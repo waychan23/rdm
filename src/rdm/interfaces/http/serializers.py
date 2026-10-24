@@ -7,7 +7,7 @@ import datetime as dt
 from decimal import Decimal
 from typing import Any
 
-from rdm.domain.entities import Member, Project, Sprint, WorkItem
+from rdm.domain.entities import Comment, Member, Project, Sprint, WorkItem
 
 
 def _iso(value: dt.datetime | dt.date | None) -> str | None:
@@ -107,6 +107,21 @@ def work_item_summary_out(
         "priority": full["priority"],
         "assignee": full["assignee"],
         "row_version": full["row_version"],
+    }
+
+
+def comment_out(c: Comment, members: dict[str, Member] | None = None) -> dict:
+    members = members or {}
+    author = members.get(c.author_member_id)
+    return {
+        "id": c.id,
+        "work_item_id": c.work_item_id,
+        "body_md": c.body_md,
+        "reply_to_id": c.reply_to_id,
+        "author": {"id": author.id, "name": author.name, "type": author.type}
+        if author
+        else {"id": c.author_member_id},
+        "created_at": _iso(c.created_at),
     }
 
 

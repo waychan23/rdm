@@ -9,9 +9,11 @@ from fastapi import FastAPI
 
 from rdm.application.services.bootstrap import bootstrap_if_empty
 from rdm.config import Settings
+from rdm.interfaces.http.comments import router as comments_router
 from rdm.interfaces.http.container import Container
 from rdm.interfaces.http.errors import install_exception_handlers
 from rdm.interfaces.http.logging import RequestContextMiddleware, configure_logging
+from rdm.interfaces.http.mailbox import router as mailbox_router
 from rdm.interfaces.http.routers import (
     members_router,
     projects_router,
@@ -58,6 +60,8 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     app.include_router(members_router)
     app.include_router(work_items_router)
     app.include_router(sprints_router)
+    app.include_router(mailbox_router)
+    app.include_router(comments_router)
 
     # FastMCP's http_app already serves its endpoint at /mcp. Mount the whole
     # guarded ASGI app at root AFTER the API routers so /api, /healthz win

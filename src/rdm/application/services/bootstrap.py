@@ -65,6 +65,11 @@ async def bootstrap_if_empty(uow: SqlAlchemyUnitOfWork, token_file: Path) -> str
     await uow.members.add(owner)
     await uow.tokens.add(token)
     await session.flush()
+
+    # Implicit indiv mailbox (architecture §16.27).
+    from rdm.application.services.mailbox_service import MailboxService
+
+    await MailboxService(uow).ensure_indiv(owner)
     seq = await uow.allocate_event_seq(project.id)
     await uow.events.append(
         project_id=project.id,

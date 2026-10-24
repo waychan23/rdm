@@ -11,7 +11,20 @@ import datetime as dt
 from collections.abc import Sequence
 from typing import Any, Protocol
 
-from rdm.domain.entities import Member, MemberToken, Project, Sprint, SprintItem, WorkItem
+from rdm.domain.entities import (
+    Comment,
+    Mailbox,
+    MailboxMember,
+    Member,
+    MemberToken,
+    Message,
+    MessageDelivery,
+    MessageRef,
+    Project,
+    Sprint,
+    SprintItem,
+    WorkItem,
+)
 from rdm.domain.events import EventType
 
 # Type aliases: inside the Protocol bodies below, a method named `list`
@@ -22,6 +35,12 @@ TokenList = list[MemberToken]
 WorkItemList = list[WorkItem]
 SprintList = list[Sprint]
 SprintItemList = list[SprintItem]
+CommentList = list[Comment]
+MailboxList = list[Mailbox]
+MailboxMemberList = list[MailboxMember]
+MessageList = list[Message]
+DeliveryList = list[MessageDelivery]
+MessageRefList = list[MessageRef]
 
 
 class Clock(Protocol):
@@ -145,6 +164,59 @@ class SprintItemRepository(Protocol):
     async def is_in_sprint(self, sprint_id: str, work_item_id: str) -> bool: ...
 
 
+class CommentRepository(Protocol):
+    async def add(self, comment: Comment) -> None: ...
+
+    async def get(self, comment_id: str) -> Comment | None: ...
+
+    async def list_for_item(
+        self, work_item_id: str, *, limit: int = 100, offset: int = 0
+    ) -> CommentList: ...
+
+
+class MailboxRepository(Protocol):
+    async def add(self, mailbox: Mailbox) -> None: ...
+
+    async def add_members(self, links: MailboxMemberList) -> None: ...
+
+    async def get(self, mailbox_id: str) -> Mailbox | None: ...
+
+    async def get_indiv(self, project_id: str, owner_member_id: str) -> Mailbox | None: ...
+
+    async def get_group_by_name(self, project_id: str, name: str) -> Mailbox | None: ...
+
+    async def list_members(self, mailbox_id: str) -> MailboxMemberList: ...
+
+
+class MessageRepository(Protocol):
+    async def add_message(self, message: Message) -> None: ...
+
+    async def add_deliveries(self, rows: DeliveryList) -> None: ...
+
+    async def add_refs(self, refs: MessageRefList) -> None: ...
+
+    async def get_message(self, message_id: str) -> Message | None: ...
+
+    async def list_deliveries(
+        self,
+        recipient_member_id: str,
+        *,
+        since_id: str | None = None,
+        unread_only: bool = False,
+        limit: int = 20,
+    ) -> DeliveryList: ...
+
+    async def list_messages(self, message_ids: Sequence[str]) -> MessageList: ...
+
+    async def list_refs(self, message_ids: Sequence[str]) -> MessageRefList: ...
+
+    async def unread_count(self, recipient_member_id: str) -> int: ...
+
+    async def mark_read(
+        self, recipient_member_id: str, delivery_ids: Sequence[str], when: dt.datetime
+    ) -> int: ...
+
+
 class EventStore(Protocol):
     async def append(
         self,
@@ -170,6 +242,9 @@ class UnitOfWork(Protocol):
     work_items: WorkItemRepository
     sprints: SprintRepository
     sprint_items: SprintItemRepository
+    mailboxes: MailboxRepository
+    messages: MessageRepository
+    comments: CommentRepository
     events: EventStore
 
     async def __aenter__(self) -> UnitOfWork: ...

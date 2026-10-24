@@ -5,9 +5,15 @@ from __future__ import annotations
 from decimal import Decimal
 
 from rdm.domain.entities import (
+    Comment,
     IssueFields,
+    Mailbox,
+    MailboxMember,
     Member,
     MemberToken,
+    Message,
+    MessageDelivery,
+    MessageRef,
     Project,
     ProjectStatus,
     Sprint,
@@ -18,7 +24,13 @@ from rdm.domain.entities import (
     WorkItem,
 )
 from rdm.infrastructure.db.models import (
+    CommentModel,
+    MailboxMemberModel,
+    MailboxModel,
     MemberTokenModel,
+    MessageDeliveryModel,
+    MessageModel,
+    MessageRefModel,
     ProjectMemberModel,
     ProjectModel,
     SprintItemModel,
@@ -133,6 +145,84 @@ def sprint_to_domain(row: SprintModel) -> Sprint:
         start_date=row.start_date,
         end_date=row.end_date,
         manager_member_id=row.manager_member_id,
+        created_at=row.created_at,
+        created_by=row.created_by,
+        updated_at=row.updated_at,
+        deleted_at=row.deleted_at,
+        deleted_by=row.deleted_by,
+    )
+
+
+def mailbox_to_domain(row: MailboxModel) -> Mailbox:
+    return Mailbox(
+        id=row.id,
+        project_id=row.project_id,
+        kind=row.kind,
+        name=row.name,
+        owner_member_id=row.owner_member_id,
+        created_at=row.created_at,
+        created_by=row.created_by,
+        updated_at=row.updated_at,
+        deleted_at=row.deleted_at,
+        deleted_by=row.deleted_by,
+    )
+
+
+def mailbox_member_to_domain(row: MailboxMemberModel) -> MailboxMember:
+    return MailboxMember(
+        id=row.id,
+        mailbox_id=row.mailbox_id,
+        member_id=row.member_id,
+        added_by=row.added_by,
+        created_at=row.created_at,
+        deleted_at=row.deleted_at,
+        deleted_by=row.deleted_by,
+    )
+
+
+def message_to_domain(row: MessageModel) -> Message:
+    return Message(
+        id=row.id,
+        project_id=row.project_id,
+        from_member_id=row.from_member_id,
+        subject=row.subject,
+        body_md=row.body_md,
+        reply_to_id=row.reply_to_id,
+        created_at=row.created_at,
+        deleted_at=row.deleted_at,
+        deleted_by=row.deleted_by,
+    )
+
+
+def delivery_to_domain(row: MessageDeliveryModel) -> MessageDelivery:
+    return MessageDelivery(
+        id=row.id,
+        message_id=row.message_id,
+        mailbox_id=row.mailbox_id,
+        recipient_member_id=row.recipient_member_id,
+        recipient_type=row.recipient_type,
+        read_at=row.read_at,
+        created_at=row.created_at,
+    )
+
+
+def message_ref_to_domain(row: MessageRefModel) -> MessageRef:
+    return MessageRef(
+        id=row.id,
+        message_id=row.message_id,
+        work_item_id=row.work_item_id,
+        created_at=row.created_at,
+    )
+
+
+def comment_to_domain(row: CommentModel) -> Comment:
+    return Comment(
+        id=row.id,
+        project_id=row.project_id,
+        work_item_id=row.work_item_id,
+        author_member_id=row.author_member_id,
+        body_md=row.body_md,
+        reply_to_id=row.reply_to_id,
         created_at=row.created_at,
         created_by=row.created_by,
         updated_at=row.updated_at,

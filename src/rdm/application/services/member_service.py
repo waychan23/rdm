@@ -113,6 +113,11 @@ class MemberService:
         )
         await self.uow.members.add(member)
         await self.uow.session.flush()  # type: ignore[union-attr]
+
+        # Implicit indiv mailbox for every new member (architecture §16.27).
+        from rdm.application.services.mailbox_service import MailboxService
+
+        await MailboxService(self.uow).ensure_indiv(member)
         seq = await self.uow.allocate_event_seq(project_id)
         assert self.uow.events is not None
         await self.uow.events.append(

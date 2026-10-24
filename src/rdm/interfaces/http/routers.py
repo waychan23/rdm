@@ -30,10 +30,18 @@ async def whoami(
 ) -> dict:
     async with container.uow() as uow:
         project = await uow.projects.get(actor.project_id)
+        from rdm.application.services.mailbox_service import MailboxService
+        from rdm.application.services.workitem_service import WorkItemService
+
+        unread = await MailboxService(uow).unread_count(actor)
+        my_open = await WorkItemService(uow).my_open_items(actor)
     return {
         "data": {
             "member": member_out(actor),
             "project": project_out(project) if project else None,
+            "roles": actor.roles,
+            "unread_count": unread,
+            "my_open_items": len(my_open),
         }
     }
 

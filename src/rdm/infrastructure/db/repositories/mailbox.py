@@ -1,0 +1,207 @@
+"""Mailbox / message repositories with non-JOIN assembly (architecture §3.3).
+
+Delivery listings use three queries (deliveries, messages IN, refs IN);
+members are assembled by the service via the member repository.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+from collections.abc import Sequence
+
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from rdm.domain.entities import Mailbox, MailboxMember, Message, MessageDelivery, MessageRef
+from rdm.infrastructure.db.models import (
+    MailboxMemberModel,
+    MailboxModel,
+    MessageDeliveryModel,
+    MessageModel,
+    MessageRefModel,
+)
+from rdm.infrastructure.db.repositories.mapping import (
+    delivery_to_domain,
+    mailbox_member_to_domain,
+    mailbox_to_domain,
+    message_ref_to_domain,
+    message_to_domain,
+)
+
+
+class MailboxRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add(self, mailbox: Mailbox) -> None:
+        self._s.add(
+            MailboxModel(
+                id=mailbox.id,
+                project_id=mailbox.project_id,
+                kind=mailbox.kind,
+                name=mailbox.name,
+                owner_member_id=mailbox.owner_member_id,
+                created_at=mailbox.created_at,
+                created_by=mailbox.created_by,
+            )
+        )
+
+    async def add_members(self, links: Sequence[MailboxMember]) -> None:
+        for link in links:
+            self._s.add(
+                MailboxMemberModel(
+                    id=link.id,
+                    mailbox_id=link.mailbox_id,
+                    member_id=link.member_id,
+                    added_by=link.added_by,
+                    created_at=link.created_at,
+                )
+            )
+
+    async def get(self, mailbox_id: str) -> Mailbox | None:
+        row = await self._s.get(MailboxModel, mailbox_id)
+        if row is None or row.deleted_at is not None:
+            return None
+        return mailbox_to_domain(row)
+
+    async def get_indiv(self, project_id: str, owner_member_id: str) -> Mailbox | None:
+        stmt = select(MailboxModel).where(
+            MailboxModel.project_id == project_id,
+            MailboxModel.kind == "indiv",
+            MailboxModel.owner_member_id == owner_member_id,
+            MailboxModel.deleted_at.is_(None),
+        )
+        row = (await self._s.execute(stmt)).scalar_one_or_none()
+        return mailbox_to_domain(row) if row else None
+
+    async def get_group_by_name(self, project_id: str, name: str) -> Mailbox | None:
+        stmt = select(MailboxModel).where(
+            MailboxModel.project_id == project_id,
+            MailboxModel.kind == "group",
+            MailboxModel.name == name,
+            MailboxModel.deleted_at.is_(None),
+        )
+        row = (await self._s.execute(stmt)).scalar_one_or_none()
+        return mailbox_to_domain(row) if row else None
+
+    async def list_members(self, mailbox_id: str) -> list[MailboxMember]:
+        stmt = select(MailboxMemberModel).where(
+            MailboxMemberModel.mailbox_id == mailbox_id,
+            MailboxMemberModel.deleted_at.is_(None),
+        )
+        rows = list((await self._s.execute(stmt)).scalars().all())
+        return [mailbox_member_to_domain(r) for r in rows]
+
+
+class MessageRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add_message(self, message: Message) -> None:
+        self._s.add(
+            MessageModel(
+                id=message.id,
+                project_id=message.project_id,
+                from_member_id=message.from_member_id,
+                subject=message.subject,
+                body_md=message.body_md,
+                reply_to_id=message.reply_to_id,
+                created_at=message.created_at,
+            )
+        )
+
+    async def add_deliveries(self, rows: Sequence[MessageDelivery]) -> None:
+        for d in rows:
+            self._s.add(
+                MessageDeliveryModel(
+                    id=d.id,
+                    message_id=d.message_id,
+                    mailbox_id=d.mailbox_id,
+                    recipient_member_id=d.recipient_member_id,
+                    recipient_type=d.recipient_type,
+                    read_at=d.read_at,
+                    created_at=d.created_at,
+                )
+            )
+
+    async def add_refs(self, refs: Sequence[MessageRef]) -> None:
+        for ref in refs:
+            self._s.add(
+                MessageRefModel(
+                    id=ref.id,
+                    message_id=ref.message_id,
+                    work_item_id=ref.work_item_id,
+                    created_at=ref.created_at,
+                )
+            )
+
+    async def get_message(self, message_id: str) -> Message | None:
+        row = await self._s.get(MessageModel, message_id)
+        if row is None or row.deleted_at is not None:
+            return None
+        return message_to_domain(row)
+
+    async def list_deliveries(
+        self,
+        recipient_member_id: str,
+        *,
+        since_id: str | None = None,
+        unread_only: bool = False,
+        limit: int = 20,
+    ) -> list[MessageDelivery]:
+        stmt = select(MessageDeliveryModel).where(
+            MessageDeliveryModel.recipient_member_id == recipient_member_id,
+            MessageDeliveryModel.deleted_at.is_(None),
+        )
+        if since_id:
+            stmt = stmt.where(MessageDeliveryModel.id > since_id)
+        if unread_only:
+            stmt = stmt.where(MessageDeliveryModel.read_at.is_(None))
+        stmt = stmt.order_by(MessageDeliveryModel.id).limit(limit)
+        rows = list((await self._s.execute(stmt)).scalars().all())
+        return [delivery_to_domain(r) for r in rows]
+
+    async def list_messages(self, message_ids: Sequence[str]) -> list[Message]:
+        if not message_ids:
+            return []
+        stmt = select(MessageModel).where(
+            MessageModel.id.in_(message_ids), MessageModel.deleted_at.is_(None)
+        )
+        rows = list((await self._s.execute(stmt)).scalars().all())
+        return [message_to_domain(r) for r in rows]
+
+    async def list_refs(self, message_ids: Sequence[str]) -> list[MessageRef]:
+        if not message_ids:
+            return []
+        stmt = select(MessageRefModel).where(MessageRefModel.message_id.in_(message_ids))
+        rows = list((await self._s.execute(stmt)).scalars().all())
+        return [message_ref_to_domain(r) for r in rows]
+
+    async def unread_count(self, recipient_member_id: str) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(MessageDeliveryModel)
+            .where(
+                MessageDeliveryModel.recipient_member_id == recipient_member_id,
+                MessageDeliveryModel.read_at.is_(None),
+                MessageDeliveryModel.deleted_at.is_(None),
+            )
+        )
+        return int((await self._s.execute(stmt)).scalar_one())
+
+    async def mark_read(
+        self, recipient_member_id: str, delivery_ids: Sequence[str], when: dt.datetime
+    ) -> int:
+        if not delivery_ids:
+            return 0
+        stmt = (
+            update(MessageDeliveryModel)
+            .where(
+                MessageDeliveryModel.id.in_(delivery_ids),
+                MessageDeliveryModel.recipient_member_id == recipient_member_id,
+                MessageDeliveryModel.read_at.is_(None),
+            )
+            .values(read_at=when)
+        )
+        result = await self._s.execute(stmt)
+        return result.rowcount
