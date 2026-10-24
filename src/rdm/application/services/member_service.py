@@ -7,6 +7,7 @@ import hashlib
 import secrets
 from typing import Any
 
+from rdm.application import security
 from rdm.domain.entities import Member, MemberToken
 from rdm.domain.enums import AcceptKind, AgentCli, MemberRole, MemberType
 from rdm.domain.errors import NotFound, ValidationError
@@ -36,6 +37,7 @@ class MemberService:
         return await self.uow.members.list_by_project(project_id)
 
     async def add_member(self, *, project_id: str, data: dict[str, Any], actor: Member) -> Member:
+        security.require_owner(actor)
         name = (data.get("name") or "").strip()
         if not name:
             raise ValidationError("name 必填", details={"field": "name"})
@@ -128,6 +130,7 @@ class MemberService:
     async def issue_token(
         self, *, member_id: str, label: str, actor: Member
     ) -> tuple[MemberToken, str]:
+        security.require_owner(actor)
         assert self.uow.members is not None and self.uow.tokens is not None
         member = await self.uow.members.get(member_id)
         if member is None:
@@ -158,6 +161,7 @@ class MemberService:
         return token, raw
 
     async def revoke_token(self, *, token_id: str, actor: Member) -> None:
+        security.require_owner(actor)
         assert self.uow.tokens is not None
         token = await self.uow.tokens.get(token_id)
         if token is None:

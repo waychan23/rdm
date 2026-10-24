@@ -81,13 +81,26 @@ class WorkItemRepository(Protocol):
         status: str | None = None,
         assignee_member_id: str | None = None,
         parent_id: str | None = None,
+        q: str | None = None,
         expand: bool = False,
         include_deleted: bool = False,
         limit: int = 50,
         offset: int = 0,
     ) -> WorkItemList: ...
 
-    async def list_children(self, parent_id: str) -> WorkItemList: ...
+    async def get_by_display_no(
+        self, project_id: str, display_no: int, *, include_deleted: bool = False
+    ) -> WorkItem | None: ...
+
+    async def list_by_ids(
+        self, project_id: str, item_ids: Sequence[str], *, include_deleted: bool = False
+    ) -> WorkItemList: ...
+
+    async def list_children(
+        self, parent_id: str, *, include_deleted: bool = False
+    ) -> WorkItemList: ...
+
+    async def restore(self, ids: Sequence[str]) -> int: ...
 
     async def save(self, item: WorkItem) -> None:
         """Persist optimistic-lock update; 0 rows -> ConflictVersion."""
@@ -135,6 +148,12 @@ class UnitOfWork(Protocol):
 
     async def rollback(self) -> None: ...
 
+    async def flush(self) -> None: ...
+
     async def allocate_event_seq(self, project_id: str) -> int:
         """UPDATE project SET event_seq = event_seq + 1 ... RETURNING event_seq."""
+        ...
+
+    async def allocate_display_no(self, project_id: str) -> int:
+        """UPDATE project SET item_seq = item_seq + 1 ... RETURNING item_seq."""
         ...

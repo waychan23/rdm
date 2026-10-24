@@ -1,7 +1,7 @@
 """Plain domain entities (dataclasses; no SQLAlchemy/FastAPI imports).
 
-M0 covers Project / Member / MemberToken / WorkItem(+kind fields). Mailbox,
-Sprint and friends follow in M1.
+M0 covers Project / Member / MemberToken / WorkItem(+kind fields). M1 adds
+SprintItem / Comment / Mailbox / Message and friends.
 """
 
 import datetime as dt
@@ -156,3 +156,86 @@ class Sprint:
     updated_at: dt.datetime | None = None
     deleted_at: dt.datetime | None = None
     deleted_by: str | None = None
+
+
+@dataclass(kw_only=True)
+class SprintItem:
+    id: str
+    sprint_id: str
+    work_item_id: str
+    added_by: str | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None
+
+
+@dataclass(kw_only=True)
+class Comment:
+    id: str
+    project_id: str
+    work_item_id: str
+    author_member_id: str
+    body_md: str
+    reply_to_id: str | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None
+
+
+@dataclass(kw_only=True)
+class Mailbox:
+    id: str
+    project_id: str
+    kind: str  # MailboxKind: indiv | group
+    name: str | None = None
+    owner_member_id: str | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None
+
+
+@dataclass(kw_only=True)
+class Message:
+    id: str
+    project_id: str
+    from_member_id: str
+    subject: str
+    body_md: str
+    reply_to_id: str | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None
+
+
+@dataclass(kw_only=True)
+class MailboxMember:
+    id: str
+    mailbox_id: str
+    member_id: str
+    added_by: str | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None
+
+
+@dataclass(kw_only=True)
+class MessageDelivery:
+    id: str
+    message_id: str
+    mailbox_id: str
+    recipient_member_id: str
+    recipient_type: str  # RecipientType: to | cc
+    read_at: dt.datetime | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+
+
+@dataclass(kw_only=True)
+class MessageRef:
+    id: str
+    message_id: str
+    work_item_id: str
+    created_at: dt.datetime = field(default_factory=_utcnow)

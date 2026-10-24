@@ -1,0 +1,84 @@
+"""Shared pydantic input models for REST routers and MCP tools.
+
+Keep framework-validation here (types, required-ness) and business/cross-kind
+validation in WorkItemService (mcp-tools.md §4: wrong-kind fields are a
+VALIDATION_ERROR with an actionable message).
+"""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+Kind = Literal["epic", "story", "issue", "task"]
+Severity = Literal["blocker", "critical", "major", "minor", "trivial"]
+TaskType = Literal[
+    "product_design",
+    "ux_design",
+    "frontend",
+    "backend",
+    "fullstack",
+    "qa",
+    "release",
+    "docs",
+    "other",
+]
+
+
+class _Strict(BaseModel):
+    model_config = {"extra": "forbid"}
+
+
+class WorkItemCreateIn(_Strict):
+    kind: Kind
+    title: str = Field(min_length=1, max_length=300)
+    parent: str | None = None
+    description_md: str | None = None
+    priority: int = Field(default=0, ge=0, le=999)
+    assignee: str | None = None
+    # story
+    acceptance_criteria_md: str | None = None
+    # issue
+    severity: Severity | None = None
+    environment: str | None = None
+    repro_steps_md: str | None = None
+    expected_behavior_md: str | None = None
+    actual_behavior_md: str | None = None
+    source_story: str | None = None
+    # task
+    task_type: TaskType | None = None
+    est_work_hours: float | None = Field(default=None, ge=0, le=9999.9)
+    actual_work_hours: float | None = Field(default=None, ge=0, le=9999.9)
+    code_branch: str | None = None
+
+
+class WorkItemUpdateIn(_Strict):
+    row_version: int
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    description_md: str | None = None
+    priority: int | None = Field(default=None, ge=0, le=999)
+    # story
+    acceptance_criteria_md: str | None = None
+    # issue
+    severity: Severity | None = None
+    environment: str | None = None
+    repro_steps_md: str | None = None
+    expected_behavior_md: str | None = None
+    actual_behavior_md: str | None = None
+    # task
+    task_type: TaskType | None = None
+    est_work_hours: float | None = Field(default=None, ge=0, le=9999.9)
+    actual_work_hours: float | None = Field(default=None, ge=0, le=9999.9)
+    code_branch: str | None = None
+
+
+class WorkItemAssignIn(_Strict):
+    # M1 supports assignee only (no reviewer/watcher tables, §16.22).
+    member: str = Field(min_length=1)
+
+
+class TransitionIn(_Strict):
+    to: str = Field(min_length=1)
+    row_version: int
+    reason: str | None = None

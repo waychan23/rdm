@@ -69,7 +69,7 @@ class WorkItemRepository:
         row = await self._s.get(WorkItemModel, item_id)
         if row is None or (not include_deleted and row.deleted_at is not None):
             return None
-        fields = (await self._assemble_fields([row]))[row.id] if expand else None
+        fields = (await self._assemble_fields([row])).get(row.id) if expand else None
         return work_item_to_domain(row, fields)
 
     async def list(
@@ -80,6 +80,7 @@ class WorkItemRepository:
         status: str | None = None,
         assignee_member_id: str | None = None,
         parent_id: str | None = None,
+        q: str | None = None,
         expand: bool = False,
         include_deleted: bool = False,
         limit: int = 50,
@@ -96,17 +97,46 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.assignee_member_id == assignee_member_id)
         if parent_id is not None:
             stmt = stmt.where(WorkItemModel.parent_id == parent_id)
+        if q:
+            stmt = stmt.where(WorkItemModel.title.ilike(f"%{q}%"))
         stmt = stmt.order_by(WorkItemModel.display_no).limit(limit).offset(offset)
         rows = list((await self._s.execute(stmt)).scalars().all())
         fields_map = await self._assemble_fields(rows) if expand and rows else {}
         return [work_item_to_domain(r, fields_map.get(r.id)) for r in rows]
 
-    async def list_children(self, parent_id: str) -> list[WorkItem]:
-        stmt = (
-            select(WorkItemModel)
-            .where(WorkItemModel.parent_id == parent_id, WorkItemModel.deleted_at.is_(None))
-            .order_by(WorkItemModel.display_no)
+    async def get_by_display_no(
+        self, project_id: str, display_no: int, *, include_deleted: bool = False
+    ) -> WorkItem | None:
+        stmt = select(WorkItemModel).where(
+            WorkItemModel.project_id == project_id, WorkItemModel.display_no == display_no
         )
+        row = (await self._s.execute(stmt)).scalar_one_or_none()
+        if row is None or (not include_deleted and row.deleted_at is not None):
+            return None
+        fields = (await self._assemble_fields([row])).get(row.id)
+        return work_item_to_domain(row, fields)
+
+    async def list_by_ids(
+        self, project_id: str, item_ids: Sequence[str], *, include_deleted: bool = False
+    ) -> list[WorkItem]:
+        if not item_ids:
+            return []
+        stmt = select(WorkItemModel).where(
+            WorkItemModel.project_id == project_id, WorkItemModel.id.in_(item_ids)
+        )
+        if not include_deleted:
+            stmt = stmt.where(WorkItemModel.deleted_at.is_(None))
+        rows = list((await self._s.execute(stmt)).scalars().all())
+        fields_map = await self._assemble_fields(rows) if rows else {}
+        return [work_item_to_domain(r, fields_map.get(r.id)) for r in rows]
+
+    async def list_children(
+        self, parent_id: str, *, include_deleted: bool = False
+    ) -> list[WorkItem]:
+        stmt = select(WorkItemModel).where(WorkItemModel.parent_id == parent_id)
+        if not include_deleted:
+            stmt = stmt.where(WorkItemModel.deleted_at.is_(None))
+        stmt = stmt.order_by(WorkItemModel.display_no)
         rows = list((await self._s.execute(stmt)).scalars().all())
         fields_map = await self._assemble_fields(rows) if rows else {}
         return [work_item_to_domain(r, fields_map.get(r.id)) for r in rows]
@@ -158,6 +188,7 @@ class WorkItemRepository:
             .where(
                 WorkItemModel.id == item_id,
                 WorkItemModel.assignee_member_id.is_(None),
+                WorkItemModel.deleted_at.is_(None),
             )
             .values(
                 assignee_member_id=member_id,
@@ -180,6 +211,18 @@ class WorkItemRepository:
         )
         await self._s.execute(stmt)
         return ids
+
+    async def restore(self, ids: Sequence[str]) -> int:
+        """Clear soft-delete columns; returns matched row count."""
+        if not ids:
+            return 0
+        stmt = (
+            update(WorkItemModel)
+            .where(WorkItemModel.id.in_(ids))
+            .values(deleted_at=None, deleted_by=None)
+        )
+        result = await self._s.execute(stmt)
+        return result.rowcount
 
     # --- non-JOIN assembly -------------------------------------------------
 

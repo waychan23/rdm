@@ -79,6 +79,10 @@ class SqlAlchemyUnitOfWork:
         if self.session.in_transaction():
             await self.session.rollback()
 
+    async def flush(self) -> None:
+        assert self.session is not None
+        await self.session.flush()
+
     async def allocate_event_seq(self, project_id: str) -> int:
         assert self.session is not None
         stmt = (

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
+from decimal import Decimal
+from typing import Any
 
-from rdm.domain.entities import Member, Project
+from rdm.domain.entities import Member, Project, WorkItem
 
 
 def _iso(value: dt.datetime | dt.date | None) -> str | None:
@@ -38,4 +41,70 @@ def member_out(m: Member) -> dict:
         "agent_cli": m.agent_cli,
         "is_active": m.is_active,
         "created_at": _iso(m.created_at),
+    }
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return float(value)
+    return value
+
+
+def _fields_out(item: WorkItem) -> dict[str, Any] | None:
+    if item.fields is None:
+        return None
+    return {k: _json_safe(v) for k, v in dataclasses.asdict(item.fields).items()}
+
+
+def _assignee_out(item: WorkItem, members: dict[str, Member]) -> dict | None:
+    member = members.get(item.assignee_member_id) if item.assignee_member_id else None
+    if member is None:
+        return None
+    return {"id": member.id, "name": member.name, "type": member.type}
+
+
+def work_item_out(
+    item: WorkItem, project: Project, members: dict[str, Member] | None = None
+) -> dict:
+    members = members or {}
+    assignee = members.get(item.assignee_member_id) if item.assignee_member_id else None
+    accountable_id = (
+        assignee.id
+        if assignee and assignee.type == "human"
+        else (assignee.manager_member_id if assignee else None)
+    )
+    return {
+        "id": item.id,
+        "display_id": f"{project.key}-{item.display_no}",
+        "project_key": project.key,
+        "kind": item.kind,
+        "title": item.title,
+        "description_md": item.description_md,
+        "status": item.status,
+        "priority": item.priority,
+        "rank": item.rank,
+        "parent_id": item.parent_id,
+        "assignee": _assignee_out(item, members),
+        "accountable_human_member_id": accountable_id,
+        "fields": _fields_out(item),
+        "row_version": item.row_version,
+        "created_at": _iso(item.created_at),
+        "updated_at": _iso(item.updated_at),
+        "deleted_at": _iso(item.deleted_at),
+    }
+
+
+def work_item_summary_out(
+    item: WorkItem, project: Project, members: dict[str, Member] | None = None
+) -> dict:
+    full = work_item_out(item, project, members)
+    return {
+        "id": full["id"],
+        "display_id": full["display_id"],
+        "kind": full["kind"],
+        "title": full["title"],
+        "status": full["status"],
+        "priority": full["priority"],
+        "assignee": full["assignee"],
+        "row_version": full["row_version"],
     }

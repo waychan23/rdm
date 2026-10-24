@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from rdm.application import security
 from rdm.application.dto import validate_project_key
 from rdm.domain.entities import Member, Project
 from rdm.domain.errors import NotFound, ProjectKeyDuplicate
@@ -31,6 +32,7 @@ class ProjectService:
         description_md: str | None,
         actor: Member,
     ) -> Project:
+        security.require_owner(actor)
         validate_project_key(key)
         assert self.uow.projects is not None
         if await self.uow.projects.get_by_key(key) is not None:

@@ -19,6 +19,7 @@ class ErrorCode(StrEnum):
     CONFLICT_VERSION = "CONFLICT_VERSION"
     ALREADY_ASSIGNED = "ALREADY_ASSIGNED"
     PROJECT_KEY_DUPLICATE = "PROJECT_KEY_DUPLICATE"
+    SPRINT_ACTIVE_EXISTS = "SPRINT_ACTIVE_EXISTS"
     ATTACHMENT_TOO_LARGE = "ATTACHMENT_TOO_LARGE"
     UNSUPPORTED_MIME = "UNSUPPORTED_MIME"
     RDM_SERVER_UNREACHABLE = "RDM_SERVER_UNREACHABLE"
@@ -96,6 +97,11 @@ class AlreadyAssigned(RdmError):
 
 class ProjectKeyDuplicate(RdmError):
     code = ErrorCode.PROJECT_KEY_DUPLICATE
+    http_status = 409
+
+
+class SprintActiveExists(RdmError):
+    code = ErrorCode.SPRINT_ACTIVE_EXISTS
     http_status = 409
 
 
