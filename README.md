@@ -58,5 +58,12 @@ cd web && pnpm install --ignore-scripts && pnpm build   # 构建 Web 到包资�
 cd web && pnpm dev                                       # Vite dev server（代理 /api、/mcp）
 ```
 
+打 wheel 前先构建 Web（`uv build` 的 force-include 要求 web-dist 存在）：
+
+```bash
+(cd web && pnpm install --frozen-lockfile --ignore-scripts && pnpm build)
+uv build
+```
+
 测试与关键裁决见 `docs/`（四份设计文档 + architecture.md §16）。
 M1 手工验收脚本见 `docs/acceptance/m1-loop.md`。

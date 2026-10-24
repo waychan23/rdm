@@ -32,6 +32,14 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rdm"]
+# web-dist is gitignored (built by `cd web && pnpm build`) but ships in the
+# wheel so a pip install serves the SPA. Build web before `uv build --wheel`;
+# sdist does not carry the web assets (build them from web/).
+[tool.hatch.build.targets.wheel.force-include]
+"src/rdm/resources/web-dist" = "rdm/resources/web-dist"
+
+[tool.hatch.build.targets.sdist.force-include]
+"src/rdm/resources/web-dist" = "src/rdm/resources/web-dist"
 
 [dependency-groups]
 dev = [
