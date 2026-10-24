@@ -1,0 +1,36 @@
+"""Comment tool."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastmcp import FastMCP
+
+from rdm.application.services.comment_service import CommentService
+from rdm.application.services.member_service import MemberService
+from rdm.interfaces.http.container import Container
+from rdm.interfaces.http.serializers import comment_out
+from rdm.interfaces.mcp.tools._base import ok, run_tool
+
+
+def register(mcp: FastMCP, container: Container) -> None:
+    @mcp.tool
+    async def comment_add(work_item_id: str, body_md: str, reply_to: str | None = None) -> Any:
+        """在工作项下发评论；@成员名 会给对方发站内信。
+
+        找不到/重名的 @mention 会静默忽略并在 meta.unresolved_mentions 返回，
+        不要因此重发评论。不要用评论推动状态（状态走 work_item_transition）。
+        """
+
+        async def run(uow, actor):
+            _proj, _item, comment, unresolved = await CommentService(uow).add(
+                actor, work_item_id, body_md, reply_to
+            )
+            project_id = comment.project_id
+            members = await MemberService(uow).members_index(project_id)
+            return ok(
+                comment_out(comment, members),
+                unresolved_mentions=unresolved,
+            )
+
+        return await run_tool(container, run)

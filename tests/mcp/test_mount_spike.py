@@ -49,13 +49,16 @@ async def test_whoami_tool_over_streamable_http(server, owner_token) -> None:
     )
     async with Client(transport) as mcp_client:
         tools = await mcp_client.list_tools()
-        assert {t.name for t in tools} == {"whoami"}
+        names = {t.name for t in tools}
+        assert len(names) == 17
+        assert "whoami" in names and "work_item_transition" in names
 
         result = await mcp_client.call_tool("whoami", {})
         assert result.structured_content is None or isinstance(result.structured_content, dict)
         payload = result.structured_content or result.data
         assert payload["data"]["member"]["name"] == "owner"
         assert payload["data"]["project"]["key"] == "RDM"
+        assert payload["data"]["unread_count"] == 0
 
 
 async def test_bad_token_rejected_at_guard(server) -> None:

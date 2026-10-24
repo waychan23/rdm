@@ -1,14 +1,33 @@
-"""FastMCP factory and tools registration."""
+"""FastMCP factory: register every MCP tool module (17 tools in M1)."""
 
 from __future__ import annotations
 
 from fastmcp import FastMCP
 
 from rdm.interfaces.http.container import Container
-from rdm.interfaces.mcp.tools import whoami as whoami_tool
+from rdm.interfaces.mcp.tools import (
+    comment as comment_tools,
+)
+from rdm.interfaces.mcp.tools import (
+    mailbox as mailbox_tools,
+)
+from rdm.interfaces.mcp.tools import (
+    sprint as sprint_tools,
+)
+from rdm.interfaces.mcp.tools import (
+    work_item as work_item_tools,
+)
+from rdm.interfaces.mcp.tools import (
+    workflow as workflow_tools,
+)
 
 
 def build_mcp(container: Container) -> FastMCP:
     mcp = FastMCP("rdm")
-    whoami_tool.register(mcp, container)
+    # Context tools: enhanced whoami replaces the M0 version.
+    workflow_tools.register(mcp, container)
+    work_item_tools.register(mcp, container)
+    comment_tools.register(mcp, container)
+    sprint_tools.register(mcp, container)
+    mailbox_tools.register(mcp, container)
     return mcp

@@ -12,9 +12,9 @@ from rdm.domain.entities import Member
 from rdm.interfaces.http.container import Container, get_actor, get_container
 from rdm.interfaces.http.serializers import member_out, project_out
 
-system_router = APIRouter()
-projects_router = APIRouter(prefix="/api/v1")
-members_router = APIRouter(prefix="/api/v1")
+system_router = APIRouter(tags=["system"])
+projects_router = APIRouter(prefix="/api/v1", tags=["projects"])
+members_router = APIRouter(prefix="/api/v1", tags=["members"])
 
 
 @system_router.get("/healthz")

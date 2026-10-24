@@ -36,6 +36,9 @@ class MemberService:
         assert self.uow.members is not None
         return await self.uow.members.list_by_project(project_id)
 
+    async def members_index(self, project_id: str) -> dict[str, Member]:
+        return {m.id: m for m in await self.list_members(project_id)}
+
     async def add_member(self, *, project_id: str, data: dict[str, Any], actor: Member) -> Member:
         security.require_owner(actor)
         name = (data.get("name") or "").strip()

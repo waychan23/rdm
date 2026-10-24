@@ -10,7 +10,7 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Sequence
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rdm.domain.entities import (
@@ -103,6 +103,17 @@ class WorkItemRepository:
         rows = list((await self._s.execute(stmt)).scalars().all())
         fields_map = await self._assemble_fields(rows) if expand and rows else {}
         return [work_item_to_domain(r, fields_map.get(r.id)) for r in rows]
+
+    async def count_by_status(self, project_id: str) -> dict[str, int]:
+        stmt = (
+            select(WorkItemModel.status, func.count())
+            .where(
+                WorkItemModel.project_id == project_id,
+                WorkItemModel.deleted_at.is_(None),
+            )
+            .group_by(WorkItemModel.status)
+        )
+        return {status: int(count) for status, count in await self._s.execute(stmt)}
 
     async def get_by_display_no(
         self, project_id: str, display_no: int, *, include_deleted: bool = False
