@@ -1,7 +1,7 @@
 """`rdm` command-line interface (Typer).
 
 M0 commands: init / serve / db upgrade|downgrade|status / member ...
-M1/M2 placeholders: skills / integrate / doctor.
+M1 commands: skills install. integrate mcp / doctor land later in M1/M2.
 Admin commands are thin HTTP clients except init/db, which talk to the
 database directly (see docs/architecture.md §7).
 """
@@ -237,9 +237,59 @@ def token_revoke(
 
 
 @skills_app.command("install")
-def skills_install() -> None:
-    """Install bundled rdm skills into an agent CLI (M1)."""
-    typer.echo("skills install is implemented in M1")
+def skills_install(
+    target: Annotated[
+        str,
+        typer.Option("--target", help="Target agent CLI: claude | codex | opencode."),
+    ],
+    scope: Annotated[str, typer.Option("--scope", help="user | project.")] = "user",
+    skill: Annotated[
+        list[str] | None,
+        typer.Option("--skill", help="Skill name to install; repeatable. Default: all."),
+    ] = None,
+    force: Annotated[bool, typer.Option("--force", help="Overwrite conflicting files.")] = False,
+) -> None:
+    """Install bundled rdm skills into an agent CLI."""
+    from rdm.interfaces.cli import skills as skills_commands
+
+    if target not in {t.value for t in skills_commands.SkillTarget}:
+        typer.secho(
+            f"unknown --target {target!r} (want claude|codex|opencode)", fg=typer.colors.RED
+        )
+        raise typer.Exit(2)
+    if scope not in {"user", "project"}:
+        typer.secho(f"unknown --scope {scope!r} (want user|project)", fg=typer.colors.RED)
+        raise typer.Exit(2)
+
+    if target == "codex":
+        typer.secho(
+            "note: codex target path (~/.codex/prompts) is inferred and unverified",
+            fg=typer.colors.YELLOW,
+        )
+
+    names = skill or skills_commands.bundled_skill_names()
+    had_conflict = False
+    for name in names:
+        try:
+            result = skills_commands.install_skill(
+                skills_commands.SkillTarget(target), scope, name, force=force
+            )
+        except FileNotFoundError:
+            bundled = skills_commands.bundled_skill_names()
+            typer.secho(f"unknown skill {name!r}; bundled: {bundled}", fg=typer.colors.RED)
+            raise typer.Exit(2) from None
+        if result.status == "conflict":
+            had_conflict = True
+            typer.secho(
+                f"CONFLICT {name} -> {result.path} (content differs; rerun with --force)",
+                fg=typer.colors.YELLOW,
+            )
+        else:
+            typer.secho(
+                f"{result.status.upper():9s} {name} -> {result.path}", fg=typer.colors.GREEN
+            )
+    if had_conflict:
+        raise typer.Exit(2)
 
 
 @integrate_app.command("mcp")
