@@ -1,7 +1,7 @@
 """`rdm` command-line interface (Typer).
 
 M0 commands: init / serve / db upgrade|downgrade|status / member ...
-M1 commands: skills install. integrate mcp / doctor land later in M1/M2.
+M1 commands: skills install, integrate mcp. doctor lands in M2.
 Admin commands are thin HTTP clients except init/db, which talk to the
 database directly (see docs/architecture.md §7).
 """
@@ -293,9 +293,57 @@ def skills_install(
 
 
 @integrate_app.command("mcp")
-def integrate_mcp() -> None:
-    """Generate user-level MCP configs for claude/codex/opencode (M1)."""
-    typer.echo("integrate mcp is implemented in M1")
+def integrate_mcp(
+    target: Annotated[
+        str | None,
+        typer.Option("--target", help="claude | codex | opencode. Default: all three."),
+    ] = None,
+    url: Annotated[str, typer.Option("--url", help="MCP endpoint URL.")] = (
+        "http://127.0.0.1:8765/mcp"
+    ),
+    force: Annotated[
+        bool, typer.Option("--force", help="Overwrite a conflicting rdm entry.")
+    ] = False,
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+) -> None:
+    """Generate user-level MCP client configs for claude/codex/opencode."""
+    from rdm.interfaces.cli import integrate as integrate_commands
+
+    if target is not None and target not in {t.value for t in integrate_commands.IntegrateTarget}:
+        typer.secho(
+            f"unknown --target {target!r} (want claude|codex|opencode)", fg=typer.colors.RED
+        )
+        raise typer.Exit(2)
+
+    names = [target] if target else [t.value for t in integrate_commands.IntegrateTarget]
+    had_conflict = False
+    for name in names:
+        merger = integrate_commands.MERGERS[integrate_commands.IntegrateTarget(name)]
+        try:
+            result = merger(Path.home(), url, force=force)
+        except ValueError as exc:
+            typer.secho(f"{name}: {exc}", fg=typer.colors.RED)
+            raise typer.Exit(1) from None
+        if name == "codex":
+            typer.secho(
+                "note: codex config path is inferred and unverified", fg=typer.colors.YELLOW
+            )
+        if result.status == "conflict":
+            had_conflict = True
+            typer.secho(
+                f"CONFLICT {name}: rdm already configured at {result.path}; rerun with --force",
+                fg=typer.colors.YELLOW,
+            )
+        else:
+            typer.secho(
+                f"{result.status.upper():7s} {name} -> {result.path}", fg=typer.colors.GREEN
+            )
+
+    typer.echo("")
+    for note in integrate_commands.post_install_notes(data_dir):
+        typer.echo(f"  {note}")
+    if had_conflict:
+        raise typer.Exit(2)
 
 
 @app.command()
