@@ -10,6 +10,9 @@ from rdm.domain.entities import (
     MemberToken,
     Project,
     ProjectStatus,
+    Sprint,
+    SprintItem,
+    SprintStatus,
     StoryFields,
     TaskFields,
     WorkItem,
@@ -18,6 +21,8 @@ from rdm.infrastructure.db.models import (
     MemberTokenModel,
     ProjectMemberModel,
     ProjectModel,
+    SprintItemModel,
+    SprintModel,
     WorkItemIssueModel,
     WorkItemModel,
     WorkItemStoryModel,
@@ -115,6 +120,36 @@ def issue_fields(row: WorkItemIssueModel) -> IssueFields:
         expected_behavior_md=row.expected_behavior_md,
         actual_behavior_md=row.actual_behavior_md,
         source_story_id=row.source_story_id,
+    )
+
+
+def sprint_to_domain(row: SprintModel) -> Sprint:
+    return Sprint(
+        id=row.id,
+        project_id=row.project_id,
+        name=row.name,
+        goal_md=row.goal_md,
+        status=SprintStatus(row.status),
+        start_date=row.start_date,
+        end_date=row.end_date,
+        manager_member_id=row.manager_member_id,
+        created_at=row.created_at,
+        created_by=row.created_by,
+        updated_at=row.updated_at,
+        deleted_at=row.deleted_at,
+        deleted_by=row.deleted_by,
+    )
+
+
+def sprint_item_to_domain(row: SprintItemModel) -> SprintItem:
+    return SprintItem(
+        id=row.id,
+        sprint_id=row.sprint_id,
+        work_item_id=row.work_item_id,
+        added_by=row.added_by,
+        created_at=row.created_at,
+        deleted_at=row.deleted_at,
+        deleted_by=row.deleted_by,
     )
 
 

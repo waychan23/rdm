@@ -1,0 +1,174 @@
+"""Integration: sprint lifecycle (plan M1-3, S3 + close gate + permissions)."""
+
+from __future__ import annotations
+
+import sqlite3
+
+import httpx
+
+API = "/api/v1"
+
+
+def auth(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def _project(client: httpx.AsyncClient, token: str, key: str = "DEMO") -> None:
+    r = await client.post(f"{API}/projects", json={"key": key, "name": key}, headers=auth(token))
+    assert r.status_code == 201, r.text
+
+
+async def _item(client: httpx.AsyncClient, token: str, payload: dict, key: str = "DEMO") -> dict:
+    r = await client.post(f"{API}/projects/{key}/work-items", json=payload, headers=auth(token))
+    assert r.status_code == 201, r.text
+    return r.json()["data"]
+
+
+async def _member_token(client: httpx.AsyncClient, owner: str, name: str, roles: list[str]) -> str:
+    r = await client.post(
+        f"{API}/projects/DEMO/members",
+        json={"name": name, "type": "human", "roles": roles},
+        headers=auth(owner),
+    )
+    assert r.status_code == 201, r.text
+    mid = r.json()["data"]["id"]
+    r = await client.post(f"{API}/members/{mid}/tokens", json={"label": "t"}, headers=auth(owner))
+    return r.json()["data"]["token"]
+
+
+async def test_sprint_lifecycle_items_start_close_gate(server, owner_token: str) -> None:
+    client, settings, _app = server
+    await _project(client, owner_token)
+    task = await _item(client, owner_token, {"kind": "task", "title": "t", "task_type": "qa"})
+
+    # create
+    r = await client.post(
+        f"{API}/projects/DEMO/sprints",
+        json={"name": "Sprint 1", "goal_md": "交付登录"},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+    sprint = r.json()["data"]
+    assert sprint["status"] == "PLANNED"
+    sid = sprint["id"]
+
+    # add items
+    r = await client.post(
+        f"{API}/sprints/{sid}/items",
+        json={"items": [task["display_id"]]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+
+    # adding twice -> validation error (unique sprint_item)
+    r = await client.post(
+        f"{API}/sprints/{sid}/items",
+        json={"items": [task["display_id"]]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    # overview shows the item and status counts
+    r = await client.get(f"{API}/sprints/{sid}", headers=auth(owner_token))
+    assert r.status_code == 200
+    body = r.json()["data"]
+    assert [i["display_id"] for i in body["items"]] == [task["display_id"]]
+    assert body["status_counts"] == {"TODO": 1}
+
+    # start
+    r = await client.post(f"{API}/sprints/{sid}/start", headers=auth(owner_token))
+    assert r.status_code == 200 and r.json()["data"]["status"] == "ACTIVE"
+
+    # close blocked by the nonterminal task (gate)
+    r = await client.post(f"{API}/sprints/{sid}/close", headers=auth(owner_token))
+    assert r.status_code == 409
+    details = r.json()["error"]["details"]
+    assert details["blocking_children"] == [task["display_id"]]
+    assert details["target"] == "CLOSED"
+
+    # drive task to DONE -> close passes
+    version = 0
+    for state in ["IN_PROGRESS", "TO_REVIEW", "DONE"]:
+        r = await client.post(
+            f"{API}/work-items/{task['display_id']}/transition",
+            json={"to": state, "row_version": version},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 200, r.text
+        version = r.json()["data"]["row_version"]
+    r = await client.post(f"{API}/sprints/{sid}/close", headers=auth(owner_token))
+    assert r.status_code == 200 and r.json()["data"]["status"] == "CLOSED"
+
+    # events
+    with sqlite3.connect(settings.db_path) as conn:
+        types = {
+            row[0]
+            for row in conn.execute(
+                "select distinct event_type from event where aggregate_type='sprint'"
+            )
+        }
+    assert {
+        "sprint.created",
+        "sprint.item_added",
+        "sprint.started",
+        "sprint.closed",
+    } <= types
+
+
+async def test_only_one_active_sprint(server, owner_token: str) -> None:
+    client, _s, _app = server
+    await _project(client, owner_token)
+    ids = []
+    for name in ("S1", "S2"):
+        r = await client.post(
+            f"{API}/projects/DEMO/sprints",
+            json={"name": name},
+            headers=auth(owner_token),
+        )
+        ids.append(r.json()["data"]["id"])
+
+    r = await client.post(f"{API}/sprints/{ids[0]}/start", headers=auth(owner_token))
+    assert r.status_code == 200
+    r = await client.post(f"{API}/sprints/{ids[1]}/start", headers=auth(owner_token))
+    assert r.status_code == 409
+    err = r.json()["error"]
+    assert err["code"] == "SPRINT_ACTIVE_EXISTS"
+    assert err["details"]["active_sprint_name"] == "S1"
+
+    # closing S1 then starting S2 works
+    r = await client.post(f"{API}/sprints/{ids[0]}/close", headers=auth(owner_token))
+    assert r.status_code == 200
+    r = await client.post(f"{API}/sprints/{ids[1]}/start", headers=auth(owner_token))
+    assert r.status_code == 200
+
+
+async def test_worker_cannot_create_sprint(server, owner_token: str) -> None:
+    client, _s, _app = server
+    await _project(client, owner_token)
+    worker = await _member_token(client, owner_token, "dev", ["worker"])
+    r = await client.post(
+        f"{API}/projects/DEMO/sprints",
+        json={"name": "x"},
+        headers=auth(worker),
+    )
+    assert r.status_code == 403 and r.json()["error"]["code"] == "FORBIDDEN"
+
+
+async def test_epic_cannot_enter_sprint(server, owner_token: str) -> None:
+    client, _s, _app = server
+    await _project(client, owner_token)
+    epic = await _item(client, owner_token, {"kind": "epic", "title": "e"})
+    r = await client.post(
+        f"{API}/projects/DEMO/sprints",
+        json={"name": "S"},
+        headers=auth(owner_token),
+    )
+    sid = r.json()["data"]["id"]
+    r = await client.post(
+        f"{API}/sprints/{sid}/items",
+        json={"items": [epic["display_id"]]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 422
+    assert r.json()["error"]["details"]["kind"] == "epic"

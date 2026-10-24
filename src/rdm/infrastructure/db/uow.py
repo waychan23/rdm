@@ -17,6 +17,10 @@ from rdm.infrastructure.db.models import ProjectModel
 from rdm.infrastructure.db.repositories.event_store import EventStore
 from rdm.infrastructure.db.repositories.member import MemberRepository, TokenRepository
 from rdm.infrastructure.db.repositories.project import ProjectRepository
+from rdm.infrastructure.db.repositories.sprint import (
+    SprintItemRepository,
+    SprintRepository,
+)
 from rdm.infrastructure.db.repositories.work_item import WorkItemRepository
 
 
@@ -31,6 +35,8 @@ class SqlAlchemyUnitOfWork:
         self.members: MemberRepository | None = None
         self.tokens: TokenRepository | None = None
         self.work_items: WorkItemRepository | None = None
+        self.sprints: SprintRepository | None = None
+        self.sprint_items: SprintItemRepository | None = None
         self.events: EventStore | None = None
 
     async def __aenter__(self) -> SqlAlchemyUnitOfWork:
@@ -45,6 +51,8 @@ class SqlAlchemyUnitOfWork:
             self.members = MemberRepository(self.session)
             self.tokens = TokenRepository(self.session)
             self.work_items = WorkItemRepository(self.session)
+            self.sprints = SprintRepository(self.session)
+            self.sprint_items = SprintItemRepository(self.session)
             self.events = EventStore(self.session)
         except BaseException:
             self._write_lock.release()

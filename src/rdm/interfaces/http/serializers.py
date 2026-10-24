@@ -7,7 +7,7 @@ import datetime as dt
 from decimal import Decimal
 from typing import Any
 
-from rdm.domain.entities import Member, Project, WorkItem
+from rdm.domain.entities import Member, Project, Sprint, WorkItem
 
 
 def _iso(value: dt.datetime | dt.date | None) -> str | None:
@@ -107,4 +107,18 @@ def work_item_summary_out(
         "priority": full["priority"],
         "assignee": full["assignee"],
         "row_version": full["row_version"],
+    }
+
+
+def sprint_out(s: Sprint) -> dict:
+    return {
+        "id": s.id,
+        "project_id": s.project_id,
+        "name": s.name,
+        "goal_md": s.goal_md,
+        "status": str(s.status),
+        "start_date": _iso(s.start_date),
+        "end_date": _iso(s.end_date),
+        "manager_member_id": s.manager_member_id,
+        "created_at": _iso(s.created_at),
     }

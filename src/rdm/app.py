@@ -17,6 +17,7 @@ from rdm.interfaces.http.routers import (
     projects_router,
     system_router,
 )
+from rdm.interfaces.http.sprint import router as sprints_router
 from rdm.interfaces.http.workitem import router as work_items_router
 from rdm.interfaces.mcp.auth_guard import McpBearerGuard
 from rdm.interfaces.mcp.server import build_mcp
@@ -56,6 +57,7 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     app.include_router(projects_router)
     app.include_router(members_router)
     app.include_router(work_items_router)
+    app.include_router(sprints_router)
 
     # FastMCP's http_app already serves its endpoint at /mcp. Mount the whole
     # guarded ASGI app at root AFTER the API routers so /api, /healthz win

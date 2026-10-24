@@ -11,7 +11,7 @@ import datetime as dt
 from collections.abc import Sequence
 from typing import Any, Protocol
 
-from rdm.domain.entities import Member, MemberToken, Project, WorkItem
+from rdm.domain.entities import Member, MemberToken, Project, Sprint, SprintItem, WorkItem
 from rdm.domain.events import EventType
 
 # Type aliases: inside the Protocol bodies below, a method named `list`
@@ -20,6 +20,8 @@ ProjectList = list[Project]
 MemberList = list[Member]
 TokenList = list[MemberToken]
 WorkItemList = list[WorkItem]
+SprintList = list[Sprint]
+SprintItemList = list[SprintItem]
 
 
 class Clock(Protocol):
@@ -115,6 +117,34 @@ class WorkItemRepository(Protocol):
     ) -> Sequence[str]: ...
 
 
+class SprintRepository(Protocol):
+    async def add(self, sprint: Sprint) -> None: ...
+
+    async def get(self, sprint_id: str, *, include_deleted: bool = False) -> Sprint | None: ...
+
+    async def list(
+        self,
+        project_id: str,
+        *,
+        status: str | None = None,
+        include_deleted: bool = False,
+    ) -> SprintList: ...
+
+    async def active_for_project(self, project_id: str) -> Sprint | None: ...
+
+    async def save_status(self, sprint: Sprint) -> None: ...
+
+
+class SprintItemRepository(Protocol):
+    async def bulk_add(self, items: Sequence[SprintItem]) -> None: ...
+
+    async def remove(self, sprint_id: str, work_item_id: str, actor_id: str) -> bool: ...
+
+    async def list_for_sprint(self, sprint_id: str) -> SprintItemList: ...
+
+    async def is_in_sprint(self, sprint_id: str, work_item_id: str) -> bool: ...
+
+
 class EventStore(Protocol):
     async def append(
         self,
@@ -138,6 +168,8 @@ class UnitOfWork(Protocol):
     members: MemberRepository
     tokens: TokenRepository
     work_items: WorkItemRepository
+    sprints: SprintRepository
+    sprint_items: SprintItemRepository
     events: EventStore
 
     async def __aenter__(self) -> UnitOfWork: ...
