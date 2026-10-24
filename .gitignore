@@ -1,0 +1,32 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Tool caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Local data directories / sqlite databases
+*.db
+*.db-wal
+*.db-shm
+/rdm-data/
+bootstrap-token
+
+# Node / web build
+web/node_modules/
+web/dist/
+src/rdm/resources/web-dist/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/

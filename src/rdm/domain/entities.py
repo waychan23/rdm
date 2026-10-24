@@ -1,0 +1,158 @@
+"""Plain domain entities (dataclasses; no SQLAlchemy/FastAPI imports).
+
+M0 covers Project / Member / MemberToken / WorkItem(+kind fields). Mailbox,
+Sprint and friends follow in M1.
+"""
+
+import datetime as dt
+from dataclasses import dataclass, field
+from decimal import Decimal
+
+from rdm.domain.enums import (
+    ProjectStatus,
+    Severity,
+    SprintStatus,
+    TaskType,
+    WorkItemKind,
+)
+
+
+def _utcnow() -> dt.datetime:
+    return dt.datetime.now(dt.UTC)
+
+
+@dataclass(kw_only=True)
+class Project:
+    id: str
+    key: str
+    name: str
+    description_md: str | None = None
+    owner_member_id: str | None = None
+    status: ProjectStatus = ProjectStatus.active
+    item_seq: int = 0
+    event_seq: int = 0
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None
+
+    @property
+    def display_id_prefix(self) -> str:
+        return self.key
+
+
+@dataclass(kw_only=True)
+class Member:
+    id: str
+    project_id: str
+    type: str  # MemberType value
+    name: str
+    description_md: str | None = None
+    manager_member_id: str | None = None
+    roles: list[str] = field(default_factory=list)
+    accept_kinds: list[str] = field(default_factory=list)
+    email: str | None = None
+    notify_webhook: str | None = None
+    agent_cli: str | None = None
+    is_active: bool = True
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None
+
+    @property
+    def is_agent(self) -> bool:
+        return self.type == "agent"
+
+    @property
+    def is_owner(self) -> bool:
+        return "project_owner" in self.roles
+
+
+@dataclass(kw_only=True)
+class MemberToken:
+    id: str
+    member_id: str
+    token_hash: str
+    label: str | None = None
+    last_used_at: dt.datetime | None = None
+    revoked_at: dt.datetime | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+
+    @property
+    def is_valid(self) -> bool:
+        return self.revoked_at is None
+
+
+# --- Work item kind-specific field sets (assembled without JOIN, arch §3.3) --
+
+
+@dataclass(frozen=True, kw_only=True)
+class StoryFields:
+    acceptance_criteria_md: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class IssueFields:
+    severity: str = Severity.major
+    environment: str | None = None
+    repro_steps_md: str | None = None
+    expected_behavior_md: str | None = None
+    actual_behavior_md: str | None = None
+    source_story_id: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class TaskFields:
+    task_type: str = TaskType.other
+    est_work_hours: Decimal | None = None
+    actual_work_hours: Decimal | None = None
+    code_branch: str | None = None
+
+
+KindFields = StoryFields | IssueFields | TaskFields
+
+
+@dataclass(kw_only=True)
+class WorkItem:
+    id: str
+    project_id: str
+    display_no: int
+    kind: str  # WorkItemKind value
+    status: str
+    title: str
+    parent_id: str | None = None
+    description_md: str | None = None
+    priority: int = 0
+    rank: int = 0
+    assignee_member_id: str | None = None
+    row_version: int = 0
+    fields: KindFields | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None
+
+    @property
+    def kind_enum(self) -> WorkItemKind:
+        return WorkItemKind(self.kind)
+
+
+@dataclass(kw_only=True)
+class Sprint:
+    id: str
+    project_id: str
+    name: str
+    goal_md: str | None = None
+    status: SprintStatus = SprintStatus.PLANNED
+    start_date: dt.date | None = None
+    end_date: dt.date | None = None
+    manager_member_id: str | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None

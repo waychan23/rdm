@@ -1,0 +1,72 @@
+[project]
+name = "rdm"
+version = "0.1.0"
+description = "rd-manager — human/agent collaborative R&D work management (MCP + REST + Web)"
+readme = "README.md"
+authors = [
+    { name = "waychan23", email = "waychan23@hotmail.com" },
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite",
+    "alembic",
+    "pydantic>=2",
+    "pydantic-settings",
+    "fastmcp",
+    "typer>=0.12",
+    "httpx",
+    "python-ulid",
+    "python-multipart",
+    "pyyaml",
+]
+
+[project.scripts]
+rdm = "rdm.interfaces.cli.main:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rdm"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "mypy",
+    "asgi-lifespan>=2.1.0",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's dependency-injection idiom is Depends()/Annotated defaults.
+"src/rdm/interfaces/**" = ["B008"]
+# Typer options also use callable defaults by design.
+"src/rdm/interfaces/cli/**" = ["B008"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "rdm.domain.*"
+strict = true
+
+[[tool.mypy.overrides]]
+module = "rdm.application.*"
+strict = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

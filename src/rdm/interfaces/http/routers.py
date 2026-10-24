@@ -1,0 +1,149 @@
+"""M0 REST routers: healthz, whoami, projects, members and tokens."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, Field
+
+from rdm import __version__
+from rdm.application.services.member_service import MemberService
+from rdm.application.services.project_service import ProjectService
+from rdm.domain.entities import Member
+from rdm.interfaces.http.container import Container, get_actor, get_container
+from rdm.interfaces.http.serializers import member_out, project_out
+
+system_router = APIRouter()
+projects_router = APIRouter(prefix="/api/v1")
+members_router = APIRouter(prefix="/api/v1")
+
+
+@system_router.get("/healthz")
+async def healthz() -> dict:
+    return {"status": "ok", "version": __version__}
+
+
+@projects_router.get("/whoami")
+async def whoami(
+    request: Request,
+    actor: Member = Depends(get_actor),
+    container: Container = Depends(get_container),
+) -> dict:
+    async with container.uow() as uow:
+        project = await uow.projects.get(actor.project_id)
+    return {
+        "data": {
+            "member": member_out(actor),
+            "project": project_out(project) if project else None,
+        }
+    }
+
+
+class ProjectCreateIn(BaseModel):
+    key: str = Field(min_length=2, max_length=12)
+    name: str = Field(min_length=1, max_length=200)
+    description_md: str | None = None
+
+
+@projects_router.get("/projects")
+async def list_projects(
+    container: Container = Depends(get_container),
+    _actor: Member = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        projects = await ProjectService(uow).list_projects()
+    return {"data": [project_out(p) for p in projects]}
+
+
+@projects_router.post("/projects", status_code=201)
+async def create_project(
+    body: ProjectCreateIn,
+    container: Container = Depends(get_container),
+    actor: Member = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project = await ProjectService(uow).create_project(
+            key=body.key,
+            name=body.name,
+            description_md=body.description_md,
+            actor=actor,
+        )
+    return {"data": project_out(project)}
+
+
+@projects_router.get("/projects/{key}")
+async def get_project(
+    key: str,
+    container: Container = Depends(get_container),
+    _actor: Member = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project = await ProjectService(uow).get_by_key(key)
+    return {"data": project_out(project)}
+
+
+class MemberCreateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    type: str = "human"
+    description_md: str | None = None
+    manager_member_id: str | None = None
+    roles: list[str] = Field(default_factory=list)
+    accept_kinds: list[str] = Field(default_factory=list)
+    email: str | None = None
+    notify_webhook: str | None = None
+    agent_cli: str | None = None
+
+
+@members_router.get("/projects/{key}/members")
+async def list_members(
+    key: str,
+    container: Container = Depends(get_container),
+    actor: Member = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project = await ProjectService(uow).get_by_key(key)
+        members = await MemberService(uow).list_members(project.id)
+    return {"data": [member_out(m) for m in members]}
+
+
+@members_router.post("/projects/{key}/members", status_code=201)
+async def create_member(
+    key: str,
+    body: MemberCreateIn,
+    container: Container = Depends(get_container),
+    actor: Member = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project = await ProjectService(uow).get_by_key(key)
+        member = await MemberService(uow).add_member(
+            project_id=project.id, data=body.model_dump(exclude_none=True), actor=actor
+        )
+    return {"data": member_out(member)}
+
+
+class TokenIssueIn(BaseModel):
+    label: str = "api"
+
+
+@members_router.post("/members/{member_id}/tokens", status_code=201)
+async def issue_token(
+    member_id: str,
+    body: TokenIssueIn,
+    container: Container = Depends(get_container),
+    actor: Member = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        token, raw = await MemberService(uow).issue_token(
+            member_id=member_id, label=body.label, actor=actor
+        )
+    return {"data": {"id": token.id, "label": token.label, "token": raw}}
+
+
+@members_router.delete("/tokens/{token_id}", status_code=204)
+async def revoke_token(
+    token_id: str,
+    container: Container = Depends(get_container),
+    actor: Member = Depends(get_actor),
+) -> None:
+    async with container.uow() as uow:
+        await MemberService(uow).revoke_token(token_id=token_id, actor=actor)
+    container.authenticator.invalidate_by_id(token_id)

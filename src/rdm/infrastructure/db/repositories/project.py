@@ -1,0 +1,50 @@
+from __future__ import annotations
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from rdm.domain.entities import Project
+from rdm.infrastructure.db.models import ProjectModel
+from rdm.infrastructure.db.repositories.mapping import project_to_domain
+
+
+class ProjectRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get(self, project_id: str) -> Project | None:
+        row = await self._s.get(ProjectModel, project_id)
+        if row is None or row.deleted_at is not None:
+            return None
+        return project_to_domain(row)
+
+    async def get_by_key(self, key: str, *, include_deleted: bool = False) -> Project | None:
+        stmt = select(ProjectModel).where(func.lower(ProjectModel.key) == key.lower())
+        row = (await self._s.execute(stmt)).scalar_one_or_none()
+        if row is None or (not include_deleted and row.deleted_at is not None):
+            return None
+        return project_to_domain(row)
+
+    async def add(self, project: Project) -> None:
+        self._s.add(
+            ProjectModel(
+                id=project.id,
+                key=project.key,
+                name=project.name,
+                description_md=project.description_md,
+                owner_member_id=project.owner_member_id,
+                status=str(project.status),
+                item_seq=project.item_seq,
+                event_seq=project.event_seq,
+                created_at=project.created_at,
+                created_by=project.created_by,
+                updated_at=project.updated_at,
+            )
+        )
+
+    async def list_all(self, *, include_deleted: bool = False) -> list[Project]:
+        stmt = select(ProjectModel).order_by(ProjectModel.created_at)
+        if not include_deleted:
+            stmt = stmt.where(ProjectModel.deleted_at.is_(None))
+        rows = (await self._s.execute(stmt)).scalars().all()
+        return [project_to_domain(r) for r in rows]
