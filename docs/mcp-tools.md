@@ -8,7 +8,7 @@
 1. **状态推进只走具名工具**（`work_item_transition` / `sprint_start` / `sprint_close`），不存在"直接 update status"的通用工具。
 2. **读响应自带下一步**：任何 item 级响应都带 `allowed_transitions`、`accountable_human`、`children_summary`，agent 不需要猜。
 3. **错误即指引**：错误 `message` 必须包含"当前状态 → 允许去向 → 建议的下一步工具"；`details` 结构化（见 §5）。
-4. **工具数量受控**（目标 26 个）：查询/编辑通用化，状态推进具名化。
+4. **工具数量受控**（目标 27 个，下文逐字枚举为准）：查询/编辑通用化，状态推进具名化。
 5. **MCP 不传二进制**：附件只读列表/下载链接；上传走 OpenAPI/Web。
 6. **返回精简**：列表默认 20 条、只回摘要字段（`display_id, kind, title, status, assignee, priority`）；详情用 `expand` 参数按需展开。
 7. **幂等/并发**：写工具返回 `row_version`；冲突时返回 `CONFLICT_VERSION` 并附最新版本，agent 重读后重试。
@@ -25,56 +25,59 @@
              "details": { "blocking_children": ["RDM-13"], "allowed_transitions": ["CANCELLED"], "hint": "..." } } }
 ```
 
-## 3. 工具清单（26）
+## 3. 工具清单（27）
 
-### 3.1 身份 / 上下文（3）
+> 计数勘误（2026-10-24，architecture §16.24）：早期版本标称 26 个，实际枚举为 **27 个**——§3.2 标题写 7 但实列 8（`sprint_list`/`sprint_get` 在表中合占一行）。分节实数：3+8+7+4+3+2=27。
+> **里程碑口径**：M1 第一批实现 **17 个**（表中以 **【M1】** 标注）；其余随 M2 补齐。
+
+### 3.1 身份 / 上下文（3）【M1 全量】
 
 | 工具 | 用途 | 关键入参 | 返回 |
 |---|---|---|---|
-| `whoami` | 当前身份与工作台：member、roles、项目、可接受 kind、未读信件数、我的未终态 items 数 | – | `{member, project, roles, unread_count, my_open_items}` |
-| `project_get` | 项目概况：成员摘要、当前 Sprint、各状态计数 | `project?` | 项目 + 成员 + sprint 摘要 |
-| `workflow_get` | 拉取流程定义（状态、转换、终态、gate），**skill 引导 agent 时先调它** | `kind?` | `{kinds: {...}}` |
+| `whoami` 【M1】 | 当前身份与工作台：member、roles、项目、可接受 kind、未读信件数、我的未终态 items 数 | – | `{member, project, roles, unread_count, my_open_items}` |
+| `project_get` 【M1】 | 项目概况：成员摘要、当前 Sprint、各状态计数 | `project?` | 项目 + 成员 + sprint 摘要 |
+| `workflow_get` 【M1】 | 拉取流程定义（状态、转换、终态、gate），**skill 引导 agent 时先调它** | `kind?` | `{kinds: {...}}` |
 
-### 3.2 查询（7）
-
-| 工具 | 用途 | 关键入参 |
-|---|---|---|
-| `work_item_list` | 通用筛选：kind/status/assignee/sprint/parent/priority/keyword，分页 | `kind?, status?, assignee?, sprint?, parent?, q?, limit?, cursor?, include_deleted?` |
-| `work_item_get` | 详情 + 子项 + 评论 + artifacts + attachments + `allowed_transitions` | `id, expand?` |
-| `my_work_list` | 我的待办（assignee=me 且非终态），按 priority/rank 排序 | `status?` |
-| `backlog_list` | ProductBacklog 视图：未入 Sprint、未终态 items | `kind?, priority_min?` |
-| `sprint_list` / `sprint_get` | Sprint 列表 / 详情（含 items 与状态统计） | – / `id` |
-| `member_list` | 项目成员（含 agent 的 manager） | `type?` |
-| `comment_list` | 某个 item 的讨论 | `work_item_id` |
-
-### 3.3 写入（工作项，7）
+### 3.2 查询（8）
 
 | 工具 | 用途 | 关键入参 |
 |---|---|---|
-| `work_item_create` | 创建 epic/story/issue/task；`kind` 判别联合 schema，特型字段随 kind 不同 | `kind, title, parent?, description_md?, priority?, ...kind 特型` |
-| `work_item_update` | 编辑字段（**不含 status**）；带 `row_version` 乐观锁 | `id, row_version, fields{...}` |
-| `work_item_assign` | 指派 assignee / reviewer / watcher（可为 agent） | `id, role, member, note?` |
-| `work_item_transition` | **唯一状态入口**；`reason?` 会写入事件 | `id, to, row_version, reason?` |
-| `work_item_delete` | 级联软删（返回被删 id 列表） | `id` |
-| `work_item_restore` | 恢复软删（校验父链） | `id` |
-| `comment_add` | 在 item 下留言，可 @member（触发站内信）、可挂已有附件 | `work_item_id, body_md, reply_to?, mention?` |
+| `work_item_list` 【M1】 | 通用筛选：kind/status/assignee/sprint/parent/priority/keyword，分页 | `kind?, status?, assignee?, sprint?, parent?, q?, limit?, cursor?, include_deleted?` |
+| `work_item_get` 【M1】 | 详情 + 子项 + 评论 + artifacts + attachments + `allowed_transitions` | `id, expand?` |
+| `my_work_list` | 我的待办（assignee=me 且非终态），按 priority/rank 排序。**M1 不单独实现**，用 `work_item_list(assignee="me")`（"me" 为保留字，§16.24） | `status?` |
+| `backlog_list` | ProductBacklog 视图：未入 Sprint、未终态 items（M2；M1 可用 work_item_list 近似） | `kind?, priority_min?` |
+| `sprint_list` / `sprint_get` | Sprint 列表 / 详情（含 items 与状态统计）（M2；M1 仅 REST） | – / `id` |
+| `member_list` | 项目成员（含 agent 的 manager）（M2） | `type?` |
+| `comment_list` | 某个 item 的讨论（M2；M1 仅 REST） | `work_item_id` |
+
+### 3.3 写入（工作项，7）【M1 全量】
+
+| 工具 | 用途 | 关键入参 |
+|---|---|---|
+| `work_item_create` 【M1】 | 创建 epic/story/issue/task；`kind` 判别联合 schema，特型字段随 kind 不同 | `kind, title, parent?, description_md?, priority?, ...kind 特型` |
+| `work_item_update` 【M1】 | 编辑字段（**不含 status**）；带 `row_version` 乐观锁 | `id, row_version, fields{...}` |
+| `work_item_assign` 【M1】 | 指派 **assignee**（可为 agent）。M1 仅支持 `role=assignee`（无 reviewer/watcher 表，§16.22），传其他 role 返回 `VALIDATION_ERROR` | `id, member, note?` |
+| `work_item_transition` 【M1】 | **唯一状态入口**；`reason?` 会写入事件 | `id, to, row_version, reason?` |
+| `work_item_delete` 【M1】 | 级联软删（返回被删 id 列表） | `id` |
+| `work_item_restore` 【M1】 | 恢复软删（校验父链，§16.26） | `id` |
+| `comment_add` 【M1】 | 在 item 下留言，可 @member（触发站内信，§16.30）；挂已有附件能力 M2 | `work_item_id, body_md, reply_to?` |
 
 ### 3.4 Sprint（4）
 
 | 工具 | 用途 |
 |---|---|
-| `sprint_create` | 建 Sprint（name/goal/起止/manager） |
-| `sprint_manage` | `action: add_items|remove_item|update`（批量加入/移出/改字段） |
-| `sprint_start` | 启动（置 active，校验同项目唯一 active） |
-| `sprint_close` | 关闭；若存在非终态 item，必须显式给 `move_out_items` 或 `allow_incomplete=false` 的专门标记，否则 gate 拒绝 |
+| `sprint_create` 【M1】 | 建 Sprint（name/goal/起止/manager） |
+| `sprint_manage` | `action: add_items|remove_item|update`（批量加入/移出/改字段）（**M2**；M1 仅 REST 增删 items） |
+| `sprint_start` 【M1】 | 启动（置 active，校验同项目唯一 active，冲突报 `SPRINT_ACTIVE_EXISTS`） |
+| `sprint_close` 【M1】 | 关闭；存在非终态 item 时 gate 拒绝（M1 只能先完成/取消这些 item；`move_out_items` 类专门标记随 M2 `sprint_manage` 提供） |
 
 ### 3.5 信箱（3）
 
 | 工具 | 用途 |
 |---|---|
-| `mailbox_check` | 增量拉取（`since` 游标，默认未读）；返回发件人、标题、摘要、关联 item id |
-| `mailbox_send` | 发信：`to[]/cc[]`（member 或 group mailbox 名）、subject、body_md、`refs[]`（work_item ids） |
-| `mailbox_mark_read` | 批量标记已读 |
+| `mailbox_check` 【M1】 | 增量拉取（`since` 游标 = 上一页最后一条 delivery id，默认未读，§16.28）；返回发件人、标题、摘要、关联 item id |
+| `mailbox_send` 【M1】 | 发信：`to[]/cc[]`（member 或 group mailbox 名）、subject、body_md、`refs[]`（work_item ids） |
+| `mailbox_mark_read` | 批量标记已读（**M2**；M1 仅 REST） |
 
 ### 3.6 产出物 / 附件 / 工作区（2）
 
@@ -83,7 +86,7 @@
 | `artifact_add` | 挂链接型产出物（设计稿/API 文档/仓库链接）到 item/comment/project |
 | `attachment_list` | 列附件元数据 + 下载 URL（不传二进制） |
 
-> 未列入 MCL 工具：项目/成员/token/workspace 的写操作（v1 走 Web/OpenAPI，保持人类掌控）；事件查询（v1 只记录，后续再加）。
+> 未列入 MCP 工具：项目/成员/token/workspace 的写操作（v1 走 Web/OpenAPI，保持人类掌控）；事件查询（v1 只记录，后续再加）。
 
 ## 4. 关键工具 Schema（节选）
 
@@ -144,7 +147,7 @@ class TransitionIn(BaseModel):
 
 `rdm-workflow/SKILL.md`（随包分发，`rdm skills install` 安装）承担"何时用哪个工具"的软引导，内容大纲：
 
-1. 开工前：`whoami` → `mailbox_check` → `my_work_list`（三步定工作上下文）。
+1. 开工前：`whoami` → `mailbox_check` → `work_item_list(assignee="me")`（三步定工作上下文；M1 无 my_work_list，§16.24）。
 2. 认领：确认 `assignee` 是自己 → 若可认领用 `work_item_update` 或 `work_item_assign` → 状态 `IN_PROGRESS`。
 3. 推进：**每次改状态前先看 `allowed_transitions`**；gate 被拒时不要去试别的转换，而是看 `blocking_children` 并处理/通知。
 4. 协作：跨 agent 传递信息一律走 `mailbox_send`（附 `refs`），不要靠 commit message/代码注释。
@@ -155,6 +158,6 @@ class TransitionIn(BaseModel):
 ## 7. 工具命名与注册约定
 
 - 命名：`资源_动作`（`work_item_*`、`sprint_*`、`mailbox_*`），全小写蛇形；无前缀 `rdm_`（server 名已隔离）。
-- 注册：`interfaces/mcp/tools/<resource>.py` 每文件一个模块，`register(mcp)` 函数；工具函数只做 pydantic 入参 → 调 service → 包信封。
+- 注册：`interfaces/mcp/tools/<resource>.py` 每文件一个模块，`register(mcp, container)` 函数（container 用于开 UoW）；工具函数只做 pydantic 入参 → 调 service → 包信封。
 - 测试：每个工具至少一条 happy path + 一条错误码映射测试；`workflow_get` 的工具输出必须与 REST `/api/v1/workflow` 完全一致（同一函数生成）。
-- 工具总数预算 26，超预算需先删/合并再新增。
+- 工具总数预算 27（见 §3 勘误），超预算需先删/合并再新增。

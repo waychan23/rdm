@@ -14,7 +14,7 @@ def engine() -> WorkflowEngine:
 
 def test_spec_has_all_kinds_and_version() -> None:
     spec = load_spec()
-    assert spec.version == 1
+    assert spec.version == 2
     assert set(spec.kinds) == {"epic", "story", "issue", "task", "sprint"}
 
 
@@ -59,9 +59,22 @@ def test_terminal_states_have_no_or_only_named_exits(engine: WorkflowEngine) -> 
     assert engine.allowed("issue", "CLOSED_DONE") == ("REOPEN",)
 
 
+def test_issue_first_fix_can_close_v2(engine: WorkflowEngine) -> None:
+    # workflow.yml v2 (architecture §16.35): FIXING may enter CLOSED_DONE
+    # directly, but the min_children gate still applies.
+    with pytest.raises(WorkflowGateBlocked) as exc:
+        engine.check("issue", "FIXING", "CLOSED_DONE", item="RDM-9", context=GateContext())
+    assert exc.value.details["min_children"] == 1
+    ctx = GateContext(children=[GateChild("task", "DONE", "RDM-10")])
+    engine.check("issue", "FIXING", "CLOSED_DONE", item="RDM-9", context=ctx)
+
+
 def test_issue_reopen_flow(engine: WorkflowEngine) -> None:
     engine.check("issue", "CLOSED_DONE", "REOPEN")
     engine.check("issue", "REOPEN", "FIXING")
+    # REOPEN may also re-close directly.
+    ctx = GateContext(children=[GateChild("task", "DONE", "RDM-10")])
+    engine.check("issue", "REOPEN", "CLOSED_DONE", item="RDM-9", context=ctx)
 
 
 def test_story_gate_blocks_on_open_children(engine: WorkflowEngine) -> None:
