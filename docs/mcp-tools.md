@@ -92,10 +92,10 @@
 
 ```python
 class WorkItemCreateIn(BaseModel):
-    project: str | None          # 缺省取 RDM_PROJECT
-    kind: Literal["epic","story","issue","task"]
+    project: str | None  # 缺省取 RDM_PROJECT
+    kind: Literal["epic", "story", "issue", "task"]
     title: str
-    parent: str | None = None    # display_id
+    parent: str | None = None  # display_id
     description_md: str | None = None
     priority: int = 0
     assignee: str | None = None  # member name 或 id
@@ -103,14 +103,27 @@ class WorkItemCreateIn(BaseModel):
     # kind=story
     acceptance_criteria_md: str | None = None
     # kind=issue
-    severity: Literal["blocker","critical","major","minor","trivial"] | None = None
+    severity: Literal["blocker", "critical", "major", "minor", "trivial"] | None = None
     environment: str | None = None
     repro_steps_md: str | None = None
     expected_behavior_md: str | None = None
     actual_behavior_md: str | None = None
     source_story: str | None = None
     # kind=task
-    task_type: Literal["product_design","ux_design","frontend","backend","fullstack","qa","release","docs","other"] | None = None
+    task_type: (
+        Literal[
+            "product_design",
+            "ux_design",
+            "frontend",
+            "backend",
+            "fullstack",
+            "qa",
+            "release",
+            "docs",
+            "other",
+        ]
+        | None
+    ) = None
     est_work_hours: float | None = None
     code_branch: str | None = None
 ```
@@ -119,9 +132,9 @@ class WorkItemCreateIn(BaseModel):
 ```python
 class TransitionIn(BaseModel):
     id: str
-    to: str                      # 状态枚举
+    to: str  # 状态枚举
     row_version: int
-    reason: str | None = None    # 记入事件 payload，供审计
+    reason: str | None = None  # 记入事件 payload，供审计
 ```
 
 `work_item_transition` 成功响应示例：
