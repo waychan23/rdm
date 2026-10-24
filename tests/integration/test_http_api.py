@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 def auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
@@ -32,12 +30,31 @@ async def test_whoami_with_bootstrap_owner(server, owner_token) -> None:
     assert body["project"]["key"] == "RDM"
 
 
-@pytest.mark.parametrize("headers", [{}, {"Authorization": "Bearer nope"}])
-async def test_auth_failures(server, headers) -> None:
+async def test_bad_bearer_rejected(server) -> None:
     client, _settings, _app = server
-    r = await client.get("/api/v1/whoami", headers=headers)
+    r = await client.get("/api/v1/whoami", headers={"Authorization": "Bearer nope"})
     assert r.status_code in (401, 403)
     assert r.json()["error"]["code"] in {"AUTH_INVALID_TOKEN", "FORBIDDEN"}
+
+
+async def test_loopback_shim_owner_without_token(server) -> None:
+    """Token-less requests from loopback act as the owner (§16.33)."""
+    client, _settings, _app = server
+    r = await client.get("/api/v1/whoami")
+    assert r.status_code == 200
+    assert r.json()["data"]["member"]["roles"] == ["project_owner"]
+
+
+async def test_non_loopback_without_token_rejected(server) -> None:
+    import httpx
+    from httpx import ASGITransport
+
+    _client, _settings, app = server
+    transport = ASGITransport(app=app, client=("10.0.0.1", 5000))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ext:
+        r = await ext.get("/api/v1/whoami")
+    assert r.status_code == 401
+    assert r.json()["error"]["code"] == "AUTH_INVALID_TOKEN"
 
 
 async def test_deactivated_member_forbidden(server, owner_token) -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 
@@ -19,6 +20,7 @@ from rdm.interfaces.http.routers import (
     projects_router,
     system_router,
 )
+from rdm.interfaces.http.spa import RootDispatch
 from rdm.interfaces.http.sprint import router as sprints_router
 from rdm.interfaces.http.workflow import router as workflow_router
 from rdm.interfaces.http.workitem import router as work_items_router
@@ -26,6 +28,8 @@ from rdm.interfaces.mcp.auth_guard import McpBearerGuard
 from rdm.interfaces.mcp.server import build_mcp
 
 logger = logging.getLogger("rdm.app")
+
+WEB_DIST = Path(__file__).resolve().parent / "resources" / "web-dist"
 
 
 def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
@@ -65,8 +69,10 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     app.include_router(comments_router)
     app.include_router(workflow_router)
 
-    # FastMCP's http_app already serves its endpoint at /mcp. Mount the whole
-    # guarded ASGI app at root AFTER the API routers so /api, /healthz win
-    # route matching; only /mcp (and unknown paths) reach the sub-app.
-    app.mount("/", McpBearerGuard(mcp_http, container.authenticator))
+    # FastMCP's http_app serves /mcp; RootDispatch splits /mcp (guarded) from
+    # the static SPA, while API routers above win route matching first.
+    app.mount(
+        "/",
+        RootDispatch(McpBearerGuard(mcp_http, container.authenticator), WEB_DIST),
+    )
     return app
