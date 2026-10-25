@@ -121,6 +121,19 @@ class SprintItemRepository:
         rows = list((await self._s.execute(stmt)).scalars().all())
         return [sprint_item_to_domain(r) for r in rows]
 
+    async def active_work_item_ids(self, project_id: str) -> list[str]:
+        """Live (non-removed) item ids across every sprint of the project."""
+        stmt = (
+            select(SprintItemModel.work_item_id)
+            .join(SprintModel, SprintItemModel.sprint_id == SprintModel.id)
+            .where(
+                SprintModel.project_id == project_id,
+                SprintItemModel.deleted_at.is_(None),
+                SprintModel.deleted_at.is_(None),
+            )
+        )
+        return [str(row[0]) for row in (await self._s.execute(stmt)).all()]
+
     async def active_link_for_item(self, work_item_id: str) -> SprintItem | None:
         """Live (non-soft-deleted) membership link of an item, across all sprints.
 

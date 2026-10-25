@@ -144,6 +144,7 @@ class WorkItemService:
         status: str | None = None,
         assignee_ref: str | None = None,
         parent_ref: str | None = None,
+        sprint_ref: str | None = None,
         q: str | None = None,
         include_deleted: bool = False,
         limit: int = 20,
@@ -163,6 +164,22 @@ class WorkItemService:
             ).id
         if include_deleted and not security.is_owner(actor):
             include_deleted = False
+
+        if sprint_ref is not None:
+            project, items = await self._list_in_sprint(
+                actor,
+                project,
+                sprint_ref,
+                kind=kind,
+                status=status,
+                assignee_id=assignee_id,
+                parent_id=parent_id,
+                q=q,
+                limit=limit,
+                offset=offset,
+            )
+            return project, items
+
         items = await self.uow.work_items.list(
             project.id,
             kind=kind,
@@ -175,6 +192,92 @@ class WorkItemService:
             offset=offset,
         )
         return project, items
+
+    async def _list_in_sprint(
+        self,
+        actor: Member,
+        project: Project,
+        sprint_ref: str,
+        *,
+        kind: str | None,
+        status: str | None,
+        assignee_id: str | None,
+        parent_id: str | None,
+        q: str | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[Project, list[WorkItem]]:
+        assert self.uow.sprints is not None and self.uow.sprint_items is not None
+        sprint = await self.uow.sprints.get(sprint_ref)
+        if sprint is None or sprint.project_id != project.id:
+            raise NotFound(
+                f"Sprint {sprint_ref} 不存在", details={"sprint_id": sprint_ref}
+            )
+        security.assert_same_project(actor, project.id)
+        links = await self.uow.sprint_items.list_for_sprint(sprint.id)
+        items = (
+            await self.uow.work_items.list_by_ids(
+                project.id, [link.work_item_id for link in links]
+            )
+            if links
+            else []
+        )
+
+        def keep(item: WorkItem) -> bool:
+            if kind is not None and item.kind != kind:
+                return False
+            if status is not None and item.status != status:
+                return False
+            if assignee_id is not None and item.assignee_member_id != assignee_id:
+                return False
+            if parent_id is not None and item.parent_id != parent_id:
+                return False
+            if q and q.lower() not in item.title.lower():
+                return False
+            return True
+
+        items = [i for i in items if keep(i)]
+        items.sort(key=lambda i: i.display_no)
+        return project, items[offset : offset + min(limit, 100)]
+
+    async def backlog_items(
+        self,
+        actor: Member,
+        *,
+        project_key: str | None = None,
+        kind: str | None = None,
+    ) -> tuple[Project, list[WorkItem]]:
+        """ProductBacklog: non-terminal items not linked to any live sprint."""
+        project = await self.resolve_project(actor, project_key)
+        assert self.uow.work_items is not None and self.uow.sprint_items is not None
+        if kind is not None and kind not in VALID_KINDS:
+            raise ValidationError(f"未知 kind {kind!r}", details={"field": "kind"})
+        in_sprint = set(await self.uow.sprint_items.active_work_item_ids(project.id))
+        items = await self.uow.work_items.list(project.id, kind=kind, limit=200)
+        engine = load_engine()
+        items = [
+            i
+            for i in items
+            if i.id not in in_sprint and not engine.is_terminal(i.kind, i.status)
+        ]
+        items.sort(key=lambda i: (-i.priority, i.display_no))
+        return project, items
+
+    async def my_items(
+        self, actor: Member, *, status: str | None = None
+    ) -> list[WorkItem]:
+        """Items assigned to me; without a status filter only non-terminal."""
+        assert self.uow.work_items is not None
+        items = await self.uow.work_items.list(
+            actor.project_id,
+            assignee_member_id=actor.id,
+            status=status,
+            limit=100,
+        )
+        if status is not None:
+            return items
+        engine = load_engine()
+        return [i for i in items if not engine.is_terminal(i.kind, i.status)]
 
     async def my_open_items(self, actor: Member) -> list[WorkItem]:
         assert self.uow.work_items is not None

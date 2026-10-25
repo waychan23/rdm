@@ -50,7 +50,7 @@ async def test_whoami_tool_over_streamable_http(server, owner_token) -> None:
     async with Client(transport) as mcp_client:
         tools = await mcp_client.list_tools()
         names = {t.name for t in tools}
-        assert len(names) == 17
+        assert len(names) == 27
         assert "whoami" in names and "work_item_transition" in names
 
         result = await mcp_client.call_tool("whoami", {})

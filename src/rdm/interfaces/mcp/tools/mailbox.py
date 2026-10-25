@@ -61,3 +61,23 @@ def register(mcp: FastMCP, container: Container) -> None:
             return ok({"message_id": message.id, "deliveries": count})
 
         return await run_tool(container, run)
+
+    @mcp.tool
+    async def mailbox_mark_read(delivery_ids: list[str]) -> Any:
+        """批量把信件投递标记为已读，返回更新条数。
+
+        处理完 mailbox_check 拉到的信件后调用；delivery id 即信件条目里的
+        delivery_id，不是 message id。
+        """
+
+        async def run(uow, actor):
+            if not delivery_ids:
+                from rdm.domain.errors import ValidationError
+
+                raise ValidationError(
+                    "delivery_ids 至少一个", details={"field": "delivery_ids"}
+                )
+            updated = await MailboxService(uow).mark_read(actor, delivery_ids)
+            return ok({"updated": updated})
+
+        return await run_tool(container, run)

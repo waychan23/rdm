@@ -37,14 +37,15 @@ def register(mcp: FastMCP, container: Container) -> None:
         status: str | None = None,
         assignee: str | None = None,
         parent: str | None = None,
+        sprint: str | None = None,
         q: str | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> Any:
         """按条件列工作项（默认 20 条摘要）。
 
-        assignee 传 "me" 表示自己（替代 my_work_list）。不要用它读详情/评论，
-        详情用 work_item_get；查 Sprint 内项目用 OpenAPI（M1 未提供该筛选）。
+        assignee 传 "me" 表示自己；sprint 传 Sprint 的 ULID（先用 sprint_list 查）。
+        不要用它读详情/评论，详情用 work_item_get。
         """
 
         async def run(uow, actor):
@@ -56,9 +57,45 @@ def register(mcp: FastMCP, container: Container) -> None:
                 status=status,
                 assignee_ref=assignee_ref,
                 parent_ref=parent,
+                sprint_ref=sprint,
                 q=q,
                 limit=limit,
                 offset=offset,
+            )
+            members = await _members(uow, proj.id)
+            return ok([work_item_summary_out(i, proj, members) for i in items])
+
+        return await run_tool(container, run)
+
+    @mcp.tool
+    async def my_work_list(status: str | None = None) -> Any:
+        """我的待办：分配给我且非终态的工作项（传 status 时按该状态精确过滤）。
+
+        开工三步之一；认领任务用它找未负责人的任务时改用 backlog_list。
+        """
+
+        async def run(uow, actor):
+            service = WorkItemService(uow)
+            items = await service.my_items(actor, status=status)
+            project = await uow.projects.get(actor.project_id)
+            members = await _members(uow, actor.project_id)
+            return ok([work_item_summary_out(i, project, members) for i in items])
+
+        return await run_tool(container, run)
+
+    @mcp.tool
+    async def backlog_list(
+        kind: str | None = None, project: str | None = None
+    ) -> Any:
+        """ProductBacklog：未进入任何 Sprint 且非终态的工作项（最多 200 条）。
+
+        查 Sprint 内的工作项用 sprint_get；已终态或已入 Sprint 的项不会出现。
+        """
+
+        async def run(uow, actor):
+            service = WorkItemService(uow)
+            proj, items = await service.backlog_items(
+                actor, project_key=project, kind=kind
             )
             members = await _members(uow, proj.id)
             return ok([work_item_summary_out(i, proj, members) for i in items])

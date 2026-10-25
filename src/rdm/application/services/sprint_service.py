@@ -44,11 +44,18 @@ class SprintService:
         return project, sprint
 
     async def list_sprints(
-        self, actor: Member, project_key: str | None = None
+        self, actor: Member, project_key: str | None = None, status: str | None = None
     ) -> tuple[Project, list[Sprint]]:
         project = await self.items.resolve_project(actor, project_key)
         assert self.uow.sprints is not None
-        sprints = await self.uow.sprints.list(project.id)
+        if status is not None:
+            status = status.upper()
+            if status not in {s.value for s in SprintStatus}:
+                raise ValidationError(
+                    f"sprint status 必须是 PLANNED/ACTIVE/CLOSED，收到 {status!r}",
+                    details={"field": "status"},
+                )
+        sprints = await self.uow.sprints.list(project.id, status=status)
         return project, sprints
 
     async def create(

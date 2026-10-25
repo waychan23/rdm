@@ -13,9 +13,9 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 
 1. `whoami` —— 确认身份、角色、未读信件数（unread_count）和我的未终态工作项数。
 2. `mailbox_check` —— 拉取分配给你的信件与上下文（默认只拉未读；带 `since` 游标做增量拉取，把上一次返回的 `next_cursor` 传回去）。
-3. `work_item_list`（参数 `assignee="me"`）—— 列出分配给你的未终态工作项（M1 没有 my_work_list 工具，`"me"` 是保留字，服务端解析为你的成员 id）。
+3. `my_work_list` —— 列出分配给你的未终态工作项（也可用 `work_item_list` 参数 `assignee="me"`，`"me"` 是保留字，服务端解析为你的成员 id）。
 
-不要在没有上下文时直接改状态或发信。
+不要在没有上下文时直接改状态或发信。信箱（查信/回信/@mention/已读）的详细规范见 rdm-mailbox skill。
 
 ## 2. 认领工作项
 

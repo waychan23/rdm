@@ -278,7 +278,10 @@ class MailboxService:
             message = msg_by_id.get(delivery.message_id)
             if message is None:
                 continue
-            sender = await self._member(actor.project_id, message.from_member_id)
+            # The sender may be the global bootstrap owner from another
+            # project; fetch by id instead of the project-scoped lookup.
+            assert self.uow.members is not None
+            sender = await self.uow.members.get(message.from_member_id)
             item_refs = [
                 f"{project.key}-{item_by_id[r.work_item_id].display_no}"
                 for r in refs
@@ -288,7 +291,11 @@ class MailboxService:
                 {
                     "delivery_id": delivery.id,
                     "message_id": message.id,
-                    "from": {"id": sender.id, "name": sender.name, "type": sender.type},
+                    "from": (
+                        {"id": sender.id, "name": sender.name, "type": sender.type}
+                        if sender is not None
+                        else {"id": message.from_member_id}
+                    ),
                     "subject": message.subject,
                     "body_md": message.body_md,
                     "recipient_type": delivery.recipient_type,

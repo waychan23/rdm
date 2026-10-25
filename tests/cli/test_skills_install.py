@@ -17,7 +17,7 @@ from rdm.interfaces.cli.skills import (
 
 
 def test_bundled_skills_catalogue() -> None:
-    assert bundled_skill_names() == ["rdm-workflow"]
+    assert bundled_skill_names() == ["rdm-mailbox", "rdm-workflow"]
     assert "work_item_transition" in bundled_skill_text("rdm-workflow")
 
 
