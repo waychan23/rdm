@@ -207,7 +207,11 @@ class WorkItemService:
         limit: int,
         offset: int,
     ) -> tuple[Project, list[WorkItem]]:
-        assert self.uow.sprints is not None and self.uow.sprint_items is not None
+        assert (
+            self.uow.sprints is not None
+            and self.uow.sprint_items is not None
+            and self.uow.work_items is not None
+        )
         sprint = await self.uow.sprints.get(sprint_ref)
         if sprint is None or sprint.project_id != project.id:
             raise NotFound(
