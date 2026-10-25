@@ -46,6 +46,10 @@ class SPAStatic:
             and "text/html" in accept
             and self._index.is_file()
         )
+        # index.html must never be cached: it references content-hashed
+        # assets, so a stale entry pins the browser to a deleted bundle.
+        if is_navigation:
+            send = self._no_cache_wrapper(send)
         try:
             if is_navigation:
                 await self._app(scope, receive, self._send_wrapper(send, scope, receive))
@@ -60,6 +64,20 @@ class SPAStatic:
             else:
                 response = Response(status_code=exc.status_code)
                 await response(scope, receive, send)
+
+    def _no_cache_wrapper(self, send: Send) -> Send:
+        async def send_wrapper(message: dict[str, Any]) -> None:
+            if message["type"] == "http.response.start":
+                headers = [
+                    (k, v)
+                    for k, v in message.get("headers", [])
+                    if k.lower() != b"cache-control"
+                ]
+                headers.append((b"cache-control", b"no-cache"))
+                message["headers"] = headers
+            await send(message)
+
+        return send_wrapper
 
     def _send_wrapper(self, send: Send, scope: Scope, receive: Receive) -> Send:
         async def send_wrapper(message: dict[str, Any]) -> None:

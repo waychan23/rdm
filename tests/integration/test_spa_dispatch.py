@@ -39,6 +39,11 @@ async def test_spa_served_with_history_fallback(tmp_path) -> None:
     async with await _client(dispatch) as client:
         r = await client.get("/", headers={"Accept": "text/html"})
         assert r.status_code == 200 and "app" in r.text
+        # index.html must revalidate so new content-hashed bundles deploy.
+        assert r.headers.get("cache-control") == "no-cache"
+
+        r = await client.get("/items/RDM-1", headers={"Accept": "text/html"})
+        assert r.headers.get("cache-control") == "no-cache"
 
         r = await client.get("/items/RDM-1", headers={"Accept": "text/html"})
         assert r.status_code == 200 and "app" in r.text
