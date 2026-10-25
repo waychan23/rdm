@@ -31,6 +31,14 @@ class SprintItemsIn(BaseModel):
     items: list[str] = Field(min_length=1)
 
 
+class SprintUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    goal_md: str | None = None
+    start_date: dt.date | None = None
+    end_date: dt.date | None = None
+    manager_member_id: str | None = None
+
+
 async def _members_map(uow, project_id: str) -> dict:
     members = await MemberService(uow).list_members(project_id)
     return {m.id: m for m in members}
@@ -76,6 +84,21 @@ async def get_sprint(
         data["items"] = [work_item_summary_out(i, project, members) for i in items]
         data["status_counts"] = counts
     return {"data": data}
+
+
+@router.patch("/sprints/{sprint_id}")
+async def update_sprint(
+    sprint_id: str,
+    body: SprintUpdateIn,
+    container: Container = Depends(get_container),
+    actor: Member = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        _project, sprint = await SprintService(uow).update(
+            actor, sprint_id, body.model_dump(exclude_unset=True)
+        )
+        out = sprint_out(sprint)
+    return {"data": out}
 
 
 @router.post("/sprints/{sprint_id}/items", status_code=201)

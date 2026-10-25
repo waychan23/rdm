@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
@@ -10,7 +12,7 @@ from rdm.application.services.member_service import MemberService
 from rdm.application.services.project_service import ProjectService
 from rdm.domain.entities import Member
 from rdm.interfaces.http.container import Container, get_actor, get_container
-from rdm.interfaces.http.serializers import member_out, project_out
+from rdm.interfaces.http.serializers import member_out, project_out, token_out
 
 system_router = APIRouter(tags=["system"])
 projects_router = APIRouter(prefix="/api/v1", tags=["projects"])
@@ -155,3 +157,41 @@ async def revoke_token(
     async with container.uow() as uow:
         await MemberService(uow).revoke_token(token_id=token_id, actor=actor)
     container.authenticator.invalidate_by_id(token_id)
+
+
+class MemberUpdateIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    description_md: str | None = None
+    roles: list[str] | None = None
+    accept_kinds: list[str] | None = None
+    email: str | None = None
+    notify_webhook: str | None = None
+    notify_webhook_format: Literal["generic", "dingtalk", "feishu"] | None = None
+    is_active: bool | None = None
+
+
+@members_router.patch("/members/{member_id}")
+async def update_member(
+    member_id: str,
+    body: MemberUpdateIn,
+    container: Container = Depends(get_container),
+    actor: Member = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        member = await MemberService(uow).update_member(
+            member_id=member_id, data=body.model_dump(exclude_unset=True), actor=actor
+        )
+        out = member_out(member)
+    return {"data": out}
+
+
+@members_router.get("/members/{member_id}/tokens")
+async def list_tokens(
+    member_id: str,
+    container: Container = Depends(get_container),
+    actor: Member = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        tokens = await MemberService(uow).list_tokens(member_id=member_id, actor=actor)
+    return {"data": [token_out(t) for t in tokens]}

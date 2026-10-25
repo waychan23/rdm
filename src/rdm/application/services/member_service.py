@@ -11,7 +11,7 @@ from rdm.application import security
 from rdm.domain.entities import Member, MemberToken
 from rdm.domain.enums import AcceptKind, MemberRole, MemberType
 from rdm.domain.errors import NotFound, ValidationError
-from rdm.domain.events import EventType
+from rdm.domain.events import EventType, updated_payload
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
@@ -133,6 +133,93 @@ class MemberService:
             payload={"snapshot": {"id": member.id, "name": member.name, "type": member.type}},
         )
         return member
+
+    async def update_member(
+        self, *, member_id: str, data: dict[str, Any], actor: Member
+    ) -> Member:
+        security.require_owner(actor)
+        assert self.uow.members is not None
+        member = await self.uow.members.get(member_id)
+        if member is None:
+            raise NotFound(f"成员 {member_id} 不存在", details={"member_id": member_id})
+
+        changes: dict[str, list[Any]] = {}
+
+        def track(key: str, new: Any) -> None:
+            nonlocal member
+            old = getattr(member, key)
+            if old != new:
+                changes[key] = [old, new]
+                setattr(member, key, new)
+
+        if "roles" in data:
+            roles = data["roles"] or []
+            bad_roles = [r for r in roles if r not in VALID_ROLES]
+            if bad_roles:
+                raise ValidationError(f"未知角色 {bad_roles}", details={"field": "roles"})
+            track("roles", list(roles))
+        if "accept_kinds" in data:
+            kinds = data["accept_kinds"] or []
+            bad = [k for k in kinds if k not in VALID_ACCEPT_KINDS]
+            if bad:
+                raise ValidationError(
+                    f"accept_kinds 只能是 story/issue/task，收到 {bad}",
+                    details={"field": "accept_kinds"},
+                )
+            track("accept_kinds", list(kinds))
+        if "description_md" in data:
+            track("description_md", data["description_md"])
+        if "email" in data:
+            track("email", data["email"] or None)
+        if "notify_webhook" in data:
+            track("notify_webhook", data["notify_webhook"] or None)
+        if "notify_webhook_format" in data:
+            fmt = data["notify_webhook_format"] or "generic"
+            if fmt not in {"generic", "dingtalk", "feishu"}:
+                raise ValidationError(
+                    "notify_webhook_format 必须是 generic/dingtalk/feishu",
+                    details={"field": "notify_webhook_format"},
+                )
+            track("notify_webhook_format", fmt)
+        was_active = member.is_active
+        if "is_active" in data:
+            track("is_active", bool(data["is_active"]))
+
+        if changes:
+            await self.uow.members.update(member)
+            seq = await self.uow.allocate_event_seq(member.project_id)
+            assert self.uow.events is not None
+            await self.uow.events.append(
+                project_id=member.project_id,
+                seq=seq,
+                aggregate_type="member",
+                aggregate_id=member.id,
+                aggregate_version=0,
+                event_type=EventType.MEMBER_UPDATED,
+                actor_member_id=actor.id,
+                payload=updated_payload(changes),
+            )
+            if was_active and not member.is_active:
+                seq = await self.uow.allocate_event_seq(member.project_id)
+                await self.uow.events.append(
+                    project_id=member.project_id,
+                    seq=seq,
+                    aggregate_type="member",
+                    aggregate_id=member.id,
+                    aggregate_version=0,
+                    event_type=EventType.MEMBER_DEACTIVATED,
+                    actor_member_id=actor.id,
+                    payload={"snapshot": {"id": member.id, "name": member.name}},
+                )
+        return member
+
+    async def list_tokens(self, *, member_id: str, actor: Member) -> list[MemberToken]:
+        security.require_owner(actor)
+        assert self.uow.members is not None and self.uow.tokens is not None
+        member = await self.uow.members.get(member_id)
+        if member is None:
+            raise NotFound(f"成员 {member_id} 不存在", details={"member_id": member_id})
+        return await self.uow.tokens.list_by_member(member_id)
 
     async def issue_token(
         self, *, member_id: str, label: str, actor: Member

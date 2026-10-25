@@ -10,6 +10,7 @@ from fastapi import FastAPI
 
 from rdm.application.services.bootstrap import bootstrap_if_empty
 from rdm.config import Settings
+from rdm.interfaces.http.artifacts import router as artifacts_router
 from rdm.interfaces.http.attachments import router as attachments_router
 from rdm.interfaces.http.comments import router as comments_router
 from rdm.interfaces.http.container import Container
@@ -25,6 +26,7 @@ from rdm.interfaces.http.spa import RootDispatch
 from rdm.interfaces.http.sprint import router as sprints_router
 from rdm.interfaces.http.workflow import router as workflow_router
 from rdm.interfaces.http.workitem import router as work_items_router
+from rdm.interfaces.http.workspaces import router as workspaces_router
 from rdm.interfaces.mcp.auth_guard import McpBearerGuard
 from rdm.interfaces.mcp.server import build_mcp
 
@@ -69,6 +71,8 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     app.include_router(mailbox_router)
     app.include_router(comments_router)
     app.include_router(attachments_router)
+    app.include_router(artifacts_router)
+    app.include_router(workspaces_router)
     app.include_router(workflow_router)
 
     # FastMCP's http_app serves /mcp; RootDispatch splits /mcp (guarded) from

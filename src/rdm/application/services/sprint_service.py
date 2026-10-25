@@ -86,6 +86,61 @@ class SprintService:
         )
         return project, sprint
 
+    async def update(
+        self, actor: Member, sprint_id: str, data: dict[str, Any]
+    ) -> tuple[Project, Sprint]:
+        """Edit sprint fields (M2 sprint_manage update / PATCH). CLOSED is frozen."""
+        security.require_sprint_manager(actor)
+        project, sprint = await self.resolve_sprint(actor, sprint_id)
+        if sprint.status == SprintStatus.CLOSED:
+            raise ValidationError(
+                f"Sprint {sprint.name} 已关闭，不能修改字段",
+                details={"sprint_id": sprint.id, "status": str(sprint.status)},
+            )
+        changes: dict[str, list[Any]] = {}
+
+        def track(key: str, new: Any) -> None:
+            old = getattr(sprint, key)
+            if old != new:
+                changes[key] = [str(old) if old is not None else None, new]
+                setattr(sprint, key, new)
+
+        if "name" in data:
+            name = (data["name"] or "").strip()
+            if not name:
+                raise ValidationError("name 不能为空", details={"field": "name"})
+            track("name", name)
+        if "goal_md" in data:
+            track("goal_md", data["goal_md"])
+        if "start_date" in data:
+            track("start_date", _as_date(data["start_date"]))
+        if "end_date" in data:
+            track("end_date", _as_date(data["end_date"]))
+        if "manager_member_id" in data:
+            manager_id = data["manager_member_id"] or None
+            if manager_id is not None:
+                manager = await self.items.resolve_member(project.id, manager_id)
+                manager_id = manager.id
+            track("manager_member_id", manager_id)
+
+        if changes:
+            for key in ("start_date", "end_date"):
+                if key in changes:
+                    changes[key] = [
+                        d.isoformat() if isinstance(d, dt.date) else d
+                        for d in changes[key]
+                    ]
+            assert self.uow.sprints is not None
+            await self.uow.sprints.save_fields(sprint)
+            await self._event(
+                project.id,
+                sprint,
+                EventType.SPRINT_UPDATED,
+                actor,
+                {"changes": changes},
+            )
+        return project, sprint
+
     async def add_items(
         self, actor: Member, sprint_id: str, item_refs: Sequence[str]
     ) -> tuple[Project, Sprint, list[WorkItem]]:

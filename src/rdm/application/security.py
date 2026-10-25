@@ -47,6 +47,16 @@ def require_sprint_manager(actor: Member) -> None:
         )
 
 
+def require_owner_or_manager(actor: Member, resource: str = "该资源") -> None:
+    if can_manage_sprint(actor):
+        return
+    raise Forbidden(
+        f"成员 {actor.name} 不能管理{resource}（仅 Owner/Manager）；"
+        "如需操作请用 mailbox_send 联系负责人。",
+        details={"member_id": actor.id, "roles": actor.roles},
+    )
+
+
 def assert_same_project(actor: Member, project_id: str) -> None:
     """Cross-project access for non-owners surfaces as NOT_FOUND."""
     if is_owner(actor) or actor.project_id == project_id:

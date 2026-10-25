@@ -65,6 +65,20 @@ class SprintRepository:
             update(SprintModel).where(SprintModel.id == sprint.id).values(status=str(sprint.status))
         )
 
+    async def save_fields(self, sprint: Sprint) -> None:
+        await self._s.execute(
+            update(SprintModel)
+            .where(SprintModel.id == sprint.id)
+            .values(
+                name=sprint.name,
+                goal_md=sprint.goal_md,
+                start_date=sprint.start_date,
+                end_date=sprint.end_date,
+                manager_member_id=sprint.manager_member_id,
+                updated_at=dt.datetime.now(dt.UTC),
+            )
+        )
+
 
 class SprintItemRepository:
     def __init__(self, session: AsyncSession) -> None:

@@ -12,6 +12,7 @@ from rdm.domain.entities import (
     Attachment,
     Comment,
     Member,
+    MemberToken,
     Project,
     Sprint,
     WorkItem,
@@ -50,6 +51,18 @@ def member_out(m: Member) -> dict:
         "notify_webhook_format": m.notify_webhook_format,
         "is_active": m.is_active,
         "created_at": _iso(m.created_at),
+    }
+
+
+def token_out(t: MemberToken) -> dict:
+    return {
+        "id": t.id,
+        "member_id": t.member_id,
+        "label": t.label,
+        "last_used_at": _iso(t.last_used_at),
+        "revoked_at": _iso(t.revoked_at),
+        "created_at": _iso(t.created_at),
+        "is_valid": t.is_valid,
     }
 
 
