@@ -8,11 +8,21 @@
       <el-table-column prop="key" label="Key" width="120" />
       <el-table-column prop="name" label="名称" />
       <el-table-column prop="status" label="状态" width="120" />
-      <el-table-column label="操作" width="320">
+      <el-table-column label="操作" width="420">
         <template #default="{ row }">
-          <el-link :href="`/projects/${row.key}/members`" :underline="false">成员</el-link>
+          <router-link :to="`/projects/${row.key}/board`">看板</router-link>
           <el-divider direction="vertical" />
-          <el-link :href="`/projects/${row.key}/backlog`" :underline="false">Backlog</el-link>
+          <router-link :to="`/projects/${row.key}/backlog`">Backlog</router-link>
+          <el-divider direction="vertical" />
+          <router-link :to="`/projects/${row.key}/sprints`">Sprint</router-link>
+          <el-divider direction="vertical" />
+          <router-link :to="`/projects/${row.key}/mailbox`">信箱</router-link>
+          <el-divider direction="vertical" />
+          <router-link :to="`/projects/${row.key}/workspaces`">工作区</router-link>
+          <el-divider direction="vertical" />
+          <router-link :to="`/projects/${row.key}/members`">成员</router-link>
+          <el-divider direction="vertical" />
+          <router-link :to="`/projects/${row.key}/settings`">设置</router-link>
         </template>
       </el-table-column>
     </el-table>

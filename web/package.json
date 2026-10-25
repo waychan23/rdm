@@ -9,7 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "dompurify": "^3.4.17",
     "element-plus": "^2.10.4",
+    "marked": "^18.1.1",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
