@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+from collections.abc import Sequence
 
+from rdm.application import security
+from rdm.application.ports import FileStore
+from rdm.application.services.attachment_service import AttachmentService
 from rdm.application.services.mailbox_service import MailboxService
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.entities import Comment, Member, Project, WorkItem
-from rdm.domain.errors import NotFound, ValidationError
+from rdm.domain.errors import Forbidden, NotFound, ValidationError
 from rdm.domain.events import EventType
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
@@ -23,10 +27,13 @@ MENTION_RE = re.compile(r"(?<![\w/])@([A-Za-z0-9_一-鿿\-]+)")
 
 
 class CommentService:
-    def __init__(self, uow: SqlAlchemyUnitOfWork) -> None:
+    def __init__(
+        self, uow: SqlAlchemyUnitOfWork, file_store: FileStore | None = None
+    ) -> None:
         self.uow = uow
         self.items = WorkItemService(uow)
         self.mailbox = MailboxService(uow)
+        self._file_store = file_store
 
     async def add(
         self,
@@ -34,6 +41,7 @@ class CommentService:
         item_ref: str,
         body_md: str,
         reply_to_id: str | None = None,
+        attachment_ids: Sequence[str] | None = None,
     ) -> tuple[Project, WorkItem, Comment, list[str]]:
         project, item = await self.items.get_item(actor, item_ref)
         body_md = (body_md or "").strip()
@@ -62,6 +70,16 @@ class CommentService:
         await self.uow.comments.add(comment)
         await self.uow.flush()
 
+        attachment_ids = list(attachment_ids or [])
+        if attachment_ids:
+            if self._file_store is None:
+                raise ValidationError(
+                    "附件挂载需要 FileStore", details={"attachment_ids": attachment_ids}
+                )
+            await AttachmentService(self.uow, self._file_store).rebind_to_comment(
+                project, item, comment.id, attachment_ids
+            )
+
         mentioned, unresolved = await self._resolve_mentions(project.id, body_md, actor)
         await self.mailbox.notify_mentions(actor, project, item, mentioned, body_md)
 
@@ -84,10 +102,66 @@ class CommentService:
                     "body_md": body_md,
                     "reply_to_id": reply_to_id,
                     "mentions": [m.id for m in mentioned],
+                    "attachment_ids": attachment_ids,
                 }
             },
         )
         return project, item, comment, unresolved
+
+    async def delete(
+        self, actor: Member, comment_id: str
+    ) -> tuple[Project, Comment, list[str]]:
+        """Author/owner/manager only; cascades to comment-owned records (§16.44)."""
+        assert self.uow.comments is not None and self.uow.projects is not None
+        comment = await self.uow.comments.get(comment_id)
+        if comment is None:
+            raise NotFound(f"评论 {comment_id} 不存在", details={"comment_id": comment_id})
+        security.assert_same_project(actor, comment.project_id)
+        if comment.author_member_id != actor.id and not (
+            security.is_owner(actor) or "manager" in actor.roles
+        ):
+            raise Forbidden(
+                f"成员 {actor.name} 不能删除该评论：仅作者本人或 Owner/Manager 可删除。",
+                details={"comment_id": comment_id, "author_member_id": comment.author_member_id},
+            )
+        project = await self.uow.projects.get(comment.project_id)
+        assert project is not None
+        now = dt.datetime.now(dt.UTC)
+
+        assert self.uow.attachments is not None and self.uow.artifacts is not None
+        attachment_ids = await self.uow.attachments.soft_delete_for_owner(
+            "comment", comment.id, actor.id, now
+        )
+        artifact_ids = await self.uow.artifacts.soft_delete_for_owner(
+            "comment", comment.id, actor.id, now
+        )
+        deleted = await self.uow.comments.soft_delete(comment.id, actor.id, now)
+        if not deleted:
+            raise NotFound(f"评论 {comment_id} 已删除", details={"comment_id": comment_id})
+        comment.deleted_at = now
+        comment.deleted_by = actor.id
+
+        cascade = [*attachment_ids, *artifact_ids]
+        seq = await self.uow.allocate_event_seq(project.id)
+        assert self.uow.events is not None
+        await self.uow.events.append(
+            project_id=project.id,
+            seq=seq,
+            aggregate_type="comment",
+            aggregate_id=comment.id,
+            aggregate_version=0,
+            event_type=EventType.COMMENT_DELETED,
+            actor_member_id=actor.id,
+            payload={
+                "snapshot": {
+                    "id": comment.id,
+                    "work_item_id": comment.work_item_id,
+                    "body_md": comment.body_md,
+                },
+                "cascade": cascade,
+            },
+        )
+        return project, comment, cascade
 
     async def list_for_item(
         self, actor: Member, item_ref: str

@@ -15,16 +15,27 @@ from rdm.interfaces.mcp.tools._base import ok, run_tool
 
 def register(mcp: FastMCP, container: Container) -> None:
     @mcp.tool
-    async def comment_add(work_item_id: str, body_md: str, reply_to: str | None = None) -> Any:
-        """在工作项下发评论；@成员名 会给对方发站内信。
+    async def comment_add(
+        work_item_id: str,
+        body_md: str,
+        reply_to: str | None = None,
+        attachment_ids: list[str] | None = None,
+    ) -> Any:
+        """在工作项下发评论；@成员名 会给对方发站内信，可挂已有附件。
 
-        找不到/重名的 @mention 会静默忽略并在 meta.unresolved_mentions 返回，
-        不要因此重发评论。不要用评论推动状态（状态走 work_item_transition）。
+        附件请先通过 REST multipart 上传到该工作项
+        （POST /projects/<key>/attachments, owner_type=work_item），再把
+        返回的附件 id 以 attachment_ids 传入；只能挂同一工作项上未绑定其他
+        评论的附件。找不到/重名的 @mention 会静默忽略并在
+        meta.unresolved_mentions 返回，不要因此重发评论。不要用评论推动状态
+        （状态走 work_item_transition）。
         """
 
         async def run(uow, actor):
-            _proj, _item, comment, unresolved = await CommentService(uow).add(
-                actor, work_item_id, body_md, reply_to
+            _proj, _item, comment, unresolved = await CommentService(
+                uow, container.file_store
+            ).add(
+                actor, work_item_id, body_md, reply_to, attachment_ids
             )
             project_id = comment.project_id
             members = await MemberService(uow).members_index(project_id)

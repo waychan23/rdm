@@ -119,7 +119,11 @@ def work_item_summary_out(
     }
 
 
-def comment_out(c: Comment, members: dict[str, Member] | None = None) -> dict:
+def comment_out(
+    c: Comment,
+    members: dict[str, Member] | None = None,
+    attachments: list[dict] | None = None,
+) -> dict:
     members = members or {}
     author = members.get(c.author_member_id)
     return {
@@ -130,6 +134,7 @@ def comment_out(c: Comment, members: dict[str, Member] | None = None) -> dict:
         "author": {"id": author.id, "name": author.name, "type": author.type}
         if author
         else {"id": c.author_member_id},
+        "attachments": attachments or [],
         "created_at": _iso(c.created_at),
     }
 
