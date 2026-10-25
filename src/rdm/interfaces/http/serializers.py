@@ -7,7 +7,16 @@ import datetime as dt
 from decimal import Decimal
 from typing import Any
 
-from rdm.domain.entities import Comment, Member, Project, Sprint, WorkItem
+from rdm.domain.entities import (
+    Artifact,
+    Attachment,
+    Comment,
+    Member,
+    Project,
+    Sprint,
+    WorkItem,
+    Workspace,
+)
 
 
 def _iso(value: dt.datetime | dt.date | None) -> str | None:
@@ -38,6 +47,7 @@ def member_out(m: Member) -> dict:
         "accept_kinds": m.accept_kinds,
         "email": m.email,
         "notify_webhook": m.notify_webhook,
+        "notify_webhook_format": m.notify_webhook_format,
         "is_active": m.is_active,
         "created_at": _iso(m.created_at),
     }
@@ -121,6 +131,51 @@ def comment_out(c: Comment, members: dict[str, Member] | None = None) -> dict:
         if author
         else {"id": c.author_member_id},
         "created_at": _iso(c.created_at),
+    }
+
+
+def attachment_out(a: Attachment, members: dict[str, Member] | None = None) -> dict:
+    members = members or {}
+    uploader = members.get(a.uploader_member_id)
+    return {
+        "id": a.id,
+        "owner_type": a.owner_type,
+        "owner_id": a.owner_id,
+        "filename": a.filename,
+        "mime": a.mime,
+        "size_bytes": a.size_bytes,
+        "sha256": a.sha256,
+        "download_url": f"/api/v1/attachments/{a.id}/download",
+        "uploader": {"id": uploader.id, "name": uploader.name, "type": uploader.type}
+        if uploader
+        else {"id": a.uploader_member_id},
+        "created_at": _iso(a.created_at),
+    }
+
+
+def artifact_out(a: Artifact) -> dict:
+    return {
+        "id": a.id,
+        "owner_type": a.owner_type,
+        "owner_id": a.owner_id,
+        "kind": a.kind,
+        "label": a.label,
+        "url": a.url,
+        "description_md": a.description_md,
+        "created_at": _iso(a.created_at),
+    }
+
+
+def workspace_out(w: Workspace) -> dict:
+    return {
+        "id": w.id,
+        "project_id": w.project_id,
+        "name": w.name,
+        "kind": w.kind,
+        "url": w.url,
+        "description_md": w.description_md,
+        "default_branch": w.default_branch,
+        "created_at": _iso(w.created_at),
     }
 
 

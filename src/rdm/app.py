@@ -10,6 +10,7 @@ from fastapi import FastAPI
 
 from rdm.application.services.bootstrap import bootstrap_if_empty
 from rdm.config import Settings
+from rdm.interfaces.http.attachments import router as attachments_router
 from rdm.interfaces.http.comments import router as comments_router
 from rdm.interfaces.http.container import Container
 from rdm.interfaces.http.errors import install_exception_handlers
@@ -67,6 +68,7 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     app.include_router(sprints_router)
     app.include_router(mailbox_router)
     app.include_router(comments_router)
+    app.include_router(attachments_router)
     app.include_router(workflow_router)
 
     # FastMCP's http_app serves /mcp; RootDispatch splits /mcp (guarded) from

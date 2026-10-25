@@ -2,16 +2,21 @@
 
 Infrastructure implements these; wiring happens only in app assembly.
 M0 defines ports needed by project/member/auth/work-item foundation;
-M1 extends with sprint/mailbox/comment repositories.
+M1 extends with sprint/mailbox/comment repositories; M2 adds collaboration
+(attachment/artifact/workspace), outbox and the on-disk file store.
 """
 
 from __future__ import annotations
 
 import datetime as dt
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
 from rdm.domain.entities import (
+    Artifact,
+    Attachment,
     Comment,
     Mailbox,
     MailboxMember,
@@ -24,6 +29,7 @@ from rdm.domain.entities import (
     Sprint,
     SprintItem,
     WorkItem,
+    Workspace,
 )
 from rdm.domain.events import EventType
 
@@ -41,6 +47,30 @@ MailboxMemberList = list[MailboxMember]
 MessageList = list[Message]
 DeliveryList = list[MessageDelivery]
 MessageRefList = list[MessageRef]
+AttachmentList = list[Attachment]
+ArtifactList = list[Artifact]
+WorkspaceList = list[Workspace]
+
+
+@dataclass(frozen=True)
+class SavedFile:
+    rel_path: str
+    size_bytes: int
+    sha256: str
+
+
+class FileStore(Protocol):
+    async def save(
+        self, project_id: str, filename: str, stream: Any, *, max_bytes: int
+    ) -> SavedFile: ...
+
+    def abspath(self, rel_path: str) -> Path: ...
+
+    def exists(self, rel_path: str) -> bool: ...
+
+    def iter_attachment_relpaths(
+        self, project_id: str | None = None
+    ) -> Iterable[tuple[str, str]]: ...
 
 
 class Clock(Protocol):
@@ -173,6 +203,78 @@ class CommentRepository(Protocol):
         self, work_item_id: str, *, limit: int = 100, offset: int = 0
     ) -> CommentList: ...
 
+    async def soft_delete(self, comment_id: str, actor_id: str, when: dt.datetime) -> bool: ...
+
+
+class AttachmentRepository(Protocol):
+    async def add(self, attachment: Attachment) -> None: ...
+
+    async def get(
+        self, attachment_id: str, *, include_deleted: bool = False
+    ) -> Attachment | None: ...
+
+    async def list_for_owner(
+        self,
+        project_id: str,
+        owner_type: str,
+        owner_id: str,
+        *,
+        include_deleted: bool = False,
+    ) -> AttachmentList: ...
+
+    async def list_for_owners(
+        self, project_id: str, owner_type: str, owner_ids: Sequence[str]
+    ) -> AttachmentList: ...
+
+    async def soft_delete(self, attachment_id: str, actor_id: str, when: dt.datetime) -> bool: ...
+
+    async def soft_delete_for_owner(
+        self, owner_type: str, owner_id: str, actor_id: str, when: dt.datetime
+    ) -> list[str]: ...
+
+    async def rebind_to_comment(
+        self,
+        attachment_ids: Sequence[str],
+        *,
+        project_id: str,
+        work_item_id: str,
+        comment_id: str,
+    ) -> int: ...
+
+    async def all_rows(self, project_id: str | None = None) -> AttachmentList: ...
+
+
+class ArtifactRepository(Protocol):
+    async def add(self, artifact: Artifact) -> None: ...
+
+    async def get(self, artifact_id: str) -> Artifact | None: ...
+
+    async def list_for_owner(
+        self, project_id: str, owner_type: str, owner_id: str
+    ) -> ArtifactList: ...
+
+    async def list_for_owners(
+        self, project_id: str, owner_type: str, owner_ids: Sequence[str]
+    ) -> ArtifactList: ...
+
+    async def soft_delete(self, artifact_id: str, actor_id: str, when: dt.datetime) -> bool: ...
+
+    async def soft_delete_for_owner(
+        self, owner_type: str, owner_id: str, actor_id: str, when: dt.datetime
+    ) -> list[str]: ...
+
+
+class WorkspaceRepository(Protocol):
+    async def add(self, workspace: Workspace) -> None: ...
+
+    async def get(self, workspace_id: str) -> Workspace | None: ...
+
+    async def list(self, project_id: str) -> WorkspaceList: ...
+
+    async def save(self, workspace: Workspace) -> None: ...
+
+    async def soft_delete(self, workspace_id: str, actor_id: str, when: dt.datetime) -> bool: ...
+
 
 class MailboxRepository(Protocol):
     async def add(self, mailbox: Mailbox) -> None: ...
@@ -245,6 +347,9 @@ class UnitOfWork(Protocol):
     mailboxes: MailboxRepository
     messages: MessageRepository
     comments: CommentRepository
+    attachments: AttachmentRepository
+    artifacts: ArtifactRepository
+    workspaces: WorkspaceRepository
     events: EventStore
 
     async def __aenter__(self) -> UnitOfWork: ...

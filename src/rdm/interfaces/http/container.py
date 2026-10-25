@@ -5,12 +5,14 @@ from __future__ import annotations
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from rdm.application.ports import FileStore
 from rdm.application.services.auth_service import Authenticator
 from rdm.config import Settings
 from rdm.domain.entities import Member
 from rdm.domain.errors import AuthInvalidToken
 from rdm.infrastructure.db.session import make_engine, make_session_factory
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
+from rdm.infrastructure.files.local_store import LocalFileStore
 
 
 class Container:
@@ -19,6 +21,7 @@ class Container:
         self.engine: AsyncEngine = make_engine(settings.db_async_url)
         self.session_factory: async_sessionmaker[AsyncSession] = make_session_factory(self.engine)
         self.authenticator = Authenticator(self.session_factory)
+        self.file_store: FileStore = LocalFileStore(settings.projects_dir)
         self._loopback_owner: Member | None = None
 
     def uow(self) -> SqlAlchemyUnitOfWork:

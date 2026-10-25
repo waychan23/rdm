@@ -90,7 +90,11 @@ class SprintService:
         self, actor: Member, sprint_id: str, item_refs: Sequence[str]
     ) -> tuple[Project, Sprint, list[WorkItem]]:
         project, sprint = await self.resolve_sprint(actor, sprint_id)
-        assert self.uow.work_items is not None and self.uow.sprint_items is not None
+        assert (
+            self.uow.work_items is not None
+            and self.uow.sprint_items is not None
+            and self.uow.sprints is not None
+        )
         if sprint.status == SprintStatus.CLOSED:
             raise ValidationError(
                 f"Sprint {sprint.name} 已关闭，不能再加入工作项",

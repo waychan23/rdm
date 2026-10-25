@@ -68,6 +68,13 @@ class MemberService:
                 details={"field": "accept_kinds"},
             )
 
+        webhook_format = data.get("notify_webhook_format") or "generic"
+        if webhook_format not in {"generic", "dingtalk", "feishu"}:
+            raise ValidationError(
+                "notify_webhook_format 必须是 generic/dingtalk/feishu",
+                details={"field": "notify_webhook_format", "value": webhook_format},
+            )
+
         manager_id = data.get("manager_member_id")
         if member_type == MemberType.agent:
             if not manager_id:
@@ -103,6 +110,7 @@ class MemberService:
             accept_kinds=list(accept_kinds),
             email=data.get("email"),
             notify_webhook=data.get("notify_webhook"),
+            notify_webhook_format=webhook_format,
             created_by=actor.id,
         )
         await self.uow.members.add(member)

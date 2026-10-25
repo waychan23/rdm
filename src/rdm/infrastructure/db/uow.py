@@ -14,7 +14,12 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rdm.infrastructure.db.models import ProjectModel
-from rdm.infrastructure.db.repositories.collaboration import CommentRepository
+from rdm.infrastructure.db.repositories.collaboration import (
+    ArtifactRepository,
+    AttachmentRepository,
+    CommentRepository,
+    WorkspaceRepository,
+)
 from rdm.infrastructure.db.repositories.event_store import EventStore
 from rdm.infrastructure.db.repositories.mailbox import (
     MailboxRepository,
@@ -45,6 +50,9 @@ class SqlAlchemyUnitOfWork:
         self.mailboxes: MailboxRepository | None = None
         self.messages: MessageRepository | None = None
         self.comments: CommentRepository | None = None
+        self.attachments: AttachmentRepository | None = None
+        self.artifacts: ArtifactRepository | None = None
+        self.workspaces: WorkspaceRepository | None = None
         self.events: EventStore | None = None
 
     async def __aenter__(self) -> SqlAlchemyUnitOfWork:
@@ -64,6 +72,9 @@ class SqlAlchemyUnitOfWork:
             self.mailboxes = MailboxRepository(self.session)
             self.messages = MessageRepository(self.session)
             self.comments = CommentRepository(self.session)
+            self.attachments = AttachmentRepository(self.session)
+            self.artifacts = ArtifactRepository(self.session)
+            self.workspaces = WorkspaceRepository(self.session)
             self.events = EventStore(self.session)
         except BaseException:
             self._write_lock.release()

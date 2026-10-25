@@ -98,6 +98,7 @@ class MemberCreateIn(BaseModel):
     accept_kinds: list[str] = Field(default_factory=list)
     email: str | None = None
     notify_webhook: str | None = None
+    notify_webhook_format: str = "generic"
 
 
 @members_router.get("/projects/{key}/members")

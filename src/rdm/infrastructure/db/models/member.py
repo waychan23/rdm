@@ -40,6 +40,9 @@ class ProjectMemberModel(AuditMixin, SoftDeleteMixin, Base):
     accept_kinds: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     notify_webhook: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    notify_webhook_format: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="generic", server_default="generic"
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     __table_args__ = (

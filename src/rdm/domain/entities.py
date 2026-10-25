@@ -54,6 +54,7 @@ class Member:
     accept_kinds: list[str] = field(default_factory=list)
     email: str | None = None
     notify_webhook: str | None = None
+    notify_webhook_format: str = "generic"
     is_active: bool = True
     created_at: dt.datetime = field(default_factory=_utcnow)
     created_by: str | None = None
@@ -238,3 +239,55 @@ class MessageRef:
     message_id: str
     work_item_id: str
     created_at: dt.datetime = field(default_factory=_utcnow)
+
+
+@dataclass(kw_only=True)
+class Attachment:
+    id: str
+    project_id: str
+    owner_type: str  # AttachmentOwnerType: work_item | comment | message
+    owner_id: str
+    uploader_member_id: str
+    filename: str
+    mime: str | None
+    size_bytes: int
+    sha256: str
+    rel_path: str  # data-dir relative path; never absolute
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None
+
+
+@dataclass(kw_only=True)
+class Artifact:
+    id: str
+    project_id: str
+    owner_type: str  # ArtifactOwnerType: project | work_item | comment | message
+    owner_id: str
+    kind: str
+    label: str
+    url: str
+    description_md: str | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None
+
+
+@dataclass(kw_only=True)
+class Workspace:
+    id: str
+    project_id: str
+    name: str
+    kind: str  # WorkspaceKind: git_repo | doc_repo | design | other
+    url: str
+    description_md: str | None = None
+    default_branch: str | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None

@@ -5,6 +5,8 @@ from __future__ import annotations
 from decimal import Decimal
 
 from rdm.domain.entities import (
+    Artifact,
+    Attachment,
     Comment,
     IssueFields,
     Mailbox,
@@ -22,8 +24,11 @@ from rdm.domain.entities import (
     StoryFields,
     TaskFields,
     WorkItem,
+    Workspace,
 )
 from rdm.infrastructure.db.models import (
+    ArtifactModel,
+    AttachmentModel,
     CommentModel,
     MailboxMemberModel,
     MailboxModel,
@@ -39,6 +44,7 @@ from rdm.infrastructure.db.models import (
     WorkItemModel,
     WorkItemStoryModel,
     WorkItemTaskModel,
+    WorkspaceModel,
 )
 
 
@@ -72,6 +78,7 @@ def member_to_domain(row: ProjectMemberModel) -> Member:
         accept_kinds=list(row.accept_kinds or []),
         email=row.email,
         notify_webhook=row.notify_webhook,
+        notify_webhook_format=row.notify_webhook_format,
         is_active=row.is_active,
         created_at=row.created_at,
         created_by=row.created_by,
@@ -237,6 +244,61 @@ def sprint_item_to_domain(row: SprintItemModel) -> SprintItem:
         work_item_id=row.work_item_id,
         added_by=row.added_by,
         created_at=row.created_at,
+        deleted_at=row.deleted_at,
+        deleted_by=row.deleted_by,
+    )
+
+
+def attachment_to_domain(row: AttachmentModel) -> Attachment:
+    return Attachment(
+        id=row.id,
+        project_id=row.project_id,
+        owner_type=row.owner_type,
+        owner_id=row.owner_id,
+        uploader_member_id=row.uploader_member_id,
+        filename=row.filename,
+        mime=row.mime,
+        size_bytes=row.size_bytes,
+        sha256=row.sha256,
+        rel_path=row.rel_path,
+        created_at=row.created_at,
+        created_by=row.created_by,
+        updated_at=row.updated_at,
+        deleted_at=row.deleted_at,
+        deleted_by=row.deleted_by,
+    )
+
+
+def artifact_to_domain(row: ArtifactModel) -> Artifact:
+    return Artifact(
+        id=row.id,
+        project_id=row.project_id,
+        owner_type=row.owner_type,
+        owner_id=row.owner_id,
+        kind=row.kind,
+        label=row.label,
+        url=row.url,
+        description_md=row.description_md,
+        created_at=row.created_at,
+        created_by=row.created_by,
+        updated_at=row.updated_at,
+        deleted_at=row.deleted_at,
+        deleted_by=row.deleted_by,
+    )
+
+
+def workspace_to_domain(row: WorkspaceModel) -> Workspace:
+    return Workspace(
+        id=row.id,
+        project_id=row.project_id,
+        name=row.name,
+        kind=row.kind,
+        url=row.url,
+        description_md=row.description_md,
+        default_branch=row.default_branch,
+        created_at=row.created_at,
+        created_by=row.created_by,
+        updated_at=row.updated_at,
         deleted_at=row.deleted_at,
         deleted_by=row.deleted_by,
     )
