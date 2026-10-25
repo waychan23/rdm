@@ -35,6 +35,16 @@
         <el-form-item label="角色">
           <el-input v-model="form.rolesText" placeholder="owner,manager,worker（逗号分隔）" />
         </el-form-item>
+        <el-form-item v-if="form.type === 'agent'" label="Manager" required>
+          <el-select v-model="form.managerId" placeholder="选择同项目 human 负责人" style="width: 100%">
+            <el-option
+              v-for="m in humanManagers"
+              :key="m.id"
+              :label="m.name"
+              :value="m.id"
+            />
+          </el-select>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialog = false">取消</el-button>
@@ -45,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { api } from "../api";
@@ -59,22 +69,31 @@ const form = reactive({
   name: "",
   type: "human",
   rolesText: "worker",
+  managerId: "" as string,
 });
+
+const humanManagers = computed(() => members.value.filter((m) => m.type === "human"));
 
 async function load() {
   members.value = (await api.get<Member[]>(`/projects/${key}/members`)).data;
 }
 
 async function create() {
+  if (form.type === "agent" && !form.managerId) {
+    ElMessage.warning("agent 必须指定一个同项目 human manager");
+    return;
+  }
   saving.value = true;
   try {
     await api.post(`/projects/${key}/members`, {
       name: form.name,
       type: form.type,
       roles: form.rolesText.split(",").map((r) => r.trim()).filter(Boolean),
+      manager_member_id: form.type === "agent" ? form.managerId : null,
     });
     dialog.value = false;
     form.name = "";
+    form.managerId = "";
     await load();
   } catch (e) {
     ElMessage.error((e as Error).message);
