@@ -298,16 +298,53 @@ def integrate_mcp(
         str | None,
         typer.Option("--target", help="claude | codex | opencode. Default: all three."),
     ] = None,
+    scope: Annotated[
+        str, typer.Option("--scope", help="user (global) | project (this directory).")
+    ] = "user",
     url: Annotated[str, typer.Option("--url", help="MCP endpoint URL.")] = (
         "http://127.0.0.1:8765/mcp"
     ),
     force: Annotated[
         bool, typer.Option("--force", help="Overwrite a conflicting rdm entry.")
     ] = False,
+    member: Annotated[
+        str | None,
+        typer.Option("--member", help="Project scope: member name or id to bind."),
+    ] = None,
+    project: ProjectOpt = None,
+    member_token: Annotated[
+        str | None,
+        typer.Option(
+            "--member-token",
+            help="Project scope: bind this member token directly instead of issuing one.",
+        ),
+    ] = None,
+    owner_token: TokenOpt = None,
+    cwd: Annotated[
+        Path | None, typer.Option("--cwd", help="Project scope: directory to bind.")
+    ] = None,
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
 ) -> None:
-    """Generate user-level MCP client configs for claude/codex/opencode."""
+    """Generate MCP client configs (user-level) or bind a directory (project)."""
     from rdm.interfaces.cli import integrate as integrate_commands
+
+    if scope not in {"user", "project"}:
+        typer.secho(f"unknown --scope {scope!r} (want user|project)", fg=typer.colors.RED)
+        raise typer.Exit(2)
+
+    if scope == "project":
+        _integrate_project_scope(
+            target=target,
+            cwd=cwd or Path.cwd(),
+            url=url,
+            force=force,
+            member_ref=member,
+            project_key=project,
+            member_token=member_token,
+            owner_token=owner_token,
+            data_dir=data_dir,
+        )
+        return
 
     if target is not None and target not in {t.value for t in integrate_commands.IntegrateTarget}:
         typer.secho(
@@ -342,6 +379,87 @@ def integrate_mcp(
     typer.echo("")
     for note in integrate_commands.post_install_notes(data_dir):
         typer.echo(f"  {note}")
+    if had_conflict:
+        raise typer.Exit(2)
+
+
+def _integrate_project_scope(
+    *,
+    target: str | None,
+    cwd: Path,
+    url: str,
+    force: bool,
+    member_ref: str | None,
+    project_key: str | None,
+    member_token: str | None,
+    owner_token: str | None,
+    data_dir: Path,
+) -> None:
+    from rdm.interfaces.cli import client as http_client
+    from rdm.interfaces.cli import integrate as integrate_commands
+
+    names = [target] if target else ["claude", "opencode"]
+    if "codex" in names:
+        typer.secho(
+            "codex has no supported project-level MCP config; use --scope user for codex",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(2)
+
+    # Resolve the member token to bind: explicit --member-token, or issue
+    # one with the owner credential (RDM_TOKEN / --data-dir bootstrap-token).
+    raw_token = member_token
+    if raw_token is None:
+        if not member_ref:
+            typer.secho(
+                "project scope needs --member <name|id> (or --member-token)",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(2)
+        owner = http_client.resolve_token(owner_token, data_dir)
+        base = url.rstrip("/").removesuffix("/mcp")
+        key = project_key or "RDM"
+        raw_token = http_client.issue_member_token_by_ref(
+            base, owner, key, member_ref, f"project:{cwd.name}"
+        )
+        typer.secho(
+            f"issued token for {member_ref} in project {key}",
+            fg=typer.colors.GREEN,
+        )
+
+    cwd.mkdir(parents=True, exist_ok=True)
+    had_conflict = False
+    for name in names:
+        try:
+            if name == "claude":
+                result = integrate_commands.merge_claude_project(
+                    Path.home(), cwd, url, raw_token, force=force
+                )
+                gitignore = False
+            else:
+                result, gitignore = integrate_commands.merge_opencode_project(
+                    cwd, url, raw_token, force=force
+                )
+        except ValueError as exc:
+            typer.secho(f"{name}: {exc}", fg=typer.colors.RED)
+            raise typer.Exit(1) from None
+        if result.status == "conflict":
+            had_conflict = True
+            typer.secho(
+                f"CONFLICT {name}: {result.path} already binds rdm; rerun with --force",
+                fg=typer.colors.YELLOW,
+            )
+            continue
+        typer.secho(f"{result.status.upper():7s} {name} -> {result.path}", fg=typer.colors.GREEN)
+        if name == "opencode" and gitignore:
+            typer.secho(
+                "         added .opencode/opencode.json to .gitignore (contains a token)",
+                fg=typer.colors.YELLOW,
+            )
+
+    typer.echo("")
+    typer.echo(f"  directory {cwd} now acts as the bound member in this rdm project.")
+    typer.echo("  restart the agent CLI there; whoami confirms member and project.")
     if had_conflict:
         raise typer.Exit(2)
 

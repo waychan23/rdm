@@ -12,8 +12,10 @@ from rdm.interfaces.cli.integrate import (
     claude_config_path,
     codex_config_path,
     merge_claude,
+    merge_claude_project,
     merge_codex,
     merge_opencode,
+    merge_opencode_project,
     opencode_config_path,
 )
 from rdm.interfaces.cli.main import app
@@ -159,3 +161,63 @@ def test_cli_bad_target(tmp_path: Path) -> None:
         app, ["integrate", "mcp", "--target", "vim"], env={"HOME": str(tmp_path)}
     )
     assert result.exit_code == 2
+
+
+# --- project (directory) scope ---
+
+
+def test_claude_project_bind_idempotent_conflict_force(tmp_path: Path) -> None:
+    home, cwd = tmp_path / "home", tmp_path / "repo"
+    cwd.mkdir(parents=True)
+    r1 = merge_claude_project(home, cwd, URL, "tok-1")
+    assert r1.status == "written"
+    data = json.loads((home / ".claude.json").read_text())
+    entry = data["projects"][str(cwd.resolve())]["mcpServers"]["rdm"]
+    assert entry["headers"]["Authorization"] == "Bearer tok-1"
+
+    assert merge_claude_project(home, cwd, URL, "tok-1").status == "skipped"
+    assert merge_claude_project(home, cwd, URL, "tok-2").status == "conflict"
+    r4 = merge_claude_project(home, cwd, URL, "tok-2", force=True)
+    assert r4.status == "written"
+    data = json.loads((home / ".claude.json").read_text())
+    assert data["projects"][str(cwd.resolve())]["mcpServers"]["rdm"]["headers"] == {
+        "Authorization": "Bearer tok-2"
+    }
+
+
+def test_claude_project_bind_preserves_other_project_data(tmp_path: Path) -> None:
+    home, cwd = tmp_path / "home", tmp_path / "repo"
+    cwd.mkdir(parents=True)
+    claude_json = home / ".claude.json"
+    claude_json.parent.mkdir(parents=True, exist_ok=True)
+    claude_json.write_text(
+        json.dumps({"projects": {str(cwd.resolve()): {"hasTrustDialogAccepted": True}}}),
+        encoding="utf-8",
+    )
+    merge_claude_project(home, cwd, URL, "t")
+    data = json.loads(claude_json.read_text())
+    node = data["projects"][str(cwd.resolve())]
+    assert node["hasTrustDialogAccepted"] is True
+    assert node["mcpServers"]["rdm"]["url"] == URL
+
+
+def test_opencode_project_bind_and_gitignore(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    result, touched = merge_opencode_project(repo, URL, "tok")
+    assert result.status == "written" and touched
+    cfg = json.loads((repo / ".opencode" / "opencode.json").read_text())
+    assert cfg["mcp"]["rdm"]["type"] == "remote"
+    assert cfg["mcp"]["rdm"]["headers"]["Authorization"] == "Bearer tok"
+    assert ".opencode/opencode.json" in (repo / ".gitignore").read_text()
+
+    # second run: skipped, gitignore not duplicated
+    result2, touched2 = merge_opencode_project(repo, URL, "tok")
+    assert result2.status == "skipped" and not touched2
+    assert (repo / ".gitignore").read_text().count(".opencode/opencode.json") == 1
+
+    # outside a git repo: still written, no gitignore
+    plain = tmp_path / "plain"
+    result3, touched3 = merge_opencode_project(plain, URL, "tok")
+    assert result3.status == "written" and not touched3
+    assert not (plain / ".gitignore").exists()

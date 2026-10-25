@@ -117,6 +117,37 @@ def run_token_issue(url: str, token: str, member_id: str, label: str) -> None:
     _show(r.json()["data"])
 
 
+def issue_member_token_by_ref(
+    url: str, owner_token: str, project_key: str, member_ref: str, label: str
+) -> str:
+    """Resolve a member by name (or ULID) in a project and issue a token."""
+    r = _http.get(
+        f"{url}/api/v1/projects/{project_key}/members",
+        headers=_headers(owner_token),
+        timeout=10,
+    )
+    if r.is_error:
+        _fail(r)
+    members = r.json()["data"]
+    match = next((m for m in members if m["name"] == member_ref or m["id"] == member_ref), None)
+    if match is None:
+        typer.secho(
+            f"member {member_ref!r} not found in project {project_key}",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    r = _http.post(
+        f"{url}/api/v1/members/{match['id']}/tokens",
+        headers=_headers(owner_token),
+        json={"label": label},
+        timeout=10,
+    )
+    if r.is_error:
+        _fail(r)
+    return r.json()["data"]["token"]
+
+
 def run_token_revoke(url: str, token: str, token_id: str) -> None:
     r = _http.delete(f"{url}/api/v1/tokens/{token_id}", headers=_headers(token), timeout=10)
     if r.is_error:

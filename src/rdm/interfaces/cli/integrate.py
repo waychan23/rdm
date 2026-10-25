@@ -49,6 +49,83 @@ def opencode_config_path(home: Path) -> Path:
     return home / ".config" / "opencode" / "opencode.json"
 
 
+# --- project (directory) scope: one working directory = one member --------
+
+
+def _bearer_entry(entry_template: dict, token: str) -> dict:
+    entry = json.loads(json.dumps(entry_template))
+    entry["headers"] = {"Authorization": f"Bearer {token}"}
+    return entry
+
+
+def merge_claude_project(
+    home: Path, cwd: Path, url: str, token: str, *, force: bool = False
+) -> IntegrateResult:
+    """Bind a directory in ~/.claude.json projects[abs_cwd].mcpServers.
+
+    Per-directory config lives in the user-global file (keyed by absolute
+    path), so the bound token never lands inside the target repository.
+    """
+    path = claude_config_path(home)
+    data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    projects = data.setdefault("projects", {})
+    key = str(cwd.resolve())
+    node = projects.setdefault(key, {})
+    if not isinstance(node, dict):
+        raise ValueError(f"{path}: projects[{key!r}] must be an object")
+    servers = node.setdefault("mcpServers", {})
+    entry = _bearer_entry(_claude_server(url), token)
+    if servers.get("rdm") == entry:
+        return IntegrateResult("claude", path, "skipped")
+    if "rdm" in servers and not force:
+        return IntegrateResult("claude", path, "conflict")
+    servers["rdm"] = entry
+    _atomic_write_json(path, data)
+    return IntegrateResult("claude", path, "written")
+
+
+def merge_opencode_project(
+    cwd: Path, url: str, token: str, *, force: bool = False
+) -> tuple[IntegrateResult, bool]:
+    """Bind a directory via <cwd>/.opencode/opencode.json.
+
+    Returns (result, gitignore_touched). This file carries a member token,
+    so when cwd is a git repo its path is appended to .gitignore.
+    """
+    path = cwd / ".opencode" / "opencode.json"
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))
+    else:
+        data = {}
+    servers = data.setdefault("mcp", {})
+    entry = _bearer_entry(_opencode_server(url), token)
+    if servers.get("rdm") == entry:
+        return IntegrateResult("opencode", path, "skipped"), False
+    if "rdm" in servers and not force:
+        return IntegrateResult("opencode", path, "conflict"), False
+    servers["rdm"] = entry
+    _atomic_write_json(path, data)
+    gitignore_touched = _ensure_gitignore(cwd, ".opencode/opencode.json")
+    return IntegrateResult("opencode", path, "written"), gitignore_touched
+
+
+def _ensure_gitignore(cwd: Path, rel_path: str) -> bool:
+    """Idempotently append rel_path to <repo>/.gitignore when in a git repo."""
+    git_root = cwd
+    while git_root != git_root.parent:
+        if (git_root / ".git").exists():
+            gi = git_root / ".gitignore"
+            line = rel_path
+            existing = gi.read_text(encoding="utf-8") if gi.exists() else ""
+            if line in existing.splitlines():
+                return False
+            prefix = "" if not existing or existing.endswith("\n") else "\n"
+            gi.write_text(existing + f"{prefix}{line}\n", encoding="utf-8")
+            return True
+        git_root = git_root.parent
+    return False
+
+
 def _claude_server(url: str) -> dict:
     return {
         "type": "http",

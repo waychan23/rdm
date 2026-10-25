@@ -28,6 +28,27 @@ uv run rdm skills install --target claude      # 安装 rdm-workflow skill
 uv run rdm skills install --target opencode
 ```
 
+### 目录级绑定：一个代码库目录 = 一个 member
+
+典型场景：同一个 rdm 项目下，前端库由 frontend agent 负责、后端库由 backend agent
+负责。在各自代码库目录里绑定对应 member，agent 在该目录启动时自动以该身份、
+该项目工作（`whoami` 同时给出 member 与 project），skill/MCP 调用都不用显式指定：
+
+```bash
+cd ~/repo/demo-frontend
+rdm integrate mcp --scope project --member frontend --project DEMO
+
+cd ~/repo/demo-backend
+rdm integrate mcp --scope project --member backend --project DEMO
+```
+
+- 默认同时写 claude（`~/.claude.json` 按绝对路径键控，**token 不进代码库**）
+  与 opencode（`<目录>/.opencode/opencode.json`，自动追加进该库 `.gitignore`）；
+  `--target` 可只选一家；codex 无项目级配置，不支持。
+- 需要 owner 凭据：环境变量 `RDM_TOKEN`（或 `--data-dir` 指向 bootstrap token）；
+  命令会为该 member 签发一个专用 token（label 为 `project:<目录名>`）。
+- 不想签发可直接 `--member-token <token>`；已有绑定变化需 `--force` 轮换。
+
 输出会给出：
 
 ```bash
