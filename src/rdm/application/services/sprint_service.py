@@ -91,6 +91,11 @@ class SprintService:
     ) -> tuple[Project, Sprint, list[WorkItem]]:
         project, sprint = await self.resolve_sprint(actor, sprint_id)
         assert self.uow.work_items is not None and self.uow.sprint_items is not None
+        if sprint.status == SprintStatus.CLOSED:
+            raise ValidationError(
+                f"Sprint {sprint.name} 已关闭，不能再加入工作项",
+                details={"sprint_id": sprint.id, "status": str(sprint.status)},
+            )
         added: list[WorkItem] = []
         links: list[SprintItem] = []
         engine = load_engine()
@@ -107,10 +112,23 @@ class SprintService:
                     f"{project.key}-{item.display_no} 已终态（{item.status}），不能加入 Sprint",
                     details={"work_item_id": item.id, "status": item.status},
                 )
-            if await self.uow.sprint_items.is_in_sprint(sprint.id, item.id):
+            existing = await self.uow.sprint_items.active_link_for_item(item.id)
+            if existing is not None:
+                if existing.sprint_id == sprint.id:
+                    raise ValidationError(
+                        f"{project.key}-{item.display_no} 已在 Sprint {sprint.name} 中",
+                        details={"work_item_id": item.id, "sprint_id": sprint.id},
+                    )
+                other = await self.uow.sprints.get(existing.sprint_id)
+                other_name = other.name if other is not None else existing.sprint_id
                 raise ValidationError(
-                    f"{project.key}-{item.display_no} 已在 Sprint {sprint.name} 中",
-                    details={"work_item_id": item.id},
+                    f"{project.key}-{item.display_no} 已在 Sprint「{other_name}」中，"
+                    "一个工作项同一时间只能属于一个 Sprint；请先从原 Sprint 移除",
+                    details={
+                        "work_item_id": item.id,
+                        "sprint_id": existing.sprint_id,
+                        "sprint_name": None if other is None else other.name,
+                    },
                 )
             added.append(item)
             links.append(

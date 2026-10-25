@@ -107,10 +107,19 @@ class SprintItemRepository:
         rows = list((await self._s.execute(stmt)).scalars().all())
         return [sprint_item_to_domain(r) for r in rows]
 
-    async def is_in_sprint(self, sprint_id: str, work_item_id: str) -> bool:
-        stmt = select(SprintItemModel.id).where(
-            SprintItemModel.sprint_id == sprint_id,
-            SprintItemModel.work_item_id == work_item_id,
-            SprintItemModel.deleted_at.is_(None),
+    async def active_link_for_item(self, work_item_id: str) -> SprintItem | None:
+        """Live (non-soft-deleted) membership link of an item, across all sprints.
+
+        Architecture §16.38: at most one such row may exist per item; the
+        partial unique index ux_sprint_item_one_sprint enforces this.
+        """
+        stmt = (
+            select(SprintItemModel)
+            .where(
+                SprintItemModel.work_item_id == work_item_id,
+                SprintItemModel.deleted_at.is_(None),
+            )
+            .limit(1)
         )
-        return (await self._s.execute(stmt)).first() is not None
+        row = (await self._s.execute(stmt)).scalar_one_or_none()
+        return sprint_item_to_domain(row) if row is not None else None

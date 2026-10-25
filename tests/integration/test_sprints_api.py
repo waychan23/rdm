@@ -143,6 +143,87 @@ async def test_only_one_active_sprint(server, owner_token: str) -> None:
     assert r.status_code == 200
 
 
+async def test_item_can_belong_to_only_one_sprint(server, owner_token: str) -> None:
+    client, _s, _app = server
+    await _project(client, owner_token)
+    task = await _item(client, owner_token, {"kind": "task", "title": "t", "task_type": "qa"})
+    sids = []
+    for name in ("S1", "S2"):
+        r = await client.post(
+            f"{API}/projects/DEMO/sprints",
+            json={"name": name},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 201, r.text
+        sids.append(r.json()["data"]["id"])
+
+    r = await client.post(
+        f"{API}/sprints/{sids[0]}/items",
+        json={"items": [task["display_id"]]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+
+    # same item into a different planned sprint -> rejected, naming S1
+    r = await client.post(
+        f"{API}/sprints/{sids[1]}/items",
+        json={"items": [task["display_id"]]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 422, r.text
+    err = r.json()["error"]
+    assert err["code"] == "VALIDATION_ERROR"
+    assert err["details"]["sprint_id"] == sids[0]
+    assert "S1" in err["message"]
+
+    # S2 overview stays empty
+    r = await client.get(f"{API}/sprints/{sids[1]}", headers=auth(owner_token))
+    assert r.json()["data"]["items"] == []
+
+
+async def test_cannot_add_items_to_closed_sprint(server, owner_token: str) -> None:
+    client, _s, _app = server
+    await _project(client, owner_token)
+    done = await _item(client, owner_token, {"kind": "task", "title": "done", "task_type": "qa"})
+    fresh = await _item(client, owner_token, {"kind": "task", "title": "fresh", "task_type": "qa"})
+    r = await client.post(
+        f"{API}/projects/DEMO/sprints",
+        json={"name": "S"},
+        headers=auth(owner_token),
+    )
+    sid = r.json()["data"]["id"]
+    r = await client.post(
+        f"{API}/sprints/{sid}/items",
+        json={"items": [done["display_id"]]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+
+    version = 0
+    for state in ["IN_PROGRESS", "TO_REVIEW", "DONE"]:
+        r = await client.post(
+            f"{API}/work-items/{done['display_id']}/transition",
+            json={"to": state, "row_version": version},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 200, r.text
+        version = r.json()["data"]["row_version"]
+    r = await client.post(f"{API}/sprints/{sid}/start", headers=auth(owner_token))
+    assert r.status_code == 200, r.text
+    r = await client.post(f"{API}/sprints/{sid}/close", headers=auth(owner_token))
+    assert r.status_code == 200, r.text
+
+    r = await client.post(
+        f"{API}/sprints/{sid}/items",
+        json={"items": [fresh["display_id"]]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 422, r.text
+    err = r.json()["error"]
+    assert err["code"] == "VALIDATION_ERROR"
+    assert err["details"]["status"] == "CLOSED"
+
+
 async def test_worker_cannot_create_sprint(server, owner_token: str) -> None:
     client, _s, _app = server
     await _project(client, owner_token)

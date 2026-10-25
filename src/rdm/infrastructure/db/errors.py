@@ -25,8 +25,8 @@ def translate_integrity(exc: Exception) -> RdmError:
         )
     if "sprint_item" in text or "ux_sprint_item" in text:
         return ValidationError(
-            "该工作项已在此 Sprint 中，不能重复加入。",
-            details={"constraint": "ux_sprint_item"},
+            "该工作项已在另一个 Sprint 中，一个工作项同一时间只能属于一个 Sprint。",
+            details={"constraint": "ux_sprint_item_one_sprint"},
         )
     if "mailbox_member" in text or "ux_mailbox_member" in text:
         return ValidationError(

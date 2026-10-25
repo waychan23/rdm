@@ -52,9 +52,11 @@ class SprintItemModel(SoftDeleteMixin, Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
+        # An item belongs to at most one sprint at a time (architecture §16.38):
+        # the uniqueness is on work_item_id alone, partial over live links so
+        # a soft-deleted removal lets the item join another sprint later.
         Index(
-            "ux_sprint_item",
-            "sprint_id",
+            "ux_sprint_item_one_sprint",
             "work_item_id",
             unique=True,
             sqlite_where=text("deleted_at IS NULL"),
