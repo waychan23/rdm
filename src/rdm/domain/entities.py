@@ -7,6 +7,7 @@ SprintItem / Comment / Mailbox / Message and friends.
 import datetime as dt
 from dataclasses import dataclass, field
 from decimal import Decimal
+from typing import Any
 
 from rdm.domain.enums import (
     ProjectStatus,
@@ -291,3 +292,22 @@ class Workspace:
     updated_at: dt.datetime | None = None
     deleted_at: dt.datetime | None = None
     deleted_by: str | None = None
+
+
+@dataclass(kw_only=True)
+class OutboxRow:
+    id: str
+    project_id: str
+    event_id: int
+    target_url: str
+    format: str  # generic | dingtalk | feishu
+    payload: dict[str, Any]
+    status: str = "pending"  # pending | delivering | delivered | failed
+    attempts: int = 0
+    next_attempt_at: dt.datetime | None = None
+    last_error: str | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    updated_at: dt.datetime | None = None
+    # Transient (not a column): domain event type joined at claim time;
+    # message.sent surfaces to receivers as mailbox.delivered (§16.40).
+    logical_event: str | None = None

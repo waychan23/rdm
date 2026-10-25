@@ -25,6 +25,7 @@ from rdm.domain.entities import (
     Message,
     MessageDelivery,
     MessageRef,
+    OutboxRow,
     Project,
     Sprint,
     SprintItem,
@@ -319,6 +320,32 @@ class MessageRepository(Protocol):
     ) -> int: ...
 
 
+class OutboxRepository(Protocol):
+    async def add(self, row: OutboxRow) -> None: ...
+
+    async def claim_due(
+        self, now: dt.datetime, limit: int
+    ) -> list[OutboxRow]:
+        """pending & due rows flip to delivering inside this transaction."""
+        ...
+
+    async def mark_delivered(self, row_id: str, now: dt.datetime) -> None: ...
+
+    async def mark_failure(
+        self, row_id: str, attempts: int, next_at: dt.datetime, error: str, now: dt.datetime
+    ) -> None: ...
+
+    async def mark_failed(
+        self, row_id: str, attempts: int, error: str, now: dt.datetime
+    ) -> None: ...
+
+    async def reclaim_delivering(self, now: dt.datetime) -> int: ...
+
+    async def status_counts(self) -> dict[str, int]: ...
+
+    async def oldest_pending_at(self) -> dt.datetime | None: ...
+
+
 class EventStore(Protocol):
     async def append(
         self,
@@ -350,6 +377,7 @@ class UnitOfWork(Protocol):
     attachments: AttachmentRepository
     artifacts: ArtifactRepository
     workspaces: WorkspaceRepository
+    outboxes: OutboxRepository
     events: EventStore
 
     async def __aenter__(self) -> UnitOfWork: ...

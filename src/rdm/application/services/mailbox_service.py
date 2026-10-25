@@ -366,7 +366,7 @@ class MailboxService:
     ) -> None:
         seq = await self.uow.allocate_event_seq(project.id)
         assert self.uow.events is not None
-        await self.uow.events.append(
+        event_id = await self.uow.events.append(
             project_id=project.id,
             seq=seq,
             aggregate_type="message",
@@ -385,6 +385,21 @@ class MailboxService:
                     "reply_to_id": message.reply_to_id,
                 }
             },
+        )
+        # message.sent maps to one logical mailbox.delivered per recipient (§16.40).
+        recipient_members = [
+            await self._member(project.id, member_id) for member_id in recipients
+        ]
+        from rdm.application.services import webhook_notify
+
+        await webhook_notify.notify_message(
+            self.uow,
+            project=project,
+            message=message,
+            event_id=event_id,
+            sender=actor,
+            recipients=recipient_members,
+            ref_items=ref_items,
         )
 
     async def _append_mailbox_event(

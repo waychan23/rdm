@@ -10,6 +10,7 @@ from fastapi import FastAPI
 
 from rdm.application.services.bootstrap import bootstrap_if_empty
 from rdm.config import Settings
+from rdm.infrastructure.webhook.worker import WebhookWorker
 from rdm.interfaces.http.artifacts import router as artifacts_router
 from rdm.interfaces.http.attachments import router as attachments_router
 from rdm.interfaces.http.comments import router as comments_router
@@ -44,6 +45,7 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        worker = WebhookWorker(container, settings)
         # Compose FastMCP's lifespan into ours.
         async with mcp_http.lifespan(mcp_http):
             if bootstrap:
@@ -54,8 +56,12 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
                         "first start: owner member created; bootstrap token written to %s",
                         settings.bootstrap_token_path,
                     )
-            yield
-            await container.aclose()
+            worker.start()
+            try:
+                yield
+            finally:
+                await worker.stop()
+                await container.aclose()
 
     app = FastAPI(title="rd-manager", version="0.1.0", lifespan=lifespan)
     app.state.container = container

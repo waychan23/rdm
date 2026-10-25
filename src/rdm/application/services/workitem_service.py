@@ -341,8 +341,11 @@ class WorkItemService:
         accountable = target.id if target.type == "human" else target.manager_member_id
         payload = updated_payload(changes)
         payload["accountable_human_member_id"] = accountable
-        await self._append_event(
+        event_id = await self._append_event(
             project.id, item, EventType.WORK_ITEM_ASSIGNED, payload, actor=actor
+        )
+        await self._notify(
+            project, item, event_id, "work_item.assigned", actor, target
         )
         return project, item
 
@@ -411,8 +414,21 @@ class WorkItemService:
         payload = status_changed_payload(old_status, to, allowed_next, gate=None)
         if reason:
             payload["reason"] = reason
-        await self._append_event(
+        event_id = await self._append_event(
             project.id, item, EventType.WORK_ITEM_STATUS_CHANGED, payload, actor=actor
+        )
+        assignee = None
+        if item.assignee_member_id:
+            assert self.uow.members is not None
+            assignee = await self.uow.members.get(item.assignee_member_id)
+        await self._notify(
+            project,
+            item,
+            event_id,
+            "work_item.status_changed",
+            actor,
+            assignee,
+            extra={"reason": reason} if reason else None,
         )
         return project, item, meta
 
@@ -653,10 +669,10 @@ class WorkItemService:
         *,
         actor: Member,
         version: int | None = None,
-    ) -> None:
+    ) -> int:
         seq = await self.uow.allocate_event_seq(project_id)
         assert self.uow.events is not None
-        await self.uow.events.append(
+        return await self.uow.events.append(
             project_id=project_id,
             seq=seq,
             aggregate_type="work_item",
@@ -665,6 +681,30 @@ class WorkItemService:
             event_type=event_type,
             actor_member_id=actor.id,
             payload=payload,
+        )
+
+    async def _notify(
+        self,
+        project: Project,
+        item: WorkItem,
+        event_id: int,
+        event_name: str,
+        actor: Member,
+        assignee: Member | None,
+        *,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        from rdm.application.services import webhook_notify
+
+        await webhook_notify.notify_work_item(
+            self.uow,
+            project=project,
+            item=item,
+            event_id=event_id,
+            event_name=event_name,
+            actor=actor,
+            assignee=assignee,
+            extra=extra,
         )
 
 

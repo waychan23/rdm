@@ -86,7 +86,7 @@ class CommentService:
         display_id = f"{project.key}-{item.display_no}"
         seq = await self.uow.allocate_event_seq(project.id)
         assert self.uow.events is not None
-        await self.uow.events.append(
+        event_id = await self.uow.events.append(
             project_id=project.id,
             seq=seq,
             aggregate_type="comment",
@@ -105,6 +105,16 @@ class CommentService:
                     "attachment_ids": attachment_ids,
                 }
             },
+        )
+        from rdm.application.services import webhook_notify
+
+        await webhook_notify.notify_comment(
+            self.uow,
+            project=project,
+            item=item,
+            comment=comment,
+            event_id=event_id,
+            actor=actor,
         )
         return project, item, comment, unresolved
 

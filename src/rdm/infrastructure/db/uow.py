@@ -26,6 +26,7 @@ from rdm.infrastructure.db.repositories.mailbox import (
     MessageRepository,
 )
 from rdm.infrastructure.db.repositories.member import MemberRepository, TokenRepository
+from rdm.infrastructure.db.repositories.outbox import OutboxRepository
 from rdm.infrastructure.db.repositories.project import ProjectRepository
 from rdm.infrastructure.db.repositories.sprint import (
     SprintItemRepository,
@@ -53,6 +54,7 @@ class SqlAlchemyUnitOfWork:
         self.attachments: AttachmentRepository | None = None
         self.artifacts: ArtifactRepository | None = None
         self.workspaces: WorkspaceRepository | None = None
+        self.outboxes: OutboxRepository | None = None
         self.events: EventStore | None = None
 
     async def __aenter__(self) -> SqlAlchemyUnitOfWork:
@@ -75,6 +77,7 @@ class SqlAlchemyUnitOfWork:
             self.attachments = AttachmentRepository(self.session)
             self.artifacts = ArtifactRepository(self.session)
             self.workspaces = WorkspaceRepository(self.session)
+            self.outboxes = OutboxRepository(self.session)
             self.events = EventStore(self.session)
         except BaseException:
             self._write_lock.release()

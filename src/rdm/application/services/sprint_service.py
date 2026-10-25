@@ -251,7 +251,10 @@ class SprintService:
             await self.uow.flush()
         except IntegrityError as exc:
             raise translate_integrity(exc) from exc
-        await self._event(project.id, sprint, EventType.SPRINT_STARTED, actor, {})
+        event_id = await self._event(
+            project.id, sprint, EventType.SPRINT_STARTED, actor, {}
+        )
+        await self._notify(project, sprint, event_id, "sprint.started", actor)
         return project, sprint
 
     async def close(self, actor: Member, sprint_id: str) -> tuple[Project, Sprint]:
@@ -279,7 +282,10 @@ class SprintService:
         sprint.status = SprintStatus.CLOSED
         await self.uow.sprints.save_status(sprint)  # type: ignore[union-attr]
         await self.uow.flush()
-        await self._event(project.id, sprint, EventType.SPRINT_CLOSED, actor, {})
+        event_id = await self._event(
+            project.id, sprint, EventType.SPRINT_CLOSED, actor, {}
+        )
+        await self._notify(project, sprint, event_id, "sprint.closed", actor)
         return project, sprint
 
     async def overview(
@@ -313,10 +319,10 @@ class SprintService:
         event_type: EventType,
         actor: Member,
         payload: dict[str, Any],
-    ) -> None:
+    ) -> int:
         seq = await self.uow.allocate_event_seq(project_id)
         assert self.uow.events is not None
-        await self.uow.events.append(
+        return await self.uow.events.append(
             project_id=project_id,
             seq=seq,
             aggregate_type="sprint",
@@ -325,6 +331,25 @@ class SprintService:
             event_type=event_type,
             actor_member_id=actor.id,
             payload=payload,
+        )
+
+    async def _notify(
+        self,
+        project: Project,
+        sprint: Sprint,
+        event_id: int,
+        event_name: str,
+        actor: Member,
+    ) -> None:
+        from rdm.application.services import webhook_notify
+
+        await webhook_notify.notify_sprint(
+            self.uow,
+            project=project,
+            sprint=sprint,
+            event_id=event_id,
+            event_name=event_name,
+            actor=actor,
         )
 
 
