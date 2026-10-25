@@ -9,8 +9,8 @@ export const router = createRouter({
   routes: [
     { path: "/", redirect: "/projects" },
     { path: "/projects", component: ProjectsView },
-    { path: "/projects/:key/members", component: MembersView },
-    { path: "/projects/:key/backlog", component: BacklogView },
+    { path: "/projects/:key/members", component: MembersView, props: true },
+    { path: "/projects/:key/backlog", component: BacklogView, props: true },
     {
       path: "/projects/:key/items/:id",
       component: ItemView,
