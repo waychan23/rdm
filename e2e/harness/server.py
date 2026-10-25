@@ -75,10 +75,16 @@ def start_server(root: Path, *, log_path: Path | None = None) -> Server:
         process.kill()
         raise RuntimeError("test server did not become healthy in 30s")
 
-    # Lifespan bootstrap writes the token on first start.
+    # Lifespan bootstrap writes the token on first start. Health can answer
+    # before the lifespan context finishes flushing, so poll for the file.
     token_path = data_dir / "bootstrap-token"
-    deadline = time.time() + 10
-    while not token_path.exists() and time.time() < deadline:
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        if token_path.exists():
+            break
         time.sleep(0.1)
+    if not token_path.exists():
+        process.kill()
+        raise RuntimeError("bootstrap token was not written")
     owner_token = token_path.read_text(encoding="utf-8").strip()
     return Server(process, base_url, data_dir, owner_token, port)
