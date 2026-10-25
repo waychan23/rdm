@@ -461,9 +461,20 @@ def _integrate_project_scope(
 
 
 @app.command()
-def doctor() -> None:
-    """Run environment/database diagnostics (M2)."""
-    typer.echo("doctor is implemented in M2")
+def doctor(
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+    as_json: Annotated[bool, typer.Option("--json", help="Machine-readable output")] = False,
+    skip_endpoint: Annotated[
+        bool, typer.Option("--skip-endpoint", help="Do not probe the running server")
+    ] = False,
+) -> None:
+    """Run data-dir/database/workflow/outbox/attachment diagnostics."""
+    from rdm.config import Settings
+    from rdm.interfaces.cli.doctor import run_doctor
+
+    settings = Settings(data_dir=data_dir)
+    code = run_doctor(settings, as_json=as_json, include_endpoint=not skip_endpoint)
+    raise typer.Exit(code)
 
 
 if __name__ == "__main__":
