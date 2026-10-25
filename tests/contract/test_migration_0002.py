@@ -65,12 +65,18 @@ def test_upgrade_0001_to_0002_drops_agent_cli(tmp_path: Path) -> None:
     with engine.connect() as conn:
         from sqlalchemy import text
 
-        assert conn.execute(
-            text("select count(*) from project_member where id=:id"), {"id": mid}
-        ).scalar_one() == 1
-        assert conn.execute(
-            text("select count(*) from member_token where member_id=:id"), {"id": mid}
-        ).scalar_one() == 1
+        assert (
+            conn.execute(
+                text("select count(*) from project_member where id=:id"), {"id": mid}
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            conn.execute(
+                text("select count(*) from member_token where member_id=:id"), {"id": mid}
+            ).scalar_one()
+            == 1
+        )
 
     # downgrade restores the column
     command.downgrade(_cfg(db_path), "0001")

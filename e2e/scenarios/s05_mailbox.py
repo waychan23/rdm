@@ -22,11 +22,14 @@ def run(h: Harness) -> None:
     )
 
     def delivered() -> bool:
-        return h.db.scalar(
-            "select count(*) from message_delivery d join project_member m "
-            "on m.id=d.recipient_member_id join project p on p.id=m.project_id "
-            "where p.key='S5' and m.name='frontend-dev'"
-        ) >= 1
+        return (
+            h.db.scalar(
+                "select count(*) from message_delivery d join project_member m "
+                "on m.id=d.recipient_member_id join project p on p.id=m.project_id "
+                "where p.key='S5' and m.name='frontend-dev'"
+            )
+            >= 1
+        )
 
     h.wait(delivered, "frontend-dev 应有投递", timeout=60)
 

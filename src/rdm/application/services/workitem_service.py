@@ -214,15 +214,11 @@ class WorkItemService:
         )
         sprint = await self.uow.sprints.get(sprint_ref)
         if sprint is None or sprint.project_id != project.id:
-            raise NotFound(
-                f"Sprint {sprint_ref} 不存在", details={"sprint_id": sprint_ref}
-            )
+            raise NotFound(f"Sprint {sprint_ref} 不存在", details={"sprint_id": sprint_ref})
         security.assert_same_project(actor, project.id)
         links = await self.uow.sprint_items.list_for_sprint(sprint.id)
         items = (
-            await self.uow.work_items.list_by_ids(
-                project.id, [link.work_item_id for link in links]
-            )
+            await self.uow.work_items.list_by_ids(project.id, [link.work_item_id for link in links])
             if links
             else []
         )
@@ -260,16 +256,12 @@ class WorkItemService:
         items = await self.uow.work_items.list(project.id, kind=kind, limit=200)
         engine = load_engine()
         items = [
-            i
-            for i in items
-            if i.id not in in_sprint and not engine.is_terminal(i.kind, i.status)
+            i for i in items if i.id not in in_sprint and not engine.is_terminal(i.kind, i.status)
         ]
         items.sort(key=lambda i: (-i.priority, i.display_no))
         return project, items
 
-    async def my_items(
-        self, actor: Member, *, status: str | None = None
-    ) -> list[WorkItem]:
+    async def my_items(self, actor: Member, *, status: str | None = None) -> list[WorkItem]:
         """Items assigned to me; without a status filter only non-terminal."""
         assert self.uow.work_items is not None
         items = await self.uow.work_items.list(
@@ -451,9 +443,7 @@ class WorkItemService:
         event_id = await self._append_event(
             project.id, item, EventType.WORK_ITEM_ASSIGNED, payload, actor=actor
         )
-        await self._notify(
-            project, item, event_id, "work_item.assigned", actor, target
-        )
+        await self._notify(project, item, event_id, "work_item.assigned", actor, target)
         return project, item
 
     async def transition(

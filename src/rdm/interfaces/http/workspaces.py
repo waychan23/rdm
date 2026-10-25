@@ -52,9 +52,7 @@ async def create_workspace(
     actor: Member = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
-        _project, workspace = await WorkspaceService(uow).create(
-            actor, key, body.model_dump()
-        )
+        _project, workspace = await WorkspaceService(uow).create(actor, key, body.model_dump())
         out = workspace_out(workspace)
     return {"data": out}
 

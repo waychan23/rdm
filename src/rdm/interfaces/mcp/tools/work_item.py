@@ -84,9 +84,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         return await run_tool(container, run)
 
     @mcp.tool
-    async def backlog_list(
-        kind: str | None = None, project: str | None = None
-    ) -> Any:
+    async def backlog_list(kind: str | None = None, project: str | None = None) -> Any:
         """ProductBacklog：未进入任何 Sprint 且非终态的工作项（最多 200 条）。
 
         查 Sprint 内的工作项用 sprint_get；已终态或已入 Sprint 的项不会出现。
@@ -94,9 +92,7 @@ def register(mcp: FastMCP, container: Container) -> None:
 
         async def run(uow, actor):
             service = WorkItemService(uow)
-            proj, items = await service.backlog_items(
-                actor, project_key=project, kind=kind
-            )
+            proj, items = await service.backlog_items(actor, project_key=project, kind=kind)
             members = await _members(uow, proj.id)
             return ok([work_item_summary_out(i, proj, members) for i in items])
 

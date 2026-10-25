@@ -37,8 +37,7 @@ def run(h: Harness) -> None:
     parent = h.item("S8", {"kind": "story", "title": "父故事"})
     child = h.item(
         "S8",
-        {"kind": "task", "title": "子任务", "parent": parent["display_id"],
-         "task_type": "backend"},
+        {"kind": "task", "title": "子任务", "parent": parent["display_id"], "task_type": "backend"},
     )
     deleted = h.rest.delete(f"/work-items/{child['display_id']}")
     assert deleted.status_code == 200

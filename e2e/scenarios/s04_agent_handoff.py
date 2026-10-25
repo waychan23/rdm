@@ -14,8 +14,7 @@ def run(h: Harness) -> None:
     story = h.item("S4", {"kind": "story", "title": "S4 故事"})
     task = h.item(
         "S4",
-        {"kind": "task", "title": "S4 前端", "task_type": "frontend",
-         "assignee": "frontend-dev"},
+        {"kind": "task", "title": "S4 前端", "task_type": "frontend", "assignee": "frontend-dev"},
     )
 
     # Worker tries to close the story while the child task is open: must fail.

@@ -47,9 +47,7 @@ class ArtifactService:
             )
         if owner_type == ArtifactOwnerType.project:
             if owner_ref != project.key and owner_ref != project.id:
-                raise NotFound(
-                    f"项目 {owner_ref!r} 不存在", details={"owner_ref": owner_ref}
-                )
+                raise NotFound(f"项目 {owner_ref!r} 不存在", details={"owner_ref": owner_ref})
             return project.id
         if owner_type == ArtifactOwnerType.work_item:
             item = await self.items.resolve_item(actor, owner_ref)
@@ -88,9 +86,7 @@ class ArtifactService:
             )
         label = (data.get("label") or "").strip()
         if not 1 <= len(label) <= 200:
-            raise ValidationError(
-                "label 必填且不超过 200 字符", details={"field": "label"}
-            )
+            raise ValidationError("label 必填且不超过 200 字符", details={"field": "label"})
         url = ensure_http_url(data.get("url") or "")
 
         artifact = Artifact(

@@ -65,9 +65,7 @@ def register(mcp: FastMCP, container: Container) -> None:
             proj, attachments = await service.list_for(
                 actor, project_key=project, owner_type=owner_type, owner_ref=owner
             )
-            members = {
-                m.id: m for m in await MemberService(uow).list_members(proj.id)
-            }
+            members = {m.id: m for m in await MemberService(uow).list_members(proj.id)}
             return ok([attachment_out(a, members) for a in attachments])
 
         return await run_tool(container, run)

@@ -59,9 +59,7 @@ async def test_backlog_and_my_work_semantics(server, mcp_clients) -> None:
         ids = {i["display_id"] for i in backlog["data"]}
         assert story_display in ids and task["data"]["display_id"] in ids
 
-        sprint = await call(
-            owner_client, "sprint_create", {"name": "S1", "project": "DEMO"}
-        )
+        sprint = await call(owner_client, "sprint_create", {"name": "S1", "project": "DEMO"})
         sid = sprint["data"]["id"]
         managed = await call(
             owner_client,
@@ -77,9 +75,7 @@ async def test_backlog_and_my_work_semantics(server, mcp_clients) -> None:
         assert task["data"]["display_id"] in ids
 
         # work_item_list gains the sprint filter.
-        in_sprint = await call(
-            owner_client, "work_item_list", {"sprint": sid, "project": "DEMO"}
-        )
+        in_sprint = await call(owner_client, "work_item_list", {"sprint": sid, "project": "DEMO"})
         assert [i["id"] for i in in_sprint["data"]] == [story_id]
 
         got = await call(owner_client, "sprint_get", {"id": sid})
@@ -110,9 +106,7 @@ async def test_backlog_and_my_work_semantics(server, mcp_clients) -> None:
             {"id": task_id, "to": "CANCELLED", "row_version": row_version},
         )
         backlog = await call(owner_client, "backlog_list", {"project": "DEMO"})
-        assert task["data"]["display_id"] not in {
-            i["display_id"] for i in backlog["data"]
-        }
+        assert task["data"]["display_id"] not in {i["display_id"] for i in backlog["data"]}
 
         # my_work_list after assigning the story to a DEMO member.
         dev_token = await _make_member(rest, mcp_clients["owner_token"], "dev")
@@ -149,18 +143,14 @@ async def test_sprint_manage_validation_and_closed_freeze(server, mcp_clients) -
         assert rejected["_is_error"]
         # CLOSED sprints still allow remove_item/update? update is frozen too;
         # remove_item remains allowed (no items -> NotFound on empty remove).
-        renamed = await call(
-            c, "sprint_manage", {"id": sid, "action": "update", "name": "x"}
-        )
+        renamed = await call(c, "sprint_manage", {"id": sid, "action": "update", "name": "x"})
         assert renamed["_is_error"]
 
         listed = await call(c, "sprint_list", {"project": "DEMO", "status": "closed"})
         assert [s["id"] for s in listed["data"]] == [sid]
 
 
-async def test_member_comment_artifact_attachment_tools(
-    server, mcp_clients
-) -> None:
+async def test_member_comment_artifact_attachment_tools(server, mcp_clients) -> None:
     rest, _settings, _app = server
     owner_token = mcp_clients["owner_token"]
     headers = _hdr(owner_token)

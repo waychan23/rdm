@@ -56,9 +56,7 @@ def run(h: Harness) -> None:
         deadline = time.time() + 20
         attempts = 0
         while time.time() < deadline:
-            rows = h.db.query(
-                "select attempts, status from webhook_outbox order by created_at"
-            )
+            rows = h.db.query("select attempts, status from webhook_outbox order by created_at")
             attempts = max((r["attempts"] for r in rows), default=0)
             if attempts >= 1:
                 break

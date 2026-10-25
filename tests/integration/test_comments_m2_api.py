@@ -90,8 +90,7 @@ async def test_comment_with_attachment_ids_rebinds(server, owner_token) -> None:
         ).fetchone()
         assert row == ("comment", comment["id"])
         payload = conn.execute(
-            "select payload from event where event_type='comment.created' "
-            "order by seq desc limit 1"
+            "select payload from event where event_type='comment.created' order by seq desc limit 1"
         ).fetchone()[0]
         assert att["id"] in payload  # JSON text contains the id
 

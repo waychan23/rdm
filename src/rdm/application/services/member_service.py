@@ -134,9 +134,7 @@ class MemberService:
         )
         return member
 
-    async def update_member(
-        self, *, member_id: str, data: dict[str, Any], actor: Member
-    ) -> Member:
+    async def update_member(self, *, member_id: str, data: dict[str, Any], actor: Member) -> Member:
         security.require_owner(actor)
         assert self.uow.members is not None
         member = await self.uow.members.get(member_id)

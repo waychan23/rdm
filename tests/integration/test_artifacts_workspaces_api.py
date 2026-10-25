@@ -126,14 +126,10 @@ async def test_workspace_owner_manager_only_crud(server, owner_token) -> None:
         "url": "https://github.com/x/y",
         "default_branch": "main",
     }
-    r = await client.post(
-        f"{API}/projects/DEMO/workspaces", json=payload, headers=auth(worker)
-    )
+    r = await client.post(f"{API}/projects/DEMO/workspaces", json=payload, headers=auth(worker))
     assert r.status_code == 403
 
-    r = await client.post(
-        f"{API}/projects/DEMO/workspaces", json=payload, headers=auth(manager)
-    )
+    r = await client.post(f"{API}/projects/DEMO/workspaces", json=payload, headers=auth(manager))
     assert r.status_code == 201, r.text
     ws = r.json()["data"]
 
@@ -201,9 +197,7 @@ async def test_member_patch_and_tokens_list(server, owner_token) -> None:
 
     # Non-owner cannot patch members.
     _wid, worker = await _member(client, owner_token, "plainworker", ["worker"])
-    r = await client.patch(
-        f"{API}/members/{mid}", json={"email": "a@b.c"}, headers=auth(worker)
-    )
+    r = await client.patch(f"{API}/members/{mid}", json={"email": "a@b.c"}, headers=auth(worker))
     assert r.status_code == 403
 
 

@@ -323,9 +323,7 @@ class MessageRepository(Protocol):
 class OutboxRepository(Protocol):
     async def add(self, row: OutboxRow) -> None: ...
 
-    async def claim_due(
-        self, now: dt.datetime, limit: int
-    ) -> list[OutboxRow]:
+    async def claim_due(self, now: dt.datetime, limit: int) -> list[OutboxRow]:
         """pending & due rows flip to delivering inside this transaction."""
         ...
 

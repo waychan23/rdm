@@ -32,9 +32,7 @@ def test_secret_store_creates_0600_file(tmp_path) -> None:
 def _view(event: str, data: dict) -> dict:
     project = Project(id="p1", key="DEMO", name="DEMO")
     actor = Member(id="m1", project_id="p1", type="human", name="tl")
-    return build_view(
-        logical_event=event, project=project, event_id=7, actor=actor, data=data
-    )
+    return build_view(logical_event=event, project=project, event_id=7, actor=actor, data=data)
 
 
 def test_render_generic_is_the_view() -> None:

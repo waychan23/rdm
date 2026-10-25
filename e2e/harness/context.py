@@ -86,9 +86,7 @@ class Harness:
     ) -> cli_runner.CliResult:
         """Drive one headless prompt as the bound member; archives output."""
         cwd = self.workdirs[member]
-        result = cli_runner.run(
-            self.cli, cwd, self.tokens[member], prompt, timeout=timeout
-        )
+        result = cli_runner.run(self.cli, cwd, self.tokens[member], prompt, timeout=timeout)
         call = AgentCall(member=member, prompt=prompt, outputs={self.cli: result})
         self.transcript.append(call)
         log_dir = self.output_dir / "prompts"

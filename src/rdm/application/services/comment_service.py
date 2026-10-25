@@ -27,9 +27,7 @@ MENTION_RE = re.compile(r"(?<![\w/])@([A-Za-z0-9_一-鿿\-]+)")
 
 
 class CommentService:
-    def __init__(
-        self, uow: SqlAlchemyUnitOfWork, file_store: FileStore | None = None
-    ) -> None:
+    def __init__(self, uow: SqlAlchemyUnitOfWork, file_store: FileStore | None = None) -> None:
         self.uow = uow
         self.items = WorkItemService(uow)
         self.mailbox = MailboxService(uow)
@@ -118,9 +116,7 @@ class CommentService:
         )
         return project, item, comment, unresolved
 
-    async def delete(
-        self, actor: Member, comment_id: str
-    ) -> tuple[Project, Comment, list[str]]:
+    async def delete(self, actor: Member, comment_id: str) -> tuple[Project, Comment, list[str]]:
         """Author/owner/manager only; cascades to comment-owned records (§16.44)."""
         assert self.uow.comments is not None and self.uow.projects is not None
         comment = await self.uow.comments.get(comment_id)

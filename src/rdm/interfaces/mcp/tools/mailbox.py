@@ -74,9 +74,7 @@ def register(mcp: FastMCP, container: Container) -> None:
             if not delivery_ids:
                 from rdm.domain.errors import ValidationError
 
-                raise ValidationError(
-                    "delivery_ids 至少一个", details={"field": "delivery_ids"}
-                )
+                raise ValidationError("delivery_ids 至少一个", details={"field": "delivery_ids"})
             updated = await MailboxService(uow).mark_read(actor, delivery_ids)
             return ok({"updated": updated})
 

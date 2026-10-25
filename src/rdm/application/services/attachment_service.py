@@ -85,9 +85,7 @@ class AttachmentService:
         ensure_allowed_type(safe_name, mime)
 
         assert self.uow.attachments is not None
-        saved = await self.files.save(
-            project.id, safe_name, stream, max_bytes=self.max_bytes
-        )
+        saved = await self.files.save(project.id, safe_name, stream, max_bytes=self.max_bytes)
         attachment = Attachment(
             id=new_id(),
             project_id=project.id,
@@ -190,9 +188,7 @@ class AttachmentService:
         project = await self.items.resolve_project(actor, project_key)
         owner_id, _display_id = await self.resolve_owner(actor, project, owner_type, owner_ref)
         assert self.uow.attachments is not None
-        attachments = await self.uow.attachments.list_for_owner(
-            project.id, owner_type, owner_id
-        )
+        attachments = await self.uow.attachments.list_for_owner(project.id, owner_type, owner_id)
         return project, attachments
 
     async def list_for_owners(
@@ -201,9 +197,7 @@ class AttachmentService:
         assert self.uow.attachments is not None
         return await self.uow.attachments.list_for_owners(project_id, owner_type, owner_ids)
 
-    async def download(
-        self, actor: Member, attachment_id: str
-    ) -> tuple[Attachment, Path]:
+    async def download(self, actor: Member, attachment_id: str) -> tuple[Attachment, Path]:
         assert self.uow.attachments is not None
         attachment = await self.uow.attachments.get(attachment_id)
         if attachment is None:

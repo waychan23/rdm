@@ -79,9 +79,7 @@ async def download_attachment(
         path,
         media_type=attachment.mime or "application/octet-stream",
         headers={
-            "Content-Disposition": (
-                f"attachment; filename=\"{quoted}\"; filename*=UTF-8''{quoted}"
-            )
+            "Content-Disposition": (f"attachment; filename=\"{quoted}\"; filename*=UTF-8''{quoted}")
         },
     )
 

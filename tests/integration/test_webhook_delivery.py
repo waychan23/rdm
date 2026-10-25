@@ -34,9 +34,7 @@ class _MockHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers.get("content-length", "0"))
         body = self.rfile.read(length)
-        type(self).received.append(
-            {"path": self.path, "headers": dict(self.headers), "body": body}
-        )
+        type(self).received.append({"path": self.path, "headers": dict(self.headers), "body": body})
         if type(self).fail_remaining > 0:
             type(self).fail_remaining -= 1
             self.send_response(500)
@@ -86,9 +84,7 @@ async def web(tmp_path) -> AsyncIterator[Web]:
     app = create_app(settings)
     async with LifespanManager(app):
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             token = settings.bootstrap_token_path.read_text(encoding="utf-8").strip()
             worker = WebhookWorker(app.state.container, settings)
             yield Web(client, token, settings, worker)

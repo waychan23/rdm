@@ -37,9 +37,7 @@ class HttpxWebhookSender:
         }
 
     async def post(self, row: OutboxRow) -> SendResult:
-        body = json.dumps(row.payload, ensure_ascii=False, separators=(",", ":")).encode(
-            "utf-8"
-        )
+        body = json.dumps(row.payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         timestamp = int(time.time())
         headers = self.build_headers(row, body, timestamp)
         try:

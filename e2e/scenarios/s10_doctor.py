@@ -67,7 +67,6 @@ def run(h: Harness) -> None:
         "tl",
         "调用 workflow_get（kind=task），报告 version 与初始状态。",
         lambda out_: (
-            str(rest_wf["version"]) in out_
-            and rest_wf["kinds"]["task"]["initial"] in out_
+            str(rest_wf["version"]) in out_ and rest_wf["kinds"]["task"]["initial"] in out_
         ),
     )

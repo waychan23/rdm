@@ -37,8 +37,7 @@ def run(h: Harness) -> None:
     agent_expect(
         h,
         "qa",
-        f"把 {display} 用 work_item_transition 转到 REOPEN，再转到 FIXING，"
-        "最后转到 CLOSED_DONE。",
+        f"把 {display} 用 work_item_transition 转到 REOPEN，再转到 FIXING，最后转到 CLOSED_DONE。",
         lambda out: "CLOSED_DONE" in out,
         tries=2,
         timeout=240,

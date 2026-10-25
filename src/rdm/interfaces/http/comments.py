@@ -22,9 +22,7 @@ class CommentIn(BaseModel):
     attachment_ids: list[str] | None = None
 
 
-async def _comments_view(
-    uow, file_store, project_id: str, comments
-) -> list[dict]:
+async def _comments_view(uow, file_store, project_id: str, comments) -> list[dict]:
     members = {m.id: m for m in await MemberService(uow).list_members(project_id)}
     attachment_rows = await AttachmentService(uow, file_store).list_for_owners(
         project_id, "comment", [c.id for c in comments]
@@ -58,9 +56,7 @@ async def add_comment(
     actor: Member = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
-        project, _item, comment, unresolved = await CommentService(
-            uow, container.file_store
-        ).add(
+        project, _item, comment, unresolved = await CommentService(uow, container.file_store).add(
             actor,
             ref,
             body.body_md,

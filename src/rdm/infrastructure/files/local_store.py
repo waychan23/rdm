@@ -98,9 +98,7 @@ class LocalFileStore:
             raise
         return SavedFile(rel_path=rel.as_posix(), size_bytes=size, sha256=hasher.hexdigest())
 
-    def iter_attachment_relpaths(
-        self, project_id: str | None = None
-    ) -> Iterable[tuple[str, str]]:
+    def iter_attachment_relpaths(self, project_id: str | None = None) -> Iterable[tuple[str, str]]:
         """Yield (project_id, rel_path) for every non-.part file on disk."""
         if project_id is None:
             base, pattern = self._root, "*/attachments/*/*"

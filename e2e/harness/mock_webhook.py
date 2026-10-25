@@ -34,9 +34,7 @@ def start_mock_webhook() -> MockWebhook:
         def do_POST(self) -> None:  # noqa: N802
             length = int(self.headers.get("content-length", "0"))
             body = self.rfile.read(length)
-            hook.received.append(
-                {"path": self.path, "headers": dict(self.headers), "body": body}
-            )
+            hook.received.append({"path": self.path, "headers": dict(self.headers), "body": body})
             if hook.fail_until > 0:
                 hook.fail_until -= 1
                 self.send_response(500)

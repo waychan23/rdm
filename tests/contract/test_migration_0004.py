@@ -20,9 +20,10 @@ def _cfg(db_path: Path) -> Config:
 def test_0004_adds_webhook_format_with_generic_default(tmp_path: Path) -> None:
     db_path = tmp_path / "m.db"
     command.upgrade(_cfg(db_path), "0003")
-    cols_0003 = {c["name"] for c in inspect(create_engine(f"sqlite:///{db_path}")).get_columns(
-        "project_member"
-    )}
+    cols_0003 = {
+        c["name"]
+        for c in inspect(create_engine(f"sqlite:///{db_path}")).get_columns("project_member")
+    }
     assert "notify_webhook_format" not in cols_0003
 
     engine = create_engine(f"sqlite:///{db_path}")

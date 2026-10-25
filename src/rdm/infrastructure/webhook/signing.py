@@ -24,9 +24,7 @@ class WebhookSecretStore:
             return self._secret
         self._path.parent.mkdir(parents=True, exist_ok=True)
         token = secrets.token_bytes(32)
-        fd = os.open(
-            self._path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
-        )
+        fd = os.open(self._path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
             os.write(fd, token.hex().encode("ascii"))
         finally:

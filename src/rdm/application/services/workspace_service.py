@@ -71,7 +71,10 @@ class WorkspaceService:
         await self.uow.workspaces.add(workspace)
         await self.uow.flush()
         await self._event(
-            project.id, workspace, EventType.WORKSPACE_ADDED, actor,
+            project.id,
+            workspace,
+            EventType.WORKSPACE_ADDED,
+            actor,
             created_payload({"id": workspace.id, "name": name, "kind": kind, "url": url}),
         )
         return project, workspace
@@ -123,7 +126,10 @@ class WorkspaceService:
         if changes:
             await self.uow.workspaces.save(workspace)
             await self._event(
-                project.id, workspace, EventType.WORKSPACE_UPDATED, actor,
+                project.id,
+                workspace,
+                EventType.WORKSPACE_UPDATED,
+                actor,
                 updated_payload(changes),
             )
         return project, workspace
@@ -144,7 +150,10 @@ class WorkspaceService:
         workspace.deleted_at = now
         workspace.deleted_by = actor.id
         await self._event(
-            project.id, workspace, EventType.WORKSPACE_DELETED, actor,
+            project.id,
+            workspace,
+            EventType.WORKSPACE_DELETED,
+            actor,
             deleted_payload({"id": workspace.id, "name": workspace.name}),
         )
         return project, workspace

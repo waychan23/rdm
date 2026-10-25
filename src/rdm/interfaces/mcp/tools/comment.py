@@ -16,9 +16,7 @@ from rdm.interfaces.mcp.tools._base import ok, run_tool
 
 def register(mcp: FastMCP, container: Container) -> None:
     @mcp.tool
-    async def comment_list(
-        work_item_id: str, limit: int = 50, offset: int = 0
-    ) -> Any:
+    async def comment_list(work_item_id: str, limit: int = 50, offset: int = 0) -> Any:
         """读某工作项下的评论（含每条评论挂载的附件元数据）。
 
         附件只有元数据和 download_url，二进制请走 OpenAPI/Web 下载。
@@ -29,21 +27,17 @@ def register(mcp: FastMCP, container: Container) -> None:
             proj, _item, comments = await service.list_for_item(actor, work_item_id)
             comments = comments[offset : offset + min(limit, 100)]
             members = await MemberService(uow).members_index(proj.id)
-            rows = await AttachmentService(
-                uow, container.file_store
-            ).list_for_owners(proj.id, "comment", [c.id for c in comments])
+            rows = await AttachmentService(uow, container.file_store).list_for_owners(
+                proj.id, "comment", [c.id for c in comments]
+            )
             for att in rows:
                 uploader = await uow.members.get(att.uploader_member_id)
                 if uploader is not None:
                     members[uploader.id] = uploader
             by_comment: dict[str, list] = {}
             for att in rows:
-                by_comment.setdefault(att.owner_id, []).append(
-                    attachment_out(att, members)
-                )
-            return ok(
-                [comment_out(c, members, by_comment.get(c.id, [])) for c in comments]
-            )
+                by_comment.setdefault(att.owner_id, []).append(attachment_out(att, members))
+            return ok([comment_out(c, members, by_comment.get(c.id, [])) for c in comments])
 
         return await run_tool(container, run)
 
@@ -65,9 +59,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         """
 
         async def run(uow, actor):
-            _proj, _item, comment, unresolved = await CommentService(
-                uow, container.file_store
-            ).add(
+            _proj, _item, comment, unresolved = await CommentService(uow, container.file_store).add(
                 actor, work_item_id, body_md, reply_to, attachment_ids
             )
             project_id = comment.project_id

@@ -35,9 +35,7 @@ async def list_artifacts(
     actor: Member = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
-        _project, artifacts = await ArtifactService(uow).list_for(
-            actor, key, owner_type, owner_ref
-        )
+        _project, artifacts = await ArtifactService(uow).list_for(actor, key, owner_type, owner_ref)
     return {"data": [artifact_out(a) for a in artifacts]}
 
 
@@ -49,9 +47,7 @@ async def add_artifact(
     actor: Member = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
-        _project, artifact = await ArtifactService(uow).add(
-            actor, key, body.model_dump()
-        )
+        _project, artifact = await ArtifactService(uow).add(actor, key, body.model_dump())
         out = artifact_out(artifact)
     return {"data": out}
 

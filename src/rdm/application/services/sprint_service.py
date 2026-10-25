@@ -134,8 +134,7 @@ class SprintService:
             for key in ("start_date", "end_date"):
                 if key in changes:
                     changes[key] = [
-                        d.isoformat() if isinstance(d, dt.date) else d
-                        for d in changes[key]
+                        d.isoformat() if isinstance(d, dt.date) else d for d in changes[key]
                     ]
             assert self.uow.sprints is not None
             await self.uow.sprints.save_fields(sprint)
@@ -258,9 +257,7 @@ class SprintService:
             await self.uow.flush()
         except IntegrityError as exc:
             raise translate_integrity(exc) from exc
-        event_id = await self._event(
-            project.id, sprint, EventType.SPRINT_STARTED, actor, {}
-        )
+        event_id = await self._event(project.id, sprint, EventType.SPRINT_STARTED, actor, {})
         await self._notify(project, sprint, event_id, "sprint.started", actor)
         return project, sprint
 
@@ -289,9 +286,7 @@ class SprintService:
         sprint.status = SprintStatus.CLOSED
         await self.uow.sprints.save_status(sprint)  # type: ignore[union-attr]
         await self.uow.flush()
-        event_id = await self._event(
-            project.id, sprint, EventType.SPRINT_CLOSED, actor, {}
-        )
+        event_id = await self._event(project.id, sprint, EventType.SPRINT_CLOSED, actor, {})
         await self._notify(project, sprint, event_id, "sprint.closed", actor)
         return project, sprint
 

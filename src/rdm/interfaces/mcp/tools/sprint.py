@@ -18,15 +18,11 @@ from rdm.interfaces.mcp.tools._base import ok, run_tool
 
 def register(mcp: FastMCP, container: Container) -> None:
     @mcp.tool
-    async def sprint_list(
-        project: str | None = None, status: str | None = None
-    ) -> Any:
+    async def sprint_list(project: str | None = None, status: str | None = None) -> Any:
         """列 Sprint（可按 PLANNED/ACTIVE/CLOSED 过滤，默认全部）。"""
 
         async def run(uow, actor):
-            _proj, sprints = await SprintService(uow).list_sprints(
-                actor, project, status=status
-            )
+            _proj, sprints = await SprintService(uow).list_sprints(actor, project, status=status)
             return ok([sprint_out(s) for s in sprints])
 
         return await run_tool(container, run)
@@ -74,9 +70,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                 if not items:
                     from rdm.domain.errors import ValidationError
 
-                    raise ValidationError(
-                        "add_items 需要 items 列表", details={"field": "items"}
-                    )
+                    raise ValidationError("add_items 需要 items 列表", details={"field": "items"})
                 _p, sprint, added = await service.add_items(actor, id, items)
                 return ok(
                     sprint_out(sprint),
@@ -86,9 +80,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                 if not item:
                     from rdm.domain.errors import ValidationError
 
-                    raise ValidationError(
-                        "remove_item 需要 item", details={"field": "item"}
-                    )
+                    raise ValidationError("remove_item 需要 item", details={"field": "item"})
                 _p, sprint, removed = await service.remove_item(actor, id, item)
                 return ok(
                     sprint_out(sprint),

@@ -50,9 +50,7 @@ def build_view(
         "project": {"id": project.id, "key": project.key},
         "occurred_at": dt.datetime.now(dt.UTC).isoformat(),
         "actor": (
-            None
-            if actor is None
-            else {"id": actor.id, "name": actor.name, "type": actor.type}
+            None if actor is None else {"id": actor.id, "name": actor.name, "type": actor.type}
         ),
         "data": data,
     }

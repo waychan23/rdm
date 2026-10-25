@@ -96,9 +96,7 @@ async def test_active_link_for_item_and_rejoin_after_remove(
     await uow.sprints.add(b)
 
     assert await uow.sprint_items.active_link_for_item(item.id) is None
-    await uow.sprint_items.bulk_add(
-        [SprintItem(id=new_id(), sprint_id=a.id, work_item_id=item.id)]
-    )
+    await uow.sprint_items.bulk_add([SprintItem(id=new_id(), sprint_id=a.id, work_item_id=item.id)])
     await uow.flush()
     link = await uow.sprint_items.active_link_for_item(item.id)
     assert link is not None and link.sprint_id == a.id
@@ -107,9 +105,7 @@ async def test_active_link_for_item_and_rejoin_after_remove(
     assert await uow.sprint_items.remove(a.id, item.id, "owner")
     await uow.flush()
     assert await uow.sprint_items.active_link_for_item(item.id) is None
-    await uow.sprint_items.bulk_add(
-        [SprintItem(id=new_id(), sprint_id=b.id, work_item_id=item.id)]
-    )
+    await uow.sprint_items.bulk_add([SprintItem(id=new_id(), sprint_id=b.id, work_item_id=item.id)])
     await uow.flush()
     link = await uow.sprint_items.active_link_for_item(item.id)
     assert link is not None and link.sprint_id == b.id

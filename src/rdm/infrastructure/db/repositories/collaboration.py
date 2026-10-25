@@ -94,9 +94,7 @@ class AttachmentRepository:
             )
         )
 
-    async def get(
-        self, attachment_id: str, *, include_deleted: bool = False
-    ) -> Attachment | None:
+    async def get(self, attachment_id: str, *, include_deleted: bool = False) -> Attachment | None:
         row = await self._s.get(AttachmentModel, attachment_id)
         if row is None or (not include_deleted and row.deleted_at is not None):
             return None

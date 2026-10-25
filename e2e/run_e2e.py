@@ -58,9 +58,7 @@ class RunReport:
     results: list[ScenarioResult] = field(default_factory=list)
 
 
-def run_one_cli(
-    cli: str, scenarios: list[str], out_root: Path, keep: bool
-) -> RunReport:
+def run_one_cli(cli: str, scenarios: list[str], out_root: Path, keep: bool) -> RunReport:
     root = out_root / cli
     root.mkdir(parents=True, exist_ok=True)
     report = RunReport(cli=cli)
@@ -86,9 +84,7 @@ def run_one_cli(
                 module = importlib.import_module(f"e2e.scenarios.{module_name}")
                 module.run(h)
                 h.dump_events(key)
-                report.results.append(
-                    ScenarioResult(key, "PASS", f"{time.time() - started:.0f}s")
-                )
+                report.results.append(ScenarioResult(key, "PASS", f"{time.time() - started:.0f}s"))
                 print(f"  {key} PASS ({time.time() - started:.0f}s)")
             except Exception as exc:  # noqa: BLE001 - record and continue
                 traceback.print_exc()
@@ -137,10 +133,7 @@ def main() -> int:
     out_root = Path("e2e/out") / time.strftime("%Y%m%d-%H%M%S")
     out_root.mkdir(parents=True, exist_ok=True)
 
-    reports = [
-        run_one_cli(cli, sorted(scenarios), out_root, args.no_cleanup)
-        for cli in selected
-    ]
+    reports = [run_one_cli(cli, sorted(scenarios), out_root, args.no_cleanup) for cli in selected]
     print("\n=== e2e summary ===")
     failed = 0
     for report in reports:

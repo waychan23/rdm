@@ -116,8 +116,9 @@ def check_outbox(settings: Settings) -> CheckResult:
     try:
         with engine.connect() as conn:
             counts = dict(
-                conn.execute(text("select status, count(*) from webhook_outbox group by status"))
-                .all()
+                conn.execute(
+                    text("select status, count(*) from webhook_outbox group by status")
+                ).all()
             )
             oldest = conn.execute(
                 text("select min(created_at) from webhook_outbox where status='pending'")
@@ -179,9 +180,7 @@ def check_attachments(settings: Settings) -> CheckResult:
     return CheckResult("attachments", OK, f"{len(rows)} 条记录，{len(on_disk)} 个文件一致")
 
 
-def run_checks(
-    settings: Settings, *, include_endpoint: bool = True
-) -> list[CheckResult]:
+def run_checks(settings: Settings, *, include_endpoint: bool = True) -> list[CheckResult]:
     checks = [
         check_data_dir(settings),
         check_database(settings),
@@ -194,9 +193,7 @@ def run_checks(
     return checks
 
 
-def run_doctor(
-    settings: Settings, *, as_json: bool = False, include_endpoint: bool = True
-) -> int:
+def run_doctor(settings: Settings, *, as_json: bool = False, include_endpoint: bool = True) -> int:
     results = run_checks(settings, include_endpoint=include_endpoint)
     if as_json:
         payload: dict[str, Any] = {

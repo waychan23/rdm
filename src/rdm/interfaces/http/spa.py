@@ -69,9 +69,7 @@ class SPAStatic:
         async def send_wrapper(message: dict[str, Any]) -> None:
             if message["type"] == "http.response.start":
                 headers = [
-                    (k, v)
-                    for k, v in message.get("headers", [])
-                    if k.lower() != b"cache-control"
+                    (k, v) for k, v in message.get("headers", []) if k.lower() != b"cache-control"
                 ]
                 headers.append((b"cache-control", b"no-cache"))
                 message["headers"] = headers

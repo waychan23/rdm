@@ -1,7 +1,8 @@
 # rd-manager（rdm）
 
 human/agent 协作的研发工作管理：受工作流引擎约束的 WorkItem/Sprint、站内信箱、
-MCP 工具与最小 Web。纯单人部署，SQLite，服务只监听 127.0.0.1。
+附件/产出物/工作区、Webhook 通知、27 个 MCP 工具与完整 Web。纯单人部署，SQLite，
+服务只监听 127.0.0.1。
 
 ## 5 分钟跑起来
 
@@ -16,9 +17,11 @@ uv run rdm serve              # http://127.0.0.1:8765 （Ctrl-C 停止）
 首次启动会创建默认项目 `RDM`、owner 成员与一次性 token，明文写到
 `~/rdm-data/bootstrap-token`（文件权限 0600），并在控制台提示。
 
-- Web：浏览器打开 <http://127.0.0.1:8765/>（回环无 token 时以 owner 身份访问）
+- Web：浏览器打开 <http://127.0.0.1:8765/>（回环无 token 时以 owner 身份访问）：
+  看板、Backlog、Sprint 管理、信箱、工作区、成员/Token 设置、工作项流转/附件/评论
 - API 文档（FastAPI Swagger）：<http://127.0.0.1:8765/docs>
 - MCP endpoint：`http://127.0.0.1:8765/mcp`（Bearer token，见下）
+- 自检：`uv run rdm doctor`（数据目录/迁移/workflow/端点/outbox 积压/附件孤儿，`--json`）
 
 ## 接入 agent CLI
 
@@ -70,7 +73,26 @@ uv run rdm member create frontend --project DEMO --roles worker
 uv run rdm member create backend  --project DEMO --roles worker
 uv run rdm token issue <member-id>          # 给某成员签发 token
 uv run rdm db status                        # 迁移版本
+uv run rdm doctor                           # 环境自检（FAIL 退出码 1）
 ```
+
+## Webhook 通知
+
+在成员上配置 `notify_webhook`（Web 设置页或创建成员时）与格式
+（generic/dingtalk/feishu）：工作项指派/状态变更投 assignee、新评论投该工作项负责人、
+信件逐收件人映射为 `mailbox.delivered`、Sprint 启停广播给全部配置成员。
+HMAC-SHA256 签名头 `X-RDM-Signature`，进程密钥在 `~/rdm-data/webhook-secret`；
+失败按 1m/5m/15m 退避，首发 + 3 重试后标记 failed，`rdm doctor` 可查积压。
+
+## 端到端验收
+
+S1–S10 场景脚本用真实 `claude -p` / `opencode run` 驱动（需本机登录相应 CLI）：
+
+```bash
+uv run python e2e/run_e2e.py --cli claude,opencode
+```
+
+详见 [e2e/README.md](e2e/README.md)。
 
 ## 开发
 

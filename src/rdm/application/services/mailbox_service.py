@@ -394,9 +394,7 @@ class MailboxService:
             },
         )
         # message.sent maps to one logical mailbox.delivered per recipient (§16.40).
-        recipient_members = [
-            await self._member(project.id, member_id) for member_id in recipients
-        ]
+        recipient_members = [await self._member(project.id, member_id) for member_id in recipients]
         from rdm.application.services import webhook_notify
 
         await webhook_notify.notify_message(

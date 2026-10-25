@@ -81,9 +81,7 @@ class OutboxRepository:
         )
         # Map to domain BEFORE the Core UPDATE: afterwards the identity map
         # would refresh the ORM rows to their post-update state.
-        claimed = [
-            _to_domain(r, _logical_name(event_types.get(r.event_id))) for r in rows
-        ]
+        claimed = [_to_domain(r, _logical_name(event_types.get(r.event_id))) for r in rows]
         await self._s.execute(
             update(WebhookOutboxModel)
             .where(WebhookOutboxModel.id.in_([r.id for r in rows]))
@@ -113,9 +111,7 @@ class OutboxRepository:
             )
         )
 
-    async def mark_failed(
-        self, row_id: str, attempts: int, error: str, now: dt.datetime
-    ) -> None:
+    async def mark_failed(self, row_id: str, attempts: int, error: str, now: dt.datetime) -> None:
         await self._s.execute(
             update(WebhookOutboxModel)
             .where(WebhookOutboxModel.id == row_id)
@@ -138,9 +134,7 @@ class OutboxRepository:
         return int(result.rowcount or 0)
 
     async def status_counts(self) -> dict[str, int]:
-        stmt = select(WebhookOutboxModel.status, func.count()).group_by(
-            WebhookOutboxModel.status
-        )
+        stmt = select(WebhookOutboxModel.status, func.count()).group_by(WebhookOutboxModel.status)
         return {str(status): int(count) for status, count in (await self._s.execute(stmt)).all()}
 
     async def oldest_pending_at(self) -> dt.datetime | None:
