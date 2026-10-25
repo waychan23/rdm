@@ -65,12 +65,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { api } from "../api";
 import type { Comment, WorkItem } from "../types";
 
-const props = defineProps<{ key: string; id: string }>();
-const key = props.key;
+const route = useRoute();
+const key = String(route.params.key);
 
 const item = ref<WorkItem | null>(null);
 const children = ref<WorkItem[]>([]);
@@ -87,19 +88,19 @@ const fieldsText = computed(() => {
 
 async function load() {
   const detail = await api.get<WorkItem>(
-    `/work-items/${encodeURIComponent(props.id)}`
+    `/work-items/${encodeURIComponent(String(route.params.id))}`
   );
   item.value = detail.data;
   children.value = ((detail.meta?.children as WorkItem[]) ?? []);
   allowed.value = (detail.meta?.allowed_transitions as string[]) ?? [];
-  comments.value = (await api.get<Comment[]>(`/work-items/${props.id}/comments`)).data;
+  comments.value = (await api.get<Comment[]>(`/work-items/${route.params.id}/comments`)).data;
 }
 
 async function postComment() {
   if (!draft.value.trim()) return;
   saving.value = true;
   try {
-    await api.post(`/work-items/${props.id}/comments`, { body_md: draft.value });
+    await api.post(`/work-items/${route.params.id}/comments`, { body_md: draft.value });
     draft.value = "";
     await load();
   } catch (e) {

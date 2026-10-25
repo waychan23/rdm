@@ -41,12 +41,12 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
+import { useRoute } from "vue-router";
 import { api } from "../api";
 import type { WorkItem } from "../types";
 
 const KINDS = ["epic", "story", "issue", "task"];
-const props = defineProps<{ key: string }>();
-const key = props.key;
+const key = String(useRoute().params.key);
 const items = ref<WorkItem[]>([]);
 const filters = reactive({ kind: "", status: "", q: "" });
 

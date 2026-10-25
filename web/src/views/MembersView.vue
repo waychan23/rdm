@@ -46,12 +46,12 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
+import { useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { api } from "../api";
 import type { Member } from "../types";
 
-const props = defineProps<{ key: string }>();
-const key = props.key;
+const key = String(useRoute().params.key);
 const members = ref<Member[]>([]);
 const dialog = ref(false);
 const saving = ref(false);
