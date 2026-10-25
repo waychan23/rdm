@@ -72,7 +72,6 @@ def member_to_domain(row: ProjectMemberModel) -> Member:
         accept_kinds=list(row.accept_kinds or []),
         email=row.email,
         notify_webhook=row.notify_webhook,
-        agent_cli=row.agent_cli,
         is_active=row.is_active,
         created_at=row.created_at,
         created_by=row.created_by,

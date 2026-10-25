@@ -42,9 +42,13 @@ cd ~/repo/demo-backend
 rdm integrate mcp --scope project --member backend --project DEMO
 ```
 
-- 默认同时写 claude（`~/.claude.json` 按绝对路径键控，**token 不进代码库**）
-  与 opencode（`<目录>/.opencode/opencode.json`，自动追加进该库 `.gitignore`）；
-  `--target` 可只选一家；codex 无项目级配置，不支持。
+- **身份与 CLI 解耦**：member 不属于任何特定 agent CLI。默认同时给 claude
+  （`~/.claude.json` 按绝对路径键控，**token 不进代码库**）与 opencode
+  （`<目录>/.opencode/opencode.json`，自动追加进该库 `.gitignore`）写入**同一个
+  member token**——同一代码库目录下在 claude / opencode 间切换，身份与默认项目不变，
+  `whoami` 始终一致；一个 member 也可签发多个 token。codex 无项目级配置，用
+  `--scope user`。仅当需要「同目录不同 CLI 扮演不同成员」时才分别用
+  `--target claude --member A` / `--target opencode --member B`。
 - 需要 owner 凭据：环境变量 `RDM_TOKEN`（或 `--data-dir` 指向 bootstrap token）；
   命令会为该 member 签发一个专用 token（label 为 `project:<目录名>`）。
 - 不想签发可直接 `--member-token <token>`；已有绑定变化需 `--force` 轮换。

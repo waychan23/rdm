@@ -14,7 +14,6 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="agent_cli" label="Agent CLI" width="140" />
       <el-table-column label="活跃" width="80">
         <template #default="{ row }">
           <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
@@ -35,9 +34,6 @@
         </el-form-item>
         <el-form-item label="角色">
           <el-input v-model="form.rolesText" placeholder="owner,manager,worker（逗号分隔）" />
-        </el-form-item>
-        <el-form-item label="Agent CLI" v-if="form.type === 'agent'">
-          <el-input v-model="form.agent_cli" placeholder="claude | codex | opencode | other" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -63,7 +59,6 @@ const form = reactive({
   name: "",
   type: "human",
   rolesText: "worker",
-  agent_cli: "",
 });
 
 async function load() {
@@ -77,7 +72,6 @@ async function create() {
       name: form.name,
       type: form.type,
       roles: form.rolesText.split(",").map((r) => r.trim()).filter(Boolean),
-      agent_cli: form.type === "agent" ? form.agent_cli : null,
     });
     dialog.value = false;
     form.name = "";

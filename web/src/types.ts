@@ -13,7 +13,6 @@ export interface Member {
   type: string;
   roles: string[];
   manager_member_id?: string | null;
-  agent_cli?: string | null;
   is_active: boolean;
   created_at: string;
 }

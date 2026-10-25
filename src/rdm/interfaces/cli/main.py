@@ -180,9 +180,6 @@ def member_create(
         str | None, typer.Option("--manager", help="Manager member id (required for agents).")
     ] = None,
     roles: Annotated[str, typer.Option("--roles", help="Comma-separated roles.")] = "worker",
-    agent_cli: Annotated[
-        str | None, typer.Option("--agent-cli", help="claude | codex | opencode | other")
-    ] = None,
     accept_kinds: Annotated[
         str | None, typer.Option("--accept-kinds", help="Comma-separated kinds.")
     ] = None,
@@ -203,7 +200,6 @@ def member_create(
             "type": type,
             "manager_member_id": manager,
             "roles": [r for r in roles.split(",") if r],
-            "agent_cli": agent_cli,
             "accept_kinds": accept_kinds.split(",") if accept_kinds else None,
         },
     )

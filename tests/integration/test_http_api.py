@@ -113,7 +113,7 @@ async def test_s1_project_and_agent_member_flow(server, owner_token) -> None:
     r = await client.post(
         "/api/v1/projects/DEMO/members",
         headers=auth(owner_token),
-        json={"name": "frontend-dev", "type": "agent", "agent_cli": "claude", "roles": ["worker"]},
+        json={"name": "frontend-dev", "type": "agent", "roles": ["worker"]},
     )
     assert r.status_code == 422
     assert "manager" in r.json()["error"]["message"]
@@ -126,7 +126,6 @@ async def test_s1_project_and_agent_member_flow(server, owner_token) -> None:
             "name": "frontend-dev",
             "type": "agent",
             "manager_member_id": tl["id"],
-            "agent_cli": "claude",
             "roles": ["worker"],
             "accept_kinds": ["task"],
         },

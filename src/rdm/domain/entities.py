@@ -54,7 +54,6 @@ class Member:
     accept_kinds: list[str] = field(default_factory=list)
     email: str | None = None
     notify_webhook: str | None = None
-    agent_cli: str | None = None
     is_active: bool = True
     created_at: dt.datetime = field(default_factory=_utcnow)
     created_by: str | None = None

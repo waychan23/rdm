@@ -32,13 +32,6 @@ class AcceptKind(StrEnum):
     task = "task"
 
 
-class AgentCli(StrEnum):
-    claude = "claude"
-    codex = "codex"
-    opencode = "opencode"
-    other = "other"
-
-
 class ProjectStatus(StrEnum):
     active = "active"
     archived = "archived"

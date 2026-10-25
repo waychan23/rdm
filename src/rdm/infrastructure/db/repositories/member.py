@@ -54,7 +54,6 @@ class MemberRepository:
                 accept_kinds=member.accept_kinds,
                 email=member.email,
                 notify_webhook=member.notify_webhook,
-                agent_cli=member.agent_cli,
                 is_active=member.is_active,
                 created_at=member.created_at,
                 created_by=member.created_by,
@@ -74,7 +73,6 @@ class MemberRepository:
                 accept_kinds=member.accept_kinds,
                 email=member.email,
                 notify_webhook=member.notify_webhook,
-                agent_cli=member.agent_cli,
                 is_active=member.is_active,
                 updated_at=dt.datetime.now(dt.UTC),
             )

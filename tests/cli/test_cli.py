@@ -31,7 +31,7 @@ def test_init_upgrade_status_idempotent(tmp_path: Path) -> None:
 
     result = runner.invoke(app, ["db", "status", "--data-dir", str(data_dir)])
     assert result.exit_code == 0, result.output
-    assert "0001" in result.output
+    assert "0002" in result.output
     assert "up to date" in result.output
 
 

@@ -9,7 +9,7 @@ from typing import Any
 
 from rdm.application import security
 from rdm.domain.entities import Member, MemberToken
-from rdm.domain.enums import AcceptKind, AgentCli, MemberRole, MemberType
+from rdm.domain.enums import AcceptKind, MemberRole, MemberType
 from rdm.domain.errors import NotFound, ValidationError
 from rdm.domain.events import EventType
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
@@ -17,7 +17,6 @@ from rdm.infrastructure.id import new_id
 
 VALID_ROLES = {r.value for r in MemberRole}
 VALID_ACCEPT_KINDS = {k.value for k in AcceptKind}
-VALID_AGENT_CLI = {c.value for c in AgentCli}
 
 
 def hash_token(raw: str) -> str:
@@ -69,13 +68,6 @@ class MemberService:
                 details={"field": "accept_kinds"},
             )
 
-        agent_cli = data.get("agent_cli")
-        if agent_cli is not None and agent_cli not in VALID_AGENT_CLI:
-            raise ValidationError(
-                f"agent_cli 必须是 claude/codex/opencode/other，收到 {agent_cli!r}",
-                details={"field": "agent_cli"},
-            )
-
         manager_id = data.get("manager_member_id")
         if member_type == MemberType.agent:
             if not manager_id:
@@ -111,7 +103,6 @@ class MemberService:
             accept_kinds=list(accept_kinds),
             email=data.get("email"),
             notify_webhook=data.get("notify_webhook"),
-            agent_cli=agent_cli if member_type == MemberType.agent else None,
             created_by=actor.id,
         )
         await self.uow.members.add(member)

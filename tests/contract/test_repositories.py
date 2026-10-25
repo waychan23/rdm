@@ -89,7 +89,6 @@ async def test_member_lifecycle(uow: SqlAlchemyUnitOfWork) -> None:
         type="agent",
         roles=["worker"],
         manager_member_id=human.id,
-        agent_cli="claude",
     )
     await uow.members.add(human)
     await uow.members.add(agent)

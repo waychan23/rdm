@@ -38,7 +38,6 @@ def member_out(m: Member) -> dict:
         "accept_kinds": m.accept_kinds,
         "email": m.email,
         "notify_webhook": m.notify_webhook,
-        "agent_cli": m.agent_cli,
         "is_active": m.is_active,
         "created_at": _iso(m.created_at),
     }
