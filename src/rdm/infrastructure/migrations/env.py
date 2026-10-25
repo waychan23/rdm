@@ -18,7 +18,12 @@ _SQLITE_PRAGMAS = (
     "PRAGMA journal_mode=WAL",
     "PRAGMA synchronous=NORMAL",
     "PRAGMA busy_timeout=5000",
-    "PRAGMA foreign_keys=ON",
+    # Migrations rebuild tables in batch (copy/rename/drop); FK enforcement
+    # must be off on this connection or swapping a table referenced by
+    # others (e.g. member_token -> project_member) fails at COMMIT.
+    # PRAGMA foreign_keys cannot be toggled inside a transaction, so this is
+    # set at connect before alembic begins one.
+    "PRAGMA foreign_keys=OFF",
 )
 
 config = context.config

@@ -16,6 +16,11 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    if bind.dialect.name == "sqlite":
+        # A previous interrupted batch run can leave its deterministic temp
+        # table behind (SQLite DDL is not rolled back with the transaction).
+        op.execute("DROP TABLE IF EXISTS _alembic_tmp_project_member")
     # batch mode emits a table rebuild on sqlite (which lacks full ALTER
     # support) and a plain DROP COLUMN on Postgres.
     with op.batch_alter_table("project_member") as batch:
