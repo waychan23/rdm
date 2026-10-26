@@ -59,6 +59,8 @@ def token_out(t: MemberToken) -> dict:
         "id": t.id,
         "member_id": t.member_id,
         "label": t.label,
+        "kind": t.kind,
+        "expires_at": _iso(t.expires_at),
         "last_used_at": _iso(t.last_used_at),
         "revoked_at": _iso(t.revoked_at),
         "created_at": _iso(t.created_at),

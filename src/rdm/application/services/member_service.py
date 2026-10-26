@@ -8,15 +8,17 @@ import secrets
 from typing import Any
 
 from rdm.application import security
+from rdm.application.services.passwords import hash_password
 from rdm.domain.entities import Member, MemberToken
-from rdm.domain.enums import AcceptKind, MemberRole, MemberType
-from rdm.domain.errors import NotFound, ValidationError
+from rdm.domain.enums import AcceptKind, MemberRole, MemberType, TokenKind
+from rdm.domain.errors import Forbidden, NotFound, ValidationError
 from rdm.domain.events import EventType, updated_payload
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
 VALID_ROLES = {r.value for r in MemberRole}
 VALID_ACCEPT_KINDS = {k.value for k in AcceptKind}
+MAX_TOKEN_DAYS = 3650
 
 
 def hash_token(raw: str) -> str:
@@ -99,6 +101,23 @@ class MemberService:
                 details={"field": "manager_member_id"},
             )
 
+        # Console login passwords are human-only; agents can never log in.
+        password = data.get("password")
+        password_hash = None
+        if password is not None:
+            if member_type != MemberType.human:
+                raise ValidationError(
+                    "agent 成员不能设置密码（agent 禁止登录控制台）",
+                    details={"field": "password"},
+                )
+            try:
+                from rdm.application.services.passwords import validate_password
+
+                validate_password(password)
+            except ValueError as exc:
+                raise ValidationError(str(exc), details={"field": "password"}) from exc
+            password_hash = hash_password(password)
+
         member = Member(
             id=new_id(),
             project_id=project_id,
@@ -111,6 +130,7 @@ class MemberService:
             email=data.get("email"),
             notify_webhook=data.get("notify_webhook"),
             notify_webhook_format=webhook_format,
+            password_hash=password_hash,
             created_by=actor.id,
         )
         await self.uow.members.add(member)
@@ -140,6 +160,29 @@ class MemberService:
         member = await self.uow.members.get(member_id)
         if member is None:
             raise NotFound(f"成员 {member_id} 不存在", details={"member_id": member_id})
+
+        # Self-lock protection (§16.58): an owner can never deactivate
+        # themselves or strip their own owner role.
+        deactivating = bool(data.get("is_active") is False)
+        new_roles = data["roles"] if "roles" in data else list(member.roles)
+        removing_owner = "roles" in data and "project_owner" not in (new_roles or [])
+        if actor.id == member.id and (deactivating or (member.is_owner and removing_owner)):
+            raise Forbidden(
+                "不能停用自己或摘除自己的 project_owner 角色（防止自锁）",
+                details={"member_id": member.id},
+            )
+
+        # The project must always keep at least one active project_owner;
+        # only deactivating/role-changing a current owner can violate that.
+        target_loses_owner = member.is_owner and (deactivating or removing_owner)
+        if target_loses_owner:
+            peers = await self.uow.members.list_by_project(member.project_id)
+            other_owner = any(m.id != member.id and m.is_active and m.is_owner for m in peers)
+            if not other_owner:
+                raise Forbidden(
+                    "项目必须至少保留一个启用状态的 project_owner",
+                    details={"project_id": member.project_id},
+                )
 
         changes: dict[str, list[Any]] = {}
 
@@ -217,16 +260,31 @@ class MemberService:
         member = await self.uow.members.get(member_id)
         if member is None:
             raise NotFound(f"成员 {member_id} 不存在", details={"member_id": member_id})
-        return await self.uow.tokens.list_by_member(member_id)
+        # The PAT management surface lists personal access tokens only;
+        # sessions and OAuth tokens are not exposed here (§16.58).
+        return await self.uow.tokens.list_by_member(member_id, kind=TokenKind.pat.value)
 
     async def issue_token(
-        self, *, member_id: str, label: str, actor: Member
+        self,
+        *,
+        member_id: str,
+        label: str,
+        actor: Member,
+        expires_in_days: int | None = None,
     ) -> tuple[MemberToken, str]:
         security.require_owner(actor)
         assert self.uow.members is not None and self.uow.tokens is not None
         member = await self.uow.members.get(member_id)
         if member is None:
             raise NotFound(f"成员 {member_id} 不存在", details={"member_id": member_id})
+        expires_at: dt.datetime | None = None
+        if expires_in_days is not None:
+            if not 1 <= expires_in_days <= MAX_TOKEN_DAYS:
+                raise ValidationError(
+                    f"expires_in_days 必须在 1–{MAX_TOKEN_DAYS} 之间",
+                    details={"field": "expires_in_days", "value": expires_in_days},
+                )
+            expires_at = dt.datetime.now(dt.UTC) + dt.timedelta(days=expires_in_days)
         # v1 single-owner deployment: the bootstrap project_owner manages
         # members/tokens across projects; tokens are not project-bound.
         raw = generate_token()
@@ -235,6 +293,8 @@ class MemberService:
             member_id=member.id,
             token_hash=hash_token(raw),
             label=label,
+            kind=TokenKind.pat.value,
+            expires_at=expires_at,
             created_at=dt.datetime.now(dt.UTC),
         )
         await self.uow.tokens.add(token)
@@ -259,6 +319,15 @@ class MemberService:
         if token is None:
             raise NotFound(f"token {token_id} 不存在", details={"token_id": token_id})
         assert self.uow.members is not None
+        # An owner must not revoke their own last valid PAT via the API;
+        # the offline `rdm account reset-password` is the escape hatch (§16.58).
+        if token.kind == TokenKind.pat.value and token.member_id == actor.id and token.is_valid:
+            remaining = await self.uow.tokens.count_valid_pat(actor.id)
+            if remaining <= 1:
+                raise Forbidden(
+                    "不能撤销自己最后一个有效访问令牌（防止自锁；如需轮换请先签发新令牌）",
+                    details={"token_id": token_id},
+                )
         await self.uow.tokens.revoke(token_id)
         member = await self.uow.members.get(token.member_id)
         if member is None:

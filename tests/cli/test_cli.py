@@ -31,11 +31,11 @@ def test_init_upgrade_status_idempotent(tmp_path: Path) -> None:
 
     result = runner.invoke(app, ["db", "status", "--data-dir", str(data_dir)])
     assert result.exit_code == 0, result.output
-    assert "0004" in result.output
+    assert "0005" in result.output
     assert "up to date" in result.output
 
 
-def test_serve_refuses_nonlocal_without_owner_token(tmp_path: Path) -> None:
+def test_serve_refuses_nonlocal_always(tmp_path: Path) -> None:
     result = CliRunner().invoke(
         app,
         [

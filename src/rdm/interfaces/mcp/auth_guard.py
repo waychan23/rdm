@@ -7,6 +7,7 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from rdm.application.services.auth_service import Authenticator
+from rdm.domain.enums import BEARER_KINDS
 from rdm.domain.errors import RdmError
 
 logger = logging.getLogger("rdm.mcp")
@@ -47,7 +48,9 @@ class McpBearerGuard:
             await self._reject(send, AuthInvalidToken("缺少 Authorization: Bearer <token> 头"))
             return
         try:
-            member = await self.authenticator.authenticate(auth[7:].strip())
+            member = await self.authenticator.authenticate(
+                auth[7:].strip(), allow_kinds=BEARER_KINDS
+            )
         except RdmError as exc:
             await self._reject(send, exc)
             return

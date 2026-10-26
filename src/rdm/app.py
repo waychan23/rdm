@@ -13,6 +13,7 @@ from rdm.config import Settings
 from rdm.infrastructure.webhook.worker import WebhookWorker
 from rdm.interfaces.http.artifacts import router as artifacts_router
 from rdm.interfaces.http.attachments import router as attachments_router
+from rdm.interfaces.http.auth import router as auth_router
 from rdm.interfaces.http.comments import router as comments_router
 from rdm.interfaces.http.container import Container
 from rdm.interfaces.http.errors import install_exception_handlers
@@ -50,11 +51,15 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
         async with mcp_http.lifespan(mcp_http):
             if bootstrap:
                 async with container.uow() as uow:
-                    token = await bootstrap_if_empty(uow, settings.bootstrap_token_path)
+                    token = await bootstrap_if_empty(
+                        uow, settings.bootstrap_token_path, settings.bootstrap_password_path
+                    )
                 if token:
                     logger.warning(
-                        "first start: owner member created; bootstrap token written to %s",
+                        "first start: owner member created; bootstrap token at %s and "
+                        "initial password at %s (mode 0600)",
                         settings.bootstrap_token_path,
+                        settings.bootstrap_password_path,
                     )
             worker.start()
             try:
@@ -70,6 +75,7 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     install_exception_handlers(app)
 
     app.include_router(system_router)
+    app.include_router(auth_router)
     app.include_router(projects_router)
     app.include_router(members_router)
     app.include_router(work_items_router)

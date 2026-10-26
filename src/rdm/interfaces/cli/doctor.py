@@ -89,6 +89,73 @@ def check_database(settings: Settings) -> CheckResult:
     return CheckResult("database", OK, f"revision {current_label}")
 
 
+def _check_secret_file(path: Path, label: str) -> tuple[str, str]:
+    """Return (status, detail) for a bootstrap token/password file."""
+    if not path.exists():
+        return WARN, f"{label} 缺失（{path}）"
+    mode = path.stat().st_mode & 0o777
+    if mode != 0o600:
+        return WARN, f"{label} 权限为 {mode:03o}，应为 0600"
+    return OK, f"{label} 存在且权限 0600"
+
+
+def check_bootstrap_credentials(settings: Settings) -> CheckResult:
+    """bootstrap-token/bootstrap-password files and their DB consistency."""
+    if not settings.db_path.exists():
+        return CheckResult("bootstrap", OK, "数据库不存在，跳过")
+
+    engine = create_engine(settings.db_sync_url)
+    try:
+        with engine.connect() as conn:
+            project_count = conn.execute(
+                text("select count(*) from project where deleted_at is null")
+            ).scalar()
+            if not project_count:
+                return CheckResult("bootstrap", OK, "尚未 bootstrap（首次 rdm serve 生成）")
+            row = conn.execute(
+                text(
+                    "select p.owner_member_id from project p "
+                    "where lower(p.key) = 'rdm' and p.deleted_at is null"
+                )
+            ).first()
+            token_status, token_detail = _check_secret_file(
+                settings.bootstrap_token_path, "bootstrap-token"
+            )
+            pw_status, pw_detail = _check_secret_file(
+                settings.bootstrap_password_path, "bootstrap-password"
+            )
+            db_detail = ""
+            if row is not None and row[0]:
+                import hashlib
+
+                raw_token = (
+                    settings.bootstrap_token_path.read_text(encoding="utf-8").strip()
+                    if settings.bootstrap_token_path.exists()
+                    else ""
+                )
+                token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+                valid_pat = conn.execute(
+                    text(
+                        "select 1 from member_token where member_id = :m "
+                        "and token_hash = :h and kind = 'pat' and revoked_at is null limit 1"
+                    ),
+                    {"m": row[0], "h": token_hash},
+                ).first()
+                if raw_token and valid_pat is None:
+                    token_status = WARN
+                    db_detail = "；bootstrap-token 与库中有效 PAT 不一致（建议轮换）"
+    finally:
+        engine.dispose()
+
+    status = (
+        FAIL
+        if FAIL in (token_status, pw_status)
+        else (WARN if WARN in (token_status, pw_status) else OK)
+    )
+    detail = f"{token_detail}；{pw_detail}{db_detail}"
+    return CheckResult("bootstrap", status, detail)
+
+
 def check_workflow(_settings: Settings) -> CheckResult:
     try:
         spec = load_spec()
@@ -184,6 +251,7 @@ def run_checks(settings: Settings, *, include_endpoint: bool = True) -> list[Che
     checks = [
         check_data_dir(settings),
         check_database(settings),
+        check_bootstrap_credentials(settings),
         check_workflow(settings),
         check_outbox(settings),
         check_attachments(settings),

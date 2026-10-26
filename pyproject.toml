@@ -21,6 +21,7 @@ dependencies = [
     "python-ulid",
     "python-multipart",
     "pyyaml",
+    "argon2-cffi>=25.1.0",
 ]
 
 [project.scripts]

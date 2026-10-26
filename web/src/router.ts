@@ -8,10 +8,13 @@ import MailboxView from "./views/MailboxView.vue";
 import WorkspacesView from "./views/WorkspacesView.vue";
 import SettingsView from "./views/SettingsView.vue";
 import ItemView from "./views/ItemView.vue";
+import LoginView from "./views/LoginView.vue";
+import { ensureSession } from "./auth";
 
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
+    { path: "/login", component: LoginView, meta: { public: true } },
     { path: "/", redirect: "/projects" },
     { path: "/projects", component: ProjectsView },
     { path: "/projects/:key/board", component: BoardView, props: true },
@@ -27,4 +30,13 @@ export const router = createRouter({
       props: true,
     },
   ],
+});
+
+router.beforeEach(async (to) => {
+  if (to.meta.public) return true;
+  const member = await ensureSession();
+  if (!member) {
+    return { path: "/login", query: { redirect: to.fullPath } };
+  }
+  return true;
 });

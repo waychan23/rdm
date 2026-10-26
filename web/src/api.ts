@@ -1,5 +1,5 @@
-// Minimal API client. In production the page is served from the same origin
-// and loopback requests act as the bootstrap owner (architecture §16.33).
+// Minimal API client. The SPA is same-origin; the rdm_session cookie (set by
+// POST /auth/login) authenticates every request (architecture §16.55/56).
 
 export interface ApiError {
   code: string;
@@ -13,12 +13,24 @@ async function parse(res: Response): Promise<unknown> {
   return text ? JSON.parse(text) : {};
 }
 
+// A full-page bounce is deliberately simple for now (M3.1); M3.3 can replace
+// it with an in-app guard. Auth endpoints manage their own 401s.
+function handleExpiredSession(path: string) {
+  if (path.startsWith("/auth")) return;
+  const here = window.location.pathname + window.location.search;
+  if (window.location.pathname !== "/login") {
+    window.location.assign(`/login?redirect=${encodeURIComponent(here)}`);
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api/v1${path}`, {
     method,
+    credentials: "same-origin",
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401) handleExpiredSession(path);
   const payload = await parse(res);
   if (!res.ok) {
     const err = ((payload as { error?: ApiError })?.error ?? {
@@ -46,7 +58,12 @@ export const api = {
 
   // Multipart upload: do not set Content-Type (the browser adds the boundary).
   async upload<T>(path: string, form: FormData): Promise<Envelope<T>> {
-    const res = await fetch(`/api/v1${path}`, { method: "POST", body: form });
+    const res = await fetch(`/api/v1${path}`, {
+      method: "POST",
+      credentials: "same-origin",
+      body: form,
+    });
+    if (res.status === 401) handleExpiredSession(path);
     const payload = await parse(res);
     if (!res.ok) {
       const err = ((payload as { error?: ApiError })?.error ?? {
@@ -65,7 +82,11 @@ export const api = {
     const path = downloadUrl.startsWith("/api/v1")
       ? downloadUrl.slice("/api/v1".length)
       : downloadUrl;
-    const res = await fetch(`/api/v1${path}`);
+    const res = await fetch(`/api/v1${path}`, { credentials: "same-origin" });
+    if (res.status === 401) {
+      handleExpiredSession(path);
+      throw new Error("HTTP 401");
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);

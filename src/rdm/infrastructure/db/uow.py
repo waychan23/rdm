@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from types import TracebackType
+from weakref import WeakKeyDictionary
 
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -36,8 +37,23 @@ from rdm.infrastructure.db.repositories.work_item import WorkItemRepository
 
 
 class SqlAlchemyUnitOfWork:
-    # Class-level: one writer per process regardless of UoW instances.
-    _write_lock: asyncio.Lock = asyncio.Lock()
+    # One writer per running event loop. Keying the lock by loop keeps the
+    # production guarantee (a single process/loop = a single write lock)
+    # while avoiding a 3.13 pitfall: an asyncio.Lock binds to the loop of
+    # its first contended acquire and then refuses every other loop. A
+    # class-level lock created at import time would therefore cross event
+    # loops (tests create one per test; a worker cancelled mid-transaction
+    # can leave it held on a loop that is about to close).
+    _locks: WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = WeakKeyDictionary()
+
+    @classmethod
+    def _write_lock(cls) -> asyncio.Lock:
+        loop = asyncio.get_running_loop()
+        lock = cls._locks.get(loop)
+        if lock is None:
+            lock = asyncio.Lock()
+            cls._locks[loop] = lock
+        return lock
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._sf = session_factory
@@ -58,7 +74,7 @@ class SqlAlchemyUnitOfWork:
         self.events: EventStore | None = None
 
     async def __aenter__(self) -> SqlAlchemyUnitOfWork:
-        await self._write_lock.acquire()
+        await self._write_lock().acquire()
         try:
             # FKs are declared DEFERRABLE INITIALLY DEFERRED, so flush may
             # insert child rows before parents within one transaction;
@@ -99,7 +115,7 @@ class SqlAlchemyUnitOfWork:
                 await self.session.rollback()
         finally:
             await self.session.close()
-            self._write_lock.release()
+            self._write_lock().release()
 
     async def commit(self) -> None:
         assert self.session is not None

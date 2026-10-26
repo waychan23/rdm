@@ -101,6 +101,8 @@ class MemberCreateIn(BaseModel):
     email: str | None = None
     notify_webhook: str | None = None
     notify_webhook_format: str = "generic"
+    # Optional initial console password; humans only (agents cannot log in).
+    password: str | None = Field(default=None, max_length=200)
 
 
 @members_router.get("/projects/{key}/members")
@@ -132,6 +134,7 @@ async def create_member(
 
 class TokenIssueIn(BaseModel):
     label: str = "api"
+    expires_in_days: int | None = Field(default=None, ge=1, le=3650)
 
 
 @members_router.post("/members/{member_id}/tokens", status_code=201)
@@ -143,9 +146,20 @@ async def issue_token(
 ) -> dict:
     async with container.uow() as uow:
         token, raw = await MemberService(uow).issue_token(
-            member_id=member_id, label=body.label, actor=actor
+            member_id=member_id,
+            label=body.label,
+            actor=actor,
+            expires_in_days=body.expires_in_days,
         )
-    return {"data": {"id": token.id, "label": token.label, "token": raw}}
+    return {
+        "data": {
+            "id": token.id,
+            "label": token.label,
+            "token": raw,
+            "kind": token.kind,
+            "expires_at": token.expires_at.isoformat() if token.expires_at else None,
+        }
+    }
 
 
 @members_router.delete("/tokens/{token_id}", status_code=204)
@@ -183,6 +197,9 @@ async def update_member(
             member_id=member_id, data=body.model_dump(exclude_unset=True), actor=actor
         )
         out = member_out(member)
+    # Deactivation/role changes must take effect immediately, not after the
+    # 60s auth cache TTL (architecture §16.58).
+    container.authenticator.invalidate_member(member_id)
     return {"data": out}
 
 

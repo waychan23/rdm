@@ -37,12 +37,13 @@ async def test_bad_bearer_rejected(server) -> None:
     assert r.json()["error"]["code"] in {"AUTH_INVALID_TOKEN", "FORBIDDEN"}
 
 
-async def test_loopback_shim_owner_without_token(server) -> None:
-    """Token-less requests from loopback act as the owner (§16.33)."""
+async def test_no_credentials_rejected_even_from_loopback(server) -> None:
+    """The loopback owner shim was removed in M3 (§16.56): every /api call
+    needs a Bearer token or a session cookie, loopback included."""
     client, _settings, _app = server
     r = await client.get("/api/v1/whoami")
-    assert r.status_code == 200
-    assert r.json()["data"]["member"]["roles"] == ["project_owner"]
+    assert r.status_code == 401
+    assert r.json()["error"]["code"] == "AUTH_INVALID_TOKEN"
 
 
 async def test_non_loopback_without_token_rejected(server) -> None:
@@ -57,21 +58,46 @@ async def test_non_loopback_without_token_rejected(server) -> None:
     assert r.json()["error"]["code"] == "AUTH_INVALID_TOKEN"
 
 
-async def test_deactivated_member_forbidden(server, owner_token) -> None:
-    client, settings, app = server
+async def test_deactivated_member_forbidden_immediately(server, owner_token) -> None:
+    """Deactivation via the API invalidates the auth cache at once (§16.58),
+    and an owner cannot deactivate themselves (self-lock protection)."""
+    client, _settings, _app = server
+
+    # Owner self-deactivation is refused.
     members = (await client.get("/api/v1/projects/RDM/members", headers=auth(owner_token))).json()[
         "data"
     ]
     owner_id = members[0]["id"]
+    r = await client.patch(
+        f"/api/v1/members/{owner_id}",
+        json={"is_active": False},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 403
 
-    async with app.state.container.uow() as uow:
-        member = await uow.members.get(owner_id)
-        member.is_active = False
-        await uow.members.update(member)
-    # Member updates invalidate the auth cache in real service flows.
-    app.state.container.authenticator.invalidate(owner_token)
+    # A separate member's token stops working immediately after deactivation.
+    r = await client.post(
+        "/api/v1/projects/RDM/members",
+        headers=auth(owner_token),
+        json={"name": "temp", "type": "human", "roles": ["worker"]},
+    )
+    assert r.status_code == 201, r.text
+    temp_id = r.json()["data"]["id"]
+    r = await client.post(
+        f"/api/v1/members/{temp_id}/tokens",
+        headers=auth(owner_token),
+        json={"label": "t"},
+    )
+    temp_token = r.json()["data"]["token"]
+    assert (await client.get("/api/v1/whoami", headers=auth(temp_token))).status_code == 200
 
-    r = await client.get("/api/v1/whoami", headers=auth(owner_token))
+    r = await client.patch(
+        f"/api/v1/members/{temp_id}",
+        json={"is_active": False},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    r = await client.get("/api/v1/whoami", headers=auth(temp_token))
     assert r.status_code == 403
     assert r.json()["error"]["code"] == "FORBIDDEN"
 

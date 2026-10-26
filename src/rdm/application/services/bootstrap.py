@@ -1,7 +1,7 @@
 """First-start bootstrap: default project RDM + owner member + admin token.
 
-Architecture §6 / decision §16.1: the plaintext token is written once to
-data-dir/bootstrap-token (mode 0600).
+Architecture §6 / decisions §16.1/55: the plaintext bootstrap token and the
+initial owner password are each written once to data-dir (mode 0600).
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 
 from rdm.application.services.member_service import generate_token, hash_token
+from rdm.application.services.passwords import generate_password, hash_password
 from rdm.domain.entities import Member, MemberToken, Project
 from rdm.domain.events import EventType
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
@@ -29,16 +30,19 @@ async def is_bootstrapped(uow: SqlAlchemyUnitOfWork) -> bool:
     return bool(await uow.projects.list_all())
 
 
-async def bootstrap_if_empty(uow: SqlAlchemyUnitOfWork, token_file: Path) -> str | None:
-    """Create default project/owner/token when the DB is empty.
+async def bootstrap_if_empty(
+    uow: SqlAlchemyUnitOfWork, token_file: Path, password_file: Path
+) -> str | None:
+    """Create default project/owner/token/password when the DB is empty.
 
     Returns the plaintext token when bootstrap happened, else None. The
-    caller prints it once; the on-disk file is mode 0600.
+    caller logs the file paths once; both files are mode 0600.
     """
     if await is_bootstrapped(uow):
         return None
 
     project = Project(id=new_id(), key=DEFAULT_PROJECT_KEY, name=DEFAULT_PROJECT_NAME)
+    raw_password = generate_password()
     owner = Member(
         id=new_id(),
         project_id=project.id,
@@ -46,6 +50,7 @@ async def bootstrap_if_empty(uow: SqlAlchemyUnitOfWork, token_file: Path) -> str
         name=OWNER_NAME,
         roles=["project_owner"],
         accept_kinds=[],
+        password_hash=hash_password(raw_password),
         created_by="bootstrap",
     )
     project.owner_member_id = owner.id
@@ -82,11 +87,12 @@ async def bootstrap_if_empty(uow: SqlAlchemyUnitOfWork, token_file: Path) -> str
         payload={"snapshot": {"id": project.id, "key": project.key, "name": project.name}},
     )
 
-    _write_token_file(token_file, raw)
+    _write_secret_file(token_file, raw)
+    _write_secret_file(password_file, raw_password)
     return raw
 
 
-def _write_token_file(path: Path, raw: str) -> None:
+def _write_secret_file(path: Path, raw: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:

@@ -55,6 +55,7 @@ class MemberRepository:
                 email=member.email,
                 notify_webhook=member.notify_webhook,
                 notify_webhook_format=member.notify_webhook_format,
+                password_hash=member.password_hash,
                 is_active=member.is_active,
                 created_at=member.created_at,
                 created_by=member.created_by,
@@ -75,6 +76,7 @@ class MemberRepository:
                 email=member.email,
                 notify_webhook=member.notify_webhook,
                 notify_webhook_format=member.notify_webhook_format,
+                password_hash=member.password_hash,
                 is_active=member.is_active,
                 updated_at=dt.datetime.now(dt.UTC),
             )
@@ -93,6 +95,12 @@ class TokenRepository:
                 member_id=token.member_id,
                 token_hash=token.token_hash,
                 label=token.label,
+                kind=token.kind,
+                expires_at=token.expires_at,
+                client_id=token.client_id,
+                scopes=list(token.scopes),
+                family_id=token.family_id,
+                consumed_at=token.consumed_at,
                 last_used_at=token.last_used_at,
                 revoked_at=token.revoked_at,
                 created_at=token.created_at,
@@ -108,13 +116,11 @@ class TokenRepository:
         row = (await self._s.execute(stmt)).scalar_one_or_none()
         return token_to_domain(row) if row else None
 
-    async def list_by_member(self, member_id: str) -> list[MemberToken]:
-        stmt = (
-            select(MemberTokenModel)
-            .where(MemberTokenModel.member_id == member_id)
-            .order_by(MemberTokenModel.created_at)
-        )
-        rows = (await self._s.execute(stmt)).scalars().all()
+    async def list_by_member(self, member_id: str, *, kind: str | None = None) -> list[MemberToken]:
+        stmt = select(MemberTokenModel).where(MemberTokenModel.member_id == member_id)
+        if kind is not None:
+            stmt = stmt.where(MemberTokenModel.kind == kind)
+        rows = (await self._s.execute(stmt.order_by(MemberTokenModel.created_at))).scalars().all()
         return [token_to_domain(r) for r in rows]
 
     async def revoke(self, token_id: str) -> bool:
@@ -125,6 +131,43 @@ class TokenRepository:
         )
         result = await self._s.execute(stmt)
         return result.rowcount == 1
+
+    async def revoke_by_member_kind(self, member_id: str, kind: str) -> int:
+        """Revoke every still-valid credential of one kind for a member."""
+        stmt = (
+            update(MemberTokenModel)
+            .where(
+                MemberTokenModel.member_id == member_id,
+                MemberTokenModel.kind == kind,
+                MemberTokenModel.revoked_at.is_(None),
+            )
+            .values(revoked_at=dt.datetime.now(dt.UTC))
+        )
+        result = await self._s.execute(stmt)
+        return int(result.rowcount or 0)
+
+    async def revoke_family(self, family_id: str) -> int:
+        """Revoke every still-valid credential in an OAuth rotation family."""
+        stmt = (
+            update(MemberTokenModel)
+            .where(
+                MemberTokenModel.family_id == family_id,
+                MemberTokenModel.revoked_at.is_(None),
+            )
+            .values(revoked_at=dt.datetime.now(dt.UTC))
+        )
+        result = await self._s.execute(stmt)
+        return int(result.rowcount or 0)
+
+    async def count_valid_pat(self, member_id: str) -> int:
+        stmt = select(MemberTokenModel).where(
+            MemberTokenModel.member_id == member_id,
+            MemberTokenModel.kind == "pat",
+            MemberTokenModel.revoked_at.is_(None),
+        )
+        rows = (await self._s.execute(stmt)).scalars().all()
+        # Expiry is checked on the entity: sqlite returns naive datetimes.
+        return sum(1 for r in rows if not token_to_domain(r).is_expired)
 
     async def touch_last_used(self, token_id: str, when: dt.datetime) -> None:
         stmt = (

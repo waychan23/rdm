@@ -29,6 +29,7 @@ app = typer.Typer(
     add_completion=False,
 )
 db_app = typer.Typer(help="Database migration commands (direct DB connection).")
+account_app = typer.Typer(help="Offline account recovery (direct DB connection).")
 project_app = typer.Typer(help="List or create projects (API client).")
 member_app = typer.Typer(help="Manage project members and tokens (API client).")
 token_app = typer.Typer(help="Issue or revoke member tokens.")
@@ -36,6 +37,7 @@ skills_app = typer.Typer(help="Install bundled skills into agent CLIs.")
 integrate_app = typer.Typer(help="Generate agent integration configs.")
 
 app.add_typer(db_app, name="db")
+app.add_typer(account_app, name="account")
 app.add_typer(project_app, name="project")
 app.add_typer(member_app, name="member")
 member_app.add_typer(token_app, name="token")
@@ -74,17 +76,54 @@ def serve(
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
     host: Annotated[str, typer.Option("--host", envvar="RDM_HOST")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", envvar="RDM_PORT")] = 8765,
-    owner_token: Annotated[
-        str | None,
-        typer.Option(
-            "--owner-token", envvar="RDM_OWNER_TOKEN", help="Required for non-local bind."
-        ),
-    ] = None,
 ) -> None:
-    """Start the HTTP + MCP server."""
+    """Start the HTTP + MCP server (loopback binds only)."""
     from rdm.interfaces.cli import server as server_commands
 
-    server_commands.run_serve(data_dir, host, port, owner_token)
+    server_commands.run_serve(data_dir, host, port)
+
+
+@app.command("bootstrap-token")
+def bootstrap_token(
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+    keep_old: Annotated[
+        bool, typer.Option("--keep-old", help="Do not revoke previous bootstrap PATs.")
+    ] = False,
+) -> None:
+    """Rotate the bootstrap owner PAT and rewrite data-dir/bootstrap-token."""
+    from rdm.interfaces.cli import account as account_commands
+
+    raw = account_commands.rotate_bootstrap_token(data_dir, keep_old=keep_old)
+    token_path = data_dir / "bootstrap-token"
+    typer.secho(f"new bootstrap token written to {token_path} (0600)", fg=typer.colors.GREEN)
+    typer.echo(raw)
+
+
+@account_app.command("reset-password")
+def account_reset_password(
+    name: Annotated[str, typer.Option("--name", help="Member name.")] = "owner",
+    project: Annotated[str, typer.Option("--project", help="Project key.")] = "RDM",
+    password: Annotated[
+        str | None, typer.Option("--password", help="New password; random when omitted.")
+    ] = None,
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+) -> None:
+    """Reset a human member's password offline (stop the server first)."""
+    from rdm.interfaces.cli import account as account_commands
+
+    raw = account_commands.reset_password(
+        data_dir,
+        project_key=project,
+        name=name,
+        new_password=password,
+        password_file=data_dir / "bootstrap-password",
+    )
+    typer.secho(
+        f"password reset for {name!r} in {project}"
+        + (" (bootstrap-password updated)" if name == "owner" and project == "RDM" else ""),
+        fg=typer.colors.GREEN,
+    )
+    typer.echo(raw)
 
 
 @db_app.command("upgrade")

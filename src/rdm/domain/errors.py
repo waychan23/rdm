@@ -24,6 +24,8 @@ class ErrorCode(StrEnum):
     UNSUPPORTED_MIME = "UNSUPPORTED_MIME"
     RDM_SERVER_UNREACHABLE = "RDM_SERVER_UNREACHABLE"
     AUTH_INVALID_TOKEN = "AUTH_INVALID_TOKEN"
+    AUTH_INVALID_CREDENTIALS = "AUTH_INVALID_CREDENTIALS"
+    RATE_LIMITED = "RATE_LIMITED"
 
 
 class RdmError(Exception):
@@ -73,6 +75,18 @@ class Forbidden(RdmError):
 class AuthInvalidToken(RdmError):
     code = ErrorCode.AUTH_INVALID_TOKEN
     http_status = 401
+
+
+class AuthInvalidCredentials(RdmError):
+    """Uniform login failure (unknown project/member or wrong password)."""
+
+    code = ErrorCode.AUTH_INVALID_CREDENTIALS
+    http_status = 401
+
+
+class RateLimited(RdmError):
+    code = ErrorCode.RATE_LIMITED
+    http_status = 429
 
 
 class WorkflowIllegalTransition(RdmError):

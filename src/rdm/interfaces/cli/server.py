@@ -26,17 +26,20 @@ def run_serve(
     data_dir: Path,
     host: str,
     port: int,
-    owner_token: str | None,
 ) -> None:
-    if not _is_local(host) and not owner_token:
+    # The v1 --owner-token shared secret was a no-op at runtime; M3 refuses
+    # non-loopback binds outright (architecture §16.59). Reach a remote host
+    # via SSH port forwarding or an authenticating reverse proxy.
+    if not _is_local(host):
         typer.secho(
-            "Refusing to bind a non-local address without --owner-token (architecture §6).",
+            "Refusing to bind a non-local address: rdm serves loopback only "
+            "(127.0.0.1/localhost/::1). Use SSH port forwarding for remote access.",
             fg=typer.colors.RED,
             err=True,
         )
         raise typer.Exit(code=2)
 
-    settings = Settings(data_dir=data_dir, host=host, port=port, owner_token=owner_token)
+    settings = Settings(data_dir=data_dir, host=host, port=port)
     # Migrate first so a bare `rdm serve` on a fresh data dir works.
     from rdm.interfaces.cli.db import initialize_data_dir, run_upgrade
 

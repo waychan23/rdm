@@ -1,7 +1,8 @@
 """Server configuration (pydantic-settings).
 
-Env overrides use the RDM_ prefix: RDM_DATA_DIR / RDM_HOST / RDM_PORT /
-RDM_OWNER_TOKEN (docs/architecture.md §16.9).
+Env overrides use the RDM_ prefix: RDM_DATA_DIR / RDM_HOST / RDM_PORT
+(docs/architecture.md §16.9). The v1 RDM_OWNER_TOKEN option was removed in
+M3: non-loopback binds are refused outright (§16.59).
 """
 
 from pathlib import Path
@@ -16,7 +17,6 @@ class Settings(BaseSettings):
     data_dir: Path = Field(default_factory=lambda: Path.home() / "rdm-data")
     host: str = "127.0.0.1"
     port: int = 8765
-    owner_token: str | None = None
     # Attachments (M2-2): 20MB hard cap (architecture §12/§16.45).
     attachment_max_bytes: int = 20 * 1024 * 1024
     # Webhook worker (M2-4); backoff is overridable via RDM_WEBHOOK_BACKOFF
@@ -54,3 +54,7 @@ class Settings(BaseSettings):
     @property
     def bootstrap_token_path(self) -> Path:
         return self.data_dir / "bootstrap-token"
+
+    @property
+    def bootstrap_password_path(self) -> Path:
+        return self.data_dir / "bootstrap-password"

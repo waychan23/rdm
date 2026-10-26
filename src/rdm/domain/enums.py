@@ -32,6 +32,21 @@ class AcceptKind(StrEnum):
     task = "task"
 
 
+class TokenKind(StrEnum):
+    # Personal access token (long-lived, CLI/CI/e2e).
+    pat = "pat"
+    # OAuth 2.1 short-lived access token (M3.2).
+    oauth_access = "oauth_access"
+    # OAuth 2.1 rotating refresh token (M3.2).
+    oauth_refresh = "oauth_refresh"
+    # Web console session cookie.
+    session = "session"
+
+
+# Credential kinds accepted by each transport (architecture §16.53/55).
+BEARER_KINDS = frozenset({TokenKind.pat, TokenKind.oauth_access})
+
+
 class ProjectStatus(StrEnum):
     active = "active"
     archived = "archived"

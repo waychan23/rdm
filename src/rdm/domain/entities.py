@@ -56,6 +56,8 @@ class Member:
     email: str | None = None
     notify_webhook: str | None = None
     notify_webhook_format: str = "generic"
+    # argon2id hash for console login; always None for agents (§16.55).
+    password_hash: str | None = None
     is_active: bool = True
     created_at: dt.datetime = field(default_factory=_utcnow)
     created_by: str | None = None
@@ -71,6 +73,11 @@ class Member:
     def is_owner(self) -> bool:
         return "project_owner" in self.roles
 
+    @property
+    def can_login(self) -> bool:
+        """Only human members with a password may open a console session."""
+        return self.type == "human" and self.password_hash is not None
+
 
 @dataclass(kw_only=True)
 class MemberToken:
@@ -78,13 +85,32 @@ class MemberToken:
     member_id: str
     token_hash: str
     label: str | None = None
+    # pat | oauth_access | oauth_refresh | session (§16.53); pre-M3 rows are pat.
+    kind: str = "pat"
+    expires_at: dt.datetime | None = None
+    client_id: str | None = None
+    scopes: list[str] = field(default_factory=list)
+    # Rotation family: one OAuth login shares a family_id across its access
+    # and refresh tokens; refresh-token reuse revokes the whole family.
+    family_id: str | None = None
+    # One-shot credentials (refresh tokens) are marked consumed on exchange.
+    consumed_at: dt.datetime | None = None
     last_used_at: dt.datetime | None = None
     revoked_at: dt.datetime | None = None
     created_at: dt.datetime = field(default_factory=_utcnow)
 
     @property
     def is_valid(self) -> bool:
-        return self.revoked_at is None
+        return self.revoked_at is None and self.consumed_at is None and not self.is_expired
+
+    @property
+    def is_expired(self) -> bool:
+        if self.expires_at is None:
+            return False
+        expires = self.expires_at
+        if expires.tzinfo is None:  # sqlite returns naive datetimes (§16.16)
+            expires = expires.replace(tzinfo=dt.UTC)
+        return expires <= _utcnow()
 
 
 # --- Work item kind-specific field sets (assembled without JOIN, arch §3.3) --

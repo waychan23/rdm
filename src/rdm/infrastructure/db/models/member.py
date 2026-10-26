@@ -43,6 +43,8 @@ class ProjectMemberModel(AuditMixin, SoftDeleteMixin, Base):
     notify_webhook_format: Mapped[str] = mapped_column(
         String(10), nullable=False, default="generic", server_default="generic"
     )
+    # argon2id password hash for console login; agents always have NULL (§16.55).
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     __table_args__ = (
@@ -62,9 +64,22 @@ class ProjectMemberModel(AuditMixin, SoftDeleteMixin, Base):
 
 
 class MemberTokenModel(Base):
-    """Tokens are never soft-deleted; revocation sets revoked_at (§3.2)."""
+    """Credentials are never soft-deleted; revocation sets revoked_at (§3.2).
+
+    One table for every credential kind (§16.53): personal access tokens,
+    OAuth access/refresh tokens and web sessions. All are opaque random
+    strings stored only as sha256 hashes.
+    """
 
     __tablename__ = "member_token"
+    __table_args__ = (
+        CheckConstraint(
+            "kind in ('pat', 'oauth_access', 'oauth_refresh', 'session')",
+            name="ck_member_token_kind",
+        ),
+        Index("ix_member_token_member_kind", "member_id", "kind"),
+        Index("ix_member_token_family", "family_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     member_id: Mapped[str] = mapped_column(
@@ -74,6 +89,16 @@ class MemberTokenModel(Base):
     )
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pat", server_default="pat"
+    )
+    expires_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    client_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    scopes: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
+    )
+    family_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    consumed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_used_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
