@@ -14,19 +14,24 @@ uv run rdm init               # 初始化 ~/rdm-data 并迁移数据库
 uv run rdm serve              # http://127.0.0.1:8765 （Ctrl-C 停止）
 ```
 
-首次启动会创建默认项目 `RDM`、owner 成员与一次性 token，明文写到
-`~/rdm-data/bootstrap-token`（文件权限 0600），并在控制台提示。
+首次启动会创建默认项目 `RDM`、owner 成员、一次性 PAT 与初始登录密码，明文写到
+`~/rdm-data/bootstrap-token` 和 `~/rdm-data/bootstrap-password`（文件权限均 0600）。
 
-- Web：浏览器打开 <http://127.0.0.1:8765/>（回环无 token 时以 owner 身份访问）：
-  看板、Backlog、Sprint 管理、信箱、工作区、成员/Token 设置、工作项流转/附件/评论
+- Web：浏览器打开 <http://127.0.0.1:8765/>，用 owner + `bootstrap-password`
+  登录（会话 cookie，7 天）：概览、看板拖拽、Backlog、Sprint、信箱、工作区、
+  成员/Token 管理、工作项流转/附件/评论
 - API 文档（FastAPI Swagger）：<http://127.0.0.1:8765/docs>
-- MCP endpoint：`http://127.0.0.1:8765/mcp`（Bearer token，见下）
-- 自检：`uv run rdm doctor`（数据目录/迁移/workflow/端点/outbox 积压/附件孤儿，`--json`）
+  （Bearer token 或登录会话）
+- MCP endpoint：`http://127.0.0.1:8765/mcp`（原生 OAuth 2.1 或 Bearer PAT，见下）
+- 自检：`uv run rdm doctor`（数据目录/迁移/bootstrap 凭据/workflow/端点/OAuth
+  metadata/outbox 积压/附件孤儿，`--json`）
+- 离线逃生（停服执行）：`rdm account reset-password`、`rdm bootstrap-token`
 
 ## 接入 agent CLI
 
 ```bash
-uv run rdm integrate mcp           # 生成 claude/codex/opencode 三家 user 级配置
+uv run rdm integrate mcp           # 默认 OAuth：客户端首次连接时浏览器登录并选身份
+uv run rdm integrate mcp --method token   # 旧方式：写死 Bearer PAT（CI/无浏览器环境）
 uv run rdm skills install --target claude      # 安装 rdm-workflow skill
 uv run rdm skills install --target opencode
 ```
