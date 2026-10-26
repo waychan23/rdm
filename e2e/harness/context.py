@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -65,7 +66,9 @@ class Harness:
         )
         self.member_ids[name] = mid
         self.tokens[name] = token
-        cwd = self.root / "workdirs" / name
+        # Outside the repo: claude resolves project config by enclosing .git
+        # root, so a workdir inside e2e/out would ignore the exact-dir binding.
+        cwd = Path(tempfile.mkdtemp(prefix=f"rdm-e2e-{self.cli}-{name}-"))
         bind_member(cwd, self.server.base_url + "/mcp", token)
         self.workdirs[name] = cwd
         return token
@@ -87,6 +90,10 @@ class Harness:
     ) -> cli_runner.CliResult:
         """Drive one headless prompt as the bound member; archives output."""
         cwd = self.workdirs[member]
+        log_dir = self.output_dir / "prompts"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        index = len(self.transcript) + 1
+        stream_log = log_dir / f"{index:02d}-{member}.log"
         result = cli_runner.run(
             self.cli,
             cwd,
@@ -94,12 +101,10 @@ class Harness:
             prompt,
             timeout=timeout,
             model=self.model,
+            stream_log=stream_log,
         )
         call = AgentCall(member=member, prompt=prompt, outputs={self.cli: result})
         self.transcript.append(call)
-        log_dir = self.output_dir / "prompts"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        index = len(self.transcript)
         (log_dir / f"{index:02d}-{member}.txt").write_text(
             f"$ {prompt}\n\n{result.stdout}", encoding="utf-8"
         )

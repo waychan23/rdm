@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Awaitable, Callable
 
 from rdm.application.services.auth_service import Authenticator
 from rdm.domain.errors import RdmError
+
+logger = logging.getLogger("rdm.mcp")
 
 ASGIReceive = Callable[[], Awaitable[dict]]
 ASGISend = Callable[[dict], Awaitable[None]]
@@ -50,4 +53,30 @@ class McpBearerGuard:
             return
 
         scope.setdefault("state", {})["member"] = member
-        await self.app(scope, receive, send)
+
+        # Surface FastMCP 4xx/5xx bodies (JSON-RPC protocol errors, parse
+        # errors) in the server log; SSE success streams pass untouched.
+        captured: dict = {"status": 0, "chunks": []}
+
+        async def send_with_log(message: dict) -> None:
+            if message["type"] == "http.response.start":
+                captured["status"] = message.get("status", 0)
+            elif (
+                message["type"] == "http.response.body"
+                and captured["status"] >= 400
+                and len(captured["chunks"]) < 4
+            ):
+                captured["chunks"].append(message.get("body", b""))
+            await send(message)
+
+        await self.app(scope, receive, send_with_log)
+        if captured["status"] >= 400:
+            body = b"".join(captured["chunks"]).decode("utf-8", "replace")
+            ua = headers.get("user-agent", "?")
+            logger.warning(
+                "MCP %s -> %s (ua=%s): %s",
+                scope.get("method"),
+                captured["status"],
+                ua,
+                body[:500],
+            )

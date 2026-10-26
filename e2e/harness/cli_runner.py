@@ -75,6 +75,7 @@ def run(
     *,
     timeout: int = 180,
     model: str | None = None,
+    stream_log: Path | None = None,
 ) -> CliResult:
     """Run one headless prompt. The directory is pre-bound to an rdm member."""
     if cli == "claude":
@@ -83,6 +84,7 @@ def run(
             "-p",
             prompt,
             "--dangerously-skip-permissions",
+            "--verbose",
         ]
         # Explicit --model marks the alias as user-selected; print/SDK mode
         # otherwise rejects custom gateway aliases (unrecognized_model).
@@ -103,17 +105,39 @@ def run(
     env["RDM_TOKEN"] = token
     env["NO_PROXY"] = "127.0.0.1,localhost"
     env["no_proxy"] = "127.0.0.1,localhost"
+
+    sink = stream_log.open("w", encoding="utf-8") if stream_log else subprocess.PIPE
+    proc = subprocess.Popen(
+        argv,
+        cwd=cwd,
+        stdout=sink,
+        stderr=subprocess.STDOUT,
+        text=True,
+        env=env,
+    )
     try:
-        proc = subprocess.run(
-            argv,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=env,
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        return CliResult(False, f"TIMEOUT after {timeout}s: {exc}", 124)
-    out = f"{proc.stdout}\n{proc.stderr}".strip()
-    return CliResult(proc.returncode == 0, out, proc.returncode)
+        try:
+            rc = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            tail = _tail(stream_log)
+            return CliResult(
+                False,
+                f"TIMEOUT after {timeout}s\n--- live log tail ---\n{tail}",
+                124,
+            )
+        if stream_log is None:
+            out = (proc.stdout.read() if proc.stdout else "").strip()
+        else:
+            out = _tail(stream_log)
+    finally:
+        if stream_log is not None:
+            sink.close()
+    return CliResult(rc == 0, out, rc)
+
+
+def _tail(path: Path | None, limit: int = 4000) -> str:
+    if path is None or not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8", errors="replace")[-limit:]

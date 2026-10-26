@@ -24,8 +24,9 @@ uv run python e2e/run_e2e.py --cli claude --scenarios S1,S4,S5 --no-cleanup
 
 ## 产物（`e2e/out/<时间戳>/<cli>/`）
 
-- `server.log`：rdm serve 日志
-- `prompts/`：每次 headless 调用的强约束 prompt 与 CLI 输出
+- `server.log`：rdm serve 日志（含 MCP 4xx 的 JSON-RPC 错误体）
+- `prompts/*.log`：每次 headless 调用的**实时**输出（超时也会落盘，可 tail）
+- `prompts/*.txt`：prompt 与最终输出归档
 - `events-<KEY>.json`：该场景项目的事件类型集合
 - `data/`：运行后默认删除（`--no-cleanup` 保留）
 
@@ -33,8 +34,15 @@ uv run python e2e/run_e2e.py --cli claude --scenarios S1,S4,S5 --no-cleanup
 
 - **管理动作走 REST**（建项目/成员/签发 token），**agent 动作走 CLI→MCP**
 - 每个成员绑定到唯一临时目录（`rdm integrate mcp project-scope` 同款绑定函数），
-  目录内安装随包 skill；claude 绑定写 `~/.claude.json` 的项目键（运行后清理），
+  目录内安装随包 skill；**工作目录建在仓库外的系统临时区**——claude-code 会把
+  git 根作为项目根读取 `~/.claude.json projects[git根].mcpServers`，若工作目录
+  在仓库内部，深层子目录的绑定会被忽略（表现为工具未连接/幻觉回答/超时）
+- 绑定后立即用 FastMCP 客户端做 initialize+list_tools 预检（27 工具），
+  配置错误秒失败而不是等 CLI 超时
+- claude 绑定写 `~/.claude.json` 的项目键（运行后清理），
   opencode 写临时目录 `.opencode/opencode.json`
+- 自定义模型网关别名（如 ark-code-latest）在 SDK 模式会打印 unrecognized_model
+  **警告**（不影响执行）；若你的网关需要显式指定，用 `--model <别名>` 透传
 - 每个 prompt 只给确定 id，指示先查工具（member_list/work_item_get）再动手，
   完成后用一句话报告结果；断言以 DB/事件为准，不依赖自然语言输出格式
 - 每步后轮询 sqlite（默认 120s），未达成则**原 prompt 整体重试一次**，仍失败判 FAIL
