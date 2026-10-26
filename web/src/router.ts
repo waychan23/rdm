@@ -10,6 +10,7 @@ import SettingsView from "./views/SettingsView.vue";
 import ItemView from "./views/ItemView.vue";
 import LoginView from "./views/LoginView.vue";
 import ConsentView from "./views/ConsentView.vue";
+import OverviewView from "./views/OverviewView.vue";
 import { ensureSession } from "./auth";
 
 export const router = createRouter({
@@ -19,6 +20,7 @@ export const router = createRouter({
     { path: "/oauth/consent/:id", component: ConsentView, meta: { bare: true } },
     { path: "/", redirect: "/projects" },
     { path: "/projects", component: ProjectsView },
+    { path: "/projects/:key", component: OverviewView },
     { path: "/projects/:key/board", component: BoardView, props: true },
     { path: "/projects/:key/backlog", component: BacklogView, props: true },
     { path: "/projects/:key/sprints", component: SprintsView, props: true },
