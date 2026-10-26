@@ -21,6 +21,14 @@ from rdm.domain.errors import Forbidden, NotFound
 
 _PRIVILEGED_ROLES = {"project_owner", "manager", "sprint_manager"}
 
+# Human-review gate (architecture §16.52): a worker may move their own item
+# through working states, but completion of epic/story/task is a human
+# privilege — "agent 不得自行把 TO_REVIEW 推成 DONE" is enforced, not just
+# skill guidance. Issue CLOSED_DONE is a QA close-out, not a review, and is
+# not restricted; CANCELLED/PUBLISHED are not gated (cancelling one's own
+# task is allowed; only privileged roles can reach DONE in the first place).
+COMPLETION_STATES = {"DONE"}
+
 
 def is_owner(actor: Member) -> bool:
     return "project_owner" in actor.roles
@@ -70,15 +78,24 @@ def can_transition(actor: Member, item: WorkItem) -> bool:
     return item.assignee_member_id == actor.id
 
 
-def require_can_transition(actor: Member, item: WorkItem, display_id: str) -> None:
-    if can_transition(actor, item):
-        return
-    raise Forbidden(
-        f"成员 {actor.name} 不能流转 {display_id}：worker 只能流转分配给自己的工作项；"
-        "请用 mailbox_send 联系其负责人。",
-        details={
-            "member_id": actor.id,
-            "work_item_id": item.id,
-            "assignee_member_id": item.assignee_member_id,
-        },
-    )
+def require_can_transition(actor: Member, item: WorkItem, to_state: str, display_id: str) -> None:
+    if not can_transition(actor, item):
+        raise Forbidden(
+            f"成员 {actor.name} 不能流转 {display_id}：worker 只能流转分配给自己的工作项；"
+            "请用 mailbox_send 联系其负责人。",
+            details={
+                "member_id": actor.id,
+                "work_item_id": item.id,
+                "assignee_member_id": item.assignee_member_id,
+            },
+        )
+    if to_state in COMPLETION_STATES and not (set(actor.roles) & _PRIVILEGED_ROLES):
+        raise Forbidden(
+            f"成员 {actor.name} 不能把 {display_id} 推到 {to_state}：完成态（DONE）"
+            "需 Owner/Manager 评审收口；请完成后停在 TO_REVIEW/TO_TEST 并通知负责人。",
+            details={
+                "member_id": actor.id,
+                "work_item_id": item.id,
+                "target_state": to_state,
+            },
+        )

@@ -461,7 +461,7 @@ class WorkItemService:
 
         project, item = await self.get_item(actor, ref)
         display_id = self.display_id(project, item)
-        security.require_can_transition(actor, item, display_id)
+        security.require_can_transition(actor, item, to, display_id)
         if item.row_version != row_version:
             from rdm.domain.errors import ConflictVersion
 

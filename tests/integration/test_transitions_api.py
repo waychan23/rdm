@@ -182,6 +182,75 @@ async def test_worker_can_only_transition_own_item(server, owner_token: str) -> 
     assert r.status_code == 403 and r.json()["error"]["code"] == "FORBIDDEN"
 
 
+async def test_worker_cannot_self_complete_done(server, owner_token: str) -> None:
+    """Review gate: even the assignee worker may not push their item to DONE."""
+    client, _s, _app = server
+    await _bootstrap_project(client, owner_token)
+    _id, worker_token = await _member_token(client, owner_token, "dev", ["worker"])
+    mine = await _create(
+        client,
+        owner_token,
+        {"kind": "task", "title": "mine", "assignee": "dev"},
+    )
+
+    async def move(to: str, version: int) -> httpx.Response:
+        return await client.post(
+            f"{API}/work-items/{mine['display_id']}/transition",
+            json={"to": to, "row_version": version},
+            headers=auth(worker_token),
+        )
+
+    assert (await move("IN_PROGRESS", 0)).status_code == 200
+    r = await move("TO_REVIEW", 1)
+    assert r.status_code == 200
+    blocked = await move("DONE", 2)
+    assert blocked.status_code == 403
+    assert blocked.json()["error"]["code"] == "FORBIDDEN"
+    assert blocked.json()["error"]["details"]["target_state"] == "DONE"
+
+    # Manager closes it after review.
+    _mgr_id, mgr_token = await _member_token(client, owner_token, "tl", ["manager"])
+    r = await client.post(
+        f"{API}/work-items/{mine['display_id']}/transition",
+        json={"to": "DONE", "row_version": 2},
+        headers=auth(mgr_token),
+    )
+    assert r.status_code == 200, r.text
+
+    # Issue CLOSED_DONE is a QA close-out, not a review: worker may do it.
+    issue = await _create(
+        client,
+        owner_token,
+        {"kind": "issue", "title": "bug", "assignee": "dev"},
+    )
+    # CLOSED_DONE carries a min_children:1 gate; give it a terminal child.
+    child = await _create(
+        client,
+        owner_token,
+        {"kind": "task", "title": "fix", "parent": issue["display_id"]},
+    )
+    child_r = await client.post(
+        f"{API}/work-items/{child['display_id']}/transition",
+        json={"to": "IN_PROGRESS", "row_version": 0},
+        headers=auth(owner_token),
+    )
+    child_version = child_r.json()["data"]["row_version"]
+    await client.post(
+        f"{API}/work-items/{child['display_id']}/transition",
+        json={"to": "CANCELLED", "row_version": child_version},
+        headers=auth(owner_token),
+    )
+    version = 0
+    for to in ("TO_CONFIRM", "TO_FIX", "FIXING", "CLOSED_DONE"):
+        r = await client.post(
+            f"{API}/work-items/{issue['display_id']}/transition",
+            json={"to": to, "row_version": version},
+            headers=auth(worker_token),
+        )
+        assert r.status_code == 200, f"{to}: {r.text}"
+        version = r.json()["data"]["row_version"]
+
+
 async def test_issue_first_fix_can_close_v2(server, owner_token: str) -> None:
     """S7 first-loop: FIXING -> CLOSED_DONE with min_children gate (workflow v2)."""
     client, _s, _app = server

@@ -56,15 +56,21 @@ def run(h: Harness) -> None:
     assert blocked.status_code == 409, blocked.text
     assert blocked.json()["error"]["code"] == "WORKFLOW_GATE_BLOCKED"
 
-    # Agents complete their tasks (the two paths), then the story gate passes.
+    # Agents advance their tasks to the review state; DONE is a human-review
+    # gate enforced server-side (worker self-completion -> 403).
     agent_expect(
         h,
         "frontend-dev",
-        f"把 {t1['display_id']} 依次转到 IN_PROGRESS、TO_REVIEW、DONE。",
-        lambda out: "DONE" in out,
+        f"把 {t1['display_id']} 依次转到 IN_PROGRESS、TO_REVIEW，然后停住（不要尝试推 DONE）。",
+        lambda out: "TO_REVIEW" in out,
     )
-    for to in ("IN_PROGRESS", "TO_REVIEW", "DONE"):
+    assert h.db.item(t1["display_id"])["status"] == "TO_REVIEW"
+    for to in ("IN_PROGRESS", "TO_REVIEW"):
         _transition(h, t2["display_id"], to, "qa")
+
+    # Manager performs the review close-out on both tasks, then the story.
+    _transition(h, t1["display_id"], "DONE", "tl")
+    _transition(h, t2["display_id"], "DONE", "tl")
     _transition(h, story["display_id"], "DONE", "tl")
     assert h.db.item(story["display_id"])["status"] == "DONE"
 
