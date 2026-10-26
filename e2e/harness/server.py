@@ -42,7 +42,12 @@ def _rdm_argv(data_dir: Path, port: int) -> list[str]:
     return [sys.executable, "-m", "rdm.interfaces.cli.main"]
 
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
 def start_server(root: Path, *, log_path: Path | None = None) -> Server:
+    # Absolute paths keep the subprocess independent of the caller's cwd.
+    root = root.resolve()
     data_dir = root / "data"
     port = free_port()
     argv = [
@@ -60,7 +65,7 @@ def start_server(root: Path, *, log_path: Path | None = None) -> Server:
         argv,
         stdout=log,
         stderr=subprocess.STDOUT,
-        cwd=Path(__file__).parents[3],
+        cwd=REPO_ROOT,
     )
     base_url = f"http://127.0.0.1:{port}"
     deadline = time.time() + 30

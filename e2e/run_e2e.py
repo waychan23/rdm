@@ -130,7 +130,7 @@ def main() -> int:
         return 1 if args.strict else 0
 
     scenarios = {s.strip().upper() for s in args.scenarios.split(",") if s.strip()}
-    out_root = Path("e2e/out") / time.strftime("%Y%m%d-%H%M%S")
+    out_root = (Path.cwd() / "e2e" / "out" / time.strftime("%Y%m%d-%H%M%S")).resolve()
     out_root.mkdir(parents=True, exist_ok=True)
 
     reports = [run_one_cli(cli, sorted(scenarios), out_root, args.no_cleanup) for cli in selected]
