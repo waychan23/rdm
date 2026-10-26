@@ -4,12 +4,31 @@
       <h2>信箱 · {{ key }}</h2>
       <div>
         <el-checkbox v-model="unreadOnly" @change="reload">仅未读</el-checkbox>
+        <el-button type="primary" @click="openCompose">发信</el-button>
         <el-button
           :disabled="!selected.size"
           @click="markSelected([...selected])"
         >标记已读</el-button>
       </div>
     </div>
+
+    <el-dialog v-model="showCompose" title="发站内信" width="520px">
+      <el-form label-position="top">
+        <el-form-item label="收件人">
+          <el-select v-model="compose.to" multiple filterable placeholder="选择成员" style="width: 100%">
+            <el-option v-for="m in members" :key="m.id" :value="m.name" :label="m.name" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="主题"><el-input v-model="compose.subject" /></el-form-item>
+        <el-form-item label="正文（Markdown）">
+          <el-input v-model="compose.body_md" type="textarea" :rows="5" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCompose = false">取消</el-button>
+        <el-button type="primary" :loading="sending" @click="send">发送</el-button>
+      </template>
+    </el-dialog>
 
     <el-empty v-if="!messages.length" description="没有信件" :image-size="80" />
     <el-card
@@ -53,10 +72,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
-import { api } from "../api";
-import type { MailMessage, Mailbox } from "../types";
+import { api, errorCause } from "../api";
+import type { MailMessage, Mailbox, Member } from "../types";
 
 const props = defineProps<{ key: string }>();
 const key = props.key;
@@ -65,6 +84,35 @@ const unreadOnly = ref(true);
 const messages = ref<MailMessage[]>([]);
 const nextCursor = ref<string | null>(null);
 const selected = ref<Set<string>>(new Set());
+const members = ref<Member[]>([]);
+const showCompose = ref(false);
+const sending = ref(false);
+const compose = reactive({ to: [] as string[], subject: "", body_md: "" });
+
+function openCompose() {
+  compose.to = [];
+  compose.subject = "";
+  compose.body_md = "";
+  showCompose.value = true;
+}
+
+async function send() {
+  if (!compose.to.length || !compose.subject.trim() || !compose.body_md.trim()) {
+    ElMessage.warning("收件人、主题、正文均必填");
+    return;
+  }
+  sending.value = true;
+  try {
+    await api.post(`/projects/${key}/messages`, { ...compose, cc: [], refs: [] });
+    ElMessage.success("已发送");
+    showCompose.value = false;
+    reload();
+  } catch (e) {
+    ElMessage.error(errorCause(e)?.message || "发送失败");
+  } finally {
+    sending.value = false;
+  }
+}
 
 async function fetchPage(since?: string | null, replace = false) {
   loading.value = true;
@@ -106,7 +154,10 @@ async function markSelected(ids: string[]) {
   }
 }
 
-onMounted(() => fetchPage(null, true));
+onMounted(async () => {
+  members.value = (await api.get<Member[]>(`/projects/${key}/members`)).data;
+  fetchPage(null, true);
+});
 </script>
 
 <style scoped>
