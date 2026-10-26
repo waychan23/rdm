@@ -107,7 +107,7 @@ async function decide(allow: boolean) {
   margin-bottom: 16px;
 }
 .field-label {
-  font-size: 13px;
+  font: var(--rdm-type-meta);
   color: var(--el-text-color-secondary);
   margin-bottom: 8px;
 }
@@ -125,7 +125,7 @@ async function decide(allow: boolean) {
 }
 .member-project {
   color: var(--el-text-color-secondary);
-  font-size: 12px;
+  font: var(--rdm-type-meta);
 }
 .actions {
   display: flex;

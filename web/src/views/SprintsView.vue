@@ -215,6 +215,6 @@ onMounted(load);
 }
 .muted {
   color: var(--el-text-color-secondary);
-  font-size: 13px;
+  font-size: 12px;
 }
 </style>

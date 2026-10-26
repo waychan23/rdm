@@ -6,9 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check-tokens": "python3 scripts/check-tokens.py src",
+    "test": "echo 'vitest added in M3.3 batch 2' && exit 0"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "dompurify": "^3.4.17",
     "element-plus": "^2.10.4",
     "marked": "^18.1.1",

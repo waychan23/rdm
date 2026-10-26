@@ -1,0 +1,320 @@
+/* ==========================================================================
+   rdm-ui tokens —— 单一真源（single source of truth）
+   参考：Teambition / 阿里云效 项目协作界面（Clarity Design / Fusion 体系）
+   取值来源：5 张 2x 截图逐像素采样（sRGB 校准）+ Clarity Design 公开色板/源码
+   用法：在 web/src/main.ts 里 import；组件里只允许引用本文件里的变量，
+         禁止写裸 hex / 裸 px（验收脚本会拦）。
+   兼容：Element Plus 2.14.7（--el-* 变量名已按 node_modules 实装核实；
+         不存在 --el-table-header-height，表头高度用选择器规则实现）
+   ========================================================================== */
+
+:root {
+  /* ---------- 品牌蓝：7 档，一级一用途（Clarity B20–B80） ---------- */
+  --rdm-blue-20: #f2fbff;   /* 极浅底：hover 底、区块高亮弱化 */
+  --rdm-blue-30: #ccecff;   /* 浅蓝载体：公告/AI 胶囊底（实测 #C5E8FF，取 Clarity B30） */
+  --rdm-blue-40: #87d2ff;   /* 描边 / 图表 / 浅色图形 */
+  --rdm-blue-50: #299feb;   /* 面性主色（实测）：进行中胶囊底、优先级圆点、当前导航图标；
+                               Clarity B50 同档为 #1B9AEE，接官方主题包时可整体替换 */
+  --rdm-blue-60: #006ad4;   /* 文字与主操作：链接、主按钮底、当前导航文字 */
+  --rdm-blue-70: #004f8a;   /* hover / click 加深 */
+  --rdm-blue-80: #002e52;   /* heavy */
+  /* 实测选中底色（#DDF1FE，介于 B20 与 B30 之间）：只用于「选中 / 未开始」 */
+  --rdm-blue-tint: #ddf1fe;
+
+  /* ---------- 功能色（Clarity 语义：20 浅底 / 50 图形 / 70 压底文字） ---------- */
+  --rdm-green-20: #edffed;  --rdm-green-50: #15ad31;  --rdm-green-70: #006d1f;
+  --rdm-amber-20: #fff7e6;  --rdm-amber-50: #fa8c15;  --rdm-amber-70: #ad4e01;
+  --rdm-red-20:   #ffeded;  --rdm-red-50:   #e62412;  --rdm-red-70:   #9a1604;
+
+  /* ---------- 中性（截图实测：底是冷灰，文字是中性灰） ---------- */
+  --rdm-white: #ffffff;
+  --rdm-gray-10: #f3f5f7;   /* 冷灰底：图标 rail、表头、hover、禁用底 */
+  --rdm-gray-20: #e9edf0;   /* 1px 分块线：页头下沿、rail 右沿、字段分隔 */
+  --rdm-gray-25: #dae0e4;   /* 控件描边 / 虚线框 / 比 gray-20 深一档（实测） */
+  --rdm-gray-30: #d9d9d9;   /* 控件描边：输入框、复选框 */
+  --rdm-gray-40: #bfbfbf;   /* 禁用文字 / 占位（不达标对比度，只许这两种用途） */
+  --rdm-gray-50: #8e8e8e;   /* 三级文字：表头、时间戳、占位 */
+  --rdm-gray-60: #6e6e6e;   /* 字段标签（label） */
+  --rdm-gray-70: #575757;   /* 正文 */
+  --rdm-gray-80: #292929;   /* 标题 / 关键数据 */
+
+  /* ---------- 工作项类型色（截图像素采样；三个图标是强识别特征） ---------- */
+  --rdm-type-requirement: #34af57;
+  --rdm-type-task: #5440b6;
+  --rdm-type-bug: #cd2f21;
+
+  /* ---------- 头像占位（无图时的橙色底 + 白色首字母） ---------- */
+  --rdm-avatar-bg: #f2b683;
+
+  /* ======================= 语义角色层（组件只许用这一层） =================== */
+  --rdm-surface: var(--rdm-white);
+  --rdm-surface-subtle: var(--rdm-gray-10);
+  --rdm-surface-selected: var(--rdm-blue-tint);
+  --rdm-border: var(--rdm-gray-20);
+  --rdm-border-strong: var(--rdm-gray-25);   /* 输入框、复选框、虚线框的描边 */
+
+  --rdm-text-1: var(--rdm-gray-80);
+  --rdm-text-2: var(--rdm-gray-70);
+  --rdm-text-3: var(--rdm-gray-50);
+  --rdm-text-label: var(--rdm-gray-60);
+  --rdm-text-disabled: var(--rdm-gray-40);
+  --rdm-text-on-accent: var(--rdm-white);
+
+  --rdm-accent: var(--rdm-blue-50);          /* 面：状态胶囊实心底、圆点 */
+  --rdm-accent-strong: var(--rdm-blue-60);   /* 字与主操作：链接、主按钮 */
+  --rdm-accent-soft: var(--rdm-blue-30);          /* 公告 / AI 胶囊底 */
+  --rdm-accent-soft-strong: #c5e8ff;              /* 页签选中底（实测，比 soft 深一档） */
+  --rdm-accent-weak: var(--rdm-blue-20);
+  --rdm-disabled-bg: #c6cdd4;                  /* 主操作类禁用底（白字可读） */
+  --rdm-disabled-fg: var(--rdm-white);
+  --rdm-disabled-soft-bg: var(--rdm-gray-10);  /* 工具/soft 类禁用底 */
+  --rdm-disabled-soft-fg: var(--rdm-text-2);
+  --rdm-danger: var(--rdm-red-50);
+  --rdm-success: var(--rdm-green-50);
+  --rdm-warning: var(--rdm-amber-50);
+
+  /* ---------- 状态胶囊：四态，配色即语义（进行中实心、终态退灰） ---------- */
+  --rdm-chip-doing-bg: var(--rdm-blue-50);
+  --rdm-chip-doing-fg: var(--rdm-white);
+  --rdm-chip-todo-bg: var(--rdm-blue-tint);
+  --rdm-chip-todo-fg: var(--rdm-blue-60);
+  --rdm-chip-done-bg: #ecedef;   /* 实测比 gray-20 略亮 */
+  --rdm-chip-done-fg: var(--rdm-gray-50);
+  --rdm-chip-blocked-bg: var(--rdm-red-20);
+  --rdm-chip-blocked-fg: var(--rdm-red-70);
+  --rdm-chip-h: 24px;
+  --rdm-chip-w: 100px;          /* 表格/字段栏内固定视觉宽；只读无 caret 时可随内容 */
+  --rdm-chip-pad-x: 16px;
+  --rdm-chip-radius: var(--rdm-radius-2);
+  --rdm-chip-font: 400 12px/16px var(--rdm-font-family);
+
+  /* ---------- 间距：4px 基数（Clarity $S4…$S80），不得出现奇数 ---------- */
+  --rdm-space-1: 4px;
+  --rdm-space-2: 8px;
+  --rdm-space-3: 12px;
+  --rdm-space-4: 16px;
+  --rdm-space-5: 20px;
+  --rdm-space-6: 24px;
+  --rdm-space-7: 28px;
+  --rdm-space-8: 32px;
+  --rdm-space-10: 40px;
+  --rdm-space-12: 48px;
+
+  /* ---------- 骨架与控件尺寸（截图实测，2x 换算） ---------- */
+  --rdm-topbar-h: 48px;        /* 顶栏：白底 + 1px 下沿 */
+  --rdm-rail-w: 64px;          /* 一级图标 rail：冷灰底 */
+  --rdm-rail-item-h: 64px;     /* rail 项：icon 20 + 标签 12 */
+  --rdm-rail-item-gap: 8px;
+  --rdm-sidebar-w: 240px;      /* 二级侧栏（迭代列表、视图列表） */
+  --rdm-fields-w: 360px;       /* 详情面板内「基础字段」栏 */
+  --rdm-drawer-w: min(1172px, 70vw);  /* 详情面板总宽 = 内容列 810 + 字段栏 360 + 1px 线；实测 1680 视口 ≈1174 */
+  --rdm-drawer-body-w: 810px;  /* 面板内内容列实测宽（字段栏之外的部分） */
+  --rdm-row-h: 40px;           /* 表格数据行 */
+  /* 表格列宽（实测按 100 宽胶囊 + 24 内距反推；列宽不是硬约束，按内容微调） */
+  --rdm-col-check: 48px;
+  --rdm-col-status: 140px;
+  --rdm-col-priority: 120px;
+  --rdm-col-person: 200px;
+  --rdm-col-date: 184px;
+  --rdm-col-creator: 144px;
+  --rdm-col-action: 100px;
+  --rdm-thead-h: 32px;         /* 表头 band */
+  --rdm-control-h: 32px;       /* 常规控件/按钮 */
+  --rdm-control-h-sm: 24px;    /* 小控件：顶栏胶囊、分页器 */
+  --rdm-page-pad-x: 32px;      /* 页面左右内距 */
+  --rdm-page-pad-y: 24px;      /* 页面上下内距 */
+  --rdm-gutter: 16px;          /* 栅格 gutter（恒 16） */
+
+  /* ---------- 圆角：只有三档，禁止 8px+ ---------- */
+  --rdm-radius-1: 2px;         /* 复选框、小标记 */
+  --rdm-radius-2: 4px;         /* 默认形状：按钮、胶囊、卡片、输入框 */
+  --rdm-radius-pill: 999px;    /* 顶栏胶囊/头像/圆点 */
+
+  /* ---------- 阴影：极浅，且只有浮层才配拥有 ---------- */
+  --rdm-shadow-1: 0 1px 3px rgba(38, 38, 38, 0.1);   /* 卡片默认 */
+  --rdm-shadow-3: 0 12px 32px rgba(38, 38, 38, 0.16);/* 抽屉 / 弹层 */
+  --rdm-shadow-left: -8px 0 24px rgba(38, 38, 38, 0.08);  /* 详情面板左沿 */
+  --rdm-shadow-up: 0 -8px 24px rgba(38, 38, 38, 0.08);    /* 详情底部评论条 */
+
+  /* ---------- 字体 ---------- */
+  --rdm-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei",
+    sans-serif;
+  --rdm-font-mono: "SF Mono", "Roboto Mono", Menlo, Consolas, monospace;
+
+  /* 字号阶梯（12 起步，正文 14；不许出现 13/15 这类中间值） */
+  --rdm-font-size-12: 12px;
+  --rdm-font-size-14: 14px;
+  --rdm-font-size-16: 16px;
+  --rdm-font-size-18: 18px;
+  --rdm-font-size-20: 20px;
+  --rdm-font-size-24: 24px;
+
+  /* 字重只有两档（400/500）：这套风格「没有 600/700」，层级靠字号 + 灰度 */
+  --rdm-weight-regular: 400;
+  --rdm-weight-medium: 500;
+
+  /* 排版角色（组件直接引用，不要自己拼 font 简写） */
+  --rdm-type-page-title: var(--rdm-weight-medium) var(--rdm-font-size-18) / 26px var(--rdm-font-family);
+  --rdm-type-drawer-title: var(--rdm-weight-medium) var(--rdm-font-size-18) / 26px var(--rdm-font-family);
+  --rdm-type-card-title: var(--rdm-weight-medium) var(--rdm-font-size-16) / 24px var(--rdm-font-family);
+  --rdm-type-section: var(--rdm-weight-medium) var(--rdm-font-size-14) / 22px var(--rdm-font-family);
+  --rdm-type-body: var(--rdm-weight-regular) var(--rdm-font-size-14) / 22px var(--rdm-font-family);
+  --rdm-type-cell: var(--rdm-weight-regular) var(--rdm-font-size-14) / 20px var(--rdm-font-family);
+  --rdm-type-meta: var(--rdm-weight-regular) var(--rdm-font-size-12) / 16px var(--rdm-font-family);
+  --rdm-type-num: var(--rdm-weight-medium) var(--rdm-font-size-20) / 28px var(--rdm-font-family);
+
+  /* ---------- 动效：只对用户操作做过渡，时长两档 ---------- */
+  --rdm-duration-fast: 120ms;
+  --rdm-duration-base: 200ms;
+  --rdm-ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==========================================================================
+   Element Plus 映射层：EP 的默认值几乎每一项都要压回来。
+   改外观 = 改这一层；禁止给 el-* 组件写内联色或深度选择器改字面值。
+   ========================================================================== */
+:root {
+  /* 主色：EP 只有 primary + light/dark，用 Clarity 的 B60 作 primary（主按钮）
+     B50 留给 .rdm-chip（见组件规格），两者不可混用。 */
+  --el-color-primary: var(--rdm-accent-strong);
+  --el-color-primary-light-3: #4d97e1;
+  --el-color-primary-light-5: #80b5ea;
+  --el-color-primary-light-7: #b3d2f2;
+  --el-color-primary-light-8: #cce0f7;
+  --el-color-primary-light-9: #e6effb;
+  --el-color-primary-dark-2: #0055aa;
+
+  --el-color-success: var(--rdm-success);
+  --el-color-warning: var(--rdm-warning);
+  --el-color-danger: var(--rdm-danger);
+  --el-color-error: var(--rdm-danger);
+  --el-color-info: var(--rdm-text-3);
+
+  --el-text-color-primary: var(--rdm-text-1);
+  --el-text-color-regular: var(--rdm-text-2);
+  --el-text-color-secondary: var(--rdm-text-label);
+  --el-text-color-placeholder: var(--rdm-text-3);
+  --el-text-color-disabled: var(--rdm-text-disabled);
+
+  --el-border-color: var(--rdm-border);
+  --el-border-color-light: var(--rdm-border);
+  --el-border-color-lighter: var(--rdm-border);
+  --el-border-color-extra-light: var(--rdm-gray-10);
+  --el-border-color-dark: var(--rdm-border-strong);
+  --el-border-color-darker: var(--rdm-border-strong);
+
+  --el-fill-color: var(--rdm-gray-10);
+  --el-fill-color-light: var(--rdm-gray-10);
+  --el-fill-color-lighter: #f8fafb;
+  --el-fill-color-blank: var(--rdm-surface);
+  --el-bg-color: var(--rdm-surface);
+  --el-bg-color-page: var(--rdm-surface);
+  --el-bg-color-overlay: var(--rdm-surface);
+
+  --el-border-radius-base: var(--rdm-radius-2);
+  --el-border-radius-small: var(--rdm-radius-1);
+  --el-border-radius-round: var(--rdm-radius-pill);
+
+  --el-font-family: var(--rdm-font-family);
+  --el-font-size-base: var(--rdm-font-size-14);
+  --el-font-size-small: var(--rdm-font-size-12);
+  --el-font-size-extra-large: var(--rdm-font-size-20);
+
+  --el-component-size: var(--rdm-control-h);
+  --el-component-size-small: var(--rdm-control-h-sm);
+
+  --el-box-shadow-light: 0 4px 16px rgba(38, 38, 38, 0.12);
+  --el-box-shadow: var(--rdm-shadow-3);
+  --el-box-shadow-lighter: 0 1px 3px rgba(38, 38, 38, 0.1);
+
+  /* 表格：表头是一整条冷灰 band，没有行分隔线、没有斑马纹 */
+  --el-table-bg-color: var(--rdm-surface);
+  --el-table-tr-bg-color: var(--rdm-surface);
+  --el-table-header-bg-color: var(--rdm-surface-subtle);
+  --el-table-header-text-color: var(--rdm-text-3);
+  --el-table-text-color: var(--rdm-text-2);
+  --el-table-border-color: transparent;
+  --el-table-row-hover-bg-color: var(--rdm-surface-subtle);
+  --el-table-current-row-bg-color: var(--rdm-surface-selected);
+  /* 注意：Element Plus 没有 --el-table-header-height 变量，表头 32px 靠
+     components.md §7 的 th 高度规则实现（不要臆造变量）。 */
+
+  /* 菜单 / 侧栏：选中态是浅蓝底 + 深蓝字，不是整块实心 */
+  --el-menu-bg-color: var(--rdm-surface);
+  --el-menu-text-color: var(--rdm-text-2);
+  --el-menu-active-color: var(--rdm-accent-strong);
+  --el-menu-hover-bg-color: var(--rdm-surface-subtle);
+  --el-menu-item-height: var(--rdm-row-h);
+}
+
+/* 全局基线：只做「让浏览器回到设计系统」的最小重置，不加装饰 */
+html,
+body {
+  margin: 0;
+  font-family: var(--rdm-font-family);
+  font-size: var(--rdm-font-size-14);
+  color: var(--rdm-text-1);
+  background: var(--rdm-surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 数字列必须等宽，纵向对比才对得齐 */
+.rdm-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------------
+   功能色的 Element Plus 派生阶
+   EP 每个语义色还要 light-3/5/7/8/9、dark-2 与 -rgb 共 30+ 个变量，
+   不补会回落成 EP 默认色（绿 #67c23a、红 #f56c6c 等），一次改版就露馅。
+   这里用 color-mix 机械化派生，避免手写 30 个值后各自漂移。
+   （需要兼容不支持 color-mix 的旧浏览器时，用脚本按同样公式预生成静态值，
+     规则见 docs/ui-design/research/frontend-audit.md §3.7）
+   -------------------------------------------------------------------------- */
+:root {
+  --el-color-white: #ffffff;
+  --el-color-black: #000000;
+
+  --el-color-primary-rgb: 0, 106, 212;
+
+  --el-color-success-light-3: color-mix(in srgb, var(--rdm-success) 70%, white);
+  --el-color-success-light-5: color-mix(in srgb, var(--rdm-success) 50%, white);
+  --el-color-success-light-7: color-mix(in srgb, var(--rdm-success) 30%, white);
+  --el-color-success-light-8: color-mix(in srgb, var(--rdm-success) 20%, white);
+  --el-color-success-light-9: color-mix(in srgb, var(--rdm-success) 10%, white);
+  --el-color-success-dark-2: color-mix(in srgb, var(--rdm-success) 80%, black);
+  --el-color-success-rgb: 21, 173, 49;
+
+  --el-color-warning-light-3: color-mix(in srgb, var(--rdm-warning) 70%, white);
+  --el-color-warning-light-5: color-mix(in srgb, var(--rdm-warning) 50%, white);
+  --el-color-warning-light-7: color-mix(in srgb, var(--rdm-warning) 30%, white);
+  --el-color-warning-light-8: color-mix(in srgb, var(--rdm-warning) 20%, white);
+  --el-color-warning-light-9: color-mix(in srgb, var(--rdm-warning) 10%, white);
+  --el-color-warning-dark-2: color-mix(in srgb, var(--rdm-warning) 80%, black);
+  --el-color-warning-rgb: 250, 140, 21;
+
+  --el-color-danger-light-3: color-mix(in srgb, var(--rdm-danger) 70%, white);
+  --el-color-danger-light-5: color-mix(in srgb, var(--rdm-danger) 50%, white);
+  --el-color-danger-light-7: color-mix(in srgb, var(--rdm-danger) 30%, white);
+  --el-color-danger-light-8: color-mix(in srgb, var(--rdm-danger) 20%, white);
+  --el-color-danger-light-9: color-mix(in srgb, var(--rdm-danger) 10%, white);
+  --el-color-danger-dark-2: color-mix(in srgb, var(--rdm-danger) 80%, black);
+  --el-color-danger-rgb: 230, 36, 18;
+
+  --el-color-error-light-3: var(--el-color-danger-light-3);
+  --el-color-error-light-5: var(--el-color-danger-light-5);
+  --el-color-error-light-7: var(--el-color-danger-light-7);
+  --el-color-error-light-8: var(--el-color-danger-light-8);
+  --el-color-error-light-9: var(--el-color-danger-light-9);
+  --el-color-error-dark-2: var(--el-color-danger-dark-2);
+  --el-color-error-rgb: var(--el-color-danger-rgb);
+
+  --el-color-info-light-3: color-mix(in srgb, var(--el-color-info) 70%, white);
+  --el-color-info-light-5: color-mix(in srgb, var(--el-color-info) 50%, white);
+  --el-color-info-light-7: color-mix(in srgb, var(--el-color-info) 30%, white);
+  --el-color-info-light-8: color-mix(in srgb, var(--el-color-info) 20%, white);
+  --el-color-info-light-9: color-mix(in srgb, var(--el-color-info) 10%, white);
+  --el-color-info-dark-2: color-mix(in srgb, var(--el-color-info) 80%, black);
+  --el-color-info-rgb: 142, 142, 142;
+}

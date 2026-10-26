@@ -1,40 +1,63 @@
 <template>
-  <router-view v-if="isAuthScreen" />
-  <el-container v-else style="min-height: 100vh">
-    <el-header class="topbar">
-      <div class="brand">rd-manager</div>
-      <el-menu mode="horizontal" :router="true" :default-active="$route.path" :ellipsis="false">
-        <el-menu-item index="/projects">项目</el-menu-item>
+  <router-view v-if="isBare" />
+  <div v-else class="shell">
+    <header class="topbar">
+      <div class="crumb">
+        <span class="crumb-root" @click="goProjects">rdm</span>
         <template v-if="projectKey">
-          <el-menu-item :index="`/projects/${projectKey}/board`">看板</el-menu-item>
-          <el-menu-item :index="`/projects/${projectKey}/backlog`">Backlog</el-menu-item>
-          <el-menu-item :index="`/projects/${projectKey}/sprints`">Sprint</el-menu-item>
-          <el-menu-item :index="`/projects/${projectKey}/mailbox`">
-            信箱
-            <el-badge v-if="who?.unread_count" :value="who.unread_count" :max="99" type="primary" />
-          </el-menu-item>
-          <el-menu-item :index="`/projects/${projectKey}/workspaces`">工作区</el-menu-item>
-          <el-menu-item :index="`/projects/${projectKey}/members`">成员</el-menu-item>
-          <el-menu-item :index="`/projects/${projectKey}/settings`">设置</el-menu-item>
-        </template>
-      </el-menu>
-      <div class="whoami">
-        <template v-if="who">
-          <span class="who-name">{{ who.member.name }}</span>
-          <span v-if="who.project" class="who-project">{{ who.project.key }}</span>
-          <el-button link type="primary" @click="onLogout">登出</el-button>
+          <span class="crumb-sep">/</span>
+          <span class="crumb-project">{{ projectKey }}</span>
         </template>
       </div>
-    </el-header>
-    <el-main>
-      <router-view />
-    </el-main>
-  </el-container>
+      <div class="topbar-right">
+        <el-badge v-if="who?.unread_count" :value="who.unread_count" :max="99" type="danger">
+          <el-button text :icon="Bell" @click="goMailbox" />
+        </el-badge>
+        <el-button v-else text :icon="Bell" @click="goMailbox" />
+        <span class="who-name">{{ who?.member.name ?? "—" }}</span>
+        <el-button link type="primary" :icon="SwitchButton" @click="onLogout">登出</el-button>
+      </div>
+    </header>
+    <div class="body">
+      <nav class="rail">
+        <RouterLink class="rail-item" :class="{ active: isActive('/projects') }" to="/projects">
+          <el-icon :size="20"><Grid /></el-icon>
+          <span>项目</span>
+        </RouterLink>
+        <template v-if="projectKey">
+          <RouterLink
+            v-for="item in nav"
+            :key="item.to"
+            class="rail-item"
+            :class="{ active: isActive(item.to) }"
+            :to="item.to"
+          >
+            <el-icon :size="20"><component :is="item.icon" /></el-icon>
+            <span>{{ item.label }}</span>
+          </RouterLink>
+        </template>
+      </nav>
+      <main class="content">
+        <router-view />
+      </main>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import {
+  Bell,
+  Calendar,
+  ChatDotRound,
+  FolderOpened,
+  Grid,
+  List,
+  Setting,
+  SwitchButton,
+  User,
+} from "@element-plus/icons-vue";
 import { api } from "./api";
 import { logout } from "./auth";
 import type { Whoami } from "./types";
@@ -47,25 +70,41 @@ const projectKey = computed(() =>
 const who = ref<Whoami | null>(null);
 let timer: number | undefined;
 
-const isAuthScreen = computed(
-  () => route.meta.public === true || route.meta.bare === true
-);
+const base = () => `/projects/${projectKey.value}`;
+const nav = computed(() => [
+  { to: `${base()}/board`, icon: Calendar, label: "看板" },
+  { to: `${base()}/backlog`, icon: List, label: "工作项" },
+  { to: `${base()}/sprints`, icon: Calendar, label: "迭代" },
+  { to: `${base()}/mailbox`, icon: ChatDotRound, label: "信箱" },
+  { to: `${base()}/workspaces`, icon: FolderOpened, label: "工作区" },
+  { to: `${base()}/members`, icon: User, label: "成员" },
+  { to: `${base()}/settings`, icon: Setting, label: "设置" },
+]);
+
+const isBare = computed(() => route.meta.public === true || route.meta.bare === true);
+
+function isActive(path: string) {
+  return route.path === path || route.path.startsWith(path + "/");
+}
+function goProjects() {
+  router.push("/projects");
+}
+function goMailbox() {
+  if (projectKey.value) router.push(`${base()}/mailbox`);
+}
 
 async function loadWhoami() {
-  if (isAuthScreen.value) return;
+  if (isBare.value) return;
   try {
     who.value = (await api.get<Whoami>("/whoami")).data;
   } catch {
     who.value = null;
   }
 }
-
 async function onLogout() {
   await logout();
   router.push("/login");
 }
-
-watch(isAuthScreen, loadWhoami);
 
 onMounted(() => {
   loadWhoami();
@@ -75,28 +114,70 @@ onUnmounted(() => window.clearInterval(timer));
 </script>
 
 <style scoped>
+.shell {
+  min-height: 100vh;
+  background: var(--rdm-surface);
+}
 .topbar {
+  height: var(--rdm-topbar-h);
   display: flex;
   align-items: center;
-  gap: 24px;
-  border-bottom: 1px solid var(--el-border-color);
+  justify-content: space-between;
+  padding: 0 var(--rdm-space-8);
+  background: var(--rdm-surface);
+  border-bottom: 1px solid var(--rdm-border);
 }
-.brand {
-  font-weight: 500;
-  font-size: 18px;
-  white-space: nowrap;
-}
-.whoami {
-  margin-left: auto;
+.crumb {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
-  white-space: nowrap;
+  gap: var(--rdm-space-2);
+  font: var(--rdm-type-body);
+}
+.crumb-root {
+  color: var(--rdm-accent-strong);
+  cursor: pointer;
+}
+.crumb-sep,
+.crumb-project {
+  color: var(--rdm-text-2);
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--rdm-space-3);
 }
 .who-name {
-  font-weight: 500;
-  color: var(--el-text-color-primary);
+  font: var(--rdm-type-meta);
+  color: var(--rdm-text-2);
+}
+.body {
+  display: flex;
+  min-height: calc(100vh - var(--rdm-topbar-h));
+}
+.rail {
+  width: var(--rdm-rail-w);
+  background: var(--rdm-surface-subtle);
+  border-right: 1px solid var(--rdm-border);
+  padding-top: var(--rdm-space-2);
+  flex-shrink: 0;
+}
+.rail-item {
+  height: var(--rdm-rail-item-h);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--rdm-text-2);
+  text-decoration: none;
+  font: var(--rdm-type-meta);
+}
+.rail-item.active {
+  color: var(--rdm-accent-strong);
+  background: var(--rdm-surface-selected);
+}
+.content {
+  flex: 1;
+  min-width: 0;
 }
 </style>

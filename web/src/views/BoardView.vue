@@ -84,21 +84,21 @@ onMounted(load);
 .column {
   flex: 1 0 220px;
   background: var(--el-fill-color-light);
-  border-radius: 6px;
+  border-radius: var(--rdm-radius-2);
   padding: 8px;
 }
 .column-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-weight: 600;
+  font-weight: 500;
   padding: 4px 6px 8px;
 }
 .card {
   display: block;
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 6px;
+  border-radius: var(--rdm-radius-2);
   padding: 8px 10px;
   margin-bottom: 8px;
   text-decoration: none;
@@ -108,15 +108,15 @@ onMounted(load);
   border-color: var(--el-color-primary);
 }
 .card-id {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--el-text-color-secondary);
 }
 .card-title {
-  font-size: 13px;
+  font-size: 12px;
   margin: 2px 0 4px;
 }
 .card-assignee {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--el-text-color-secondary);
 }
 </style>
