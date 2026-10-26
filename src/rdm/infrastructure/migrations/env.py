@@ -7,12 +7,23 @@ Migrations run on a synchronous driver (sqlite by default).
 
 from __future__ import annotations
 
+import warnings
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, event, pool
+from sqlalchemy.exc import SAWarning
 
 from rdm.infrastructure.db.models import Base
+
+# Batch migrations reflect referenced tables to recreate foreign keys.
+# SQLite's inspector cannot reflect the expression-based index on lower(key)
+# (ux_project_key_lower) and emits a cosmetic warning; silence exactly that.
+warnings.filterwarnings(
+    "ignore",
+    message=r"Skipped unsupported reflection of expression-based index",
+    category=SAWarning,
+)
 
 _SQLITE_PRAGMAS = (
     "PRAGMA journal_mode=WAL",

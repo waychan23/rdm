@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import os
+import sqlite3
 from pathlib import Path
 
 import typer
@@ -19,6 +20,10 @@ from sqlalchemy import create_engine, text
 from rdm.application.services.member_service import generate_token
 from rdm.application.services.passwords import generate_password, hash_password
 from rdm.infrastructure.id import new_id
+
+# Python 3.12 deprecates the implicit datetime→str adapter for raw sqlite3.
+# These offline statements bind datetimes directly, so register an explicit one.
+sqlite3.register_adapter(dt.datetime, lambda v: v.strftime("%Y-%m-%d %H:%M:%S.%f"))
 
 
 def _db_url(data_dir: Path) -> str:
