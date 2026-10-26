@@ -32,3 +32,6 @@ src/rdm/resources/web-dist/
 .vscode/
 e2e/out/
 .opencode/opencode.json
+
+.claude
+docs/ui-design
