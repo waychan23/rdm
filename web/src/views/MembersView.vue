@@ -29,9 +29,15 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="80">
+      <el-table-column label="操作" width="160">
         <template #default="{ row }">
           <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+          <el-button
+            v-if="row.type === 'human'"
+            link
+            type="warning"
+            @click="resetPassword(row)"
+          >重置密码</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -52,6 +58,9 @@
           <el-select v-model="form.managerId" placeholder="选择同项目 human 负责人" style="width: 100%">
             <el-option v-for="m in humanManagers" :key="m.id" :label="m.name" :value="m.id" />
           </el-select>
+        </el-form-item>
+        <el-form-item v-if="form.type === 'human'" label="初始密码">
+          <el-input v-model="form.password" placeholder="至少 8 位；留空则不能登录（之后可重置）" />
         </el-form-item>
         <el-form-item label="Email"><el-input v-model="form.email" /></el-form-item>
         <el-form-item label="Webhook URL">
@@ -107,7 +116,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
 import type { Member } from "../types";
 
@@ -124,6 +133,7 @@ const form = reactive({
   email: "",
   notifyWebhook: "",
   notifyFormat: "generic",
+  password: "",
 });
 const edit = reactive({
   id: "",
@@ -156,12 +166,14 @@ async function create() {
       email: form.email || null,
       notify_webhook: form.notifyWebhook || null,
       notify_webhook_format: form.notifyFormat,
+      password: form.type === "human" && form.password ? form.password : null,
     });
     dialog.value = false;
     form.name = "";
     form.managerId = "";
     form.email = "";
     form.notifyWebhook = "";
+    form.password = "";
     await load();
   } catch (e) {
     ElMessage.error((e as Error).message);
@@ -200,6 +212,23 @@ async function saveEdit() {
     ElMessage.error((e as Error).message);
   } finally {
     saving.value = false;
+  }
+}
+
+async function resetPassword(row: Member) {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `为 ${row.name} 设置新密码（留空则随机生成，至少 8 位）`,
+      "重置登录密码",
+      { confirmButtonText: "重置", cancelButtonText: "取消", inputPlaceholder: "新密码（可留空）" }
+    );
+    const res = await api.post<{ password: string }>(`/members/${row.id}/password`, {
+      password: value || null,
+    });
+    await navigator.clipboard.writeText(res.data.password);
+    ElMessage.success(`已重置，新密码已复制：${res.data.password}`);
+  } catch (e) {
+    if (e !== "cancel") ElMessage.error((e as Error).message);
   }
 }
 

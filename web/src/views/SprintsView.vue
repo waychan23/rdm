@@ -42,7 +42,14 @@
 
     <el-drawer v-model="detailOpen" :title="detail?.name ?? ''" size="46%">
       <template v-if="detail">
-        <p class="muted">状态：<el-tag :type="statusType(detail.status)" size="small">{{ detail.status }}</el-tag></p>
+        <div class="detail-head">
+          <el-tag :type="statusType(detail.status)" size="small">{{ detail.status }}</el-tag>
+          <el-button
+            v-if="detail.status !== 'CLOSED'"
+            size="small"
+            @click="openEdit"
+          >编辑</el-button>
+        </div>
         <p v-if="detail.goal_md" class="muted">{{ detail.goal_md }}</p>
         <div v-for="(n, status) in detail.status_counts" :key="status" style="margin-right: 8px">
           <el-tag size="small" style="margin: 2px">{{ status }}: {{ n }}</el-tag>
@@ -92,6 +99,28 @@
         </div>
       </template>
     </el-drawer>
+
+    <el-dialog v-model="editDialog" title="编辑 Sprint" width="440px">
+      <el-form label-position="top">
+        <el-form-item label="名称"><el-input v-model="editForm.name" /></el-form-item>
+        <el-form-item label="目标（Markdown）">
+          <el-input v-model="editForm.goal_md" type="textarea" :rows="3" />
+        </el-form-item>
+        <el-form-item label="起止日期">
+          <el-date-picker
+            v-model="editRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            start-placeholder="开始"
+            end-placeholder="结束"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveEdit">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -193,6 +222,42 @@ async function changeStatus(action: "start") {
   }
 }
 
+const editDialog = ref(false);
+const editForm = reactive({ name: "", goal_md: "" });
+const editRange = ref<[string, string] | []>([]);
+
+function openEdit() {
+  if (!detail.value) return;
+  editForm.name = detail.value.name;
+  editForm.goal_md = detail.value.goal_md ?? "";
+  editRange.value =
+    detail.value.start_date && detail.value.end_date
+      ? [detail.value.start_date, detail.value.end_date]
+      : [];
+  editDialog.value = true;
+}
+
+async function saveEdit() {
+  if (!detail.value) return;
+  saving.value = true;
+  try {
+    const [startDate, endDate] = editRange.value.length === 2 ? editRange.value : [null, null];
+    await api.patch(`/sprints/${detail.value.id}`, {
+      name: editForm.name,
+      goal_md: editForm.goal_md,
+      start_date: startDate,
+      end_date: endDate,
+    });
+    editDialog.value = false;
+    ElMessage.success("已保存");
+    await Promise.all([refreshDetail(), load()]);
+  } catch (e) {
+    ElMessage.error((e as Error).message);
+  } finally {
+    saving.value = false;
+  }
+}
+
 async function closeSprint() {
   if (!detail.value) return;
   try {
@@ -208,6 +273,12 @@ onMounted(load);
 </script>
 
 <style scoped>
+.detail-head {
+  display: flex;
+  align-items: center;
+  gap: var(--rdm-space-3);
+  margin-bottom: var(--rdm-space-3);
+}
 .head {
   display: flex;
   justify-content: space-between;

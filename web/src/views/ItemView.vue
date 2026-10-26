@@ -1,149 +1,177 @@
 <template>
-  <div v-if="item">
-    <el-page-header style="margin-bottom: 16px">
-      <template #content>
-        <router-link :to="`/projects/${key}/backlog`">← {{ item.display_id }}</router-link>
-        <span style="margin-left: 12px">{{ item.title }}</span>
-        <el-button size="small" style="margin-left: 12px" @click="showEdit = true">编辑</el-button>
-      </template>
-    </el-page-header>
+  <div v-if="item" class="overlay">
+    <!-- Pressed-back list context (P2: not a modal; the table stays usable) -->
+    <BacklogView class="backdrop" />
 
-    <WorkItemEditDialog v-model="showEdit" :item="item" @saved="onSaved" />
+    <aside class="panel">
+      <header class="panel-head">
+        <button class="chevron" title="关闭" @click="close">›</button>
+        <TypeIcon :kind="item.kind" />
+        <span class="display-id rdm-num">{{ item.display_id }}</span>
+        <el-button size="small" link type="primary" @click="showEdit = true">编辑</el-button>
+      </header>
 
-    <el-descriptions :column="2" border>
-      <el-descriptions-item label="类型">{{ item.kind }}</el-descriptions-item>
-      <el-descriptions-item label="状态">{{ item.status }}</el-descriptions-item>
-      <el-descriptions-item label="优先级">{{ item.priority }}</el-descriptions-item>
-      <el-descriptions-item label="负责人">
-        <el-select
-          :model-value="item.assignee?.id ?? ''"
-          size="small"
-          filterable
-          placeholder="未指派"
-          style="width: 180px"
-          @change="assign"
-        >
-          <el-option v-for="m in members" :key="m.id" :label="m.name" :value="m.id" />
-        </el-select>
-      </el-descriptions-item>
-      <el-descriptions-item label="版本">{{ item.row_version }}</el-descriptions-item>
-      <el-descriptions-item label="可流转">
-        <el-button
-          v-for="s in allowed"
-          :key="s"
-          size="small"
-          :loading="transitioning === s"
-          style="margin: 2px"
-          @click="transitionTo(s)"
-        >{{ s }}</el-button>
-      </el-descriptions-item>
-      <el-descriptions-item label="描述" :span="2">
-        <div v-if="item.description_md" class="md" v-html="renderMarkdown(item.description_md)" />
-        <span v-else class="muted">—</span>
-      </el-descriptions-item>
-      <el-descriptions-item v-if="fieldsText" label="特型字段" :span="2">
-        <pre class="fields">{{ fieldsText }}</pre>
-      </el-descriptions-item>
-    </el-descriptions>
+      <div class="panel-body">
+        <section class="content-col">
+          <h1 class="title">{{ item.title }}</h1>
+          <div class="section-label">描述</div>
+          <div
+            v-if="item.description_md"
+            class="desc md"
+            v-html="renderMarkdown(item.description_md)"
+          />
+          <div v-else class="desc desc-empty">未填写描述</div>
 
-    <el-divider content-position="left">子项</el-divider>
-    <el-table :data="children" border size="small">
-      <el-table-column label="ID" width="110">
-        <template #default="{ row }">
-          <router-link :to="`/projects/${key}/items/${row.display_id}`">{{ row.display_id }}</router-link>
-        </template>
-      </el-table-column>
-      <el-table-column prop="kind" label="类型" width="90" />
-      <el-table-column prop="title" label="标题" />
-      <el-table-column prop="status" label="状态" width="140" />
-    </el-table>
+          <div v-if="fieldsText" class="kind-fields">
+            <div class="section-label">特型字段</div>
+            <pre class="fields">{{ fieldsText }}</pre>
+          </div>
 
-    <el-divider content-position="left">产出物</el-divider>
-    <el-table :data="artifacts" size="small" border>
-      <el-table-column prop="kind" label="类型" width="100" />
-      <el-table-column label="链接">
-        <template #default="{ row }">
-          <el-link :href="row.url" target="_blank" :underline="false">{{ row.label }}</el-link>
-        </template>
-      </el-table-column>
-    </el-table>
-    <el-button size="small" style="margin-top: 8px" @click="artifactDialog = true">挂产出物</el-button>
+          <div class="section-label">子项（{{ children.length }}）</div>
+          <div
+            v-for="c in children"
+            :key="c.id"
+            class="child-row"
+            @click="openChild(c)"
+          >
+            <TypeIcon :kind="c.kind" />
+            <span class="rdm-num child-id">{{ c.display_id }}</span>
+            <span class="child-title">{{ c.title }}</span>
+            <StatusPill :status="c.status" />
+          </div>
 
-    <el-divider content-position="left">附件</el-divider>
-    <el-upload
-      :show-file-list="false"
-      :before-upload="uploadAttachment"
-      multiple
-    >
-      <el-button size="small" :loading="uploading">上传附件</el-button>
-    </el-upload>
-    <el-table :data="attachments" size="small" border style="margin-top: 8px">
-      <el-table-column prop="filename" label="文件" />
-      <el-table-column label="大小" width="100">
-        <template #default="{ row }">{{ formatSize(row.size_bytes) }}</template>
-      </el-table-column>
-      <el-table-column label="上传者" width="120">
-        <template #default="{ row }">{{ row.uploader.name ?? row.uploader.id }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="150">
-        <template #default="{ row }">
-          <el-button link type="primary" @click="api.download(row.download_url, row.filename)">下载</el-button>
-          <el-button link type="danger" @click="removeAttachment(row.id)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+          <div class="comments">
+            <div class="section-label">评论</div>
+            <div v-for="c in comments" :key="c.id" class="comment">
+              <div class="comment-head">
+                <PersonCell :name="c.author.name ?? c.author.id" />
+                <span class="meta">{{ formatDate(c.created_at) }}</span>
+              </div>
+              <div class="md comment-body" v-html="renderMarkdown(c.body_md)" />
+              <div v-for="a in c.attachments" :key="a.id" class="comment-att">
+                <el-link :underline="false" @click="api.download(a.download_url, a.filename)">
+                  📎 {{ a.filename }}
+                </el-link>
+              </div>
+            </div>
+            <el-empty v-if="!comments.length" description="还没有评论" :image-size="60" />
+          </div>
+        </section>
 
-    <el-divider content-position="left">评论</el-divider>
-    <div v-for="c in comments" :key="c.id" class="comment">
-      <div class="comment-head">
-        <strong>{{ c.author.name ?? c.author.id }}</strong>
-        <span class="muted">{{ c.created_at }}</span>
+        <section class="fields-col">
+          <div class="field">
+            <div class="field-label">状态</div>
+            <StatusPill :status="item.status" />
+          </div>
+          <div class="field">
+            <div class="field-label">流转到</div>
+            <el-select
+              :model-value="''"
+              size="small"
+              placeholder="选择目标状态"
+              style="width: 100%"
+              @change="transitionTo"
+            >
+              <el-option v-for="s in allowed" :key="s" :value="s" :label="s" />
+            </el-select>
+          </div>
+          <div class="field">
+            <div class="field-label">优先级</div>
+            <PriorityRank :priority="item.priority" />
+          </div>
+          <div class="field">
+            <div class="field-label">负责人</div>
+            <el-select
+              :model-value="item.assignee?.id ?? ''"
+              size="small"
+              filterable
+              clearable
+              placeholder="未指派"
+              style="width: 100%"
+              @change="assign"
+            >
+              <el-option v-for="m in members" :key="m.id" :label="m.name" :value="m.id" />
+            </el-select>
+          </div>
+          <div class="field">
+            <div class="field-label">类型 / 版本</div>
+            <span class="meta">{{ item.kind }} · v{{ item.row_version }}</span>
+          </div>
+          <div class="field">
+            <div class="field-label">创建时间</div>
+            <span class="meta">{{ formatDate(item.created_at) }}</span>
+          </div>
+
+          <div class="field">
+            <div class="field-label">附件</div>
+            <el-upload :show-file-list="false" :before-upload="uploadAttachment" multiple>
+              <el-button size="small" :loading="uploading">上传附件</el-button>
+            </el-upload>
+            <div v-for="a in attachments" :key="a.id" class="att-row">
+              <el-link :underline="false" @click="api.download(a.download_url, a.filename)">
+                {{ a.filename }}
+              </el-link>
+              <span class="meta">{{ formatSize(a.size_bytes) }}</span>
+              <el-button link type="danger" size="small" @click="removeAttachment(a.id)">
+                删除
+              </el-button>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">产出物</div>
+            <div v-for="art in artifacts" :key="art.id" class="att-row">
+              <el-link :href="art.url" target="_blank" :underline="false">{{ art.label }}</el-link>
+              <span class="meta">{{ art.kind }}</span>
+            </div>
+            <el-button size="small" @click="artifactDialog = true">挂产出物</el-button>
+          </div>
+        </section>
       </div>
-      <div class="md comment-body" v-html="renderMarkdown(c.body_md)" />
-      <div v-for="a in c.attachments" :key="a.id" class="comment-att">
-        📎
-        <el-link :underline="false" @click="api.download(a.download_url, a.filename)">
-          {{ a.filename }}
-        </el-link>
-      </div>
-    </div>
-    <el-empty v-if="!comments.length" description="还没有评论" :image-size="60" />
 
-    <el-input
-      v-model="draft"
-      type="textarea"
-      :rows="3"
-      placeholder="写评论；@成员名 会给对方发站内信"
-      style="margin-top: 12px"
-    />
-    <div class="comment-actions">
-      <el-upload :show-file-list="true" :file-list="pendingFiles" :before-upload="queueAttachment" multiple>
-        <el-button size="small">添加附件</el-button>
-      </el-upload>
-      <el-button type="primary" :loading="saving" @click="postComment">提交评论</el-button>
-    </div>
+      <footer class="comment-bar">
+        <el-input v-model="draft" type="textarea" :rows="2" placeholder="写评论；@成员名 会给对方发站内信" />
+        <div class="comment-bar-actions">
+          <el-upload
+            :show-file-list="true"
+            :file-list="pendingFiles"
+            :before-upload="queueAttachment"
+            multiple
+          >
+            <el-button size="small">添加附件</el-button>
+          </el-upload>
+          <el-button type="primary" size="small" :loading="saving" @click="postComment">
+            提交评论
+          </el-button>
+        </div>
+      </footer>
 
-    <el-dialog v-model="artifactDialog" title="挂载产出物" width="440px">
-      <el-form label-width="72px">
-        <el-form-item label="类型">
-          <el-select v-model="artifact.kind">
-            <el-option v-for="k in ARTIFACT_KINDS" :key="k" :label="k" :value="k" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="标题"><el-input v-model="artifact.label" /></el-form-item>
-        <el-form-item label="URL"><el-input v-model="artifact.url" placeholder="https://…" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="artifactDialog = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="addArtifact">保存</el-button>
-      </template>
-    </el-dialog>
+      <WorkItemEditDialog v-model="showEdit" :item="item" @saved="onSaved" />
+
+      <el-dialog v-model="artifactDialog" title="挂载产出物" width="440px" append-to-body>
+        <el-form label-position="top">
+          <el-form-item label="类型">
+            <el-select v-model="artifact.kind">
+              <el-option v-for="k in ARTIFACT_KINDS" :key="k" :label="k" :value="k" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="标题"><el-input v-model="artifact.label" /></el-form-item>
+          <el-form-item label="URL">
+            <el-input v-model="artifact.url" placeholder="https://…" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="artifactDialog = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="addArtifact">保存</el-button>
+        </template>
+      </el-dialog>
+    </aside>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, reactive, ref } from "vue";
-import { useRoute } from "vue-router";
+import { computed, h, onMounted, reactive, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import type { UploadFile, UploadRawFile } from "element-plus";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { api, errorCause } from "../api";
@@ -156,10 +184,16 @@ import type {
 } from "../types";
 import { renderMarkdown } from "../util/markdown";
 import WorkItemEditDialog from "../components/WorkItemEditDialog.vue";
+import StatusPill from "../components/StatusPill.vue";
+import PriorityRank from "../components/PriorityRank.vue";
+import PersonCell from "../components/PersonCell.vue";
+import TypeIcon from "../components/TypeIcon.vue";
+import BacklogView from "./BacklogView.vue";
 
 const route = useRoute();
-const key = String(route.params.key);
-const refId = String(route.params.id);
+const router = useRouter();
+const key = computed(() => String(route.params.key));
+const refId = computed(() => String(route.params.id));
 
 const item = ref<WorkItem | null>(null);
 const showEdit = ref(false);
@@ -185,29 +219,36 @@ const ARTIFACT_KINDS = ["link", "doc", "design", "api_doc", "repo", "other"];
 
 const fieldsText = computed(() => {
   const f = item.value?.fields;
-  if (!f || Object.keys(f).length === 0) return "";
+  if (!f || !Object.keys(f).length) return "";
   return JSON.stringify(f, null, 2);
 });
 
-function formatSize(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+function formatSize(n: number) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+function formatDate(iso: string) {
+  return iso ? iso.slice(0, 16).replace("T", " ") : "";
+}
+function close() {
+  router.push(`/projects/${key.value}/backlog`);
+}
+function openChild(c: WorkItem) {
+  router.push(`/projects/${key.value}/items/${c.id}`);
 }
 
 async function load() {
-  const detail = await api.get<WorkItem>(`/work-items/${encodeURIComponent(refId)}`);
+  const detail = await api.get<WorkItem>(`/work-items/${encodeURIComponent(refId.value)}`);
   item.value = detail.data;
-  children.value = ((detail.meta?.children as WorkItem[]) ?? []);
+  children.value = ((detail.meta?.children as WorkItem[]) ?? []) as WorkItem[];
   allowed.value = (detail.meta?.allowed_transitions as string[]) ?? [];
   const [cm, mm, am, artm] = await Promise.all([
-    api.get<Comment[]>(`/work-items/${refId}/comments`),
-    api.get<Member[]>(`/projects/${key}/members`),
+    api.get<Comment[]>(`/work-items/${refId.value}/comments`),
+    api.get<Member[]>(`/projects/${key.value}/members`),
     api.get<Attachment[]>(
-      `/projects/${key}/attachments?owner_type=work_item&owner_ref=${encodeURIComponent(refId)}`
+      `/projects/${key.value}/attachments?owner_type=work_item&owner_ref=${encodeURIComponent(refId.value)}`
     ),
     api.get<Artifact[]>(
-      `/projects/${key}/artifacts?owner_type=work_item&owner_ref=${encodeURIComponent(refId)}`
+      `/projects/${key.value}/artifacts?owner_type=work_item&owner_ref=${encodeURIComponent(refId.value)}`
     ),
   ]);
   comments.value = cm.data;
@@ -217,6 +258,7 @@ async function load() {
 }
 
 async function transitionTo(to: string) {
+  if (!to) return;
   try {
     let reason: string | null = null;
     try {
@@ -230,7 +272,7 @@ async function transitionTo(to: string) {
     }
     if (!item.value) return;
     transitioning.value = to;
-    await api.post(`/work-items/${refId}/transition`, {
+    await api.post(`/work-items/${refId.value}/transition`, {
       to,
       row_version: item.value.row_version,
       reason,
@@ -244,10 +286,29 @@ async function transitionTo(to: string) {
   }
 }
 
+function reportGate(e: unknown) {
+  const cause = errorCause(e);
+  if (cause?.code === "WORKFLOW_GATE_BLOCKED" && cause.details?.blocking_children) {
+    const ids = (cause.details.blocking_children as { display_id?: string }[])
+      .map((c) => c.display_id)
+      .join(", ");
+    ElMessageBox.alert(
+      h("div", [
+        h("p", null, cause.message),
+        h("p", { style: "margin-top:8px" }, `阻塞子项: ${ids}`),
+      ]),
+      "子项未终态",
+      { type: "warning" }
+    );
+  } else {
+    ElMessage.error(cause?.message ?? "流转失败");
+  }
+}
+
 async function assign(memberId: string) {
   if (!memberId) return;
   try {
-    await api.post(`/work-items/${refId}/assign`, { member: memberId });
+    await api.post(`/work-items/${refId.value}/assign`, { member: memberId });
     await load();
   } catch (e) {
     ElMessage.error((e as Error).message);
@@ -261,15 +322,15 @@ async function uploadAttachment(file: UploadRawFile) {
     const form = new FormData();
     form.append("file", file);
     form.append("owner_type", "work_item");
-    form.append("owner_ref", refId);
-    const res = await api.upload<Attachment>(`/projects/${key}/attachments`, form);
+    form.append("owner_ref", refId.value);
+    const res = await api.upload<Attachment>(`/projects/${key.value}/attachments`, form);
     attachments.value = [...attachments.value, res.data];
   } catch (e) {
     ElMessage.error((e as Error).message);
   } finally {
     uploading.value = false;
   }
-  return false; // keep el-upload from posting itself
+  return false;
 }
 
 async function queueAttachment(file: UploadRawFile) {
@@ -277,8 +338,8 @@ async function queueAttachment(file: UploadRawFile) {
     const form = new FormData();
     form.append("file", file);
     form.append("owner_type", "work_item");
-    form.append("owner_ref", refId);
-    const res = await api.upload<Attachment>(`/projects/${key}/attachments`, form);
+    form.append("owner_ref", refId.value);
+    const res = await api.upload<Attachment>(`/projects/${key.value}/attachments`, form);
     pendingAttachmentIds.value.push(res.data.id);
     pendingFiles.value.push({ name: file.name } as UploadFile);
     ElMessage.success(`附件 ${file.name} 已上传，提交评论时挂载`);
@@ -301,7 +362,7 @@ async function postComment() {
   if (!draft.value.trim()) return;
   saving.value = true;
   try {
-    await api.post(`/work-items/${refId}/comments`, {
+    await api.post(`/work-items/${refId.value}/comments`, {
       body_md: draft.value,
       attachment_ids: pendingAttachmentIds.value,
     });
@@ -323,17 +384,21 @@ async function addArtifact() {
   }
   saving.value = true;
   try {
-    await api.post(`/projects/${key}/artifacts`, {
-      owner_type: "work_item",
-      owner_ref: refId,
-      kind: artifact.kind,
-      label: artifact.label,
-      url: artifact.url,
-    });
-    artifactDialog.value = false;
+    const res = await api.post<Artifact>(
+      `/projects/${key.value}/artifacts`,
+      {
+        owner_type: "work_item",
+        owner_ref: refId.value,
+        kind: artifact.kind,
+        label: artifact.label,
+        url: artifact.url,
+        description_md: "",
+      }
+    );
+    artifacts.value = [...artifacts.value, res.data];
     artifact.label = "";
     artifact.url = "";
-    await load();
+    artifactDialog.value = false;
   } catch (e) {
     ElMessage.error((e as Error).message);
   } finally {
@@ -341,50 +406,179 @@ async function addArtifact() {
   }
 }
 
-function reportGate(e: unknown) {
-  const cause = errorCause(e);
-  const blocking = (cause?.details?.blocking_children ?? []) as string[];
-  ElMessage({
-    type: "error",
-    message: h("div", [
-      h("p", (e as Error).message),
-      blocking.length ? h("p", `阻塞子项：${blocking.join(", ")}`) : null,
-    ]),
-  });
-}
-
+watch(refId, () => load());
 onMounted(load);
 </script>
 
 <style scoped>
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+.backdrop {
+  position: absolute;
+  inset: 0;
+}
+.panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--rdm-drawer-w);
+  display: flex;
+  flex-direction: column;
+  background: var(--rdm-surface);
+  box-shadow: var(--rdm-shadow-left);
+}
+.panel-head {
+  height: var(--rdm-topbar-h);
+  display: flex;
+  align-items: center;
+  gap: var(--rdm-space-3);
+  padding: 0 var(--rdm-space-4);
+  border-bottom: 1px solid var(--rdm-border);
+  flex-shrink: 0;
+}
+.chevron {
+  border: none;
+  background: none;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--rdm-text-2);
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--rdm-radius-pill);
+}
+.chevron:hover {
+  background: var(--rdm-surface-subtle);
+}
+.display-id {
+  color: var(--rdm-accent-strong);
+  font: var(--rdm-type-body);
+}
+.panel-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+.content-col {
+  flex: 1;
+  min-width: 0;
+  padding: var(--rdm-space-5);
+  overflow-y: auto;
+}
+.fields-col {
+  width: var(--rdm-fields-w);
+  flex-shrink: 0;
+  border-left: 1px solid var(--rdm-border);
+  padding: var(--rdm-space-5);
+  overflow-y: auto;
+}
+.title {
+  margin: 0 0 var(--rdm-space-4);
+  font: var(--rdm-type-drawer-title);
+  color: var(--rdm-text-1);
+}
+.section-label {
+  font: var(--rdm-type-section);
+  color: var(--rdm-text-label);
+  margin: var(--rdm-space-4) 0 var(--rdm-space-2);
+}
+.desc {
+  border: 1px dashed var(--rdm-border-strong);
+  border-radius: var(--rdm-radius-2);
+  min-height: 138px;
+  padding: var(--rdm-space-4);
+  font: var(--rdm-type-body);
+  color: var(--rdm-text-2);
+}
+.desc-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rdm-text-3);
+}
+.fields {
+  font: var(--rdm-type-meta);
+  color: var(--rdm-text-2);
+  white-space: pre-wrap;
+}
+.child-row {
+  display: flex;
+  align-items: center;
+  gap: var(--rdm-space-2);
+  height: var(--rdm-row-h);
+  padding: 0 var(--rdm-space-2);
+  border-radius: var(--rdm-radius-2);
+  cursor: pointer;
+  font: var(--rdm-type-cell);
+}
+.child-row:hover {
+  background: var(--rdm-surface-subtle);
+}
+.child-id {
+  color: var(--rdm-accent-strong);
+}
+.child-title {
+  flex: 1;
+  color: var(--rdm-text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.field {
+  margin-bottom: var(--rdm-space-5);
+}
+.field-label {
+  font: var(--rdm-type-meta);
+  color: var(--rdm-text-label);
+  margin-bottom: var(--rdm-space-2);
+}
+.meta {
+  font: var(--rdm-type-meta);
+  color: var(--rdm-text-3);
+}
+.att-row {
+  display: flex;
+  align-items: center;
+  gap: var(--rdm-space-2);
+  padding: var(--rdm-space-1) 0;
+}
+.att-row .el-link {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comment-bar {
+  border-top: 1px solid var(--rdm-border);
+  box-shadow: var(--rdm-shadow-up);
+  padding: var(--rdm-space-4);
+  flex-shrink: 0;
+}
+.comment-bar-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--rdm-space-2);
+  margin-top: var(--rdm-space-2);
+}
 .comment {
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  padding: 8px 0;
+  padding: var(--rdm-space-3) 0;
+  border-bottom: 1px solid var(--rdm-border);
 }
 .comment-head {
   display: flex;
-  gap: 10px;
-  align-items: baseline;
-}
-.muted {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
+  align-items: center;
+  gap: var(--rdm-space-3);
+  margin-bottom: var(--rdm-space-1);
 }
 .comment-body {
-  margin-top: 4px;
+  color: var(--rdm-text-2);
+  font: var(--rdm-type-body);
 }
 .comment-att {
-  font-size: 12px;
-  margin: 2px 0;
-}
-.comment-actions {
-  margin-top: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.fields {
-  margin: 0;
-  font-size: 12px;
+  margin-top: var(--rdm-space-1);
 }
 </style>
