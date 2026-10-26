@@ -11,6 +11,7 @@ import ItemView from "./views/ItemView.vue";
 import LoginView from "./views/LoginView.vue";
 import ConsentView from "./views/ConsentView.vue";
 import OverviewView from "./views/OverviewView.vue";
+import NotFoundView from "./views/NotFoundView.vue";
 import { ensureSession } from "./auth";
 
 export const router = createRouter({
@@ -33,6 +34,7 @@ export const router = createRouter({
       component: ItemView,
       props: true,
     },
+    { path: "/:pathMatch(.*)*", component: NotFoundView },
   ],
 });
 

@@ -123,6 +123,9 @@
             <div v-for="art in artifacts" :key="art.id" class="att-row">
               <el-link :href="art.url" target="_blank" :underline="false">{{ art.label }}</el-link>
               <span class="meta">{{ art.kind }}</span>
+              <el-button link type="danger" size="small" @click="removeArtifact(art.id)">
+                删除
+              </el-button>
             </div>
             <el-button size="small" @click="artifactDialog = true">挂产出物</el-button>
           </div>
@@ -353,6 +356,15 @@ async function removeAttachment(id: string) {
   try {
     await api.del(`/attachments/${id}`);
     attachments.value = attachments.value.filter((a) => a.id !== id);
+  } catch (e) {
+    ElMessage.error((e as Error).message);
+  }
+}
+
+async function removeArtifact(id: string) {
+  try {
+    await api.post(`/artifacts/${id}/delete`, {});
+    artifacts.value = artifacts.value.filter((a) => a.id !== id);
   } catch (e) {
     ElMessage.error((e as Error).message);
   }
