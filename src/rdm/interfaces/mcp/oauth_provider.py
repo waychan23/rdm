@@ -45,6 +45,13 @@ logger = logging.getLogger("rdm.oauth")
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
+def _epoch(value: dt.datetime) -> float:
+    """Epoch seconds, treating naive values as UTC (sqlite drops tzinfo)."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=dt.UTC)
+    return value.timestamp()
+
+
 def _loopback_redirect_only(info: OAuthClientInformationFull) -> None:
     """DCR accepts http(s) loopback redirect URIs only (architecture §16.54)."""
     for raw in info.redirect_uris or []:
@@ -153,7 +160,7 @@ class RdmOAuthProvider(OAuthProvider):
         return AuthorizationCode(
             code=authorization_code,
             scopes=list(code.scopes),
-            expires_at=expires.timestamp(),
+            expires_at=_epoch(expires),
             client_id=code.client_id,
             code_challenge=code.code_challenge,
             redirect_uri=code.redirect_uri,
@@ -204,7 +211,7 @@ class RdmOAuthProvider(OAuthProvider):
             token=refresh_token,
             client_id=client.client_id,
             scopes=scopes,
-            expires_at=int(expires.timestamp()) if expires else None,
+            expires_at=int(_epoch(expires)) if expires else None,
             subject=member_id,
         )
 
@@ -241,7 +248,7 @@ class RdmOAuthProvider(OAuthProvider):
             token=token,
             client_id=row.client_id or "unknown",
             scopes=list(row.scopes),
-            expires_at=int(row.expires_at.timestamp()) if row.expires_at else None,
+            expires_at=int(_epoch(row.expires_at)) if row.expires_at else None,
             subject=row.member_id,
         )
 
@@ -257,7 +264,7 @@ class RdmOAuthProvider(OAuthProvider):
             token=token,
             client_id=row.client_id or "pat",
             scopes=list(row.scopes),
-            expires_at=int(row.expires_at.timestamp()) if row.expires_at else None,
+            expires_at=int(_epoch(row.expires_at)) if row.expires_at else None,
             subject=member.id,
             claims={"member": member, "token_id": row.id, "family_id": row.family_id},
         )
