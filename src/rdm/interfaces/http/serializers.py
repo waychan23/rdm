@@ -129,8 +129,13 @@ def work_item_summary_out(
         "title": full["title"],
         "status": full["status"],
         "priority": full["priority"],
+        "rank": full["rank"],
+        "parent_id": full["parent_id"],
         "assignee": full["assignee"],
+        "accountable_human_member_id": full["accountable_human_member_id"],
         "row_version": full["row_version"],
+        "created_at": full["created_at"],
+        "updated_at": full["updated_at"],
     }
 
 

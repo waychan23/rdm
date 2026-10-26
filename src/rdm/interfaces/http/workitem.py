@@ -41,7 +41,7 @@ async def list_work_items(
     actor: Member = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
-        project, items = await WorkItemService(uow).list_items(
+        project, items, total = await WorkItemService(uow).list_items_paginated(
             actor,
             project_key=key,
             kind=kind,
@@ -55,7 +55,10 @@ async def list_work_items(
             offset=offset,
         )
         members = await _members_map(uow, project.id)
-    return {"data": [work_item_summary_out(i, project, members) for i in items]}
+    return {
+        "data": [work_item_summary_out(i, project, members) for i in items],
+        "meta": {"total": total, "limit": min(limit, 100), "offset": offset},
+    }
 
 
 @router.post("/projects/{key}/work-items", status_code=201)

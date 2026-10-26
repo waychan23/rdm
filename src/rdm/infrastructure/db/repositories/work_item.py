@@ -104,6 +104,36 @@ class WorkItemRepository:
         fields_map = await self._assemble_fields(rows) if expand and rows else {}
         return [work_item_to_domain(r, fields_map.get(r.id)) for r in rows]
 
+    async def count(
+        self,
+        project_id: str,
+        *,
+        kind: str | None = None,
+        status: str | None = None,
+        assignee_member_id: str | None = None,
+        parent_id: str | None = None,
+        q: str | None = None,
+        include_deleted: bool = False,
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(WorkItemModel)
+            .where(WorkItemModel.project_id == project_id)
+        )
+        if not include_deleted:
+            stmt = stmt.where(WorkItemModel.deleted_at.is_(None))
+        if kind is not None:
+            stmt = stmt.where(WorkItemModel.kind == kind)
+        if status is not None:
+            stmt = stmt.where(WorkItemModel.status == status)
+        if assignee_member_id is not None:
+            stmt = stmt.where(WorkItemModel.assignee_member_id == assignee_member_id)
+        if parent_id is not None:
+            stmt = stmt.where(WorkItemModel.parent_id == parent_id)
+        if q:
+            stmt = stmt.where(WorkItemModel.title.ilike(f"%{q}%"))
+        return int((await self._s.execute(stmt)).scalar_one())
+
     async def count_by_status(self, project_id: str) -> dict[str, int]:
         stmt = (
             select(WorkItemModel.status, func.count())

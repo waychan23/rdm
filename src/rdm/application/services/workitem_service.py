@@ -135,7 +135,7 @@ class WorkItemService:
 
     # --- queries ----------------------------------------------------------
 
-    async def list_items(
+    async def list_items_paginated(
         self,
         actor: Member,
         *,
@@ -149,14 +149,19 @@ class WorkItemService:
         include_deleted: bool = False,
         limit: int = 20,
         offset: int = 0,
-    ) -> tuple[Project, list[WorkItem]]:
+    ) -> tuple[Project, list[WorkItem], int]:
+        """Like list_items but also returns the unpaginated match count."""
         project = await self.resolve_project(actor, project_key)
         assert self.uow.work_items is not None
         if kind is not None and kind not in VALID_KINDS:
             raise ValidationError(f"未知 kind {kind!r}", details={"field": "kind"})
         assignee_id = None
         if assignee_ref is not None:
-            assignee_id = (await self.resolve_member(project.id, assignee_ref)).id
+            assignee_id = (
+                actor.id
+                if assignee_ref == "me"
+                else (await self.resolve_member(project.id, assignee_ref)).id
+            )
         parent_id = None
         if parent_ref is not None:
             parent_id = (
@@ -166,7 +171,7 @@ class WorkItemService:
             include_deleted = False
 
         if sprint_ref is not None:
-            project, items = await self._list_in_sprint(
+            project, all_items = await self._list_in_sprint(
                 actor,
                 project,
                 sprint_ref,
@@ -175,11 +180,21 @@ class WorkItemService:
                 assignee_id=assignee_id,
                 parent_id=parent_id,
                 q=q,
-                limit=limit,
-                offset=offset,
+                limit=100_000,
+                offset=0,
             )
-            return project, items
+            total = len(all_items)
+            return project, all_items[offset : offset + min(limit, 100)], total
 
+        total = await self.uow.work_items.count(
+            project.id,
+            kind=kind,
+            status=status,
+            assignee_member_id=assignee_id,
+            parent_id=parent_id,
+            q=q,
+            include_deleted=include_deleted,
+        )
         items = await self.uow.work_items.list(
             project.id,
             kind=kind,
@@ -191,6 +206,14 @@ class WorkItemService:
             limit=min(limit, 100),
             offset=offset,
         )
+        return project, items, total
+
+    async def list_items(
+        self,
+        actor: Member,
+        **kwargs: object,
+    ) -> tuple[Project, list[WorkItem]]:
+        project, items, _total = await self.list_items_paginated(actor, **kwargs)  # type: ignore[arg-type]
         return project, items
 
     async def _list_in_sprint(
@@ -411,7 +434,10 @@ class WorkItemService:
         self, actor: Member, ref: str, member_ref: str
     ) -> tuple[Project, WorkItem]:
         project, item = await self.get_item(actor, ref)
-        target = await self.resolve_member(project.id, member_ref)
+        if member_ref == "me":
+            target = actor
+        else:
+            target = await self.resolve_member(project.id, member_ref)
         assert self.uow.work_items is not None
 
         if item.assignee_member_id is None and target.id == actor.id:

@@ -91,6 +91,41 @@ async def get_project(
     return {"data": project_out(project)}
 
 
+class ProjectUpdateIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description_md: str | None = None
+
+
+@projects_router.patch("/projects/{key}")
+async def update_project(
+    key: str,
+    body: ProjectUpdateIn,
+    container: Container = Depends(get_container),
+    actor: Member = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project = await ProjectService(uow).update_project(
+            key,
+            actor=actor,
+            name=body.name,
+            description_md=body.description_md,
+        )
+    return {"data": project_out(project)}
+
+
+@projects_router.post("/projects/{key}/archive")
+async def archive_project(
+    key: str,
+    container: Container = Depends(get_container),
+    actor: Member = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project = await ProjectService(uow).archive_project(key, actor=actor)
+    return {"data": project_out(project)}
+
+
 class MemberCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     type: str = "human"

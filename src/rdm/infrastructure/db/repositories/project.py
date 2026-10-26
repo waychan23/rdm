@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import func, select
+import datetime as dt
+
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rdm.domain.entities import Project
@@ -39,6 +41,19 @@ class ProjectRepository:
                 created_at=project.created_at,
                 created_by=project.created_by,
                 updated_at=project.updated_at,
+            )
+        )
+
+    async def update(self, project: Project) -> None:
+        await self._s.execute(
+            update(ProjectModel)
+            .where(ProjectModel.id == project.id)
+            .values(
+                name=project.name,
+                description_md=project.description_md,
+                status=str(project.status),
+                owner_member_id=project.owner_member_id,
+                updated_at=dt.datetime.now(dt.UTC),
             )
         )
 

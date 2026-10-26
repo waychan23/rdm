@@ -88,6 +88,8 @@ class ProjectRepository(Protocol):
 
     async def add(self, project: Project) -> None: ...
 
+    async def update(self, project: Project) -> None: ...
+
     async def list_all(self, *, include_deleted: bool = False) -> ProjectList: ...
 
 
@@ -164,6 +166,18 @@ class WorkItemRepository(Protocol):
         limit: int = 50,
         offset: int = 0,
     ) -> WorkItemList: ...
+
+    async def count(
+        self,
+        project_id: str,
+        *,
+        kind: str | None = None,
+        status: str | None = None,
+        assignee_member_id: str | None = None,
+        parent_id: str | None = None,
+        q: str | None = None,
+        include_deleted: bool = False,
+    ) -> int: ...
 
     async def get_by_display_no(
         self, project_id: str, display_no: int, *, include_deleted: bool = False
