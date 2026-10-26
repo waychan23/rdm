@@ -4,8 +4,11 @@
       <template #content>
         <router-link :to="`/projects/${key}/backlog`">← {{ item.display_id }}</router-link>
         <span style="margin-left: 12px">{{ item.title }}</span>
+        <el-button size="small" style="margin-left: 12px" @click="showEdit = true">编辑</el-button>
       </template>
     </el-page-header>
+
+    <WorkItemEditDialog v-model="showEdit" :item="item" @saved="onSaved" />
 
     <el-descriptions :column="2" border>
       <el-descriptions-item label="类型">{{ item.kind }}</el-descriptions-item>
@@ -152,12 +155,18 @@ import type {
   WorkItem,
 } from "../types";
 import { renderMarkdown } from "../util/markdown";
+import WorkItemEditDialog from "../components/WorkItemEditDialog.vue";
 
 const route = useRoute();
 const key = String(route.params.key);
 const refId = String(route.params.id);
 
 const item = ref<WorkItem | null>(null);
+const showEdit = ref(false);
+function onSaved(updated: WorkItem) {
+  item.value = updated;
+  load();
+}
 const children = ref<WorkItem[]>([]);
 const allowed = ref<string[]>([]);
 const comments = ref<Comment[]>([]);
