@@ -27,11 +27,23 @@ def run(h: Harness) -> None:
     story = h.item("S6", {"kind": "story", "title": "S6 故事"})
     t1 = h.item(
         "S6",
-        {"kind": "task", "title": "S6 前端", "task_type": "frontend", "assignee": "frontend-dev"},
+        {
+            "kind": "task",
+            "title": "S6 前端",
+            "task_type": "frontend",
+            "parent": story["display_id"],
+            "assignee": "frontend-dev",
+        },
     )
     t2 = h.item(
         "S6",
-        {"kind": "task", "title": "S6 测试", "task_type": "qa", "assignee": "qa"},
+        {
+            "kind": "task",
+            "title": "S6 测试",
+            "task_type": "qa",
+            "parent": story["display_id"],
+            "assignee": "qa",
+        },
     )
 
     # Move story to TO_TEST with open children; DONE must be rejected (gate).

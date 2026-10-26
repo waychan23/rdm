@@ -14,7 +14,13 @@ def run(h: Harness) -> None:
     story = h.item("S4", {"kind": "story", "title": "S4 故事"})
     task = h.item(
         "S4",
-        {"kind": "task", "title": "S4 前端", "task_type": "frontend", "assignee": "frontend-dev"},
+        {
+            "kind": "task",
+            "title": "S4 前端",
+            "task_type": "frontend",
+            "parent": story["display_id"],
+            "assignee": "frontend-dev",
+        },
     )
 
     # Worker tries to close the story while the child task is open: must fail.
@@ -22,8 +28,8 @@ def run(h: Harness) -> None:
         "frontend-dev",
         "尝试把 "
         + story["display_id"]
-        + " 用 work_item_transition 一路转到 DONE（先 IN_PROGRESS 再 TO_TEST 再 DONE）。"
-        "如实报告是否成功以及错误码。",
+        + " 用 work_item_transition 转到 DONE（如需可先转 IN_PROGRESS、TO_TEST；"
+        "也可以先 work_item_assign 自领）。如实报告每一步是否成功以及错误码。",
         timeout=180,
     )
     story_status = h.db.item(story["display_id"])
@@ -40,7 +46,8 @@ def run(h: Harness) -> None:
     agent_expect(
         h,
         "tl",
-        f"把 {story['display_id']} 依次转到 IN_PROGRESS、TO_TEST、DONE。",
+        f"先 work_item_get 查看 {story['display_id']} 的当前状态与 allowed_transitions，"
+        "然后用允许的转换把它转到 DONE（它可能已在 TO_TEST）。",
         lambda out: "DONE" in out,
     )
     assert h.db.item(story["display_id"])["status"] == "DONE"
