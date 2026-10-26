@@ -31,3 +31,4 @@ src/rdm/resources/web-dist/
 .idea/
 .vscode/
 e2e/out/
+.opencode/opencode.json

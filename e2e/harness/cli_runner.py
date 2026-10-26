@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -43,6 +44,29 @@ def detect() -> dict[str, Cli]:
     return out
 
 
+def _claude_settings_env() -> dict[str, str]:
+    """env block from ~/.claude/settings.json (model/base-url overrides).
+
+    Interactive sessions apply these; headless SDK runs need them passed
+    explicitly so custom model aliases resolve the same way.
+    """
+    path = Path.home() / ".claude" / "settings.json"
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    raw = data.get("env") or {}
+    out: dict[str, str] = {}
+    for key, value in raw.items():
+        if isinstance(value, bool):
+            out[key] = "true" if value else "false"
+        elif value is not None:
+            out[key] = str(value)
+    return out
+
+
 def run(
     cli: str,
     cwd: Path,
@@ -64,7 +88,11 @@ def run(
     else:
         raise ValueError(f"unknown cli {cli}")
 
+    # Precedence: inherited shell env < claude settings env (mirrors an
+    # interactive session) < harness bindings that must always win.
     env = dict(os.environ)
+    if cli == "claude":
+        env.update(_claude_settings_env())
     env["RDM_TOKEN"] = token
     env["NO_PROXY"] = "127.0.0.1,localhost"
     env["no_proxy"] = "127.0.0.1,localhost"
