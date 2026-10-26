@@ -58,7 +58,13 @@ class RunReport:
     results: list[ScenarioResult] = field(default_factory=list)
 
 
-def run_one_cli(cli: str, scenarios: list[str], out_root: Path, keep: bool) -> RunReport:
+def run_one_cli(
+    cli: str,
+    scenarios: list[str],
+    out_root: Path,
+    keep: bool,
+    model: str | None = None,
+) -> RunReport:
     root = out_root / cli
     root.mkdir(parents=True, exist_ok=True)
     report = RunReport(cli=cli)
@@ -75,6 +81,7 @@ def run_one_cli(cli: str, scenarios: list[str], out_root: Path, keep: bool) -> R
             cli=cli,
             output_dir=root,
             keep=keep,
+            model=model,
         )
         for key, module_name in SCENARIOS:
             if scenarios and key not in scenarios:
@@ -116,6 +123,11 @@ def main() -> int:
         action="store_true",
         help="Reserved for CI: treat SKIPPED runs as failures",
     )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Explicit --model for the agent CLI (custom gateway alias)",
+    )
     args = parser.parse_args()
 
     wanted = [c.strip() for c in args.cli.split(",") if c.strip()]
@@ -133,7 +145,10 @@ def main() -> int:
     out_root = (Path.cwd() / "e2e" / "out" / time.strftime("%Y%m%d-%H%M%S")).resolve()
     out_root.mkdir(parents=True, exist_ok=True)
 
-    reports = [run_one_cli(cli, sorted(scenarios), out_root, args.no_cleanup) for cli in selected]
+    reports = [
+        run_one_cli(cli, sorted(scenarios), out_root, args.no_cleanup, args.model)
+        for cli in selected
+    ]
     print("\n=== e2e summary ===")
     failed = 0
     for report in reports:

@@ -31,6 +31,7 @@ class Harness:
     cli: str
     output_dir: Path
     keep: bool = False
+    model: str | None = None
     tokens: dict[str, str] = field(default_factory=dict)
     member_ids: dict[str, str] = field(default_factory=dict)
     workdirs: dict[str, Path] = field(default_factory=dict)
@@ -86,7 +87,14 @@ class Harness:
     ) -> cli_runner.CliResult:
         """Drive one headless prompt as the bound member; archives output."""
         cwd = self.workdirs[member]
-        result = cli_runner.run(self.cli, cwd, self.tokens[member], prompt, timeout=timeout)
+        result = cli_runner.run(
+            self.cli,
+            cwd,
+            self.tokens[member],
+            prompt,
+            timeout=timeout,
+            model=self.model,
+        )
         call = AgentCall(member=member, prompt=prompt, outputs={self.cli: result})
         self.transcript.append(call)
         log_dir = self.output_dir / "prompts"

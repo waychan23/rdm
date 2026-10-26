@@ -74,6 +74,7 @@ def run(
     prompt: str,
     *,
     timeout: int = 180,
+    model: str | None = None,
 ) -> CliResult:
     """Run one headless prompt. The directory is pre-bound to an rdm member."""
     if cli == "claude":
@@ -83,8 +84,14 @@ def run(
             prompt,
             "--dangerously-skip-permissions",
         ]
+        # Explicit --model marks the alias as user-selected; print/SDK mode
+        # otherwise rejects custom gateway aliases (unrecognized_model).
+        if model:
+            argv += ["--model", model]
     elif cli == "opencode":
         argv = ["opencode", "run", prompt]
+        if model:
+            argv += ["--model", model]
     else:
         raise ValueError(f"unknown cli {cli}")
 
