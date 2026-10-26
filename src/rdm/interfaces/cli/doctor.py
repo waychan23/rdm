@@ -176,6 +176,17 @@ def check_endpoint(settings: Settings) -> CheckResult:
         return CheckResult("endpoint", WARN, f"{url} 不可达：{str(exc)[:160]}")
 
 
+def check_oauth_metadata(settings: Settings) -> CheckResult:
+    url = f"http://{settings.host}:{settings.port}/.well-known/oauth-protected-resource/mcp"
+    try:
+        response = httpx.get(url, trust_env=False, timeout=3)
+        if response.status_code == 200:
+            return CheckResult("oauth", OK, url)
+        return CheckResult("oauth", WARN, f"{url} 返回 {response.status_code}")
+    except httpx.HTTPError as exc:
+        return CheckResult("oauth", WARN, f"{url} 不可达：{str(exc)[:120]}")
+
+
 def check_outbox(settings: Settings) -> CheckResult:
     if not settings.db_path.exists():
         return CheckResult("outbox", WARN, "数据库不存在，跳过")
@@ -258,6 +269,7 @@ def run_checks(settings: Settings, *, include_endpoint: bool = True) -> list[Che
     ]
     if include_endpoint:
         checks.insert(3, check_endpoint(settings))
+        checks.insert(4, check_oauth_metadata(settings))
     return checks
 
 

@@ -1,7 +1,7 @@
-"""Root ASGI dispatcher: /api routes win first, then /mcp, then the SPA.
+"""Root ASGI dispatcher: /api routes win first, then MCP/OAuth, then the SPA.
 
-Replaces the M0 direct root mount of McpBearerGuard (architecture §16.34):
-- /mcp* goes to the MCP guard/sub-app (M0 behavior unchanged)
+- /mcp* and the OAuth 2.1 endpoints (/authorize, /token, /register, /revoke,
+  /.well-known/*) go to the FastMCP sub-app (architecture §16.34/54)
 - everything else is served by StaticFiles when web-dist exists, with
   history-route fallback to index.html for navigations (but not /assets)
 - without a built web-dist, unknown paths get a JSON 404 so API tests and
@@ -101,6 +101,20 @@ async def _json_404(scope: Scope, receive: Receive, send: Send) -> None:
     await send({"type": "http.response.body", "body": _JSON_404})
 
 
+# OAuth 2.1 authorization-server routes are mounted at the FastMCP sub-app
+# root (architecture §16.54), alongside /mcp. well-known metadata must be
+# reachable at the origin root per RFC 8414/9728.
+_OAUTH_EXACT = {
+    "/authorize",
+    "/token",
+    "/register",
+    "/revoke",
+    "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-protected-resource/mcp",
+    "/.well-known/openid-configuration",
+}
+
+
 class RootDispatch:
     def __init__(self, mcp_app: Any, web_dist: Path | None) -> None:
         self._mcp = mcp_app
@@ -111,7 +125,12 @@ class RootDispatch:
         if scope["type"] != "http":
             return
         path = scope.get("path", "/")
-        if path == "/mcp" or path.startswith("/mcp/"):
+        if (
+            path == "/mcp"
+            or path.startswith("/mcp/")
+            or path in _OAUTH_EXACT
+            or path.startswith("/.well-known/")
+        ):
             await self._mcp(scope, receive, send)
             return
         if self._static is not None:

@@ -12,6 +12,11 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": "http://127.0.0.1:8765",
+      "/authorize": "http://127.0.0.1:8765",
+      "/token": "http://127.0.0.1:8765",
+      "/register": "http://127.0.0.1:8765",
+      "/revoke": "http://127.0.0.1:8765",
+      "/.well-known": "http://127.0.0.1:8765",
       "/mcp": {
         target: "http://127.0.0.1:8765",
         ws: true,

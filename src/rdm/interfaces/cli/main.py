@@ -354,6 +354,13 @@ def integrate_mcp(
             help="Project scope: bind this member token directly instead of issuing one.",
         ),
     ] = None,
+    method: Annotated[
+        str,
+        typer.Option(
+            "--method",
+            help="oauth (native browser authorization, default) or token (static PAT).",
+        ),
+    ] = "oauth",
     owner_token: TokenOpt = None,
     cwd: Annotated[
         Path | None, typer.Option("--cwd", help="Project scope: directory to bind.")
@@ -366,6 +373,9 @@ def integrate_mcp(
     if scope not in {"user", "project"}:
         typer.secho(f"unknown --scope {scope!r} (want user|project)", fg=typer.colors.RED)
         raise typer.Exit(2)
+    if method not in {"oauth", "token"}:
+        typer.secho(f"unknown --method {method!r} (want oauth|token)", fg=typer.colors.RED)
+        raise typer.Exit(2)
 
     if scope == "project":
         _integrate_project_scope(
@@ -376,6 +386,7 @@ def integrate_mcp(
             member_ref=member,
             project_key=project,
             member_token=member_token,
+            method=method,
             owner_token=owner_token,
             data_dir=data_dir,
         )
@@ -392,14 +403,15 @@ def integrate_mcp(
     for name in names:
         merger = integrate_commands.MERGERS[integrate_commands.IntegrateTarget(name)]
         try:
-            result = merger(Path.home(), url, force=force)
+            result = merger(Path.home(), url, force=force, method=method)
         except ValueError as exc:
             typer.secho(f"{name}: {exc}", fg=typer.colors.RED)
             raise typer.Exit(1) from None
         if name == "codex":
-            typer.secho(
-                "note: codex config path is inferred and unverified", fg=typer.colors.YELLOW
-            )
+            note = "codex config path is inferred"
+            if method == "oauth":
+                note += " and OAuth support is unverified"
+            typer.secho(f"note: {note}", fg=typer.colors.YELLOW)
         if result.status == "conflict":
             had_conflict = True
             typer.secho(
@@ -412,7 +424,7 @@ def integrate_mcp(
             )
 
     typer.echo("")
-    for note in integrate_commands.post_install_notes(data_dir):
+    for note in integrate_commands.post_install_notes(data_dir, method=method):
         typer.echo(f"  {note}")
     if had_conflict:
         raise typer.Exit(2)
@@ -427,6 +439,7 @@ def _integrate_project_scope(
     member_ref: str | None,
     project_key: str | None,
     member_token: str | None,
+    method: str,
     owner_token: str | None,
     data_dir: Path,
 ) -> None:
@@ -441,13 +454,14 @@ def _integrate_project_scope(
         )
         raise typer.Exit(2)
 
-    # Resolve the member token to bind: explicit --member-token, or issue
-    # one with the owner credential (RDM_TOKEN / --data-dir bootstrap-token).
-    raw_token = member_token
-    if raw_token is None:
+    # Resolve the member token to bind for the static-token method: explicit
+    # --member-token, or issue one with the owner credential. The oauth method
+    # writes no secret; identity is chosen in the browser consent page.
+    raw_token = member_token or ""
+    if method == "token" and not raw_token:
         if not member_ref:
             typer.secho(
-                "project scope needs --member <name|id> (or --member-token)",
+                "project scope --method token needs --member <name|id> (or --member-token)",
                 fg=typer.colors.RED,
             )
             raise typer.Exit(2)
@@ -468,12 +482,12 @@ def _integrate_project_scope(
         try:
             if name == "claude":
                 result = integrate_commands.merge_claude_project(
-                    Path.home(), cwd, url, raw_token, force=force
+                    Path.home(), cwd, url, raw_token, force=force, method=method
                 )
                 gitignore = False
             else:
                 result, gitignore = integrate_commands.merge_opencode_project(
-                    cwd, url, raw_token, force=force
+                    cwd, url, raw_token, force=force, method=method
                 )
         except ValueError as exc:
             typer.secho(f"{name}: {exc}", fg=typer.colors.RED)
@@ -493,8 +507,12 @@ def _integrate_project_scope(
             )
 
     typer.echo("")
-    typer.echo(f"  directory {cwd} now acts as the bound member in this rdm project.")
-    typer.echo("  restart the agent CLI there; whoami confirms member and project.")
+    if method == "oauth":
+        typer.echo("  restart the agent CLI there; a browser will prompt for login")
+        typer.echo("  and member choice on first use (whoami confirms the identity).")
+    else:
+        typer.echo(f"  directory {cwd} now acts as the bound member in this rdm project.")
+        typer.echo("  restart the agent CLI there; whoami confirms member and project.")
     if had_conflict:
         raise typer.Exit(2)
 

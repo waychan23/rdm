@@ -41,6 +41,13 @@ class MemberRepository:
         rows = (await self._s.execute(stmt.order_by(ProjectMemberModel.created_at))).scalars().all()
         return [member_to_domain(r) for r in rows]
 
+    async def list_all(self, *, include_deleted: bool = False) -> list[Member]:
+        stmt = select(ProjectMemberModel)
+        if not include_deleted:
+            stmt = stmt.where(ProjectMemberModel.deleted_at.is_(None))
+        rows = (await self._s.execute(stmt)).scalars().all()
+        return [member_to_domain(r) for r in rows]
+
     async def add(self, member: Member) -> None:
         self._s.add(
             ProjectMemberModel(
@@ -142,6 +149,28 @@ class TokenRepository:
                 MemberTokenModel.revoked_at.is_(None),
             )
             .values(revoked_at=dt.datetime.now(dt.UTC))
+        )
+        result = await self._s.execute(stmt)
+        return int(result.rowcount or 0)
+
+    async def consume(self, token_id: str, when: dt.datetime) -> None:
+        """Mark a one-shot credential (refresh token) consumed and revoked."""
+        await self._s.execute(
+            update(MemberTokenModel)
+            .where(MemberTokenModel.id == token_id)
+            .values(consumed_at=when, revoked_at=when)
+        )
+
+    async def revoke_access_of_family(self, family_id: str, when: dt.datetime) -> int:
+        """Revoke still-valid access tokens of a family (keeps refresh rows)."""
+        stmt = (
+            update(MemberTokenModel)
+            .where(
+                MemberTokenModel.family_id == family_id,
+                MemberTokenModel.kind == "oauth_access",
+                MemberTokenModel.revoked_at.is_(None),
+            )
+            .values(revoked_at=when)
         )
         result = await self._s.execute(stmt)
         return int(result.rowcount or 0)

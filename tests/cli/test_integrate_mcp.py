@@ -140,7 +140,9 @@ def test_cli_all_targets_and_notes(tmp_path: Path) -> None:
     runner = CliRunner()
     env = {"HOME": str(tmp_path)}
     result = runner.invoke(
-        app, ["integrate", "mcp", "--data-dir", str(tmp_path / "rdm-data")], env=env
+        app,
+        ["integrate", "mcp", "--method", "token", "--data-dir", str(tmp_path / "rdm-data")],
+        env=env,
     )
     assert result.exit_code == 0, result.output
     assert "WRITTEN" in result.output
@@ -151,9 +153,55 @@ def test_cli_all_targets_and_notes(tmp_path: Path) -> None:
     assert (tmp_path / ".codex/config.toml").exists()
 
     # second run: all skipped, still exit 0
-    result = runner.invoke(app, ["integrate", "mcp"], env=env)
+    result = runner.invoke(app, ["integrate", "mcp", "--method", "token"], env=env)
     assert result.exit_code == 0
     assert "SKIPPED" in result.output
+
+
+def test_cli_oauth_method_writes_no_static_credentials(tmp_path: Path) -> None:
+    runner = CliRunner()
+    env = {"HOME": str(tmp_path)}
+    result = runner.invoke(app, ["integrate", "mcp", "--method", "oauth"], env=env)
+    assert result.exit_code == 0, result.output
+    assert "WRITTEN" in result.output
+    assert "RDM_TOKEN" not in result.output  # no static-token export hint
+
+    claude = json.loads((tmp_path / ".claude.json").read_text())
+    assert claude["mcpServers"]["rdm"] == {"type": "http", "url": URL}
+    opencode = json.loads((tmp_path / ".config/opencode/opencode.json").read_text())
+    assert opencode["mcp"]["rdm"] == {"type": "remote", "url": URL}
+    codex = (tmp_path / ".codex/config.toml").read_text()
+    assert "url = " in codex and "bearer_token_env_var" not in codex
+
+    # Idempotent.
+    assert runner.invoke(app, ["integrate", "mcp", "--method", "oauth"], env=env).exit_code == 0
+
+
+def test_cli_project_oauth_writes_no_token(tmp_path: Path) -> None:
+    home, cwd = tmp_path / "home", tmp_path / "repo"
+    cwd.mkdir(parents=True)
+    result = CliRunner().invoke(
+        app,
+        [
+            "integrate",
+            "mcp",
+            "--scope",
+            "project",
+            "--method",
+            "oauth",
+            "--target",
+            "claude",
+            "--url",
+            URL,
+            "--cwd",
+            str(cwd),
+        ],
+        env={"HOME": str(home)},
+    )
+    assert result.exit_code == 0, result.output
+    data = json.loads((home / ".claude.json").read_text())
+    entry = data["projects"][str(cwd.resolve())]["mcpServers"]["rdm"]
+    assert entry == {"type": "http", "url": URL}
 
 
 def test_cli_bad_target(tmp_path: Path) -> None:

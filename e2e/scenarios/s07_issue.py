@@ -69,9 +69,9 @@ def run(h: Harness) -> None:
 
 
 def _version(h: Harness, display_id: str) -> int:
-    return h.rest.get(
-        f"/work-items/{display_id}", token=h.tokens["qa"]
-    ).json()["data"]["row_version"]
+    return h.rest.get(f"/work-items/{display_id}", token=h.tokens["qa"]).json()["data"][
+        "row_version"
+    ]
 
 
 def _owner_version(h: Harness, display_id: str) -> int:

@@ -34,10 +34,14 @@ def _client_factory(app) -> Callable[..., httpx.AsyncClient]:
 
 
 async def test_unauthenticated_mcp_request_rejected(server) -> None:
+    # OAuth 2.1 resource-server 401: RFC 6750 WWW-Authenticate challenge with
+    # resource metadata, which is what lets an MCP client discover the flow.
     client, _settings, _app = server
     r = await client.post("/mcp", headers={"Accept": "application/json, text/event-stream"})
     assert r.status_code == 401
-    assert r.json()["error"]["code"] == "AUTH_INVALID_TOKEN"
+    challenge = r.headers.get("www-authenticate", "")
+    assert challenge.lower().startswith("bearer")
+    assert "oauth-protected-resource/mcp" in challenge
 
 
 async def test_whoami_tool_over_streamable_http(server, owner_token) -> None:

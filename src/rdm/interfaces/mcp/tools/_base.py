@@ -1,6 +1,7 @@
 """Shared scaffolding for MCP tools (architecture §16.23).
 
-- actor_from_request: member placed in scope by McpBearerGuard
+- actor_from_request: member carried in the access token claims by
+  RdmOAuthProvider (FastMCP bearer middleware puts it in scope["user"])
 - ok(): success envelope {"data", "meta": {"server_time", ...}}
 - run_tool(): opens a UoW and maps failures to ToolResult(is_error=True)
   carrying the same structured error envelope as REST. FastMCP 4.1.3 has no
@@ -27,8 +28,11 @@ logger = logging.getLogger("rdm.mcp.tools")
 
 
 def actor_from_request() -> Member:
+    # FastMCP's BearerAuthBackend sets scope["user"] = AuthenticatedUser; the
+    # rdm member snapshot is attached to the access token claims in
+    # RdmOAuthProvider.verify_token (works for both PAT and OAuth tokens).
     request = get_http_request()
-    return request.scope["state"]["member"]
+    return request.scope["user"].access_token.claims["member"]
 
 
 def ok(data: Any, **meta: Any) -> dict[str, Any]:

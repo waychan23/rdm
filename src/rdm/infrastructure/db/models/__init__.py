@@ -16,6 +16,11 @@ from rdm.infrastructure.db.models.mailbox import (
     MessageRefModel,
 )
 from rdm.infrastructure.db.models.member import MemberTokenModel, ProjectMemberModel
+from rdm.infrastructure.db.models.oauth import (
+    OAuthAuthorizationCodeModel,
+    OAuthClientModel,
+    OAuthConsentModel,
+)
 from rdm.infrastructure.db.models.project import ProjectModel
 from rdm.infrastructure.db.models.sprint import SprintItemModel, SprintModel
 from rdm.infrastructure.db.models.workitem import (
@@ -47,4 +52,7 @@ __all__ = [
     "MessageRefModel",
     "EventModel",
     "WebhookOutboxModel",
+    "OAuthClientModel",
+    "OAuthAuthorizationCodeModel",
+    "OAuthConsentModel",
 ]

@@ -29,7 +29,8 @@ from rdm.interfaces.http.sprint import router as sprints_router
 from rdm.interfaces.http.workflow import router as workflow_router
 from rdm.interfaces.http.workitem import router as work_items_router
 from rdm.interfaces.http.workspaces import router as workspaces_router
-from rdm.interfaces.mcp.auth_guard import McpBearerGuard
+from rdm.interfaces.mcp.oauth_provider import RdmOAuthProvider
+from rdm.interfaces.mcp.request_scope import RequestScopeMiddleware
 from rdm.interfaces.mcp.server import build_mcp
 
 logger = logging.getLogger("rdm.app")
@@ -40,9 +41,15 @@ WEB_DIST = Path(__file__).resolve().parent / "resources" / "web-dist"
 def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     configure_logging()
     container = Container(settings)
-    mcp = build_mcp(container)
-    # streamable-http only; no stdio (architecture §1).
-    mcp_http = mcp.http_app(transport="streamable-http")
+    base_url = f"http://{settings.host}:{settings.port}"
+    oauth_provider = RdmOAuthProvider(base_url=base_url, container=container)
+    mcp = build_mcp(container, oauth_provider)
+    # streamable-http only; no stdio (architecture §1). host_origin_protection
+    # is disabled: rdm binds loopback only (§16.59) and serves test hosts too.
+    mcp_http = mcp.http_app(transport="streamable-http", host_origin_protection=False)
+    # OAuth endpoints (/authorize, /.well-known/*) need the ASGI scope to
+    # read the session cookie, so wrap the whole FastMCP sub-app.
+    mcp_guarded = RequestScopeMiddleware(mcp_http)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -87,10 +94,9 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     app.include_router(workspaces_router)
     app.include_router(workflow_router)
 
-    # FastMCP's http_app serves /mcp; RootDispatch splits /mcp (guarded) from
-    # the static SPA, while API routers above win route matching first.
-    app.mount(
-        "/",
-        RootDispatch(McpBearerGuard(mcp_http, container.authenticator), WEB_DIST),
-    )
+    # FastMCP's http_app serves /mcp and the OAuth 2.1 endpoints (§16.54);
+    # RootDispatch splits those from the static SPA, while API routers above
+    # win route matching first. Authentication is FastMCP's bearer middleware
+    # (RdmOAuthProvider accepts both PAT and OAuth access tokens).
+    app.mount("/", RootDispatch(mcp_guarded, WEB_DIST))
     return app

@@ -28,8 +28,8 @@ from rdm.interfaces.mcp.tools import (
 )
 
 
-def build_mcp(container: Container) -> FastMCP:
-    mcp = FastMCP("rdm")
+def build_mcp(container: Container, auth) -> FastMCP:  # type: ignore[no-untyped-def]
+    mcp = FastMCP("rdm", auth=auth)
     # Context tools: enhanced whoami replaces the M0 version.
     workflow_tools.register(mcp, container)
     work_item_tools.register(mcp, container)

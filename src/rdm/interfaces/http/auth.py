@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, Field
 
 from rdm.application.services.account_service import SESSION_TTL, AccountService
+from rdm.application.services.oauth_service import OAuthService
 from rdm.domain.entities import Member
 from rdm.interfaces.http.container import (
     SESSION_COOKIE_NAME,
@@ -37,6 +38,11 @@ class PasswordChangeIn(BaseModel):
 
 class AdminPasswordResetIn(BaseModel):
     password: str | None = Field(default=None, max_length=200)
+
+
+class ConsentDecisionIn(BaseModel):
+    decision: str = Field(pattern="^(allow|deny)$")
+    member_id: str | None = None
 
 
 def _set_session_cookie(response: Response, raw: str, request: Request) -> None:
@@ -125,3 +131,60 @@ async def admin_reset_password(
         )
     container.authenticator.invalidate_member(member.id)
     return {"data": {"id": member.id, "name": member.name, "password": raw}}
+
+
+@router.get("/oauth/consent/{consent_id}")
+async def get_consent(
+    consent_id: str,
+    request: Request,
+    container: Container = Depends(get_container),
+) -> dict:
+    """Information for the browser consent page (session cookie required)."""
+    _member, session = await get_actor_session(request)
+    async with container.uow() as uow:
+        service = OAuthService(uow)
+        consent = await service.get_consent_for_session(consent_id, session.id)
+        client = await service.get_client(consent.client_id)
+        members = {
+            m.id: m
+            for m in await uow.members.list_all()
+            if m.id in set(consent.selectable_member_ids)
+        }
+        projects = {p.id: p for p in await uow.projects.list_all()}
+    client_name = None
+    if client is not None:
+        client_name = client.client_info.get("client_name")
+    selectable = []
+    for member_id in consent.selectable_member_ids:
+        m = members.get(member_id)
+        if m is None:
+            continue
+        out = member_out(m)
+        project = projects.get(m.project_id)
+        out["project_key"] = project.key if project else None
+        selectable.append(out)
+    return {
+        "data": {
+            "client": {"client_id": consent.client_id, "client_name": client_name},
+            "scopes": consent.scopes,
+            "selectable_members": selectable,
+        }
+    }
+
+
+@router.post("/oauth/consent/{consent_id}/decision")
+async def decide_consent(
+    consent_id: str,
+    body: ConsentDecisionIn,
+    request: Request,
+    container: Container = Depends(get_container),
+) -> dict:
+    _member, session = await get_actor_session(request)
+    async with container.uow() as uow:
+        redirect_to = await OAuthService(uow).decide_consent(
+            consent_id,
+            allow=body.decision == "allow",
+            member_id=body.member_id,
+            session_token_id=session.id,
+        )
+    return {"data": {"redirect_to": redirect_to}}

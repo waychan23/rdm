@@ -27,6 +27,11 @@ from rdm.infrastructure.db.repositories.mailbox import (
     MessageRepository,
 )
 from rdm.infrastructure.db.repositories.member import MemberRepository, TokenRepository
+from rdm.infrastructure.db.repositories.oauth import (
+    AuthorizationCodeRepository,
+    ConsentRepository,
+    OAuthClientRepository,
+)
 from rdm.infrastructure.db.repositories.outbox import OutboxRepository
 from rdm.infrastructure.db.repositories.project import ProjectRepository
 from rdm.infrastructure.db.repositories.sprint import (
@@ -61,6 +66,9 @@ class SqlAlchemyUnitOfWork:
         self.projects: ProjectRepository | None = None
         self.members: MemberRepository | None = None
         self.tokens: TokenRepository | None = None
+        self.oauth_clients: OAuthClientRepository | None = None
+        self.oauth_codes: AuthorizationCodeRepository | None = None
+        self.oauth_consents: ConsentRepository | None = None
         self.work_items: WorkItemRepository | None = None
         self.sprints: SprintRepository | None = None
         self.sprint_items: SprintItemRepository | None = None
@@ -84,6 +92,9 @@ class SqlAlchemyUnitOfWork:
             self.projects = ProjectRepository(self.session)
             self.members = MemberRepository(self.session)
             self.tokens = TokenRepository(self.session)
+            self.oauth_clients = OAuthClientRepository(self.session)
+            self.oauth_codes = AuthorizationCodeRepository(self.session)
+            self.oauth_consents = ConsentRepository(self.session)
             self.work_items = WorkItemRepository(self.session)
             self.sprints = SprintRepository(self.session)
             self.sprint_items = SprintItemRepository(self.session)

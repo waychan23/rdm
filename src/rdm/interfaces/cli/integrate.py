@@ -59,12 +59,20 @@ def _bearer_entry(entry_template: dict, token: str) -> dict:
 
 
 def merge_claude_project(
-    home: Path, cwd: Path, url: str, token: str, *, force: bool = False
+    home: Path,
+    cwd: Path,
+    url: str,
+    token: str = "",
+    *,
+    force: bool = False,
+    method: str = "token",
 ) -> IntegrateResult:
     """Bind a directory in ~/.claude.json projects[abs_cwd].mcpServers.
 
     Per-directory config lives in the user-global file (keyed by absolute
-    path), so the bound token never lands inside the target repository.
+    path), so the bound token never lands inside the target repository. With
+    method="oauth" no token is written; identity is chosen in the browser
+    consent page on first use (architecture §16.60).
     """
     path = claude_config_path(home)
     data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
@@ -74,7 +82,11 @@ def merge_claude_project(
     if not isinstance(node, dict):
         raise ValueError(f"{path}: projects[{key!r}] must be an object")
     servers = node.setdefault("mcpServers", {})
-    entry = _bearer_entry(_claude_server(url), token)
+    entry = (
+        _claude_oauth_server(url)
+        if method == "oauth"
+        else _bearer_entry(_claude_server(url), token)
+    )
     if servers.get("rdm") == entry:
         return IntegrateResult("claude", path, "skipped")
     if "rdm" in servers and not force:
@@ -85,12 +97,18 @@ def merge_claude_project(
 
 
 def merge_opencode_project(
-    cwd: Path, url: str, token: str, *, force: bool = False
+    cwd: Path,
+    url: str,
+    token: str = "",
+    *,
+    force: bool = False,
+    method: str = "token",
 ) -> tuple[IntegrateResult, bool]:
     """Bind a directory via <cwd>/.opencode/opencode.json.
 
-    Returns (result, gitignore_touched). This file carries a member token,
-    so when cwd is a git repo its path is appended to .gitignore.
+    Returns (result, gitignore_touched). The token method carries a member
+    token, so when cwd is a git repo its path is appended to .gitignore; the
+    oauth method writes no secret.
     """
     path = cwd / ".opencode" / "opencode.json"
     if path.exists():
@@ -98,14 +116,20 @@ def merge_opencode_project(
     else:
         data = {}
     servers = data.setdefault("mcp", {})
-    entry = _bearer_entry(_opencode_server(url), token)
+    entry = (
+        _opencode_oauth_server(url)
+        if method == "oauth"
+        else _bearer_entry(_opencode_server(url), token)
+    )
     if servers.get("rdm") == entry:
         return IntegrateResult("opencode", path, "skipped"), False
     if "rdm" in servers and not force:
         return IntegrateResult("opencode", path, "conflict"), False
     servers["rdm"] = entry
     _atomic_write_json(path, data)
-    gitignore_touched = _ensure_gitignore(cwd, ".opencode/opencode.json")
+    gitignore_touched = (
+        _ensure_gitignore(cwd, ".opencode/opencode.json") if method == "token" else False
+    )
     return IntegrateResult("opencode", path, "written"), gitignore_touched
 
 
@@ -141,6 +165,19 @@ def _opencode_server(url: str) -> dict:
         "headers": {"Authorization": "Bearer {env:RDM_TOKEN}"},
         "oauth": False,
     }
+
+
+# Native OAuth 2.1 (architecture §16.54/60): no static Bearer header; the
+# client discovers the flow from the 401 resource metadata and opens a browser.
+def _claude_oauth_server(url: str) -> dict:
+    return {"type": "http", "url": url}
+
+
+def _opencode_oauth_server(url: str) -> dict:
+    return {"type": "remote", "url": url}
+
+
+METHODS = ("oauth", "token")
 
 
 def _atomic_write_json(path: Path, data: dict) -> None:
@@ -189,32 +226,33 @@ def merge_json_config(
     return IntegrateResult(target, path, "written")
 
 
-def merge_claude(home: Path, url: str, *, force: bool = False) -> IntegrateResult:
+def merge_claude(
+    home: Path, url: str, *, force: bool = False, method: str = "token"
+) -> IntegrateResult:
+    entry = _claude_oauth_server(url) if method == "oauth" else _claude_server(url)
     return merge_json_config(
         claude_config_path(home),
         section=("mcpServers",),
-        entry=_claude_server(url),
+        entry=entry,
         force=force,
     )
 
 
-def merge_opencode(home: Path, url: str, *, force: bool = False) -> IntegrateResult:
+def merge_opencode(
+    home: Path, url: str, *, force: bool = False, method: str = "token"
+) -> IntegrateResult:
+    entry = _opencode_oauth_server(url) if method == "oauth" else _opencode_server(url)
     return merge_json_config(
         opencode_config_path(home),
         section=("mcp",),
-        entry=_opencode_server(url),
+        entry=entry,
         force=force,
     )
 
 
-def _codex_block(url: str) -> str:
-    return (
-        f"{MANAGED_BEGIN}\n"
-        "[mcp_servers.rdm]\n"
-        f'url = "{url}"\n'
-        'bearer_token_env_var = "RDM_TOKEN"\n'
-        f"{MANAGED_END}\n"
-    )
+def _codex_block(url: str, *, method: str = "token") -> str:
+    auth_line = "" if method == "oauth" else 'bearer_token_env_var = "RDM_TOKEN"\n'
+    return f'{MANAGED_BEGIN}\n[mcp_servers.rdm]\nurl = "{url}"\n{auth_line}{MANAGED_END}\n'
 
 
 def _replace_managed_block(text: str, block: str) -> str | None:
@@ -232,17 +270,22 @@ def _replace_managed_block(text: str, block: str) -> str | None:
     return text[:start] + block + text[end:]
 
 
-def merge_codex(home: Path, url: str, *, force: bool = False) -> IntegrateResult:
+def merge_codex(
+    home: Path, url: str, *, force: bool = False, method: str = "token"
+) -> IntegrateResult:
     """Create/update the codex TOML config.
 
     We never splice user-written TOML: a missing [mcp_servers.rdm] gets an
     appended managed block; a managed block that differs is replaced with
     --force; a hand-written rdm section only yields to --force by rewriting
-    the whole file.
+    the whole file. codex OAuth support is unverified (method=oauth only
+    writes url); use --method token if it cannot complete the handshake.
     """
     path = codex_config_path(home)
-    block = _codex_block(url)
-    wanted = {"url": url, "bearer_token_env_var": "RDM_TOKEN"}
+    block = _codex_block(url, method=method)
+    wanted = (
+        {"url": url} if method == "oauth" else {"url": url, "bearer_token_env_var": "RDM_TOKEN"}
+    )
 
     if path.exists():
         text = path.read_text(encoding="utf-8")
@@ -281,8 +324,14 @@ MERGERS = {
 }
 
 
-def post_install_notes(data_dir: Path) -> list[str]:
+def post_install_notes(data_dir: Path, *, method: str = "token") -> list[str]:
     token_path = data_dir / "bootstrap-token"
+    if method == "oauth":
+        return [
+            "restart your agent CLI; it will open a browser to authorize rdm.",
+            "Log in with a human account and choose the member identity to bind.",
+            "If the client cannot complete the handshake, rerun with --method token.",
+        ]
     return [
         f"export RDM_TOKEN=$(cat {token_path})",
         "export NO_PROXY=127.0.0.1,localhost",

@@ -321,6 +321,63 @@ class Workspace:
 
 
 @dataclass(kw_only=True)
+class OAuthClient:
+    """A dynamically registered OAuth 2.1 client (architecture §16.54).
+
+    client_info is the full verbatim OAuthClientInformationFull record
+    (including the plaintext client_secret, required by the SDK authenticator);
+    redirect_uris is a denormalised list for queries/audits.
+    """
+
+    client_id: str
+    client_info: dict[str, Any]
+    redirect_uris: list[str] = field(default_factory=list)
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    revoked_at: dt.datetime | None = None
+
+
+@dataclass(kw_only=True)
+class OAuthAuthorizationCode:
+    """One-shot PKCE authorization code; only its sha256 hash is stored."""
+
+    id: str
+    code_hash: str
+    client_id: str
+    member_id: str
+    scopes: list[str] = field(default_factory=list)
+    code_challenge: str
+    redirect_uri: str
+    redirect_uri_explicit: bool = False
+    resource: str | None = None
+    expires_at: dt.datetime
+    consumed_at: dt.datetime | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+
+    @property
+    def is_consumed(self) -> bool:
+        return self.consumed_at is not None
+
+
+@dataclass(kw_only=True)
+class OAuthConsent:
+    """Pending browser consent between /authorize and the decision (§16.60)."""
+
+    id: str
+    client_id: str
+    session_token_id: str
+    selectable_member_ids: list[str] = field(default_factory=list)
+    state: str | None = None
+    scopes: list[str] = field(default_factory=list)
+    code_challenge: str
+    redirect_uri: str
+    redirect_uri_explicit: bool = False
+    resource: str | None = None
+    expires_at: dt.datetime
+    decided_at: dt.datetime | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+
+
+@dataclass(kw_only=True)
 class OutboxRow:
     id: str
     project_id: str

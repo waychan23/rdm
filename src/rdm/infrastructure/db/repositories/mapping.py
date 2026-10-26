@@ -16,6 +16,9 @@ from rdm.domain.entities import (
     Message,
     MessageDelivery,
     MessageRef,
+    OAuthAuthorizationCode,
+    OAuthClient,
+    OAuthConsent,
     Project,
     ProjectStatus,
     Sprint,
@@ -36,6 +39,9 @@ from rdm.infrastructure.db.models import (
     MessageDeliveryModel,
     MessageModel,
     MessageRefModel,
+    OAuthAuthorizationCodeModel,
+    OAuthClientModel,
+    OAuthConsentModel,
     ProjectMemberModel,
     ProjectModel,
     SprintItemModel,
@@ -308,6 +314,51 @@ def workspace_to_domain(row: WorkspaceModel) -> Workspace:
         updated_at=row.updated_at,
         deleted_at=row.deleted_at,
         deleted_by=row.deleted_by,
+    )
+
+
+def oauth_client_to_domain(row: OAuthClientModel) -> OAuthClient:
+    return OAuthClient(
+        client_id=row.client_id,
+        client_info=dict(row.client_info or {}),
+        redirect_uris=list(row.redirect_uris or []),
+        created_at=row.created_at,
+        revoked_at=row.revoked_at,
+    )
+
+
+def oauth_code_to_domain(row: OAuthAuthorizationCodeModel) -> OAuthAuthorizationCode:
+    return OAuthAuthorizationCode(
+        id=row.id,
+        code_hash=row.code_hash,
+        client_id=row.client_id,
+        member_id=row.member_id,
+        scopes=list(row.scopes or []),
+        code_challenge=row.code_challenge,
+        redirect_uri=row.redirect_uri,
+        redirect_uri_explicit=row.redirect_uri_explicit,
+        resource=row.resource,
+        expires_at=row.expires_at,
+        consumed_at=row.consumed_at,
+        created_at=row.created_at,
+    )
+
+
+def oauth_consent_to_domain(row: OAuthConsentModel) -> OAuthConsent:
+    return OAuthConsent(
+        id=row.id,
+        client_id=row.client_id,
+        session_token_id=row.session_token_id,
+        selectable_member_ids=list(row.selectable_member_ids or []),
+        state=row.state,
+        scopes=list(row.scopes or []),
+        code_challenge=row.code_challenge,
+        redirect_uri=row.redirect_uri,
+        redirect_uri_explicit=row.redirect_uri_explicit,
+        resource=row.resource,
+        expires_at=row.expires_at,
+        decided_at=row.decided_at,
+        created_at=row.created_at,
     )
 
 

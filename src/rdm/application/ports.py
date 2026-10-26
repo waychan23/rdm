@@ -25,6 +25,9 @@ from rdm.domain.entities import (
     Message,
     MessageDelivery,
     MessageRef,
+    OAuthAuthorizationCode,
+    OAuthClient,
+    OAuthConsent,
     OutboxRow,
     Project,
     Sprint,
@@ -116,6 +119,28 @@ class TokenRepository(Protocol):
     async def revoke(self, token_id: str) -> bool: ...
 
     async def touch_last_used(self, token_id: str, when: dt.datetime) -> None: ...
+
+
+class OAuthClientRepository(Protocol):
+    async def upsert(self, client: OAuthClient) -> None: ...
+
+    async def get(self, client_id: str) -> OAuthClient | None: ...
+
+
+class AuthorizationCodeRepository(Protocol):
+    async def add(self, code: OAuthAuthorizationCode) -> None: ...
+
+    async def get_by_hash(self, code_hash: str) -> OAuthAuthorizationCode | None: ...
+
+    async def mark_consumed(self, code_id: str, when: dt.datetime) -> None: ...
+
+
+class ConsentRepository(Protocol):
+    async def add(self, consent: OAuthConsent) -> None: ...
+
+    async def get(self, consent_id: str) -> OAuthConsent | None: ...
+
+    async def mark_decided(self, consent_id: str, when: dt.datetime) -> None: ...
 
 
 class WorkItemRepository(Protocol):
@@ -366,6 +391,9 @@ class UnitOfWork(Protocol):
     projects: ProjectRepository
     members: MemberRepository
     tokens: TokenRepository
+    oauth_clients: OAuthClientRepository
+    oauth_codes: AuthorizationCodeRepository
+    oauth_consents: ConsentRepository
     work_items: WorkItemRepository
     sprints: SprintRepository
     sprint_items: SprintItemRepository

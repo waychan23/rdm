@@ -47,7 +47,9 @@ const projectKey = computed(() =>
 const who = ref<Whoami | null>(null);
 let timer: number | undefined;
 
-const isAuthScreen = computed(() => route.meta.public === true);
+const isAuthScreen = computed(
+  () => route.meta.public === true || route.meta.bare === true
+);
 
 async function loadWhoami() {
   if (isAuthScreen.value) return;
