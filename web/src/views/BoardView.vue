@@ -74,7 +74,6 @@ const KINDS = [
   { value: "task", label: "任务" },
 ];
 
-defineProps<{ key?: string }>();
 const route = useRoute();
 const router = useRouter();
 const key = String(route.params.key);

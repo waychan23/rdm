@@ -46,13 +46,13 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
+import { useRoute } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
 import type { Workspace } from "../types";
 
 const KINDS = ["git_repo", "doc_repo", "design", "other"];
-const props = defineProps<{ key: string }>();
-const key = props.key;
+const key = String(useRoute().params.key);
 const loading = ref(false);
 const saving = ref(false);
 const dialog = ref(false);

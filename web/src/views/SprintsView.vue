@@ -126,12 +126,12 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
+import { useRoute } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
 import type { Sprint, SprintDetail } from "../types";
 
-const props = defineProps<{ key: string }>();
-const key = props.key;
+const key = String(useRoute().params.key);
 const loading = ref(false);
 const saving = ref(false);
 const sprints = ref<Sprint[]>([]);
