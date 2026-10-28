@@ -8,6 +8,7 @@ is SDK-free. Tokens issued here are opaque member_token rows
 from __future__ import annotations
 
 import datetime as dt
+import logging
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
@@ -24,6 +25,8 @@ from rdm.domain.enums import TokenKind
 from rdm.domain.errors import Forbidden, NotFound, ValidationError
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
+
+logger = logging.getLogger("rdm.oauth")
 
 SCOPE_MCP = "mcp"
 
@@ -252,12 +255,20 @@ class OAuthService:
         if _as_utc(code.expires_at) <= now:
             raise OAuthGrantError("invalid_grant", "授权码已过期")
         await self.uow.oauth_codes.mark_consumed(code.id, now)
-        return await self._issue_pair(
+        issued = await self._issue_pair(
             client_id=client_id,
             member_id=code.member_id,
             scopes=code.scopes,
             resource=code.resource,
         )
+        logger.info(
+            "oauth tokens issued from code: member=%s client=%s family=%s scope=%s",
+            code.member_id,
+            client_id,
+            issued.family_id,
+            issued.scope,
+        )
+        return issued
 
     async def refresh(
         self, raw_refresh: str, client_id: str, requested_scopes: list[str]
@@ -267,13 +278,25 @@ class OAuthService:
         now = dt.datetime.now(dt.UTC)
         token = await self.uow.tokens.get_by_hash(hash_token(raw_refresh))
         if token is None or token.kind != TokenKind.oauth_refresh.value:
+            logger.info("oauth refresh rejected: unknown or non-refresh token client=%s", client_id)
             return None, False
         if token.client_id != client_id:
+            logger.info(
+                "oauth refresh rejected: client mismatch token_client=%s request_client=%s",
+                token.client_id,
+                client_id,
+            )
             return None, False
 
         if not token.is_valid:
             # Rotated/revoked/expired refresh presented again: credential theft
             # signal — revoke the entire rotation family (OAuth 2.1 BCP).
+            logger.warning(
+                "oauth refresh reuse detected: member=%s client=%s family=%s; revoking family",
+                token.member_id,
+                client_id,
+                token.family_id,
+            )
             if token.family_id:
                 await self.uow.tokens.revoke_family(token.family_id)
             return None, True
@@ -291,6 +314,13 @@ class OAuthService:
             resource=None,
             family_id=token.family_id,
         )
+        logger.info(
+            "oauth tokens refreshed: member=%s client=%s family=%s scope=%s",
+            token.member_id,
+            client_id,
+            issued.family_id,
+            issued.scope,
+        )
         return issued, False
 
     async def revoke_credential(self, raw: str) -> None:
@@ -301,6 +331,13 @@ class OAuthService:
             return
         if token.kind not in (TokenKind.oauth_access.value, TokenKind.oauth_refresh.value):
             return
+        logger.info(
+            "oauth family revoked: member=%s client=%s family=%s via=%s",
+            token.member_id,
+            token.client_id,
+            token.family_id,
+            token.kind,
+        )
         await self.uow.tokens.revoke_family(token.family_id)
 
     async def valid_refresh(self, raw_refresh: str, client_id: str) -> MemberToken | None:
