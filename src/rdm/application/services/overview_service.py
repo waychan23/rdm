@@ -13,9 +13,7 @@ class OverviewService:
     def __init__(self, uow: SqlAlchemyUnitOfWork) -> None:
         self.uow = uow
 
-    async def overview(
-        self, actor: Member, project_key: str
-    ) -> tuple[Project, dict[str, object]]:
+    async def overview(self, actor: Member, project_key: str) -> tuple[Project, dict[str, object]]:
         assert self.uow.projects and self.uow.work_items
         project = await self.uow.projects.get_by_key(project_key)
         if project is None:
@@ -51,9 +49,7 @@ class OverviewService:
         if active_sprint is not None:
             links = await self.uow.sprint_items.list_for_sprint(active_sprint.id)
             sprint_item_ids = [link.work_item_id for link in links]
-            sprint_items = (
-                await items.list_by_ids(project.id, sprint_item_ids) if links else []
-            )
+            sprint_items = await items.list_by_ids(project.id, sprint_item_ids) if links else []
             sprint_status: dict[str, int] = {}
             for i in sprint_items:
                 sprint_status[i.status] = sprint_status.get(i.status, 0) + 1
