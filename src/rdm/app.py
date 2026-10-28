@@ -36,7 +36,14 @@ from rdm.interfaces.mcp.server import build_mcp
 
 logger = logging.getLogger("rdm.app")
 
-WEB_DIST = Path(__file__).resolve().parent / "resources" / "web-dist"
+_RESOURCES = Path(__file__).resolve().parent / "resources"
+# Selectable SPA bundles (architecture §16.62). The React + Atlaskit rewrite
+# (web-next/) is the default; the frozen Vue + Element Plus app (web/) stays
+# available via Settings.web_ui="legacy".
+WEB_DISTS = {
+    "next": _RESOURCES / "web-next-dist",
+    "legacy": _RESOURCES / "web-dist",
+}
 
 
 def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
@@ -100,5 +107,5 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     # RootDispatch splits those from the static SPA, while API routers above
     # win route matching first. Authentication is FastMCP's bearer middleware
     # (RdmOAuthProvider accepts both PAT and OAuth access tokens).
-    app.mount("/", RootDispatch(mcp_guarded, WEB_DIST))
+    app.mount("/", RootDispatch(mcp_guarded, WEB_DISTS[settings.web_ui]))
     return app

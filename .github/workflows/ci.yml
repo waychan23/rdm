@@ -29,9 +29,13 @@ jobs:
 
   web:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [web, web-next]
     defaults:
       run:
-        working-directory: web
+        working-directory: ${{ matrix.dir }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -39,10 +43,40 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
+          cache-dependency-path: ${{ matrix.dir }}/pnpm-lock.yaml
       # esbuild needs no postinstall (platform binary is an optional dep);
       # --ignore-scripts also keeps the install independent of build approval.
       - name: Install
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Type-check and build
         run: pnpm build
+      - name: Verify SPA bundle landed in package resources
+        run: test -f ../src/rdm/resources/${{ matrix.dir == 'web' && 'web-dist' || 'web-next-dist' }}/index.html
+
+  package:
+    runs-on: ubuntu-latest
+    needs: [test, web]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - name: Set up Python
+        run: uv python install 3.13
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Both bundles must exist before uv build: hatch force-include fails on
+      # a missing source directory, so this guards "shipped only one SPA".
+      - name: Build both SPA bundles
+        run: |
+          pnpm -C web-next install --frozen-lockfile --ignore-scripts
+          pnpm -C web-next build
+          pnpm -C web install --frozen-lockfile --ignore-scripts
+          pnpm -C web build
+      - name: Build wheel and assert both bundles ship
+        run: |
+          uv build --wheel
+          python3 -c "import zipfile,sys,glob; w=zipfile.ZipFile(glob.glob('dist/*.whl')[0]); names=w.namelist(); assert any('resources/web-next-dist/index.html' in n for n in names); assert any('resources/web-dist/index.html' in n for n in names); print('both SPA bundles present in wheel')"

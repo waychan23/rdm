@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 from pathlib import Path
+from typing import Literal
 
 import typer
 import uvicorn
@@ -26,6 +27,7 @@ def run_serve(
     data_dir: Path,
     host: str,
     port: int,
+    web_ui: Literal["next", "legacy"] = "next",
 ) -> None:
     # The v1 --owner-token shared secret was a no-op at runtime; M3 refuses
     # non-loopback binds outright (architecture §16.59). Reach a remote host
@@ -39,7 +41,7 @@ def run_serve(
         )
         raise typer.Exit(code=2)
 
-    settings = Settings(data_dir=data_dir, host=host, port=port)
+    settings = Settings(data_dir=data_dir, host=host, port=port, web_ui=web_ui)
     # Migrate first so a bare `rdm serve` on a fresh data dir works.
     from rdm.interfaces.cli.db import initialize_data_dir, run_upgrade
 

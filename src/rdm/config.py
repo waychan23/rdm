@@ -6,6 +6,7 @@ M3: non-loopback binds are refused outright (§16.59).
 """
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,6 +18,10 @@ class Settings(BaseSettings):
     data_dir: Path = Field(default_factory=lambda: Path.home() / "rdm-data")
     host: str = "127.0.0.1"
     port: int = 8765
+    # Selects the built SPA bundle served at "/" (architecture §16.62):
+    # "next" = React + Atlaskit/ADS (web-next-dist, default); "legacy" = the
+    # frozen Vue + Element Plus app (web-dist). Overridden by RDM_WEB_UI.
+    web_ui: Literal["next", "legacy"] = "next"
     # Attachments (M2-2): 20MB hard cap (architecture §12/§16.45).
     attachment_max_bytes: int = 20 * 1024 * 1024
     # Webhook worker (M2-4); backoff is overridable via RDM_WEBHOOK_BACKOFF

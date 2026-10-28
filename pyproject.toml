@@ -33,13 +33,16 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rdm"]
-# web-dist is gitignored (built by `cd web && pnpm build`) but ships in the
-# wheel so a pip install serves the SPA. Build web before `uv build --wheel`;
-# sdist does not carry the web assets (build them from web/).
+# The SPA bundles are gitignored but ship in the wheel so a pip install serves
+# the UI: web-next-dist (React + Atlaskit/ADS, default) and web-dist (frozen
+# Vue app). Build BOTH (`pnpm -C web-next build && pnpm -C web build`) before
+# `uv build --wheel`; hatch fails when a force-include source is missing.
 [tool.hatch.build.targets.wheel.force-include]
+"src/rdm/resources/web-next-dist" = "rdm/resources/web-next-dist"
 "src/rdm/resources/web-dist" = "rdm/resources/web-dist"
 
 [tool.hatch.build.targets.sdist.force-include]
+"src/rdm/resources/web-next-dist" = "src/rdm/resources/web-next-dist"
 "src/rdm/resources/web-dist" = "src/rdm/resources/web-dist"
 
 [dependency-groups]

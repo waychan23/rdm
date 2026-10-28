@@ -106,16 +106,24 @@ uv run pytest -q                             # 全部测试
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src/rdm/domain src/rdm/application
 
-cd web && pnpm install --ignore-scripts && pnpm build   # 构建 Web 到包资源目录
-cd web && pnpm dev                                       # Vite dev server（代理 /api、/mcp）
+# 当前前端：React 18 + Atlaskit/ADS（architecture §16.62）
+pnpm -C web-next install --ignore-scripts
+pnpm -C web-next dev        # Vite dev server（代理 /api、OAuth、/mcp 到 8765）
+pnpm -C web-next build      # 产物到 src/rdm/resources/web-next-dist
+
+# 旧前端（Vue 3 + Element Plus），已冻结，仅维护性构建
+pnpm -C web install --ignore-scripts && pnpm -C web build
 ```
 
-打 wheel 前先构建 Web（`uv build` 的 force-include 要求 web-dist 存在）：
+服务默认发新版，`rdm serve --web-ui legacy`（或 `RDM_WEB_UI=legacy`）切旧版。
+
+打 wheel 前两套前端都要构建（`uv build` 的 force-include 要求两个 dist 都存在）：
 
 ```bash
-(cd web && pnpm install --frozen-lockfile --ignore-scripts && pnpm build)
+pnpm -C web-next install --frozen-lockfile --ignore-scripts && pnpm -C web-next build
+pnpm -C web install --frozen-lockfile --ignore-scripts && pnpm -C web build
 uv build
 ```
 
-测试与关键裁决见 `docs/`（四份设计文档 + architecture.md §16）。
+前端写码规则见仓库根 `CLAUDE.md`；测试与关键裁决见 `docs/`（architecture.md §16）。
 M1 手工验收脚本见 `docs/acceptance/m1-loop.md`。

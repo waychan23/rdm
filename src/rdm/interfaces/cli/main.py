@@ -7,7 +7,7 @@ database directly (see docs/architecture.md §7).
 """
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import typer
 
@@ -80,11 +80,19 @@ def serve(
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
     host: Annotated[str, typer.Option("--host", envvar="RDM_HOST")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", envvar="RDM_PORT")] = 8765,
+    web_ui: Annotated[
+        Literal["next", "legacy"],
+        typer.Option(
+            "--web-ui",
+            envvar="RDM_WEB_UI",
+            help="SPA bundle to serve: next (React+ADS, default) | legacy (frozen Vue app).",
+        ),
+    ] = "next",
 ) -> None:
     """Start the HTTP + MCP server (loopback binds only)."""
     from rdm.interfaces.cli import server as server_commands
 
-    server_commands.run_serve(data_dir, host, port)
+    server_commands.run_serve(data_dir, host, port, web_ui)
 
 
 @app.command("bootstrap-token")

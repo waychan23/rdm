@@ -7,7 +7,6 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "check-tokens": "python3 scripts/check-tokens.py src",
     "test": "echo 'vitest added in M3.3 batch 2' && exit 0"
   },
   "dependencies": {
