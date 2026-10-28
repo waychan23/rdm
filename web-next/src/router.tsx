@@ -1,19 +1,27 @@
+import { lazy, Suspense, type ReactNode } from "react";
 import type { LoaderFunctionArgs } from "react-router-dom";
 import { Navigate, createBrowserRouter, redirect } from "react-router-dom";
 
+import Spinner from "@atlaskit/spinner";
+import { Box } from "@atlaskit/primitives";
+
 import { ensureSession } from "./lib/auth";
 import AppShell from "./shell/AppShell";
-import BacklogPage from "./pages/BacklogPage";
-import BoardPage from "./pages/BoardPage";
-import ConsentPage from "./pages/ConsentPage";
-import ItemPage from "./pages/ItemPage";
 import LoginPage from "./pages/LoginPage";
-import MailboxPage from "./pages/MailboxPage";
-import NotFoundPage from "./pages/NotFoundPage";
-import OverviewPage from "./pages/OverviewPage";
-import PlaceholderPage from "./pages/PlaceholderPage";
-import ProjectsPage from "./pages/ProjectsPage";
-import SprintsPage from "./pages/SprintsPage";
+
+// Route-level code splitting (the old single chunk was >1MB; Batch 6).
+const ConsentPage = lazy(() => import("./pages/ConsentPage"));
+const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
+const OverviewPage = lazy(() => import("./pages/OverviewPage"));
+const BoardPage = lazy(() => import("./pages/BoardPage"));
+const BacklogPage = lazy(() => import("./pages/BacklogPage"));
+const SprintsPage = lazy(() => import("./pages/SprintsPage"));
+const MailboxPage = lazy(() => import("./pages/MailboxPage"));
+const WorkspacesPage = lazy(() => import("./pages/WorkspacesPage"));
+const MembersPage = lazy(() => import("./pages/MembersPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const ItemPage = lazy(() => import("./pages/ItemPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
 async function requireAuth({ request }: LoaderFunctionArgs) {
   const member = await ensureSession();
@@ -24,28 +32,47 @@ async function requireAuth({ request }: LoaderFunctionArgs) {
   return null;
 }
 
-const placeholder = (title: string) => <PlaceholderPage title={title} />;
+function withSuspense(node: ReactNode) {
+  return (
+    <Suspense
+      fallback={
+        <Box padding="space.400" style={{ display: "flex", justifyContent: "center" }}>
+          <Spinner size="large" />
+        </Box>
+      }
+    >
+      {node}
+    </Suspense>
+  );
+}
 
 export const router = createBrowserRouter([
   { path: "/login", Component: LoginPage },
   // Consent needs a session but renders without the app shell ("bare").
-  { path: "/oauth/consent/:id", Component: ConsentPage, loader: requireAuth },
+  {
+    path: "/oauth/consent/:id",
+    Component: () => withSuspense(<ConsentPage />),
+    loader: requireAuth,
+  },
   {
     Component: AppShell,
     loader: requireAuth,
     children: [
       { index: true, element: <Navigate to="/projects" replace /> },
-      { path: "projects", Component: ProjectsPage },
-      { path: "projects/:key", Component: OverviewPage },
-      { path: "projects/:key/board", Component: BoardPage },
-      { path: "projects/:key/backlog", Component: BacklogPage },
-      { path: "projects/:key/sprints", Component: SprintsPage },
-      { path: "projects/:key/mailbox", Component: MailboxPage },
-      { path: "projects/:key/workspaces", element: placeholder("工作区") },
-      { path: "projects/:key/members", element: placeholder("成员") },
-      { path: "projects/:key/settings", element: placeholder("设置") },
-      { path: "projects/:key/items/:id", Component: ItemPage },
-      { path: "*", Component: NotFoundPage },
+      { path: "projects", Component: () => withSuspense(<ProjectsPage />) },
+      { path: "projects/:key", Component: () => withSuspense(<OverviewPage />) },
+      { path: "projects/:key/board", Component: () => withSuspense(<BoardPage />) },
+      { path: "projects/:key/backlog", Component: () => withSuspense(<BacklogPage />) },
+      { path: "projects/:key/sprints", Component: () => withSuspense(<SprintsPage />) },
+      { path: "projects/:key/mailbox", Component: () => withSuspense(<MailboxPage />) },
+      {
+        path: "projects/:key/workspaces",
+        Component: () => withSuspense(<WorkspacesPage />),
+      },
+      { path: "projects/:key/members", Component: () => withSuspense(<MembersPage />) },
+      { path: "projects/:key/settings", Component: () => withSuspense(<SettingsPage />) },
+      { path: "projects/:key/items/:id", Component: () => withSuspense(<ItemPage />) },
+      { path: "*", Component: () => withSuspense(<NotFoundPage />) },
     ],
   },
 ]);
