@@ -1,0 +1,74 @@
+/*
+ * Compact, borderless data table (ADS tokens only): 32px header band,
+ * 40px rows, no zebra/grid lines, hover row background. Semantic <table>.
+ * Runtime CSS vars for color use the short legacy names emitted by
+ * setGlobalTheme (--ds-background-*/--ds-text-*/--ds-border/--ds-link).
+ */
+.rdm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: var(--ds-text);
+}
+
+.rdm-table thead th {
+  height: 32px;
+  text-align: left;
+  padding: 0 var(--ds-space-200, 16px);
+  background: var(--ds-surface-sunken, #f8f8f8);
+  color: var(--ds-text-subtlest);
+  font-size: 12px;
+  font-weight: var(--ds-font-weight-medium, 500);
+  white-space: nowrap;
+}
+
+.rdm-table tbody td {
+  height: 40px;
+  padding: 0 var(--ds-space-200, 16px);
+  border-bottom: none;
+  white-space: nowrap;
+}
+
+.rdm-table tbody tr {
+  cursor: pointer;
+}
+
+.rdm-table tbody tr:hover {
+  background: var(--ds-background-neutral-subtle-hovered);
+}
+
+.rdm-table .col-title {
+  min-width: 280px;
+}
+
+.rdm-table .cell-title {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-100, 8px);
+  min-width: 0;
+}
+
+.rdm-table .display-id {
+  color: var(--ds-link);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.rdm-table .title-text {
+  color: var(--ds-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rdm-table .cell-meta {
+  color: var(--ds-text-subtlest);
+  font-size: 12px;
+}
+
+.rdm-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ds-space-100, 8px) var(--ds-space-200, 16px);
+  border-top: 1px solid var(--ds-border);
+}

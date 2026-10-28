@@ -3,6 +3,7 @@ import { Navigate, createBrowserRouter, redirect } from "react-router-dom";
 
 import { ensureSession } from "./lib/auth";
 import AppShell from "./shell/AppShell";
+import BacklogPage from "./pages/BacklogPage";
 import ConsentPage from "./pages/ConsentPage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
@@ -32,7 +33,7 @@ export const router = createBrowserRouter([
       { path: "projects", Component: ProjectsPage },
       { path: "projects/:key", element: placeholder("概览") },
       { path: "projects/:key/board", element: placeholder("看板") },
-      { path: "projects/:key/backlog", element: placeholder("工作项") },
+      { path: "projects/:key/backlog", Component: BacklogPage },
       { path: "projects/:key/sprints", element: placeholder("迭代") },
       { path: "projects/:key/mailbox", element: placeholder("信箱") },
       { path: "projects/:key/workspaces", element: placeholder("工作区") },
