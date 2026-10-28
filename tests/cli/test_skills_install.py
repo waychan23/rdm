@@ -25,10 +25,10 @@ def test_bundled_skills_catalogue() -> None:
     "target,scope,relative",
     [
         ("claude", "user", ".claude/skills/rdm-workflow/SKILL.md"),
-        ("codex", "user", ".codex/prompts/rdm-workflow.md"),
+        ("codex", "user", ".codex/skills/rdm-workflow/SKILL.md"),
         ("opencode", "user", ".config/opencode/skills/rdm-workflow/SKILL.md"),
         ("claude", "project", ".claude/skills/rdm-workflow/SKILL.md"),
-        ("codex", "project", ".codex/prompts/rdm-workflow.md"),
+        ("codex", "project", ".codex/skills/rdm-workflow/SKILL.md"),
         ("opencode", "project", ".opencode/skills/rdm-workflow/SKILL.md"),
     ],
 )
@@ -123,3 +123,40 @@ def test_cli_bad_target_and_unknown_skill(tmp_path: Path) -> None:
         app, ["skills", "install", "--target", "claude", "--skill", "ghost"], env=env
     )
     assert result.exit_code == 2
+
+
+def test_cli_project_scope_requires_cwd(tmp_path: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["skills", "install", "--target", "claude", "--scope", "project"],
+        env={"HOME": str(tmp_path / "home")},
+    )
+    assert result.exit_code == 2
+    assert "requires --cwd" in result.output
+
+
+def test_cli_project_scope_installs_into_cwd(tmp_path: Path) -> None:
+    runner = CliRunner()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    result = runner.invoke(
+        app,
+        [
+            "skills",
+            "install",
+            "--target",
+            "codex",
+            "--scope",
+            "project",
+            "--cwd",
+            str(repo),
+            "--skill",
+            "rdm-workflow",
+        ],
+        env={"HOME": str(tmp_path / "home")},
+    )
+    assert result.exit_code == 0, result.output
+    dest = repo / ".codex" / "skills" / "rdm-workflow" / "SKILL.md"
+    assert dest.exists()
+    assert "rdm-managed" in dest.read_text(encoding="utf-8")

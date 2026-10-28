@@ -3,7 +3,8 @@
 Bundled canonical skills live in rdm.resources/skills/<name>/SKILL.md.
 Target path conventions (architecture §16.32):
 - claude: native skills — ~/.claude/skills/<name>/SKILL.md, .claude/skills/...
-- codex: no native skill concept, thin shell in prompts dir (UNVERIFIED)
+- codex: native skills (codex-rs `skills` crate, SKILL.md) —
+  $CODEX_HOME/skills/<name>/SKILL.md (default ~/.codex), .codex/skills/...
 - opencode: native skills (verified 1.18.35 via `opencode debug skill`) —
   ~/.config/opencode/skills/<name>/SKILL.md, .opencode/skills/...
 
@@ -13,6 +14,7 @@ content conflict requires --force.
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from enum import StrEnum
 from importlib.resources import files
@@ -70,13 +72,13 @@ def resolve_target_path(
         if target is SkillTarget.claude:
             return home / ".claude" / "skills" / skill_name / "SKILL.md"
         if target is SkillTarget.codex:
-            return home / ".codex" / "prompts" / f"{skill_name}.md"
+            return home / ".codex" / "skills" / skill_name / "SKILL.md"
         return home / ".config" / "opencode" / "skills" / skill_name / "SKILL.md"
     if scope == "project":
         if target is SkillTarget.claude:
             return cwd / ".claude" / "skills" / skill_name / "SKILL.md"
         if target is SkillTarget.codex:
-            return cwd / ".codex" / "prompts" / f"{skill_name}.md"
+            return cwd / ".codex" / "skills" / skill_name / "SKILL.md"
         return cwd / ".opencode" / "skills" / skill_name / "SKILL.md"
     raise ValueError(f"scope must be 'user' or 'project', got {scope!r}")
 
@@ -118,3 +120,44 @@ def install_skill(
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(content, encoding="utf-8")
     return InstallResult(skill_name, target.value, scope, dest, "installed")
+
+
+@dataclass(frozen=True)
+class UninstallResult:
+    skill: str
+    target: str
+    scope: str
+    path: Path
+    status: str  # "removed" | "absent" | "unmanaged"
+
+
+def uninstall_skill(
+    target: SkillTarget,
+    scope: str,
+    skill_name: str,
+    *,
+    force: bool = False,
+    home: Path | None = None,
+    cwd: Path | None = None,
+) -> UninstallResult:
+    """Remove a previously installed (rdm-managed) skill.
+
+    A file that exists but lacks the rdm-managed marker is treated as user
+    content and left alone unless force=True. claude/opencode skills live in
+    a per-skill directory (SKILL.md); codex uses one prompt file per skill.
+    """
+    home = home or Path.home()
+    cwd = cwd or Path.cwd()
+    dest = resolve_target_path(target, scope, skill_name, home=home, cwd=cwd)
+    if not dest.exists():
+        return UninstallResult(skill_name, target.value, scope, dest, "absent")
+
+    managed = MANAGED_MARKER in dest.read_text(encoding="utf-8")
+    if not managed and not force:
+        return UninstallResult(skill_name, target.value, scope, dest, "unmanaged")
+
+    if target is SkillTarget.codex:
+        dest.unlink()
+    else:
+        shutil.rmtree(dest.parent)
+    return UninstallResult(skill_name, target.value, scope, dest, "removed")

@@ -35,6 +35,9 @@ member_app = typer.Typer(help="Manage project members and tokens (API client).")
 token_app = typer.Typer(help="Issue or revoke member tokens.")
 skills_app = typer.Typer(help="Install bundled skills into agent CLIs.")
 integrate_app = typer.Typer(help="Generate agent integration configs.")
+uninstall_app = typer.Typer(
+    help="Remove rdm MCP configs and skills from agent CLIs (inverse of install/integrate)."
+)
 
 app.add_typer(db_app, name="db")
 app.add_typer(account_app, name="account")
@@ -43,6 +46,7 @@ app.add_typer(member_app, name="member")
 member_app.add_typer(token_app, name="token")
 app.add_typer(skills_app, name="skills")
 app.add_typer(integrate_app, name="integrate")
+app.add_typer(uninstall_app, name="uninstall")
 
 
 def _version_callback(value: bool) -> None:
@@ -282,6 +286,9 @@ def skills_install(
         list[str] | None,
         typer.Option("--skill", help="Skill name to install; repeatable. Default: all."),
     ] = None,
+    cwd: Annotated[
+        Path | None, typer.Option("--cwd", help="Project scope: directory to install into.")
+    ] = None,
     force: Annotated[bool, typer.Option("--force", help="Overwrite conflicting files.")] = False,
 ) -> None:
     """Install bundled rdm skills into an agent CLI."""
@@ -295,19 +302,21 @@ def skills_install(
     if scope not in {"user", "project"}:
         typer.secho(f"unknown --scope {scope!r} (want user|project)", fg=typer.colors.RED)
         raise typer.Exit(2)
-
-    if target == "codex":
-        typer.secho(
-            "note: codex target path (~/.codex/prompts) is inferred and unverified",
-            fg=typer.colors.YELLOW,
-        )
+    if scope == "project" and cwd is None:
+        typer.secho("--scope project requires --cwd", fg=typer.colors.RED)
+        raise typer.Exit(2)
+    directory = cwd or Path.cwd()
 
     names = skill or skills_commands.bundled_skill_names()
     had_conflict = False
     for name in names:
         try:
             result = skills_commands.install_skill(
-                skills_commands.SkillTarget(target), scope, name, force=force
+                skills_commands.SkillTarget(target),
+                scope,
+                name,
+                force=force,
+                cwd=directory,
             )
         except FileNotFoundError:
             bundled = skills_commands.bundled_skill_names()
@@ -515,6 +524,156 @@ def _integrate_project_scope(
         typer.echo("  restart the agent CLI there; whoami confirms member and project.")
     if had_conflict:
         raise typer.Exit(2)
+
+
+def _validate_target(target: str | None) -> list[str]:
+    from rdm.interfaces.cli import integrate as integrate_commands
+
+    names = [target] if target else [t.value for t in integrate_commands.IntegrateTarget]
+    invalid = [n for n in names if n not in {t.value for t in integrate_commands.IntegrateTarget}]
+    if invalid:
+        typer.secho(f"unknown --target {invalid[0]!r}", fg=typer.colors.RED)
+        raise typer.Exit(2)
+    return names
+
+
+def _run_uninstall_mcp(names: list[str], cwd: Path | None) -> None:
+    from rdm.interfaces.cli import integrate as commands
+
+    project_scope = cwd is not None
+    if project_scope and "codex" in names:
+        typer.secho(
+            "codex has no supported project-level MCP config; use --scope user",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(2)
+
+    directory = cwd or Path.cwd()
+    had_anything = False
+    for name in names:
+        try:
+            if project_scope:
+                if name == "claude":
+                    result = commands.remove_claude_project(Path.home(), directory)
+                    gitignore = False
+                else:
+                    result, gitignore = commands.remove_opencode_project(directory)
+            else:
+                result = commands.REMOVERS[commands.IntegrateTarget(name)](Path.home())
+                gitignore = False
+        except ValueError as exc:
+            typer.secho(f"{name}: {exc}", fg=typer.colors.RED)
+            raise typer.Exit(1) from None
+        if result.status == "removed":
+            had_anything = True
+            parts = []
+            if result.detail:
+                parts.append(result.detail)
+            if gitignore:
+                parts.append("removed .gitignore entry")
+            extra = f" ({'; '.join(parts)})" if parts else ""
+            typer.secho(f"REMOVED   {name} -> {result.path}{extra}", fg=typer.colors.GREEN)
+        else:
+            typer.secho(f"ABSENT    {name} (no rdm entry found)", fg=typer.colors.YELLOW)
+    if not had_anything:
+        typer.secho("nothing to remove", fg=typer.colors.YELLOW)
+
+
+def _run_uninstall_skills(
+    names: list[str], *, scope: str, skill: list[str] | None, cwd: Path | None, force: bool
+) -> None:
+    from rdm.interfaces.cli import skills as skills_commands
+
+    if scope not in {"user", "project"}:
+        typer.secho(f"unknown --scope {scope!r} (want user|project)", fg=typer.colors.RED)
+        raise typer.Exit(2)
+
+    skill_names = skill or skills_commands.bundled_skill_names()
+    directory = cwd or Path.cwd()
+    blocked = False
+    for name_target in names:
+        for name_skill in skill_names:
+            result = skills_commands.uninstall_skill(
+                skills_commands.SkillTarget(name_target),
+                scope,
+                name_skill,
+                force=force,
+                cwd=directory,
+            )
+            if result.status == "removed":
+                typer.secho(f"REMOVED   {result.skill} -> {result.path}", fg=typer.colors.GREEN)
+            elif result.status == "absent":
+                typer.secho(f"ABSENT    {result.skill} ({name_target})", fg=typer.colors.YELLOW)
+            else:  # unmanaged
+                blocked = True
+                typer.secho(
+                    f"UNMANAGED {result.skill} -> {result.path} "
+                    "(not rdm-managed; rerun with --force to delete)",
+                    fg=typer.colors.RED,
+                )
+    if blocked:
+        raise typer.Exit(2)
+
+
+@uninstall_app.command("mcp")
+def uninstall_mcp(
+    target: Annotated[
+        str | None,
+        typer.Option("--target", help="claude | codex | opencode. Default: all three."),
+    ] = None,
+    scope: Annotated[
+        str, typer.Option("--scope", help="user (global) | project (a directory).")
+    ] = "user",
+    cwd: Annotated[
+        Path | None,
+        typer.Option("--cwd", help="Directory to unbind (required with --scope project)."),
+    ] = None,
+) -> None:
+    """Remove the rdm MCP server entry from agent CLI config(s)."""
+    if scope not in {"user", "project"}:
+        typer.secho(f"unknown --scope {scope!r} (want user|project)", fg=typer.colors.RED)
+        raise typer.Exit(2)
+    if scope == "project" and cwd is None:
+        typer.secho("--scope project requires --cwd", fg=typer.colors.RED)
+        raise typer.Exit(2)
+    if scope == "user":
+        cwd = None
+    _run_uninstall_mcp(_validate_target(target), cwd)
+
+
+@uninstall_app.command("skills")
+def uninstall_skills(
+    target: Annotated[
+        str | None,
+        typer.Option("--target", help="claude | codex | opencode. Default: all three."),
+    ] = None,
+    scope: Annotated[str, typer.Option("--scope", help="user | project.")] = "user",
+    skill: Annotated[
+        list[str] | None,
+        typer.Option("--skill", help="Skill to remove; repeatable. Default: all bundled."),
+    ] = None,
+    cwd: Annotated[
+        Path | None, typer.Option("--cwd", help="Directory for --scope project.")
+    ] = None,
+    force: Annotated[
+        bool, typer.Option("--force", help="Remove even a non-rdm-managed file.")
+    ] = False,
+) -> None:
+    """Remove rdm skills installed into an agent CLI."""
+    _run_uninstall_skills(_validate_target(target), scope=scope, skill=skill, cwd=cwd, force=force)
+
+
+@uninstall_app.command("all")
+def uninstall_all(
+    target: Annotated[
+        str | None,
+        typer.Option("--target", help="claude | codex | opencode. Default: all three."),
+    ] = None,
+) -> None:
+    """Remove user-scope rdm MCP config and all bundled rdm skills."""
+    names = _validate_target(target)
+    _run_uninstall_mcp(names, None)
+    _run_uninstall_skills(names, scope="user", skill=None, cwd=None, force=False)
 
 
 @app.command()

@@ -34,7 +34,8 @@ class IntegrateTarget(StrEnum):
 class IntegrateResult:
     target: str
     path: Path
-    status: str  # "written" | "skipped" | "conflict"
+    status: str  # "written" | "skipped" | "conflict" | "removed" | "absent"
+    detail: str = ""
 
 
 def claude_config_path(home: Path) -> Path:
@@ -316,6 +317,192 @@ def merge_codex(
     os.replace(tmp, path)
     return IntegrateResult("codex", path, "written")
 
+
+def _remove_managed_block(text: str) -> str | None:
+    """Drop the rdm-managed TOML block (plus surrounding blank lines)."""
+    start = text.find(MANAGED_BEGIN)
+    if start == -1:
+        return None
+    end = text.find(MANAGED_END, start)
+    if end == -1:
+        return None
+    end += len(MANAGED_END)
+    if end < len(text) and text[end] == "\n":
+        end += 1
+    result = text[:start] + text[end:]
+    # Collapse the gap left behind (up to two consecutive blank lines).
+    return result.replace("\n\n\n\n", "\n\n").strip() + "\n"
+
+
+def _remove_json_key(path: Path, section: tuple[str, ...], key: str) -> str:
+    """Remove one key under a nested section; returns removed/absent/error."""
+    if not path.exists():
+        return "absent"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path} is not valid JSON: {exc}") from exc
+    node = data
+    for part in section:
+        if not isinstance(node, dict) or part not in node:
+            return "absent"
+        node = node[part]
+    if not isinstance(node, dict) or key not in node:
+        return "absent"
+    node.pop(key)
+    _atomic_write_json(path, data)
+    return "removed"
+
+
+def _remove_disabled_server(node: dict) -> int:
+    """Remove "rdm" from a disabledMcpServers field.
+
+    Claude Code stores disabled servers as a list of names; tolerate a dict
+    (name -> boolean) as well, since user-edited configs vary.
+    """
+    disabled = node.get("disabledMcpServers")
+    if isinstance(disabled, list) and "rdm" in disabled:
+        disabled.remove("rdm")
+        return 1
+    if isinstance(disabled, dict) and "rdm" in disabled:
+        disabled.pop("rdm")
+        return 1
+    return 0
+
+
+def remove_claude(home: Path) -> IntegrateResult:
+    """Remove every rdm binding from claude config.
+
+    Claude Code stores both user-scope config under top-level ``mcpServers``
+    and one project-scope config per absolute directory under
+    ``projects.<cwd>.mcpServers``. A user-scope uninstall must clean both;
+    there can be many historical project bindings in one ~/.claude.json.
+    """
+    path = claude_config_path(home)
+    if not path.exists():
+        return IntegrateResult("claude", path, "absent")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path} is not valid JSON: {exc}") from exc
+
+    removed = 0
+    disabled = 0
+
+    if isinstance(data.get("mcpServers"), dict) and "rdm" in data["mcpServers"]:
+        data["mcpServers"].pop("rdm")
+        removed += 1
+    disabled += _remove_disabled_server(data)
+
+    project_dirs: list[str] = []
+    projects = data.get("projects")
+    if isinstance(projects, dict):
+        for directory, node in projects.items():
+            if not isinstance(node, dict):
+                continue
+            servers = node.get("mcpServers")
+            if isinstance(servers, dict) and "rdm" in servers:
+                servers.pop("rdm")
+                removed += 1
+                project_dirs.append(directory)
+            disabled += _remove_disabled_server(node)
+
+    if not removed and not disabled:
+        return IntegrateResult("claude", path, "absent")
+    _atomic_write_json(path, data)
+    notes = []
+    if removed:
+        notes.append(
+            f"top-level + {len(project_dirs)} project binding(s)"
+            if project_dirs and removed > len(project_dirs)
+            else f"{len(project_dirs)} project binding(s)"
+            if project_dirs
+            else "top-level"
+        )
+    if disabled:
+        notes.append(f"{disabled} disabled entry(ies)")
+    return IntegrateResult("claude", path, "removed", ", ".join(notes))
+
+
+def remove_opencode(home: Path) -> IntegrateResult:
+    status = _remove_json_key(opencode_config_path(home), ("mcp",), "rdm")
+    return IntegrateResult("opencode", opencode_config_path(home), status)
+
+
+def remove_codex(home: Path) -> IntegrateResult:
+    path = codex_config_path(home)
+    if not path.exists() or MANAGED_BEGIN not in path.read_text(encoding="utf-8"):
+        return IntegrateResult("codex", path, "absent")
+    text = path.read_text(encoding="utf-8")
+    replacement = _remove_managed_block(text)
+    assert replacement is not None
+    tmp = path.with_suffix(".toml.tmp")
+    tmp.write_text(replacement, encoding="utf-8")
+    os.replace(tmp, path)
+    return IntegrateResult("codex", path, "removed")
+
+
+def remove_claude_project(home: Path, cwd: Path) -> IntegrateResult:
+    path = claude_config_path(home)
+    status = _remove_json_key(path, ("projects", str(cwd.resolve()), "mcpServers"), "rdm")
+    return IntegrateResult("claude", path, status)
+
+
+def _remove_gitignore_line(cwd: Path, rel_path: str) -> None:
+    git_root = cwd
+    while git_root != git_root.parent:
+        if (git_root / ".git").exists():
+            gi = git_root / ".gitignore"
+            if gi.exists():
+                lines = gi.read_text(encoding="utf-8").splitlines()
+                if rel_path in lines:
+                    kept = [line for line in lines if line != rel_path]
+                    content = "\n".join(kept).rstrip()
+                    gi.write_text(content + ("\n" if content else ""), encoding="utf-8")
+            return
+        git_root = git_root.parent
+
+
+def remove_opencode_project(cwd: Path) -> tuple[IntegrateResult, bool]:
+    """Remove directory-scoped binding; delete the file when rdm was its only server."""
+    path = cwd / ".opencode" / "opencode.json"
+    if not path.exists():
+        return IntegrateResult("opencode", path, "absent"), False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path} is not valid JSON: {exc}") from exc
+    servers = data.get("mcp") if isinstance(data, dict) else None
+    if not isinstance(servers, dict) or "rdm" not in servers:
+        return IntegrateResult("opencode", path, "absent"), False
+    servers.pop("rdm")
+    gitignore_touched = False
+    if not servers and set(data.keys()) <= {"mcp"}:
+        # rdm was the file's only content: remove it and undo the ignore rule.
+        path.unlink()
+        before = _find_gitignore(cwd)
+        _remove_gitignore_line(cwd, ".opencode/opencode.json")
+        gitignore_touched = before is not None
+    else:
+        _atomic_write_json(path, data)
+    return IntegrateResult("opencode", path, "removed"), gitignore_touched
+
+
+def _find_gitignore(cwd: Path) -> Path | None:
+    git_root = cwd
+    while git_root != git_root.parent:
+        gi = git_root / ".gitignore"
+        if (git_root / ".git").exists() and gi.exists():
+            return gi
+        git_root = git_root.parent
+    return None
+
+
+REMOVERS = {
+    IntegrateTarget.claude: remove_claude,
+    IntegrateTarget.codex: remove_codex,
+    IntegrateTarget.opencode: remove_opencode,
+}
 
 MERGERS = {
     IntegrateTarget.claude: merge_claude,
