@@ -6,6 +6,7 @@ import AppShell from "./shell/AppShell";
 import BacklogPage from "./pages/BacklogPage";
 import BoardPage from "./pages/BoardPage";
 import ConsentPage from "./pages/ConsentPage";
+import ItemPage from "./pages/ItemPage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import OverviewPage from "./pages/OverviewPage";
@@ -41,7 +42,7 @@ export const router = createBrowserRouter([
       { path: "projects/:key/workspaces", element: placeholder("工作区") },
       { path: "projects/:key/members", element: placeholder("成员") },
       { path: "projects/:key/settings", element: placeholder("设置") },
-      { path: "projects/:key/items/:id", element: placeholder("工作项详情") },
+      { path: "projects/:key/items/:id", Component: ItemPage },
       { path: "*", Component: NotFoundPage },
     ],
   },
