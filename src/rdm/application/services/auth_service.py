@@ -45,6 +45,10 @@ class _CacheEntry:
     last_touch: float
     member_id: str
     family_id: str | None
+    client_id: str | None = None
+    # The credential's own expiry (MemberToken.expires_at), distinct from the
+    # monotonic cache deadline above; needed to reconstruct cached tokens.
+    token_expires_at: dt.datetime | None = None
 
 
 class Authenticator:
@@ -115,13 +119,18 @@ class Authenticator:
         if cached is not None and cached.expires_at > now:
             if not cached.member.is_active:
                 raise Forbidden("成员已停用", details={"member_id": cached.member.id})
-            # Reconstruct a lightweight token view for callers needing the id.
+            # Reconstruct a token view carrying every field callers need:
+            # dropping client_id/expires_at here previously made cached
+            # OAuth access tokens look like PATs (client_id "pat", no expiry),
+            # which broke MCP session principal checks and hid the TTL.
             cached_token = MemberToken(
                 id=cached.token_id,
                 member_id=cached.member.id,
                 token_hash=token_hash,
                 kind=cached.kind,
                 family_id=cached.family_id,
+                client_id=cached.client_id,
+                expires_at=cached.token_expires_at,
             )
             return cached.member, cached_token
 
@@ -172,6 +181,8 @@ class Authenticator:
             last_touch=last_touch,
             member_id=member.id,
             family_id=token.family_id,
+            client_id=token.client_id,
+            token_expires_at=token.expires_at,
         )
         self._cache[token_hash] = entry
         self._id_to_hash[token.id] = token_hash
