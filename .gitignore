@@ -41,3 +41,6 @@ docs/ui-design
 docs/acceptance
 
 .opencode
+
+node_modules/
+**/node_modules/
