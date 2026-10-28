@@ -1,0 +1,188 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+
+import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+import Button from "@atlaskit/button/default/button";
+import Checkbox from "@atlaskit/checkbox";
+import Heading from "@atlaskit/heading";
+import Spinner from "@atlaskit/spinner";
+import EmptyState from "@atlaskit/empty-state";
+import { Box, Inline } from "@atlaskit/primitives";
+import { token } from "@atlaskit/tokens";
+
+import { api, errorCause } from "../lib/api";
+import { useNotify } from "../lib/flags";
+import type { WorkItem, WorkflowDto } from "../types";
+import { KIND_OPTIONS } from "../workitems/constants";
+import BoardCard from "./board/BoardCard";
+import BoardColumn from "./board/BoardColumn";
+
+export default function BoardPage() {
+  const { key: projectKey = "" } = useParams();
+  const navigate = useNavigate();
+  const notify = useNotify();
+
+  const [kind, setKind] = useState("task");
+  const [showTerminal, setShowTerminal] = useState(true);
+  const [items, setItems] = useState<WorkItem[]>([]);
+  const [workflow, setWorkflow] = useState<WorkflowDto | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Latest values for the (mount-once) drop monitor.
+  const stateRef = useRef({ items, workflow, kind, projectKey });
+  stateRef.current = { items, workflow, kind, projectKey };
+
+  const load = useCallback(
+    async (nextKind: string, initial = false) => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({ kind: nextKind, limit: "200" });
+        const [wf, list] = await Promise.all([
+          initial || !stateRef.current.workflow
+            ? api.get<WorkflowDto>("/workflow")
+            : Promise.resolve({ data: stateRef.current.workflow! }),
+          api.get<WorkItem[]>(
+            `/projects/${projectKey}/work-items?${params.toString()}`,
+          ),
+        ]);
+        setWorkflow(wf.data);
+        setItems(list.data);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [projectKey],
+  );
+
+  useEffect(() => {
+    load(kind, true);
+    // load identity is stable; reload when the kind filter changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind]);
+
+  const handleDrop = useCallback(
+    async (itemId: string, target: string) => {
+      const { items: current, workflow: wf, projectKey: pk } = stateRef.current;
+      const item = current.find((i) => i.id === itemId);
+      if (!item || item.status === target) return;
+      const allowed = wf?.kinds[item.kind]?.transitions[item.status] ?? [];
+      if (!allowed.includes(target)) {
+        notify.error(
+          "非法流转",
+          `${item.display_id} 不能从 ${item.status} 流转到 ${target}`,
+        );
+        return;
+      }
+      const previous = item.status;
+      setItems((prev) =>
+        prev.map((i) => (i.id === item.id ? { ...i, status: target } : i)),
+      );
+      try {
+        await api.post(`/work-items/${item.display_id}/transition`, {
+          to: target,
+          row_version: item.row_version,
+          reason: null,
+        });
+        notify.success(`${item.display_id} → ${target}`);
+        await load(stateRef.current.kind);
+      } catch (e) {
+        setItems((prev) =>
+          prev.map((i) => (i.id === item.id ? { ...i, status: previous } : i)),
+        );
+        const cause = errorCause(e);
+        // Engine emits display-id strings in details.blocking_children.
+        const blocking = ((cause?.details?.blocking_children as unknown) as
+          | string[]
+          | undefined)
+          ?.filter(Boolean)
+          .join(", ");
+        notify.error(
+          "流转失败",
+          blocking ? `${cause?.message}（阻塞: ${blocking}）` : cause?.message,
+        );
+      }
+    },
+    [load, notify],
+  );
+
+  useEffect(() => {
+    return monitorForElements({
+      onDrop({ source, location }) {
+        const target = location.current.dropTargets[0]?.data as
+          | { status?: string }
+          | undefined;
+        const src = source.data as { itemId?: string };
+        if (target?.status && src.itemId) void handleDrop(src.itemId, target.status);
+      },
+    });
+  }, [handleDrop]);
+
+  const columns = useMemo(() => {
+    const spec = workflow?.kinds[kind];
+    if (!spec) return [];
+    const terminal = new Set(spec.terminal);
+    const states = spec.states.filter((s) => showTerminal || !terminal.has(s));
+    return states.map((status) => ({
+      status,
+      items: items.filter((i) => i.status === status),
+    }));
+  }, [workflow, kind, showTerminal, items]);
+
+  const openItem = (item: WorkItem) =>
+    navigate(`/projects/${projectKey}/items/${item.id}`);
+
+  return (
+    <Box
+      padding="space.300"
+      style={{ display: "flex", flexDirection: "column", height: "100%" }}
+    >
+      <Inline space="space.200" alignBlock="center">
+        <Heading size="large">看板</Heading>
+        <Inline space="space.050" alignBlock="center">
+          {KIND_OPTIONS.map((k) => (
+            <Button
+              key={k.value}
+              appearance={kind === k.value ? "primary" : "default"}
+              spacing="compact"
+              onClick={() => setKind(k.value)}
+            >
+              {k.label}
+            </Button>
+          ))}
+        </Inline>
+        <Checkbox
+          label="显示终态列"
+          isChecked={showTerminal}
+          onChange={(e) => setShowTerminal(e.currentTarget.checked)}
+        />
+      </Inline>
+
+      <Box
+        style={{
+          flex: 1,
+          display: "flex",
+          gap: token("space.100"),
+          overflowX: "auto",
+          alignItems: "stretch",
+          marginTop: token("space.200"),
+        }}
+      >
+        {loading ? (
+          <Spinner size="large" />
+        ) : columns.length === 0 ? (
+          <EmptyState header="该类型暂无工作流列" />
+        ) : (
+          columns.map((col) => (
+            <BoardColumn key={col.status} status={col.status} count={col.items.length}>
+              {col.items.length === 0 ? null : (
+                col.items.map((item) => (
+                  <BoardCard key={item.id} item={item} onOpen={openItem} />
+                ))
+              )}
+            </BoardColumn>
+          ))
+        )}
+      </Box>
+    </Box>
+  );
+}

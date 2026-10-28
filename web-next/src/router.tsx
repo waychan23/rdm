@@ -4,9 +4,11 @@ import { Navigate, createBrowserRouter, redirect } from "react-router-dom";
 import { ensureSession } from "./lib/auth";
 import AppShell from "./shell/AppShell";
 import BacklogPage from "./pages/BacklogPage";
+import BoardPage from "./pages/BoardPage";
 import ConsentPage from "./pages/ConsentPage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
+import OverviewPage from "./pages/OverviewPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import ProjectsPage from "./pages/ProjectsPage";
 
@@ -31,8 +33,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/projects" replace /> },
       { path: "projects", Component: ProjectsPage },
-      { path: "projects/:key", element: placeholder("概览") },
-      { path: "projects/:key/board", element: placeholder("看板") },
+      { path: "projects/:key", Component: OverviewPage },
+      { path: "projects/:key/board", Component: BoardPage },
       { path: "projects/:key/backlog", Component: BacklogPage },
       { path: "projects/:key/sprints", element: placeholder("迭代") },
       { path: "projects/:key/mailbox", element: placeholder("信箱") },
