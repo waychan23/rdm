@@ -43,11 +43,28 @@ const name = ref("");
 const password = ref("");
 const loading = ref(false);
 
-function safeRedirect(target: unknown): string {
-  if (typeof target === "string" && target.startsWith("/") && !target.startsWith("//")) {
-    return target;
-  }
-  return "/projects";
+// Server-side (non-SPA) paths the OAuth flow may ask us to return to after
+// login: /authorize must be re-requested as a full page (with the new session
+// cookie) so the authorization server can continue and redirect to consent.
+const SERVER_PATHS = new Set([
+  "/authorize",
+  "/token",
+  "/register",
+  "/revoke",
+]);
+
+function isSafeInternalPath(target: unknown): target is string {
+  return (
+    typeof target === "string" &&
+    target.startsWith("/") &&
+    !target.startsWith("//") &&
+    !target.startsWith("/\\")
+  );
+}
+
+function isServerPath(target: string): boolean {
+  const path = target.split("?")[0].split("#")[0];
+  return SERVER_PATHS.has(path) || path.startsWith("/.well-known/");
 }
 
 async function submit() {
@@ -56,7 +73,21 @@ async function submit() {
   try {
     rememberProjectKey(projectKey.value.trim() || "RDM");
     await login(projectKey.value.trim() || "RDM", name.value.trim(), password.value);
-    router.push(safeRedirect(route.query.redirect));
+    // OAuth provider redirects to /login?next=/authorize?...; the router guard
+    // uses ?redirect= for SPA pages. Honor both.
+    const target =
+      (route.query.next as string | undefined) ??
+      (route.query.redirect as string | undefined);
+    if (isSafeInternalPath(target)) {
+      if (isServerPath(target)) {
+        // Full navigation: re-hit the server endpoint with the session cookie.
+        window.location.assign(target);
+        return;
+      }
+      router.push(target);
+    } else {
+      router.push("/projects");
+    }
   } catch (e) {
     ElMessage.error(errorCause(e)?.message || "登录失败");
   } finally {

@@ -117,8 +117,10 @@ async function send() {
 async function fetchPage(since?: string | null, replace = false) {
   loading.value = true;
   try {
-    const params = new URLSearchParams({ limit: "20" });
-    if (unreadOnly.value) params.set("unread_only", "true");
+    const params = new URLSearchParams({
+      limit: "20",
+      unread_only: unreadOnly.value ? "true" : "false",
+    });
     if (since) params.set("since", since);
     const box = (await api.get<Mailbox>(`/projects/${key}/mailbox?${params}`)).data;
     messages.value = replace ? box.messages : [...messages.value, ...box.messages];
