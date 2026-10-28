@@ -35,3 +35,6 @@ e2e/out/
 
 .claude
 docs/ui-design
+docs/acceptance
+
+.opencode
