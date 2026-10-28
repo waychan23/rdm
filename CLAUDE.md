@@ -17,6 +17,9 @@ human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，三个组
 
 ## 写 web-next/ 下的 UI 时
 
+完整规范见 **[docs/web-next-ui.md](docs/web-next-ui.md)**（ADS 工具用法、token 规则与短名坑、
+组件导入路径、状态/类型配色、表格/对话框/覆盖面板模式、新页面 checklist）——动手前先读。
+
 - 动手前先用 ads-mcp（`.mcp.json` 已配，工具名 `mcp__ads-mcp__*`）或
   `npx @atlaskit/ads-cli search/docs ... [--json]` 确认组件名、token 名、用法；查不到再用 `atlaskit_*` fallback 工具。
 - 颜色、间距、圆角、阴影、字体、层级一律走 `@atlaskit/tokens`（`token('…')` / CSS 变量 `var(--ds-…)`），

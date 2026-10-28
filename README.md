@@ -125,5 +125,6 @@ pnpm -C web install --frozen-lockfile --ignore-scripts && pnpm -C web build
 uv build
 ```
 
-前端写码规则见仓库根 `CLAUDE.md`；测试与关键裁决见 `docs/`（architecture.md §16）。
+前端写码规则见仓库根 `CLAUDE.md`，UI 设计与组件/token 规范见 [docs/web-next-ui.md](docs/web-next-ui.md)；
+测试与关键裁决见 `docs/`（architecture.md §16）。
 M1 手工验收脚本见 `docs/acceptance/m1-loop.md`。
