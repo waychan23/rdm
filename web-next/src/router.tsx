@@ -8,10 +8,12 @@ import BoardPage from "./pages/BoardPage";
 import ConsentPage from "./pages/ConsentPage";
 import ItemPage from "./pages/ItemPage";
 import LoginPage from "./pages/LoginPage";
+import MailboxPage from "./pages/MailboxPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import OverviewPage from "./pages/OverviewPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import ProjectsPage from "./pages/ProjectsPage";
+import SprintsPage from "./pages/SprintsPage";
 
 async function requireAuth({ request }: LoaderFunctionArgs) {
   const member = await ensureSession();
@@ -37,8 +39,8 @@ export const router = createBrowserRouter([
       { path: "projects/:key", Component: OverviewPage },
       { path: "projects/:key/board", Component: BoardPage },
       { path: "projects/:key/backlog", Component: BacklogPage },
-      { path: "projects/:key/sprints", element: placeholder("迭代") },
-      { path: "projects/:key/mailbox", element: placeholder("信箱") },
+      { path: "projects/:key/sprints", Component: SprintsPage },
+      { path: "projects/:key/mailbox", Component: MailboxPage },
       { path: "projects/:key/workspaces", element: placeholder("工作区") },
       { path: "projects/:key/members", element: placeholder("成员") },
       { path: "projects/:key/settings", element: placeholder("设置") },

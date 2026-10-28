@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import Lozenge from "@atlaskit/lozenge";
 import type { NewLozengeProps } from "@atlaskit/lozenge";
 
@@ -23,6 +25,12 @@ const APPEARANCE: Record<StatusTone, NewLozengeProps["appearance"]> = {
   todo: "accent-blue", // subtle blue
 };
 
-export default function StatusLozenge({ status }: { status: string }) {
-  return <Lozenge appearance={APPEARANCE[statusTone(status)]}>{status}</Lozenge>;
+export default function StatusLozenge({
+  status,
+  children,
+}: {
+  status: string;
+  children?: ReactNode;
+}) {
+  return <Lozenge appearance={APPEARANCE[statusTone(status)]}>{children ?? status}</Lozenge>;
 }
