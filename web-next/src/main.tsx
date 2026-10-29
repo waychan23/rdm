@@ -1,3 +1,6 @@
+// Must run before the Atlaskit imports below evaluate (see the file header).
+import "./lib/feature-flags";
+
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { Link, RouterProvider } from "react-router-dom";
