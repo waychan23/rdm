@@ -542,7 +542,7 @@ function HumanGroup({
           <td>
             <Lozenge appearance="warning">agent</Lozenge>
           </td>
-          <td colSpan={3}>
+          <td colSpan={2}>
             <Text size="small" color="color.text.subtlest">
               由其 human 在「我的设置」中管理
             </Text>
@@ -552,6 +552,7 @@ function HumanGroup({
               {a.effective_active ? "生效" : "停用"}
             </Lozenge>
           </td>
+          <td />
         </tr>
       ))}
     </>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
+import Checkbox from "@atlaskit/checkbox";
 import Heading from "@atlaskit/heading";
 import Lozenge from "@atlaskit/lozenge";
 import ModalDialog, {
@@ -18,6 +19,7 @@ import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { portalMenuProps } from "../lib/portalMenu";
 
 import FormField from "../components/FormField";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
@@ -37,6 +39,18 @@ const ACCEPT_KINDS = [
   { label: "issue", value: "issue" },
   { label: "task", value: "task" },
 ];
+const ALL_ACCEPT_KINDS = ACCEPT_KINDS.map((k) => k.value);
+
+function defaultAgentForm() {
+  return {
+    name: "",
+    // New agents can take every kind unless the user narrows it.
+    accept_kinds: [...ALL_ACCEPT_KINDS],
+    email: "",
+    notify_webhook: "",
+    notify_webhook_format: "generic",
+  };
+}
 const WEBHOOK_FORMATS = [
   { label: "generic", value: "generic" },
   { label: "dingtalk", value: "dingtalk" },
@@ -103,25 +117,34 @@ export default function PersonalSettingsPage() {
      }
   };
 
-  const revokeToken = async (id: string) => {
+  const [revokeTarget, setRevokeTarget] = useState<Token | null>(null);
+  const [revoking, setRevoking] = useState(false);
+  const [hideRevoked, setHideRevoked] = useState(false);
+  const visibleTokens = (tokens ?? []).filter((t) => !hideRevoked || t.is_valid);
+
+  const revokeToken = async () => {
+     if (!revokeTarget || revoking) return;
+     setRevoking(true);
      try {
-       await api.del(`/me/tokens/${id}`);
+       await api.del(`/me/tokens/${revokeTarget.id}`);
+       setRevokeTarget(null);
        reload();
+       notify.success("令牌已吊销");
      } catch (e) {
        notify.error("吊销失败", errorCause(e)?.message);
+     } finally {
+       setRevoking(false);
      }
   };
 
   // --- agents ---
   const [agentOpen, setAgentOpen] = useState(false);
-  const [agentForm, setAgentForm] = useState({
-     name: "",
-     accept_kinds: [] as string[],
-     email: "",
-     notify_webhook: "",
-     notify_webhook_format: "generic",
-  });
+  const [agentForm, setAgentForm] = useState(defaultAgentForm);
   const [savingAgent, setSavingAgent] = useState(false);
+
+  useEffect(() => {
+    if (agentOpen) setAgentForm(defaultAgentForm());
+  }, [agentOpen]);
 
   const createAgent = async () => {
      if (savingAgent) return;
@@ -136,13 +159,7 @@ export default function PersonalSettingsPage() {
        };
        await api.post("/me/agents", body);
        setAgentOpen(false);
-       setAgentForm({
-         name: "",
-         accept_kinds: [],
-         email: "",
-         notify_webhook: "",
-         notify_webhook_format: "generic",
-       });
+       setAgentForm(defaultAgentForm());
        reload();
      } catch (e) {
        notify.error("创建 agent 失败", errorCause(e)?.message);
@@ -232,18 +249,28 @@ export default function PersonalSettingsPage() {
          <Stack space="space.200">
            <Inline spread="space-between" alignBlock="center">
              <Heading size="small">访问令牌（PAT）</Heading>
-             <Button
-               testId="personal-token-create-button"
-               onClick={() => {
-                 setIssued("");
-                 setTokenOpen(true);
-               }}
-             >
-               创建令牌
-             </Button>
+             <Inline space="space.100" alignBlock="center">
+               <Checkbox
+                 label="隐藏已吊销"
+                 isChecked={hideRevoked}
+                 testId="personal-token-hide-revoked"
+                 onChange={(e) => setHideRevoked(e.currentTarget.checked)}
+               />
+               <Button
+                 testId="personal-token-create-button"
+                 onClick={() => {
+                   setIssued("");
+                   setTokenOpen(true);
+                 }}
+               >
+                 创建令牌
+               </Button>
+             </Inline>
            </Inline>
-           {(tokens ?? []).length === 0 ? (
-             emptyHint
+           {visibleTokens.length === 0 ? (
+             <Text size="small" color="color.text.subtlest">
+               {(tokens ?? []).length > 0 ? "没有有效令牌（已隐藏已吊销）" : "暂无记录"}
+             </Text>
            ) : (
              <table className="rdm-table" aria-label="访问令牌" data-testid="personal-token-table">
                <thead>
@@ -269,7 +296,7 @@ export default function PersonalSettingsPage() {
                  </tr>
                </thead>
                <tbody>
-                 {(tokens ?? []).map((t) => (
+                 {visibleTokens.map((t) => (
                    <tr key={t.id} data-testid={`personal-token-row-${t.id}`}>
                      <td className="cell-meta">{t.label ?? "—"}</td>
                      <td className="cell-meta">
@@ -292,7 +319,7 @@ export default function PersonalSettingsPage() {
                            spacing="compact"
                            appearance="danger"
                            testId={`personal-token-revoke-${t.id}`}
-                           onClick={() => void revokeToken(t.id)}
+                           onClick={() => setRevokeTarget(t)}
                          >
                            吊销
                          </Button>
@@ -393,69 +420,85 @@ export default function PersonalSettingsPage() {
                <ModalTitle>创建访问令牌</ModalTitle>
              </ModalHeader>
              <ModalBody>
-               <Stack space="space.150">
-                 <FormField label="标签" htmlFor="token-label">
-                   <Textfield
-                     id="token-label"
-                     value={tokenLabel}
-                     testId="personal-token-label"
-                     onChange={(e) => setTokenLabel(e.currentTarget.value)}
-                   />
-                 </FormField>
-                 <FormField label="有效期（天，留空=永久）" htmlFor="token-days">
-                   <Textfield
-                     id="token-days"
-                     type="number"
-                     value={tokenDays}
-                     testId="personal-token-days"
-                     onChange={(e) => setTokenDays(e.currentTarget.value)}
-                   />
-                 </FormField>
-                 <FormField label="使用身份">
-                   <Select {...portalMenuProps}
-                     inputId="token-act-as"
-                     placeholder="本人"
-                     options={(agents ?? []).map((a) => ({
-                       label: `${a.name}（agent）`,
-                       value: a.id,
-                     }))}
-                     value={
-                       actAs
-                         ? {
-                             label: agents?.find((a) => a.id === actAs)?.name ?? "",
-                             value: actAs,
-                           }
-                         : null
-                     }
-                     onChange={(opt) =>
-                       setActAs((opt as { value: string } | null)?.value ?? null)
-                     }
-                     isClearable
-                   />
-                 </FormField>
-                 {issued && (
-                   <SectionMessage appearance="success" title="令牌只显示一次">
-                     <code>{issued}</code>
-                   </SectionMessage>
-                 )}
-               </Stack>
+               {issued ? (
+                 <SectionMessage appearance="success" title="令牌只显示一次">
+                   <Stack space="space.100">
+                     <code style={{ wordBreak: "break-all" }}>{issued}</code>
+                     <Text size="small">请立即复制保存；关闭窗口后无法再次查看。</Text>
+                   </Stack>
+                 </SectionMessage>
+               ) : (
+                 <Stack space="space.150">
+                   <FormField label="标签" htmlFor="token-label">
+                     <Textfield
+                       id="token-label"
+                       value={tokenLabel}
+                       testId="personal-token-label"
+                       onChange={(e) => setTokenLabel(e.currentTarget.value)}
+                     />
+                   </FormField>
+                   <FormField label="有效期（天，留空=永久）" htmlFor="token-days">
+                     <Textfield
+                       id="token-days"
+                       type="number"
+                       value={tokenDays}
+                       testId="personal-token-days"
+                       onChange={(e) => setTokenDays(e.currentTarget.value)}
+                     />
+                   </FormField>
+                   <FormField label="使用身份">
+                     <Select {...portalMenuProps}
+                       inputId="token-act-as"
+                       placeholder="本人"
+                       options={(agents ?? []).map((a) => ({
+                         label: `${a.name}（agent）`,
+                         value: a.id,
+                       }))}
+                       value={
+                         actAs
+                           ? {
+                               label: agents?.find((a) => a.id === actAs)?.name ?? "",
+                               value: actAs,
+                             }
+                           : null
+                       }
+                       onChange={(opt) =>
+                         setActAs((opt as { value: string } | null)?.value ?? null)
+                       }
+                       isClearable
+                     />
+                   </FormField>
+                 </Stack>
+               )}
              </ModalBody>
              <ModalFooter>
-               <Button
-                 appearance="subtle"
-                 testId="personal-token-dialog-close"
-                 onClick={() => setTokenOpen(false)}
-               >
-                 关闭
-               </Button>
-               <Button
-                 appearance="primary"
-                 onClick={createToken}
-                 isLoading={savingToken}
-                 testId="personal-token-submit"
-               >
-                 创建
-               </Button>
+               {issued ? (
+                 <Button
+                   appearance="primary"
+                   testId="personal-token-dialog-close"
+                   onClick={() => setTokenOpen(false)}
+                 >
+                   关闭
+                 </Button>
+               ) : (
+                 <>
+                   <Button
+                     appearance="subtle"
+                     testId="personal-token-dialog-close"
+                     onClick={() => setTokenOpen(false)}
+                   >
+                     关闭
+                   </Button>
+                   <Button
+                     appearance="primary"
+                     onClick={createToken}
+                     isLoading={savingToken}
+                     testId="personal-token-submit"
+                   >
+                     创建
+                   </Button>
+                 </>
+               )}
              </ModalFooter>
            </ModalDialog>
          )}
@@ -595,6 +638,21 @@ export default function PersonalSettingsPage() {
            </ModalDialog>
          )}
        </ModalTransition>
+
+       <ConfirmDialog
+         open={revokeTarget !== null}
+         title="吊销访问令牌"
+         confirmLabel="吊销"
+         danger
+         busy={revoking}
+         testId="personal-token-revoke-dialog"
+         onClose={() => {
+           if (!revoking) setRevokeTarget(null);
+         }}
+         onConfirm={() => void revokeToken()}
+       >
+         确定吊销标签为「{revokeTarget?.label ?? "—"}」的访问令牌？使用该令牌的客户端会立即失效，且不可恢复。
+       </ConfirmDialog>
      </Page>
   );
 }
