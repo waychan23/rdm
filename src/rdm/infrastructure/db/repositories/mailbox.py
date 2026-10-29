@@ -223,12 +223,8 @@ class MessageRepository:
         rows = list((await self._s.execute(stmt)).scalars().all())
         return [message_ref_to_domain(r) for r in rows]
 
-    async def unread_count(
-        self, recipient_user_id: str, *, project_id: str | None = None
-    ) -> int:
-        return await self.unread_count_for_users(
-            [recipient_user_id], project_id=project_id
-        )
+    async def unread_count(self, recipient_user_id: str, *, project_id: str | None = None) -> int:
+        return await self.unread_count_for_users([recipient_user_id], project_id=project_id)
 
     async def unread_count_for_users(
         self, recipient_user_ids: Sequence[str], *, project_id: str | None = None

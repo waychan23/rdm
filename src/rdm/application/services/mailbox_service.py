@@ -393,12 +393,8 @@ class MailboxService:
     ) -> int:
         assert self.uow.messages is not None
         await self.ensure_indiv(project_id, actor.id)
-        identity_ids = await self._mailbox_identity_ids(
-            actor, include_agents=include_agents
-        )
-        return await self.uow.messages.unread_count_for_users(
-            identity_ids, project_id=project_id
-        )
+        identity_ids = await self._mailbox_identity_ids(actor, include_agents=include_agents)
+        return await self.uow.messages.unread_count_for_users(identity_ids, project_id=project_id)
 
     # --- @mention fan-out (shared with comment service) -------------------
 

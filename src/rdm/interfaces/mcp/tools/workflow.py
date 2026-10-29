@@ -29,15 +29,11 @@ def register(mcp: FastMCP, container: Container) -> None:
             assert uow.users is not None
             agents = await uow.users.list_agents_of(actor.human_id)
             identity_ids = (
-                [actor.id]
-                if actor.is_agent
-                else [actor.human_id, *[a.id for a in agents]]
+                [actor.id] if actor.is_agent else [actor.human_id, *[a.id for a in agents]]
             )
             unread = await uow.messages.unread_count_for_users(identity_ids)
             project_unread = {
-                p.id: await uow.messages.unread_count_for_users(
-                    identity_ids, project_id=p.id
-                )
+                p.id: await uow.messages.unread_count_for_users(identity_ids, project_id=p.id)
                 for p in projects
             }
             my_open = await WorkItemService(uow).my_open_items(actor)

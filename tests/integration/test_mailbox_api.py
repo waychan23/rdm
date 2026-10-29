@@ -199,16 +199,12 @@ async def test_mailbox_is_project_scoped(server, owner_token: str) -> None:
         )
         assert r.status_code == 201, r.text
 
-    r = await client.get(
-        f"{API}/projects/DEMO/mailbox?unread_only=false", headers=auth(human)
-    )
+    r = await client.get(f"{API}/projects/DEMO/mailbox?unread_only=false", headers=auth(human))
     assert [m["subject"] for m in r.json()["data"]["messages"]] == ["项目 A 的信"]
     assert r.json()["data"]["unread_count"] == 1
     demo_delivery = r.json()["data"]["messages"][0]["delivery_id"]
 
-    r = await client.get(
-        f"{API}/projects/OTHER/mailbox?unread_only=false", headers=auth(human)
-    )
+    r = await client.get(f"{API}/projects/OTHER/mailbox?unread_only=false", headers=auth(human))
     assert [m["subject"] for m in r.json()["data"]["messages"]] == ["项目 B 的信"]
     assert r.json()["data"]["unread_count"] == 1
 
