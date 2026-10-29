@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Button from "@atlaskit/button/default/button";
 import IconButton from "@atlaskit/button/icon/button";
@@ -6,27 +6,42 @@ import Heading from "@atlaskit/heading";
 import CrossIcon from "@atlaskit/icon/core/cross";
 import Link from "@atlaskit/link";
 import Select from "@atlaskit/select";
-import TextArea from "@atlaskit/textarea";
 import SectionMessage from "@atlaskit/section-message";
 import Spinner from "@atlaskit/spinner";
-import { Box, Inline, Text } from "@atlaskit/primitives/compiled";
-import TextButton from "../../components/TextButton";
+import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { token } from "@atlaskit/tokens";
-import { portalMenuProps } from "../../lib/portalMenu";
 
-import { api, errorCause } from "../../lib/api";
-import { formatDate, formatSize } from "../../lib/format";
-import { useNotify } from "../../lib/flags";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import ImagePreviewDialog from "../../components/ImagePreviewDialog";
+import MarkdownEditor from "../../components/MarkdownEditor";
 import MarkdownText from "../../components/MarkdownText";
 import PersonCell from "../../components/PersonCell";
 import PriorityMark from "../../components/PriorityMark";
+import TextButton from "../../components/TextButton";
 import TypeKindIcon from "../../components/TypeKindIcon";
+import WorkItemPicker, { type WorkItemOption } from "../../components/WorkItemPicker";
 import EditWorkItemDialog from "../../workitems/EditWorkItemDialog";
 import StatusLozenge from "../../workitems/status";
-import type { Artifact, Attachment, Comment, OrgUser, ProjectMemberRow, WorkItem } from "../../types";
+import { api, errorCause } from "../../lib/api";
+import { useCurrentUser } from "../../lib/auth";
+import { formatDate, formatSize } from "../../lib/format";
+import { useNotify } from "../../lib/flags";
 import { flattenMembers } from "../../lib/members";
-import TransitionDialog from "./TransitionDialog";
+import { portalMenuProps } from "../../lib/portalMenu";
+import type {
+  Artifact,
+  Attachment,
+  Comment,
+  OrgUser,
+  ProjectMemberRow,
+  WorkItem,
+  WorkItemDetailMeta,
+} from "../../types";
 import ArtifactDialog from "./ArtifactDialog";
+import ChildrenSection from "./ChildrenSection";
+import HistorySection from "./HistorySection";
+import TransitionDialog from "./TransitionDialog";
+import WorkItemFieldsView from "./WorkItemFieldsView";
 
 interface Props {
   projectKey: string;
@@ -37,16 +52,41 @@ interface Props {
 
 interface DetailBundle {
   item: WorkItem;
+  parent: WorkItem | null;
   children: WorkItem[];
   allowed: string[];
+  allowedParentKinds: string[];
+  allowedChildKinds: string[];
   comments: Comment[];
   members: OrgUser[];
   attachments: Attachment[];
   artifacts: Artifact[];
 }
 
+interface PreviewImage {
+  src: string;
+  alt: string;
+}
+
+const PRIORITY_VALUES = [0, 1, 2, 3, 4];
+const COMMENTS_PAGE = 50;
+
+function toWorkItemOption(item: WorkItem): WorkItemOption {
+  return {
+    label: `${item.display_id} · ${item.title}`,
+    value: item.display_id,
+    id: item.id,
+    display_id: item.display_id,
+    title: item.title,
+    kind: item.kind,
+    status: item.status,
+    row_version: item.row_version,
+  };
+}
+
 export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: Props) {
   const notify = useNotify();
+  const me = useCurrentUser();
   const [bundle, setBundle] = useState<DetailBundle | null>(null);
   const [loadError, setLoadError] = useState(false);
 
@@ -54,22 +94,33 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   const [transitionTarget, setTransitionTarget] = useState<string | null>(null);
   const [showArtifact, setShowArtifact] = useState(false);
   const [gateMessage, setGateMessage] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PreviewImage | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [parentEditing, setParentEditing] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState<Comment | null>(null);
 
   const [draft, setDraft] = useState("");
+  const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const [savingComment, setSavingComment] = useState(false);
+  const [uploadingDraftImage, setUploadingDraftImage] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<{ name: string; id: string }[]>([]);
   const pendingIds = useRef<string[]>([]);
   const commentFileInput = useRef<HTMLInputElement>(null);
   const attachFileInput = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [hasMoreComments, setHasMoreComments] = useState(false);
+  const [loadingMoreComments, setLoadingMoreComments] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const detail = await api.get<WorkItem>(
         `/work-items/${encodeURIComponent(itemId)}`,
       );
+      const meta = (detail.meta ?? {}) as WorkItemDetailMeta;
       const [cm, mm, am, artm] = await Promise.all([
-        api.get<Comment[]>(`/work-items/${itemId}/comments`),
+        api.get<Comment[]>(
+          `/work-items/${itemId}/comments?limit=${COMMENTS_PAGE}&offset=0`,
+        ),
         api.get<ProjectMemberRow[]>(`/projects/${projectKey}/members`),
         api.get<Attachment[]>(
           `/projects/${projectKey}/attachments?owner_type=work_item&owner_ref=${encodeURIComponent(itemId)}`,
@@ -80,13 +131,17 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       ]);
       setBundle({
         item: detail.data,
-        children: ((detail.meta?.children as WorkItem[]) ?? []) as WorkItem[],
-        allowed: (detail.meta?.allowed_transitions as string[]) ?? [],
+        parent: meta.parent ?? null,
+        children: meta.children ?? [],
+        allowed: meta.allowed_transitions ?? [],
+        allowedParentKinds: meta.allowed_parent_kinds ?? [],
+        allowedChildKinds: meta.allowed_child_kinds ?? [],
         comments: cm.data,
         members: flattenMembers(mm.data),
         attachments: am.data,
         artifacts: artm.data,
       });
+      setHasMoreComments(cm.data.length >= COMMENTS_PAGE);
       setLoadError(false);
     } catch {
       setLoadError(true);
@@ -97,6 +152,39 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     setBundle(null);
     void load();
   }, [load]);
+
+  const refresh = useCallback(async () => {
+    await load();
+    setRefreshKey((value) => value + 1);
+  }, [load]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (
+        showEdit ||
+        showArtifact ||
+        transitionTarget ||
+        preview ||
+        commentToDelete ||
+        parentEditing
+      ) {
+        return;
+      }
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    commentToDelete,
+    onClose,
+    parentEditing,
+    preview,
+    showArtifact,
+    showEdit,
+    transitionTarget,
+  ]);
 
   const reportGate = (e: unknown) => {
     const cause = errorCause(e);
@@ -118,7 +206,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       });
       notify.success(`已流转到 ${transitionTarget}`);
       setTransitionTarget(null);
-      await load();
+      await refresh();
     } catch (e) {
       setTransitionTarget(null);
       reportGate(e);
@@ -129,10 +217,39 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     if (!memberId) return;
     try {
       await api.post(`/work-items/${itemId}/assign`, { member: memberId });
-      await load();
+      await refresh();
     } catch (e) {
       notify.error("指派失败", errorCause(e)?.message);
-      await load();
+      await refresh();
+    }
+  };
+
+  const changePriority = async (priority: number) => {
+    if (!bundle) return;
+    try {
+      await api.patch(`/work-items/${itemId}`, {
+        row_version: bundle.item.row_version,
+        priority,
+      });
+      await refresh();
+    } catch (e) {
+      notify.error("优先级保存失败", errorCause(e)?.message);
+      await refresh();
+    }
+  };
+
+  const reparent = async (option: WorkItemOption | null) => {
+    if (!bundle) return;
+    try {
+      await api.post(`/work-items/${itemId}/reparent`, {
+        parent: option?.display_id ?? null,
+        row_version: bundle.item.row_version,
+      });
+      notify.success(option ? `已改为 ${option.display_id} 的子项` : "已移出父项");
+      setParentEditing(false);
+      await refresh();
+    } catch (e) {
+      notify.error("更改父项失败", errorCause(e)?.message);
     }
   };
 
@@ -172,8 +289,33 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     }
   };
 
-  const removeArtifact = async (id: string) => {
+  const copyLink = async () => {
     try {
+      await navigator.clipboard.writeText(window.location.href);
+      notify.success("链接已复制");
+    } catch {
+      notify.error("复制失败", "浏览器未授予剪贴板权限");
+    }
+  };
+
+  const loadMoreComments = async () => {    if (!bundle || loadingMoreComments) return;
+    setLoadingMoreComments(true);
+    try {
+      const res = await api.get<Comment[]>(
+        `/work-items/${itemId}/comments?limit=${COMMENTS_PAGE}&offset=${bundle.comments.length}`,
+      );
+      setBundle((b) =>
+        b ? { ...b, comments: [...b.comments, ...res.data] } : b,
+      );
+      setHasMoreComments(res.data.length >= COMMENTS_PAGE);
+    } catch (e) {
+      notify.error("评论加载失败", errorCause(e)?.message);
+    } finally {
+      setLoadingMoreComments(false);
+    }
+  };
+
+  const removeArtifact = async (id: string) => {    try {
       await api.post(`/artifacts/${id}/delete`, {});
       setBundle((b) =>
         b ? { ...b, artifacts: b.artifacts.filter((a) => a.id !== id) } : b,
@@ -184,21 +326,38 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   };
 
   const postComment = async () => {
-    if (!draft.trim() || savingComment) return;
+    if (!draft.trim() || savingComment || uploadingDraftImage) return;
     setSavingComment(true);
     try {
-      await api.post(`/work-items/${itemId}/comments`, {
+      const res = await api.post<Comment>(`/work-items/${itemId}/comments`, {
         body_md: draft,
+        reply_to_id: replyTo?.id ?? null,
         attachment_ids: pendingIds.current,
       });
+      setBundle((b) =>
+        b ? { ...b, comments: [...b.comments, res.data] } : b,
+      );
+      setRefreshKey((value) => value + 1);
       setDraft("");
+      setReplyTo(null);
       pendingIds.current = [];
       setPendingFiles([]);
-      await load();
     } catch (e) {
       notify.error("评论失败", errorCause(e)?.message);
     } finally {
       setSavingComment(false);
+    }
+  };
+
+  const deleteComment = async () => {
+    if (!commentToDelete) return;
+    const target = commentToDelete;
+    setCommentToDelete(null);
+    try {
+      await api.del(`/comments/${target.id}`);
+      await refresh();
+    } catch (e) {
+      notify.error("删除评论失败", errorCause(e)?.message);
     }
   };
 
@@ -229,11 +388,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         <Box padding="space.400">
           <SectionMessage appearance="error">工作项加载失败或已被删除。</SectionMessage>
           <Box paddingBlockStart="space.200">
-            <Button
-              appearance="primary"
-              testId="item-panel-error-back"
-              onClick={onClose}
-            >
+            <Button appearance="primary" testId="item-panel-error-back" onClick={onClose}>
               返回列表
             </Button>
           </Box>
@@ -251,8 +406,37 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     );
   }
 
-  const { item, children, allowed, comments, members, attachments, artifacts } = bundle;
+  const {
+    item,
+    parent,
+    children,
+    allowed,
+    allowedParentKinds,
+    allowedChildKinds,
+    comments,
+    members,
+    attachments,
+    artifacts,
+  } = bundle;
   const memberOptions = members.map((m) => ({ label: m.name, value: m.id }));
+  const priorityValues = PRIORITY_VALUES.includes(item.priority)
+    ? PRIORITY_VALUES
+    : [...PRIORITY_VALUES, item.priority].sort((a, b) => a - b);
+  const priorityOptions = priorityValues.map((value) => ({
+    label: value === 0 ? "未设置" : `P${value}`,
+    value,
+  }));
+  const identityId = me?.identity.id ?? me?.user.id ?? null;
+  const projectRoles =
+    me?.projects.find((project) => project.key === projectKey)?.roles ?? [];
+  const canModerate =
+    Boolean(me?.org_roles.includes("org_owner")) ||
+    projectRoles.includes("project_owner") ||
+    projectRoles.includes("manager");
+  const parentOption = useMemo(
+    () => (parent ? toWorkItemOption(parent) : null),
+    [parent],
+  );
 
   return (
     <aside className="rdm-item-panel" aria-label="工作项详情" data-testid="item-panel">
@@ -271,6 +455,9 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         <TextButton data-testid="item-panel-edit" onClick={() => setShowEdit(true)}>
           编辑
         </TextButton>
+        <TextButton data-testid="item-panel-copy-link" onClick={() => void copyLink()}>
+          复制链接
+        </TextButton>
       </header>
 
       <div className="rdm-item-body">
@@ -284,7 +471,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           <div className="rdm-item-section-label">描述</div>
           {item.description_md ? (
             <div className="rdm-item-desc" data-testid="item-panel-description">
-              <MarkdownText source={item.description_md} />
+              <MarkdownText source={item.description_md} onImageClick={setPreview} />
             </div>
           ) : (
             <div
@@ -295,59 +482,95 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             </div>
           )}
 
-          {item.fields && Object.keys(item.fields).length > 0 && (
-            <>
-              <div className="rdm-item-section-label">特型字段</div>
-              <pre
-                style={{ font: token("font.body.small"), color: token("color.text.subtle") }}
-                data-testid="item-panel-fields-json"
-              >
-                {JSON.stringify(item.fields, null, 2)}
-              </pre>
-            </>
-          )}
-
-          <div className="rdm-item-section-label">子项（{children.length}）</div>
-          <div data-testid="item-panel-children">
-            {children.map((c) => (
-              <div key={c.id} className="rdm-item-child" onClick={() => onOpenItem(c.id)}>
-                <TypeKindIcon kind={c.kind} />
-                <span className="rdm-item-child-id">{c.display_id}</span>
-                <span className="rdm-item-child-title">{c.title}</span>
-                <StatusLozenge status={c.status} />
-              </div>
-            ))}
+          <div className="rdm-item-section-label">特型字段</div>
+          <div data-testid="item-panel-fields-json">
+            <WorkItemFieldsView
+              item={item}
+              onOpenItem={onOpenItem}
+              onImageClick={setPreview}
+            />
           </div>
 
-          <div className="rdm-item-section-label">评论</div>
+          <div className="rdm-item-spacer" />
+          <ChildrenSection
+            projectKey={projectKey}
+            parent={item}
+            children={children}
+            allowedKinds={allowedChildKinds}
+            onOpen={onOpenItem}
+            onChanged={() => void refresh()}
+          />
+
+          <div className="rdm-item-section-label">评论（{comments.length}）</div>
           <div data-testid="item-panel-comments">
             {comments.length === 0 && (
               <Text size="small" color="color.text.subtlest">
                 还没有评论
               </Text>
             )}
-            {comments.map((c) => (
-              <div key={c.id} className="rdm-item-comment" data-testid={`item-comment-${c.id}`}>
-                <div className="rdm-item-comment-head">
-                  <PersonCell name={c.author.name ?? c.author.id} />
-                  <Text size="small" color="color.text.subtlest">
-                    {formatDate(c.created_at)}
-                  </Text>
-                </div>
-                <MarkdownText source={c.body_md} />
-                {c.attachments?.map((a) => (
-                  <div
-                    key={a.id}
-                    className="rdm-item-att"
-                    style={{ marginTop: token("space.050") }}
-                  >
-                    <TextButton onClick={() => api.download(a.download_url, a.filename)}>
-                      📎 {a.filename}
-                    </TextButton>
+            {comments.map((c) => {
+              const parentComment = c.reply_to_id
+                ? comments.find((x) => x.id === c.reply_to_id)
+                : null;
+              const canDelete = c.author.id === identityId || canModerate;
+              return (
+                <div key={c.id} className="rdm-item-comment" data-testid={`item-comment-${c.id}`}>
+                  <div className="rdm-item-comment-head">
+                    <PersonCell name={c.author.name ?? c.author.id} />
+                    <Inline space="space.100" alignBlock="center">
+                      <Text size="small" color="color.text.subtlest">
+                        {formatDate(c.created_at)}
+                      </Text>
+                      <TextButton
+                        data-testid={`item-comment-reply-${c.id}`}
+                        onClick={() => setReplyTo(c)}
+                      >
+                        回复
+                      </TextButton>
+                      {canDelete && (
+                        <TextButton
+                          danger
+                          data-testid={`item-comment-delete-${c.id}`}
+                          onClick={() => setCommentToDelete(c)}
+                        >
+                          删除
+                        </TextButton>
+                      )}
+                    </Inline>
                   </div>
-                ))}
-              </div>
-            ))}
+                  {parentComment && (
+                    <div className="rdm-item-comment-reply">
+                      回复 {parentComment.author.name ?? parentComment.author.id}：
+                      {parentComment.body_md.slice(0, 80)}
+                    </div>
+                  )}
+                  <MarkdownText source={c.body_md} onImageClick={setPreview} />
+                  {c.attachments
+                    ?.filter((a) => !c.body_md.includes(a.download_url))
+                    .map((a) => (
+                    <div
+                      key={a.id}
+                      className="rdm-item-att"
+                      style={{ marginTop: token("space.050") }}
+                    >
+                      <TextButton onClick={() => api.download(a.download_url, a.filename)}>
+                        📎 {a.filename}
+                      </TextButton>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+            {hasMoreComments && (
+              <Box paddingBlockStart="space.100">
+                <TextButton
+                  data-testid="item-comment-more"
+                  onClick={() => void loadMoreComments()}
+                >
+                  {loadingMoreComments ? "加载中…" : "加载更多评论"}
+                </TextButton>
+              </Box>
+            )}
           </div>
         </section>
 
@@ -367,7 +590,8 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
 
           <div className="rdm-item-field" data-testid="item-field-transition">
             <div className="rdm-item-section-label">流转到</div>
-            <Select {...portalMenuProps}
+            <Select
+              {...portalMenuProps}
               options={allowed.map((s) => ({ label: s, value: s }))}
               placeholder="选择目标状态"
               value={null}
@@ -378,18 +602,80 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
 
           <div className="rdm-item-field" data-testid="item-field-priority">
             <div className="rdm-item-section-label">优先级</div>
-            <PriorityMark priority={item.priority} />
+            <Select
+              {...portalMenuProps}
+              options={priorityOptions}
+              value={priorityOptions.find((o) => o.value === item.priority) ?? null}
+              onChange={(opt) =>
+                opt && void changePriority((opt as { value: number }).value)
+              }
+              isClearable={false}
+            />
+            <Box paddingBlockStart="space.050">
+              <PriorityMark priority={item.priority} />
+            </Box>
           </div>
 
           <div className="rdm-item-field" data-testid="item-field-assignee">
             <div className="rdm-item-section-label">负责人</div>
-            <Select {...portalMenuProps}
+            <Select
+              {...portalMenuProps}
               options={memberOptions}
               value={memberOptions.find((o) => o.value === item.assignee?.id) ?? null}
               placeholder="未指派"
               isClearable
               onChange={(opt) => assign((opt as { value: string } | null)?.value ?? null)}
             />
+          </div>
+
+          <div className="rdm-item-field" data-testid="item-field-parent">
+            <div className="rdm-item-section-label">父项</div>
+            {parent && !parentEditing ? (
+              <Inline space="space.100" alignBlock="center">
+                <TextButton onClick={() => onOpenItem(parent.id)}>
+                  {parent.display_id}
+                </TextButton>
+                <Text size="small" color="color.text.subtlest">
+                  {parent.title}
+                </Text>
+              </Inline>
+            ) : (
+              <Text size="small" color="color.text.subtlest">
+                {allowedParentKinds.length === 0 ? "该类型不支持父项" : "无父项"}
+              </Text>
+            )}
+            {allowedParentKinds.length > 0 && (
+              <Box paddingBlockStart="space.100">
+                {parentEditing ? (
+                  <Stack space="space.100">
+                    <WorkItemPicker
+                      projectKey={projectKey}
+                      allowedKinds={allowedParentKinds}
+                      excludeIds={[item.id, ...children.map((c) => c.id)]}
+                      value={parentOption}
+                      onChange={(option) => void reparent(option)}
+                      placeholder="选择父项"
+                      testId="item-parent-picker"
+                    />
+                    <TextButton onClick={() => setParentEditing(false)}>取消</TextButton>
+                  </Stack>
+                ) : (
+                  <Inline space="space.100">
+                    <TextButton
+                      data-testid="item-parent-change"
+                      onClick={() => setParentEditing(true)}
+                    >
+                      {parent ? "更改父项" : "设置父项"}
+                    </TextButton>
+                    {parent && (
+                      <TextButton danger onClick={() => void reparent(null)}>
+                        移出父项
+                      </TextButton>
+                    )}
+                  </Inline>
+                )}
+              </Box>
+            )}
           </div>
 
           <div className="rdm-item-field">
@@ -440,11 +726,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             <div className="rdm-item-section-label">产出物</div>
             {artifacts.map((art) => (
               <div key={art.id} className="rdm-item-att" data-testid={`item-artifact-${art.id}`}>
-                <Link
-                  href={art.url}
-                  target="_blank"
-                  testId={`item-artifact-link-${art.id}`}
-                >
+                <Link href={art.url} target="_blank" testId={`item-artifact-link-${art.id}`}>
                   {art.label}
                 </Link>
                 <Text size="small" color="color.text.subtlest">
@@ -459,16 +741,31 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
               挂产出物
             </Button>
           </div>
+
+          <HistorySection itemId={item.id} refreshKey={refreshKey} />
         </section>
       </div>
 
       <footer className="rdm-item-comment-bar" data-testid="item-comment-bar">
-        <TextArea
+        {replyTo && (
+          <div className="rdm-item-comment-reply-chip">
+            <Text size="small" color="color.text.subtlest">
+              回复 {replyTo.author.name ?? replyTo.author.id}
+            </Text>
+            <TextButton onClick={() => setReplyTo(null)}>取消</TextButton>
+          </div>
+        )}
+        <MarkdownEditor
           value={draft}
+          onChange={setDraft}
+          projectKey={projectKey}
           minimumRows={2}
           placeholder="写评论；@成员名 会给对方发站内信"
-          testId="item-comment-input"
-          onChange={(e) => setDraft(e.currentTarget.value)}
+          testId="item-comment"
+          onSubmit={() => void postComment()}
+          onImageClick={setPreview}
+          onUploadingChange={setUploadingDraftImage}
+          isDisabled={savingComment}
         />
         {pendingFiles.length > 0 && (
           <Inline space="space.100" shouldWrap>
@@ -487,15 +784,13 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             hidden
             onChange={(e) => void uploadFiles(e.target.files, true)}
           />
-          <Button
-            testId="item-comment-attach"
-            onClick={() => commentFileInput.current?.click()}
-          >
+          <Button testId="item-comment-attach" onClick={() => commentFileInput.current?.click()}>
             添加附件
           </Button>
           <Button
             appearance="primary"
             isLoading={savingComment}
+            isDisabled={uploadingDraftImage}
             testId="item-comment-submit"
             onClick={() => void postComment()}
           >
@@ -509,16 +804,37 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         onCancel={() => setTransitionTarget(null)}
         onConfirm={doTransition}
       />
-      <ArtifactDialog open={showArtifact} onClose={() => setShowArtifact(false)} onSave={addArtifact} />
+      <ArtifactDialog
+        open={showArtifact}
+        onClose={() => setShowArtifact(false)}
+        onSave={addArtifact}
+      />
       <EditWorkItemDialog
         open={showEdit}
+        projectKey={projectKey}
         item={item}
+        parentOption={parentOption}
         onClose={() => setShowEdit(false)}
-        onSaved={(updated) => {
-          setBundle((b) => (b ? { ...b, item: updated } : b));
-          void load();
+        onSaved={() => {
+          void refresh();
         }}
       />
+      <ImagePreviewDialog
+        open={preview !== null}
+        src={preview?.src ?? null}
+        alt={preview?.alt}
+        onClose={() => setPreview(null)}
+      />
+      <ConfirmDialog
+        open={commentToDelete !== null}
+        title="删除评论"
+        confirmLabel="删除"
+        testId="item-comment-delete-dialog"
+        onClose={() => setCommentToDelete(null)}
+        onConfirm={() => void deleteComment()}
+      >
+        删除后不可恢复，确认删除这条评论？
+      </ConfirmDialog>
     </aside>
   );
 }

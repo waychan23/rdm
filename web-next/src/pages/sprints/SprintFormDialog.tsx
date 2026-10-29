@@ -10,10 +10,10 @@ import ModalDialog, {
 } from "@atlaskit/modal-dialog";
 import { DatePicker } from "@atlaskit/datetime-picker";
 import { Inline, Stack } from "@atlaskit/primitives/compiled";
-import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";
 
 import FormField from "../../components/FormField";
+import MarkdownEditor from "../../components/MarkdownEditor";
 
 export interface SprintFormValues {
   name: string;
@@ -25,12 +25,20 @@ export interface SprintFormValues {
 interface Props {
   open: boolean;
   title: string;
+  projectKey: string;
   initial?: Partial<SprintFormValues>;
   onClose: () => void;
   onSave: (values: SprintFormValues) => Promise<void> | void;
 }
 
-export default function SprintFormDialog({ open, title, initial, onClose, onSave }: Props) {
+export default function SprintFormDialog({
+  open,
+  title,
+  projectKey,
+  initial,
+  onClose,
+  onSave,
+}: Props) {
   const [name, setName] = useState(initial?.name ?? "");
   const [goal, setGoal] = useState(initial?.goal_md ?? "");
   const [start, setStart] = useState(initial?.start_date ?? "");
@@ -83,13 +91,14 @@ export default function SprintFormDialog({ open, title, initial, onClose, onSave
                   onChange={(e) => setName(e.currentTarget.value)}
                 />
               </FormField>
-              <FormField label="目标（Markdown）" htmlFor="sprint-goal">
-                <TextArea
-                  id="sprint-goal"
+              <FormField label="目标（Markdown）">
+                <MarkdownEditor
                   value={goal}
+                  onChange={setGoal}
+                  projectKey={projectKey}
                   minimumRows={3}
                   testId="sprint-form-goal"
-                  onChange={(e) => setGoal(e.currentTarget.value)}
+                  onSubmit={() => void submit()}
                 />
               </FormField>
               <FormField label="起止日期">

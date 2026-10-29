@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
 import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
@@ -37,6 +37,7 @@ const styles = cssMap({
 export default function BoardPage() {
   const { key: projectKey = "" } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const notify = useNotify();
 
   const [kind, setKind] = useState("task");
@@ -146,7 +147,9 @@ export default function BoardPage() {
   }, [workflow, kind, showTerminal, items]);
 
   const openItem = (item: WorkItem) =>
-    navigate(`/projects/${projectKey}/items/${item.id}`);
+    navigate(`/projects/${projectKey}/items/${item.id}`, {
+      state: { from: location.pathname + location.search },
+    });
 
   return (
     <Page fill testId="page-board">

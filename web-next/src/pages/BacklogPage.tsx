@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -51,6 +51,7 @@ const pageStyles = cssMap({
 export default function BacklogPage() {
   const { key: projectKey = "RDM" } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [kinds, setKinds] = useState<string[]>(["epic", "story", "issue", "task"]);
   const [status, setStatus] = useState<Option | null>(null);
@@ -114,7 +115,9 @@ export default function BacklogPage() {
   };
 
   const openItem = (item: WorkItem) =>
-    navigate(`/projects/${projectKey}/items/${item.id}`);
+    navigate(`/projects/${projectKey}/items/${item.id}`, {
+      state: { from: location.pathname + location.search },
+    });
 
   return (
     <Page fill testId="page-backlog">

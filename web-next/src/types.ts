@@ -63,6 +63,32 @@ export interface WorkItem {
   deleted_at?: string | null;
 }
 
+export interface WorkItemDetailMeta {
+  allowed_transitions?: string[];
+  children?: WorkItem[];
+  parent?: WorkItem | null;
+  allowed_parent_kinds?: string[];
+  allowed_child_kinds?: string[];
+}
+
+export interface HistoryChange {
+  from?: unknown;
+  to?: unknown;
+  redacted?: boolean;
+}
+
+export interface HistoryEntry {
+  id: number;
+  seq: number;
+  event_type: string;
+  action: string;
+  occurred_at: string;
+  actor: { id: string; name?: string; type?: string } | null;
+  changes: Record<string, HistoryChange>;
+  comment?: { id: string; excerpt?: string; reply_to_id?: string | null } | null;
+  meta?: Record<string, unknown> | null;
+}
+
 export interface Attachment {
   id: string;
   owner_type: string;
@@ -72,6 +98,8 @@ export interface Attachment {
   size_bytes: number;
   sha256: string;
   download_url: string;
+  state?: "temp" | "active" | string;
+  committed_at?: string | null;
   uploader: { id: string; name?: string; type?: string };
   created_at: string;
 }

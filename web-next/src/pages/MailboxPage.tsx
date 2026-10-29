@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -15,7 +15,6 @@ import ModalDialog, {
 } from "@atlaskit/modal-dialog";
 import Select from "@atlaskit/select";
 import Spinner from "@atlaskit/spinner";
-import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { token } from "@atlaskit/tokens";
@@ -23,6 +22,9 @@ import { portalMenuProps } from "../lib/portalMenu";
 
 import { cardBorder } from "../components/cardBorder";
 import FormField from "../components/FormField";
+import ImagePreviewDialog from "../components/ImagePreviewDialog";
+import MarkdownEditor from "../components/MarkdownEditor";
+import MarkdownText from "../components/MarkdownText";
 import { Page, PageHeader } from "../components/Page";
 import TextButton from "../components/TextButton";
 import { api, errorCause } from "../lib/api";
@@ -52,6 +54,7 @@ interface Option {
 
 export default function MailboxPage() {
   const { key: projectKey = "" } = useParams();
+  const location = useLocation();
   const notify = useNotify();
   const me = useCurrentUser();
 
@@ -65,6 +68,7 @@ export default function MailboxPage() {
   const [members, setMembers] = useState<OrgUser[]>([]);
   const [showCompose, setShowCompose] = useState(false);
   const [sending, setSending] = useState(false);
+  const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
   const [compose, setCompose] = useState<{
     to: Option[];
     subject: string;
@@ -169,7 +173,7 @@ export default function MailboxPage() {
     const sender = m.from.name ?? m.from.id;
     const subject = m.subject.replace(/^Re:\s*/i, "");
     setCompose({
-      to: [{ label: sender, value: sender }],
+      to: [{ label: sender, value: m.from.id ?? sender }],
       subject: `Re: ${subject}`,
       body: "",
       replyTo: m.message_id,
@@ -178,7 +182,7 @@ export default function MailboxPage() {
     setShowCompose(true);
   };
 
-  const memberOptions: Option[] = members.map((m) => ({ label: m.name, value: m.name }));
+  const memberOptions: Option[] = members.map((m) => ({ label: m.name, value: m.id }));
   const identityOptions: Option[] = [
     ...(me ? [{ label: `我（${me.user.name}）`, value: me.user.id }] : []),
     ...agents.map((a) => ({ label: `${a.name}（agent）`, value: a.id })),
@@ -287,8 +291,8 @@ export default function MailboxPage() {
                     回复
                   </TextButton>
                 </Inline>
-                <Box as="div" style={{ whiteSpace: "pre-wrap" }} paddingInlineStart="space.300">
-                  {m.body_md}
+                <Box paddingInlineStart="space.300">
+                  <MarkdownText source={m.body_md} onImageClick={setPreview} />
                 </Box>
                 {m.refs.length > 0 && (
                   <Inline space="space.100">
@@ -300,6 +304,7 @@ export default function MailboxPage() {
                         key={r}
                         className="rdm-link"
                         to={`/projects/${projectKey}/items/${r}`}
+                        state={{ from: location.pathname + location.search }}
                         data-testid={`mailbox-item-ref-${r}`}
                       >
                         {r}
@@ -352,13 +357,14 @@ export default function MailboxPage() {
                     onChange={(e) => setCompose({ ...compose, subject: e.currentTarget.value })}
                   />
                 </FormField>
-                <FormField label="正文（Markdown）" htmlFor="mail-body">
-                  <TextArea
-                    id="mail-body"
+                <FormField label="正文（Markdown）">
+                  <MarkdownEditor
                     value={compose.body}
-                    minimumRows={5}
+                    onChange={(body) => setCompose({ ...compose, body })}
+                    projectKey={projectKey}
+                    minimumRows={6}
                     testId="mailbox-compose-body"
-                    onChange={(e) => setCompose({ ...compose, body: e.currentTarget.value })}
+                    onSubmit={() => void send()}
                   />
                 </FormField>
               </Stack>
@@ -383,6 +389,12 @@ export default function MailboxPage() {
           </ModalDialog>
         )}
       </ModalTransition>
+      <ImagePreviewDialog
+        open={preview !== null}
+        src={preview?.src ?? null}
+        alt={preview?.alt}
+        onClose={() => setPreview(null)}
+      />
     </Page>
   );
 }

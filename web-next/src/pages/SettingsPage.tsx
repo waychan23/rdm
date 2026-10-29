@@ -7,13 +7,13 @@ import Heading from "@atlaskit/heading";
 import Lozenge from "@atlaskit/lozenge";
 import Select from "@atlaskit/select";
 import Spinner from "@atlaskit/spinner";
-import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
 import ConfirmDialog from "../components/ConfirmDialog";
 import { cardBorder } from "../components/cardBorder";
 import FormField from "../components/FormField";
+import MarkdownEditor from "../components/MarkdownEditor";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
@@ -180,13 +180,13 @@ export default function SettingsPage() {
                onChange={(e) => setName(e.currentTarget.value)}
              />
            </FormField>
-           <FormField label="描述" htmlFor="project-desc">
-             <TextArea
-               id="project-desc"
+           <FormField label="描述">
+             <MarkdownEditor
                value={description}
+               onChange={setDescription}
+               projectKey={projectKey}
                minimumRows={3}
                testId="project-settings-description"
-               onChange={(e) => setDescription(e.currentTarget.value)}
              />
            </FormField>
            <Inline space="space.100">

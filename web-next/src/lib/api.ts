@@ -99,21 +99,8 @@ export const api = {
   },
 
   download(downloadUrl: string, filename: string): Promise<void> {
-    const path = downloadUrl.startsWith("/api/v1")
-      ? downloadUrl.slice("/api/v1".length)
-      : downloadUrl;
     return (async () => {
-      const res = await fetch(`/api/v1${path}`, {
-        headers: getAccessToken()
-          ? { Authorization: `Bearer ${getAccessToken()}` }
-          : undefined,
-      });
-      if (res.status === 401) {
-        await kickToLogin();
-        throw new Error("HTTP 401");
-      }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
+      const blob = await api.fetchBlob(downloadUrl);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -123,6 +110,30 @@ export const api = {
       a.remove();
       URL.revokeObjectURL(url);
     })();
+  },
+
+  /** Fetch a protected binary resource with the Bearer credential. */
+  async fetchBlob(downloadUrl: string): Promise<Blob> {
+    const path = downloadUrl.startsWith("/api/v1")
+      ? downloadUrl.slice("/api/v1".length)
+      : downloadUrl;
+    const send = (token: string | null) =>
+      fetch(`/api/v1${path}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+    let res = await send(getAccessToken());
+    if (res.status === 401) {
+      if (await refreshTokens()) res = await send(getAccessToken());
+      if (res.status === 401) await kickToLogin();
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.blob();
+  },
+
+  /** Fetch a protected binary resource and return a revocable object URL. */
+  async blobUrl(downloadUrl: string): Promise<string> {
+    const blob = await api.fetchBlob(downloadUrl);
+    return URL.createObjectURL(blob);
   },
 };
 

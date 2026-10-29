@@ -6,12 +6,14 @@ import Drawer from "@atlaskit/drawer";
 import EmptyState from "@atlaskit/empty-state";
 import Heading from "@atlaskit/heading";
 import Spinner from "@atlaskit/spinner";
-import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
 import ConfirmDialog from "../components/ConfirmDialog";
+import ImagePreviewDialog from "../components/ImagePreviewDialog";
+import MarkdownText from "../components/MarkdownText";
 import { Page, PageHeader } from "../components/Page";
 import TextButton from "../components/TextButton";
+import WorkItemPicker, { type WorkItemOption } from "../components/WorkItemPicker";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
@@ -35,7 +37,8 @@ export default function SprintsPage() {
   const [showEdit, setShowEdit] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SprintDetail | null>(null);
-  const [itemRef, setItemRef] = useState("");
+  const [itemRefs, setItemRefs] = useState<WorkItemOption[]>([]);
+  const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -81,11 +84,13 @@ export default function SprintsPage() {
   };
 
   const addItem = async () => {
-    if (!detail || !itemRef.trim() || busy) return;
+    if (!detail || itemRefs.length === 0 || busy) return;
     setBusy(true);
     try {
-      await api.post(`/sprints/${detail.id}/items`, { items: [itemRef.trim()] });
-      setItemRef("");
+      await api.post(`/sprints/${detail.id}/items`, {
+        items: itemRefs.map((item) => item.display_id),
+      });
+      setItemRefs([]);
       await Promise.all([refreshDetail(), reload()]);
     } catch (e) {
       notify.error("加入失败", errorCause(e)?.message);
@@ -204,12 +209,14 @@ export default function SprintsPage() {
       <SprintFormDialog
         open={showCreate}
         title="新建 Sprint"
+        projectKey={projectKey}
         onClose={() => setShowCreate(false)}
         onSave={create}
       />
       <SprintFormDialog
         open={showEdit}
         title="编辑 Sprint"
+        projectKey={projectKey}
         initial={
           detail
             ? {
@@ -251,9 +258,7 @@ export default function SprintsPage() {
                 )}
               </Inline>
               {detail.goal_md && (
-                <Text size="small" color="color.text.subtlest">
-                  {detail.goal_md}
-                </Text>
+                <MarkdownText source={detail.goal_md} onImageClick={setPreview} />
               )}
               <Inline space="space.075" shouldWrap>
                 {Object.entries(detail.status_counts).map(([s, n]) => (
@@ -317,16 +322,23 @@ export default function SprintsPage() {
 
               {detail.status !== "CLOSED" && (
                 <Stack space="space.150">
-                  <Inline space="space.100">
-                    <Textfield
-                      placeholder="工作项 display_id（如 DEMO-3），回车加入"
-                      value={itemRef}
-                      testId="sprint-item-input"
-                      onChange={(e) => setItemRef(e.currentTarget.value)}
-                      onKeyDown={(e) => e.key === "Enter" && void addItem()}
-                    />
+                  <Inline space="space.100" alignBlock="end">
+                    <div style={{ flex: 1 }}>
+                      <WorkItemPicker
+                        isMulti
+                        projectKey={projectKey}
+                        allowedKinds={["story", "issue", "task"]}
+                        excludeIds={detail.items.map((item) => item.id)}
+                        backlogOnly
+                        value={itemRefs}
+                        onChange={setItemRefs}
+                        placeholder="搜索待办工作项，可多选"
+                        testId="sprint-item-input"
+                      />
+                    </div>
                     <Button
                       isLoading={busy}
+                      isDisabled={itemRefs.length === 0}
                       testId="sprint-item-add"
                       onClick={() => void addItem()}
                     >
@@ -370,6 +382,12 @@ export default function SprintsPage() {
       >
         关闭后不能再加项；未终态项需先移出。确认关闭？
       </ConfirmDialog>
+      <ImagePreviewDialog
+        open={preview !== null}
+        src={preview?.src ?? null}
+        alt={preview?.alt}
+        onClose={() => setPreview(null)}
+      />
     </Page>
   );
 }

@@ -1,0 +1,49 @@
+/* Shared markdown editor chrome. Density values use ADS runtime tokens. */
+.rdm-md-editor {
+  position: relative;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-small, 4px);
+  background: var(--ds-surface);
+}
+
+.rdm-md-editor-dragging {
+  border-color: var(--ds-border-selected, var(--ds-link));
+  background: var(--ds-surface-sunken);
+}
+
+.rdm-md-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-025, 2px);
+  flex-wrap: wrap;
+  padding: var(--ds-space-050, 4px) var(--ds-space-100, 8px);
+  border-bottom: 1px solid var(--ds-border);
+}
+
+.rdm-md-editor-spacer {
+  flex: 1;
+}
+
+.rdm-md-editor-mention {
+  padding: var(--ds-space-100, 8px);
+  border-bottom: 1px solid var(--ds-border);
+}
+
+.rdm-md-editor-preview {
+  min-height: 72px;
+  padding: var(--ds-space-100, 8px) var(--ds-space-150, 12px);
+}
+
+.rdm-md-editor-drop-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: var(--ds-text-subtle);
+  background: var(--ds-surface-sunken);
+  opacity: 0.92;
+  border-radius: var(--ds-radius-small, 4px);
+  font-size: 14px;
+}

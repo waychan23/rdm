@@ -15,12 +15,12 @@ import ModalDialog, {
 import Select from "@atlaskit/select";
 import SectionMessage from "@atlaskit/section-message";
 import Spinner from "@atlaskit/spinner";
-import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack } from "@atlaskit/primitives/compiled";
 import { portalMenuProps } from "../lib/portalMenu";
 
 import FormField from "../components/FormField";
+import MarkdownEditor from "../components/MarkdownEditor";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
@@ -263,14 +263,13 @@ export default function WorkspacesPage() {
                     onChange={(e) => setForm({ ...form, location: e.currentTarget.value })}
                   />
                 </FormField>
-                <FormField label="描述" htmlFor="ws-desc">
-                  <TextArea
-                    id="ws-desc"
+                <FormField label="描述">
+                  <MarkdownEditor
                     value={form.description_md}
+                    onChange={(value) => setForm({ ...form, description_md: value })}
+                    projectKey={projectKey}
+                    minimumRows={3}
                     testId="workspace-form-description"
-                    onChange={(e) =>
-                      setForm({ ...form, description_md: e.currentTarget.value })
-                    }
                   />
                 </FormField>
               </Stack>

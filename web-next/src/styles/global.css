@@ -54,3 +54,21 @@
   padding: 8px 12px;
   overflow-x: auto;
 }
+
+.md img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--ds-radius-small, 4px);
+  cursor: zoom-in;
+}
+
+.rdm-image-preview {
+  padding: var(--ds-space-200, 16px);
+  text-align: center;
+}
+
+.rdm-image-preview img {
+  max-width: 100%;
+  max-height: 70vh;
+  border-radius: var(--ds-radius-small, 4px);
+}
