@@ -39,6 +39,24 @@ export function callbackUrl(): string {
   return `${window.location.origin}/auth/callback`;
 }
 
+// Auth-flow pages are never valid post-login destinations: landing back on
+// /login (no auth_key) immediately starts another authorization request, which
+// loops forever after logout. Anything that is not a normal SPA page falls
+// back to /projects.
+const AUTH_PAGE_PREFIXES = ["/login", "/auth/", "/set-password", "/oauth/consent"];
+
+export function safePostLoginPath(target: string | null | undefined): string {
+  if (!target) return "/projects";
+  if (!target.startsWith("/") || target.startsWith("//") || target.startsWith("/\\")) {
+    return "/projects";
+  }
+  const path = target.split("?")[0].split("#")[0];
+  if (AUTH_PAGE_PREFIXES.some((prefix) => path === prefix || path.startsWith(prefix))) {
+    return "/projects";
+  }
+  return target;
+}
+
 /** Start the full-page OAuth flow, remembering where to return afterwards. */
 export async function beginLogin(postLoginPath?: string): Promise<void> {
   const verifier = randomString(48);
@@ -47,7 +65,7 @@ export async function beginLogin(postLoginPath?: string): Promise<void> {
   sessionStorage.setItem(STATE_KEY, state);
   sessionStorage.setItem(
     POST_LOGIN_KEY,
-    postLoginPath ?? window.location.pathname + window.location.search,
+    safePostLoginPath(postLoginPath ?? window.location.pathname + window.location.search),
   );
   const params = new URLSearchParams({
     response_type: "code",
@@ -62,9 +80,9 @@ export async function beginLogin(postLoginPath?: string): Promise<void> {
 }
 
 export function takePostLoginPath(): string {
-  const path = sessionStorage.getItem(POST_LOGIN_KEY) || "/projects";
+  const path = sessionStorage.getItem(POST_LOGIN_KEY);
   sessionStorage.removeItem(POST_LOGIN_KEY);
-  return path;
+  return safePostLoginPath(path);
 }
 
 /** Exchange the callback code; returns false when state/PKCE checks fail. */

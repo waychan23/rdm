@@ -16,10 +16,12 @@ async function parse(res: Response): Promise<unknown> {
   return text ? JSON.parse(text) : {};
 }
 
-const AUTH_PATHS = ["/auth/login", "/auth/set-password", "/oauth/consent"];
-
+// Auth endpoints handle their own 401s (bad credentials, expired ticket).
+// Letting the global handler react would clear a valid session and bounce the
+// page — e.g. "wrong old password" would trigger a full re-login instead of an
+// inline error, and logout could start a fresh authorization request.
 function isAuthPath(path: string): boolean {
-  return AUTH_PATHS.some((p) => path.startsWith(p));
+  return path.startsWith("/auth/") || path.startsWith("/oauth/consent");
 }
 
 async function kickToLogin() {

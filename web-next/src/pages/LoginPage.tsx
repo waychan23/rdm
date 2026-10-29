@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import Button from "@atlaskit/button/default/button";
 import Checkbox from "@atlaskit/checkbox";
@@ -11,11 +11,7 @@ import { Box, Stack, Text, xcss } from "@atlaskit/primitives";
 import { errorCause } from "../lib/api";
 import { submitLogin } from "../lib/auth";
 import { useNotify } from "../lib/flags";
-import { beginLogin } from "../lib/oauth";
-
-function safeInternalPath(target: string | null): string | null {
-  return target && target.startsWith("/") && !target.startsWith("//") ? target : null;
-}
+import { beginLogin, getAccessToken, safePostLoginPath } from "../lib/oauth";
 
 const wrapStyles = xcss({
   minHeight: "100vh",
@@ -41,8 +37,12 @@ const labelStyles = xcss({
 
 export default function LoginPage() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const notify = useNotify();
   const authKey = params.get("auth_key");
+  const redirectTarget = safePostLoginPath(params.get("redirect"));
+  // React StrictMode mounts effects twice in dev; one full-page redirect is enough.
+  const startedRef = useRef(false);
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
@@ -51,10 +51,17 @@ export default function LoginPage() {
   // Direct visits (bookmarks, a 401 bounce) start a fresh authorization
   // request instead of pretending to be a login form without context.
   useEffect(() => {
-    if (!authKey) {
-      void beginLogin(safeInternalPath(params.get("redirect")) ?? undefined);
+    if (authKey) return;
+    // Already authenticated (e.g. a bookmark or a stale /login link): do not
+    // restart the OAuth flow, just continue to the app.
+    if (getAccessToken()) {
+      navigate(redirectTarget, { replace: true });
+      return;
     }
-  }, [authKey, params]);
+    if (startedRef.current) return;
+    startedRef.current = true;
+    void beginLogin(redirectTarget);
+  }, [authKey, redirectTarget, navigate]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
