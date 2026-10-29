@@ -9,6 +9,7 @@ export interface Project {
   roles?: string[];
   implicit?: boolean;
   membership_id?: string | null;
+  unread_count?: number;
 }
 
 /** Organization-level identity (human or agent), §17. */
@@ -128,6 +129,7 @@ export interface MailMessage {
   delivery_id: string;
   message_id: string;
   from: { id: string; name?: string; type?: string };
+  mailbox_owner?: { id: string; name?: string; type?: string };
   subject: string;
   body_md: string;
   recipient_type: string;

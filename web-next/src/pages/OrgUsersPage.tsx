@@ -126,6 +126,14 @@ export default function OrgUsersPage() {
     }
   };
 
+  const [disableTarget, setDisableTarget] = useState<OrgUser | null>(null);
+  const disableUser = async () => {
+    if (!disableTarget) return;
+    const target = disableTarget;
+    setDisableTarget(null);
+    await setActive(target, false);
+  };
+
   const [confirmRevoke, setConfirmRevoke] = useState<OrgUser | null>(null);
   const revokeAll = async () => {
     if (!confirmRevoke) return;
@@ -226,7 +234,10 @@ export default function OrgUsersPage() {
                 agents={agentsByManager.get(h.id) ?? []}
                 isOwner={isOwner}
                 onReset={() => void resetPassword(h)}
-                onToggle={() => void setActive(h, !h.is_active)}
+                onToggle={() => {
+                  if (h.is_active) setDisableTarget(h);
+                  else void setActive(h, true);
+                }}
                 onRevoke={() => setConfirmRevoke(h)}
                 onRoles={() => openRoles(h)}
                 onTransferOwner={() => setConfirmTransfer(h)}
@@ -410,6 +421,18 @@ export default function OrgUsersPage() {
         onConfirm={() => void revokeAll()}
       >
         撤销 {confirmRevoke?.name} 及其 agent 的全部访问令牌？该操作不可恢复。
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={disableTarget !== null}
+        title="停用用户"
+        confirmLabel="停用"
+        danger
+        testId="org-user-disable-dialog"
+        onClose={() => setDisableTarget(null)}
+        onConfirm={() => void disableUser()}
+      >
+        停用 {disableTarget?.name}？该用户将无法登录，现有令牌会被撤销。若其担任项目经理，项目需要由 Org Owner 或 project-director 另行转让。
       </ConfirmDialog>
 
       <ConfirmDialog

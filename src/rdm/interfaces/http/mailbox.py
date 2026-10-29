@@ -36,12 +36,20 @@ async def check_mailbox(
     since: str | None = None,
     unread_only: bool = True,
     limit: int = 20,
+    include_agents: bool = False,
+    identity: str | None = None,
     container: Container = Depends(get_container),
     actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
         body = await MailboxService(uow).check(
-            actor, since=since, unread_only=unread_only, limit=min(limit, 100)
+            actor,
+            project_key=key,
+            since=since,
+            unread_only=unread_only,
+            limit=min(limit, 100),
+            include_agents=include_agents,
+            identity=identity,
         )
     return {"data": body}
 
@@ -64,7 +72,13 @@ async def send_message(
             refs=body.refs,
             reply_to=body.reply_to,
         )
-    return {"data": {"message_id": message.id, "deliveries": count}}
+    return {
+        "data": {
+            "message_id": message.id,
+            "reply_to_id": message.reply_to_id,
+            "deliveries": count,
+        }
+    }
 
 
 @router.post("/messages/read")

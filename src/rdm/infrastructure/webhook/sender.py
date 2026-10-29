@@ -45,12 +45,36 @@ class HttpxWebhookSender:
         except httpx.HTTPError as exc:
             return SendResult(False, None, str(exc)[:900])
         if 200 <= response.status_code < 300:
+            error = self._provider_error(row, response)
+            if error is not None:
+                return SendResult(False, response.status_code, error)
             return SendResult(True, response.status_code, None)
         return SendResult(
             False,
             response.status_code,
             f"HTTP {response.status_code}: {response.text[:300]}",
         )
+
+    @staticmethod
+    def _provider_error(row: OutboxRow, response: httpx.Response) -> str | None:
+        """Feishu/DingTalk return HTTP 200 with a non-zero application code."""
+        if row.format not in {"feishu", "dingtalk"}:
+            return None
+        try:
+            data = response.json()
+        except ValueError:
+            return None
+        if not isinstance(data, dict):
+            return None
+        if row.format == "feishu":
+            code = data.get("code")
+            if code not in (None, 0):
+                return f"feishu code {code}: {data.get('msg') or data.get('message') or ''}"[:900]
+        else:
+            code = data.get("errcode")
+            if code not in (None, 0):
+                return f"dingtalk errcode {code}: {data.get('errmsg') or ''}"[:900]
+        return None
 
     async def aclose(self) -> None:
         await self._client.aclose()

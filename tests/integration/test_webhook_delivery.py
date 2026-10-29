@@ -29,6 +29,8 @@ def auth(token: str) -> dict[str, str]:
 
 class _MockHandler(BaseHTTPRequestHandler):
     fail_remaining = 0
+    response_status = 200
+    response_body = b"ok"
     received: list[dict] = []
 
     def do_POST(self) -> None:  # noqa: N802
@@ -41,9 +43,9 @@ class _MockHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"err")
             return
-        self.send_response(200)
+        self.send_response(type(self).response_status)
         self.end_headers()
-        self.wfile.write(b"ok")
+        self.wfile.write(type(self).response_body)
 
     def log_message(self, *args) -> None:
         pass
@@ -53,6 +55,8 @@ class _MockHandler(BaseHTTPRequestHandler):
 def mock_server():
     _MockHandler.received = []
     _MockHandler.fail_remaining = 0
+    _MockHandler.response_status = 200
+    _MockHandler.response_body = b"ok"
     server = ThreadingHTTPServer(("127.0.0.1", 0), _MockHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -197,6 +201,36 @@ async def test_message_event_maps_to_mailbox_delivered(web: Web, mock_server) ->
     payload = json.loads(call["body"])
     assert payload["event"] == "mailbox.delivered"
     assert payload["data"]["subject"] == "你好"
+
+
+async def test_feishu_application_error_is_not_delivered(web: Web, mock_server) -> None:
+    import sqlite3
+
+    await _project(web.client, web.token)
+    await _member_with_hook(web.client, web.token, "fe", mock_server, "feishu")
+    item = await _task(web.client, web.token)
+    await web.client.post(
+        f"{API}/work-items/{item['display_id']}/assign",
+        json={"member": "fe"},
+        headers=auth(web.token),
+    )
+    # Feishu returns HTTP 200 with a non-zero code for invalid payloads.
+    _MockHandler.response_body = b'{"code":19002,"msg":"params error"}'
+    assert await web.worker.run_once() == 1
+    with sqlite3.connect(web.settings.db_path) as conn:
+        status, attempts, last_error = conn.execute(
+            "select status, attempts, last_error from webhook_outbox"
+        ).fetchone()
+    assert status == "pending"
+    assert attempts == 1
+    assert "19002" in last_error
+
+    # A real success response is acknowledged as delivered.
+    _MockHandler.response_body = b'{"code":0,"msg":"success"}'
+    await web.worker.run_once()
+    with sqlite3.connect(web.settings.db_path) as conn:
+        status = conn.execute("select status from webhook_outbox").fetchone()[0]
+    assert status == "delivered"
 
 
 async def test_four_failures_then_failed(web: Web, mock_server) -> None:

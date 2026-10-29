@@ -29,6 +29,24 @@ from rdm.infrastructure.id import new_id
 EXCERPT_LEN = 200
 
 
+def effective_format(fmt: str, url: str) -> str:
+    """Resolve a generic webhook pointed at a known IM bot to its native format.
+
+    Users often paste a Feishu/DingTalk bot URL while leaving the format at the
+    default "generic"; those endpoints reject generic JSON. Detect the well-known
+    bot paths so their existing configuration starts working without a data fix.
+    Explicit formats always win.
+    """
+    if fmt != "generic":
+        return fmt
+    lowered = (url or "").lower()
+    if "open.feishu.cn/open-apis/bot" in lowered or "open.larksuite.com/open-apis/bot" in lowered:
+        return "feishu"
+    if "oapi.dingtalk.com/robot/send" in lowered:
+        return "dingtalk"
+    return fmt
+
+
 # --- rendering -------------------------------------------------------------
 
 
@@ -155,13 +173,14 @@ async def enqueue(
             continue
         if target_set is not None and member.id not in target_set:
             continue
+        fmt = effective_format(member.notify_webhook_format, member.notify_webhook)
         row = OutboxRow(
             id=new_id(),
             project_id=project.id,
             event_id=event_id,
             target_url=member.notify_webhook,
-            format=member.notify_webhook_format,
-            payload=render_payload(member.notify_webhook_format, view),
+            format=fmt,
+            payload=render_payload(fmt, view),
             created_at=now,
         )
         await uow.outboxes.add(row)

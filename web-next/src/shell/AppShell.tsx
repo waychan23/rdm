@@ -104,6 +104,10 @@ export default function AppShell() {
     return () => window.clearInterval(timer);
   }, [projectKey]);
 
+  const unreadCount = projectKey
+    ? (who?.projects.find((p) => p.key === projectKey)?.unread_count ?? 0)
+    : (who?.unread_count ?? 0);
+
   const onLogout = async () => {
     const returnTo = safePostLoginPath(location.pathname + location.search);
     await logout();
@@ -142,9 +146,9 @@ export default function AppShell() {
               testId="topbar-mailbox"
               onClick={() => projectKey && navigate(`/projects/${projectKey}/mailbox`)}
             />
-            {who?.unread_count ? (
+            {unreadCount > 0 ? (
               <Box xcss={styles.bellBadge}>
-                <Badge appearance="danger">{who.unread_count}</Badge>
+                <Badge appearance="danger">{unreadCount}</Badge>
               </Box>
             ) : null}
           </Box>

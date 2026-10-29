@@ -35,6 +35,9 @@ function AgentRow({ agent }: { agent: NonNullable<ProjectMemberRow["agents"]>[nu
           </span>
           <Text size="small">{agent.user.name}</Text>
           <Lozenge appearance="default">自动</Lozenge>
+          {!agent.user.effective_active && (
+            <Lozenge appearance="default">已停用</Lozenge>
+          )}
         </Inline>
       </td>
       <td>
@@ -52,7 +55,7 @@ function AgentRow({ agent }: { agent: NonNullable<ProjectMemberRow["agents"]>[nu
       </td>
       <td>
         <Lozenge appearance={agent.user.effective_active ? "success" : "default"}>
-          {agent.user.effective_active ? "是" : "否"}
+          {agent.user.effective_active ? "启用" : "停用"}
         </Lozenge>
       </td>
       <td />
@@ -230,6 +233,7 @@ function MemberGroup({
           <Inline space="space.100" alignBlock="center">
             <Text weight="medium">{member.name}</Text>
             {isOwner && <Lozenge appearance="inprogress">项目经理</Lozenge>}
+            {!member.is_active && <Lozenge appearance="default">已停用</Lozenge>}
           </Inline>
         </td>
         <td>
@@ -258,7 +262,7 @@ function MemberGroup({
         </td>
         <td>
           <Lozenge appearance={member.is_active ? "success" : "default"}>
-            {member.is_active ? "是" : "否"}
+            {member.is_active ? "启用" : "停用"}
           </Lozenge>
         </td>
         <td>

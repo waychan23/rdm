@@ -107,6 +107,125 @@ async def test_send_check_cursor_read_reply(server, owner_token: str) -> None:
     assert r.status_code == 404
 
 
+async def test_human_can_read_own_and_agent_mailboxes(server, owner_token: str) -> None:
+    """Humans see their own + owned agents' inboxes; identity filter and
+    mark-read only cover identities they actually own."""
+    from tests.support import create_agent
+
+    client, _settings, _app = server
+    await _project(client, owner_token)
+    alice_id, alice = await _member(client, owner_token, "alice")
+    agent_id = await create_agent(client, alice, "alice-agent")
+
+    for recipient, subject in [("alice", "给人类"), ("alice-agent", "给 agent")]:
+        r = await client.post(
+            f"{API}/projects/DEMO/messages",
+            json={"to": [recipient], "subject": subject, "body_md": "hello"},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 201, r.text
+
+    # Default (include_agents=false) stays self-only.
+    r = await client.get(f"{API}/projects/DEMO/mailbox?unread_only=false", headers=auth(alice))
+    assert r.status_code == 200
+    assert [m["subject"] for m in r.json()["data"]["messages"]] == ["给人类"]
+
+    # Mixed view returns both, with a clear mailbox owner on every row.
+    r = await client.get(
+        f"{API}/projects/DEMO/mailbox?unread_only=false&include_agents=true",
+        headers=auth(alice),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()["data"]
+    assert body["unread_count"] == 2
+    by_subject = {m["subject"]: m for m in body["messages"]}
+    assert by_subject["给人类"]["mailbox_owner"] == {
+        "id": alice_id,
+        "name": "alice",
+        "type": "human",
+    }
+    assert by_subject["给 agent"]["mailbox_owner"]["id"] == agent_id
+    assert by_subject["给 agent"]["mailbox_owner"]["type"] == "agent"
+
+    # Identity filter narrows to one mailbox.
+    r = await client.get(
+        f"{API}/projects/DEMO/mailbox?unread_only=false&include_agents=true&identity={agent_id}",
+        headers=auth(alice),
+    )
+    assert r.status_code == 200
+    assert [m["subject"] for m in r.json()["data"]["messages"]] == ["给 agent"]
+
+    # ...but cannot peek at someone else's mailbox.
+    r = await client.get(
+        f"{API}/projects/DEMO/mailbox?include_agents=true&identity={owner_token}",
+        headers=auth(alice),
+    )
+    assert r.status_code == 404
+
+    # The human can mark an agent delivery read from the mixed view.
+    agent_delivery = by_subject["给 agent"]["delivery_id"]
+    r = await client.post(
+        f"{API}/messages/read",
+        json={"delivery_ids": [agent_delivery]},
+        headers=auth(alice),
+    )
+    assert r.status_code == 200
+    assert r.json()["data"]["updated"] == 1
+    r = await client.get(
+        f"{API}/projects/DEMO/mailbox?unread_only=true&include_agents=true",
+        headers=auth(alice),
+    )
+    assert r.json()["data"]["unread_count"] == 1
+    assert [m["subject"] for m in r.json()["data"]["messages"]] == ["给人类"]
+
+
+async def test_mailbox_is_project_scoped(server, owner_token: str) -> None:
+    from tests.support import add_to_project
+
+    client, _settings, _app = server
+    await _project(client, owner_token, "DEMO")
+    r = await client.post(
+        f"{API}/projects", json={"key": "OTHER", "name": "OTHER"}, headers=auth(owner_token)
+    )
+    assert r.status_code == 201, r.text
+    human_id, human = await _member(client, owner_token, "alice")
+    await add_to_project(client, owner_token, "OTHER", human_id, ["worker"])
+
+    for project, subject in [("DEMO", "项目 A 的信"), ("OTHER", "项目 B 的信")]:
+        r = await client.post(
+            f"{API}/projects/{project}/messages",
+            json={"to": ["alice"], "subject": subject, "body_md": "hi"},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 201, r.text
+
+    r = await client.get(
+        f"{API}/projects/DEMO/mailbox?unread_only=false", headers=auth(human)
+    )
+    assert [m["subject"] for m in r.json()["data"]["messages"]] == ["项目 A 的信"]
+    assert r.json()["data"]["unread_count"] == 1
+    demo_delivery = r.json()["data"]["messages"][0]["delivery_id"]
+
+    r = await client.get(
+        f"{API}/projects/OTHER/mailbox?unread_only=false", headers=auth(human)
+    )
+    assert [m["subject"] for m in r.json()["data"]["messages"]] == ["项目 B 的信"]
+    assert r.json()["data"]["unread_count"] == 1
+
+    # Marking read in one project must not touch the other inbox.
+    r = await client.post(
+        f"{API}/messages/read",
+        json={"delivery_ids": [demo_delivery]},
+        headers=auth(human),
+    )
+    assert r.status_code == 200
+    assert r.json()["data"]["updated"] == 1
+    r = await client.get(f"{API}/projects/DEMO/mailbox", headers=auth(human))
+    assert r.json()["data"]["unread_count"] == 0
+    r = await client.get(f"{API}/projects/OTHER/mailbox", headers=auth(human))
+    assert r.json()["data"]["unread_count"] == 1
+
+
 async def test_group_mailbox_fanout_to_and_cc(server, owner_token: str) -> None:
     client, _settings, _app = server
     await _project(client, owner_token)

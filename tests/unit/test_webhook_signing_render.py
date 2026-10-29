@@ -6,7 +6,11 @@ import hashlib
 import hmac
 import json
 
-from rdm.application.services.webhook_notify import build_view, render_payload
+from rdm.application.services.webhook_notify import (
+    build_view,
+    effective_format,
+    render_payload,
+)
 from rdm.domain.constants import DEFAULT_ORG_ID
 from rdm.domain.entities import Project, User
 from rdm.infrastructure.webhook.signing import WebhookSecretStore, sign
@@ -77,3 +81,15 @@ def test_render_status_changed_summary() -> None:
     dt_out = render_payload("dingtalk", view)
     assert "DEMO-9" in dt_out["markdown"]["text"]
     assert "IN_PROGRESS" in dt_out["markdown"]["text"]
+
+
+def test_generic_format_auto_detects_im_bot_urls() -> None:
+    feishu = "https://open.feishu.cn/open-apis/bot/v2/hook/abc"
+    lark = "https://open.larksuite.com/open-apis/bot/v2/hook/abc"
+    dingtalk = "https://oapi.dingtalk.com/robot/send?access_token=x"
+    assert effective_format("generic", feishu) == "feishu"
+    assert effective_format("generic", lark) == "feishu"
+    assert effective_format("generic", dingtalk) == "dingtalk"
+    # Explicit format wins; unknown URLs stay generic.
+    assert effective_format("dingtalk", feishu) == "dingtalk"
+    assert effective_format("generic", "https://example.com/hook") == "generic"

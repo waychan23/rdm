@@ -412,19 +412,54 @@ class MessageRepository(Protocol):
         self,
         recipient_user_id: str,
         *,
+        project_id: str | None = None,
         since_id: str | None = None,
         unread_only: bool = False,
         limit: int = 20,
+    ) -> DeliveryList: ...
+
+    async def list_deliveries_for_users(
+        self,
+        recipient_user_ids: Sequence[str],
+        *,
+        project_id: str | None = None,
+        since_id: str | None = None,
+        unread_only: bool = False,
+        limit: int = 20,
+    ) -> DeliveryList: ...
+
+    async def list_deliveries_by_ids(
+        self, delivery_ids: Sequence[str], *, project_id: str | None = None
     ) -> DeliveryList: ...
 
     async def list_messages(self, message_ids: Sequence[str]) -> MessageList: ...
 
     async def list_refs(self, message_ids: Sequence[str]) -> MessageRefList: ...
 
-    async def unread_count(self, recipient_user_id: str) -> int: ...
+    async def unread_count(
+        self, recipient_user_id: str, *, project_id: str | None = None
+    ) -> int: ...
+
+    async def unread_count_for_users(
+        self, recipient_user_ids: Sequence[str], *, project_id: str | None = None
+    ) -> int: ...
 
     async def mark_read(
-        self, recipient_user_id: str, delivery_ids: Sequence[str], when: dt.datetime
+        self,
+        recipient_user_id: str,
+        delivery_ids: Sequence[str],
+        when: dt.datetime,
+        *,
+        project_id: str | None = None,
+    ) -> int: ...
+
+    async def mark_read_for_users(
+        self,
+        recipient_user_ids: Sequence[str],
+        delivery_ids: Sequence[str],
+        when: dt.datetime,
+        *,
+        project_id: str | None = None,
     ) -> int: ...
 
 

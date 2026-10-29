@@ -26,10 +26,21 @@ def register(mcp: FastMCP, container: Container) -> None:
         async def run(uow, actor):
             projects = await ProjectService(uow).list_projects(actor)
             default = projects[0] if len(projects) == 1 else None
-            unread = await uow.messages.unread_count(actor.id)
-            my_open = await WorkItemService(uow).my_open_items(actor)
             assert uow.users is not None
             agents = await uow.users.list_agents_of(actor.human_id)
+            identity_ids = (
+                [actor.id]
+                if actor.is_agent
+                else [actor.human_id, *[a.id for a in agents]]
+            )
+            unread = await uow.messages.unread_count_for_users(identity_ids)
+            project_unread = {
+                p.id: await uow.messages.unread_count_for_users(
+                    identity_ids, project_id=p.id
+                )
+                for p in projects
+            }
+            my_open = await WorkItemService(uow).my_open_items(actor)
             return ok(
                 {
                     "user": user_out(actor.human),
@@ -46,6 +57,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                             **project_out(p),
                             "roles": actor.project_roles(p.id),
                             "implicit": actor.is_org_owner,
+                            "unread_count": project_unread[p.id],
                         }
                         for p in projects
                     ],

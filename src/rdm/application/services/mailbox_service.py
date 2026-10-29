@@ -47,6 +47,23 @@ class MailboxService:
 
     # --- provisioning -----------------------------------------------------
 
+    async def _mailbox_identity_ids(
+        self, actor: Actor, *, include_agents: bool = False
+    ) -> list[str]:
+        """Mailboxes the current actor may read.
+
+        Humans can read their own inbox plus their agents' inboxes; an agent
+        identity can only read its own inbox. The human's agents are never
+        visible through another human's account.
+        """
+        if actor.is_agent:
+            return [actor.id]
+        ids = [actor.human_id]
+        if include_agents:
+            assert self.uow.users is not None
+            ids.extend(a.id for a in await self.uow.users.list_agents_of(actor.human_id))
+        return ids
+
     async def ensure_indiv(self, project_id: str, user_id: str) -> Mailbox:
         """Return the user's indiv mailbox in a project, creating it on demand."""
         assert self.uow.mailboxes is not None
@@ -256,12 +273,23 @@ class MailboxService:
         since: str | None = None,
         unread_only: bool = True,
         limit: int = 20,
+        include_agents: bool = False,
+        identity: str | None = None,
     ) -> dict[str, Any]:
         assert self.uow.messages is not None and self.uow.work_items is not None
         project = await self.items.resolve_project(actor, project_key)
         await self.ensure_indiv(project.id, actor.id)
-        page = await self.uow.messages.list_deliveries(
-            actor.id, since_id=since, unread_only=unread_only, limit=limit + 1
+        identity_ids = await self._mailbox_identity_ids(actor, include_agents=include_agents)
+        if identity is not None:
+            if identity not in identity_ids:
+                raise NotFound("信箱身份不存在或无权查看", details={"user_id": identity})
+            identity_ids = [identity]
+        page = await self.uow.messages.list_deliveries_for_users(
+            identity_ids,
+            project_id=project.id,
+            since_id=since,
+            unread_only=unread_only,
+            limit=limit + 1,
         )
         has_more = len(page) > limit
         page = page[:limit]
@@ -273,6 +301,8 @@ class MailboxService:
             project.id, [r.work_item_id for r in refs], include_deleted=True
         )
         item_by_id = {i.id: i for i in ref_items}
+        assert self.uow.users is not None
+        owner_by_id = {user_id: await self.uow.users.get(user_id) for user_id in identity_ids}
 
         rows: list[dict[str, Any]] = []
         for delivery in page:
@@ -280,8 +310,8 @@ class MailboxService:
             if message is None:
                 continue
             # The sender may be a member of another project (org-level user).
-            assert self.uow.users is not None
             sender = await self.uow.users.get(message.from_user_id)
+            owner = owner_by_id.get(delivery.recipient_user_id)
             item_refs = [
                 f"{project.key}-{item_by_id[r.work_item_id].display_no}"
                 for r in refs
@@ -296,6 +326,11 @@ class MailboxService:
                         if sender is not None
                         else {"id": message.from_user_id}
                     ),
+                    "mailbox_owner": (
+                        {"id": owner.id, "name": owner.name, "type": owner.type}
+                        if owner is not None
+                        else {"id": delivery.recipient_user_id}
+                    ),
                     "subject": message.subject,
                     "body_md": message.body_md,
                     "recipient_type": delivery.recipient_type,
@@ -308,33 +343,62 @@ class MailboxService:
         return {
             "messages": rows,
             "next_cursor": page[-1].id if has_more and page else None,
-            "unread_count": await self.uow.messages.unread_count(actor.id),
+            "unread_count": await self.uow.messages.unread_count_for_users(
+                identity_ids, project_id=project.id
+            ),
         }
 
     async def mark_read(self, actor: Actor, delivery_ids: Sequence[str]) -> int:
-        assert self.uow.messages is not None
-        count = await self.uow.messages.mark_read(actor.id, delivery_ids, dt.datetime.now(dt.UTC))
-        if count:
-            project = await self.items.resolve_project(actor, None)
-            seq = await self.uow.allocate_event_seq(project.org_id)
-            assert self.uow.events is not None
-            await self.uow.events.append(
-                org_id=project.org_id,
-                project_id=project.id,
-                seq=seq,
-                aggregate_type="mailbox",
-                aggregate_id=actor.id,
-                aggregate_version=0,
-                event_type=EventType.MESSAGE_READ,
-                actor_user_id=actor.id,
-                payload={"delivery_ids": list(delivery_ids), "updated": count},
+        assert self.uow.messages is not None and self.uow.projects is not None
+        identity_ids = await self._mailbox_identity_ids(actor, include_agents=True)
+        allowed = set(identity_ids)
+        # Resolve the project(s) from the deliveries themselves: the actor may
+        # belong to multiple projects, so there is no implicit "current project".
+        deliveries = await self.uow.messages.list_deliveries_by_ids(delivery_ids)
+        visible = [d for d in deliveries if d.recipient_user_id in allowed and d.read_at is None]
+        count = await self.uow.messages.mark_read_for_users(
+            identity_ids, delivery_ids, dt.datetime.now(dt.UTC)
+        )
+        if count and visible:
+            messages = await self.uow.messages.list_messages(
+                sorted({d.message_id for d in visible})
             )
+            project_by_message = {m.id: m.project_id for m in messages}
+            assert self.uow.events is not None
+            for project_id in sorted(set(project_by_message.values())):
+                project = await self.uow.projects.get(project_id)
+                if project is None:
+                    continue
+                changed = [
+                    d.id for d in visible if project_by_message.get(d.message_id) == project_id
+                ]
+                if not changed:
+                    continue
+                seq = await self.uow.allocate_event_seq(project.org_id)
+                await self.uow.events.append(
+                    org_id=project.org_id,
+                    project_id=project.id,
+                    seq=seq,
+                    aggregate_type="mailbox",
+                    aggregate_id=actor.id,
+                    aggregate_version=0,
+                    event_type=EventType.MESSAGE_READ,
+                    actor_user_id=actor.id,
+                    payload={"delivery_ids": changed, "updated": len(changed)},
+                )
         return count
 
-    async def unread_count(self, actor: Actor, *, project_id: str) -> int:
+    async def unread_count(
+        self, actor: Actor, *, project_id: str, include_agents: bool = False
+    ) -> int:
         assert self.uow.messages is not None
         await self.ensure_indiv(project_id, actor.id)
-        return await self.uow.messages.unread_count(actor.id)
+        identity_ids = await self._mailbox_identity_ids(
+            actor, include_agents=include_agents
+        )
+        return await self.uow.messages.unread_count_for_users(
+            identity_ids, project_id=project_id
+        )
 
     # --- @mention fan-out (shared with comment service) -------------------
 

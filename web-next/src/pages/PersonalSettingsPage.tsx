@@ -122,6 +122,16 @@ export default function PersonalSettingsPage() {
   const [hideRevoked, setHideRevoked] = useState(false);
   const visibleTokens = (tokens ?? []).filter((t) => !hideRevoked || t.is_valid);
 
+  const copyIssuedToken = async () => {
+    if (!issued) return;
+    try {
+      await navigator.clipboard.writeText(issued);
+      notify.success("令牌已复制");
+    } catch {
+      notify.error("复制失败", "请手动选中令牌文本复制");
+    }
+  };
+
   const revokeToken = async () => {
      if (!revokeTarget || revoking) return;
      setRevoking(true);
@@ -424,6 +434,15 @@ export default function PersonalSettingsPage() {
                  <SectionMessage appearance="success" title="令牌只显示一次">
                    <Stack space="space.100">
                      <code style={{ wordBreak: "break-all" }}>{issued}</code>
+                     <Inline>
+                       <Button
+                         spacing="compact"
+                         testId="personal-token-copy"
+                         onClick={() => void copyIssuedToken()}
+                       >
+                         复制令牌
+                       </Button>
+                     </Inline>
                      <Text size="small">请立即复制保存；关闭窗口后无法再次查看。</Text>
                    </Stack>
                  </SectionMessage>

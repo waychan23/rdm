@@ -152,9 +152,20 @@ async def test_project_owner_is_single_source_of_truth(server, owner_token) -> N
     r = await client.delete(f"/api/v1/projects/OWN/members/{worker_id}", headers=auth(owner_token))
     assert r.status_code == 422
 
-    # An active project owner cannot be disabled without transferring first.
+    # Disabling a project owner is allowed; ownership is retained and the
+    # inactive state is surfaced in member listings. Re-enabling restores access.
     r = await client.post(f"/api/v1/users/{worker_id}/disable", headers=auth(owner_token))
-    assert r.status_code == 403
+    assert r.status_code == 200, r.text
+    users = (await client.get("/api/v1/users", headers=auth(owner_token))).json()["data"]
+    disabled = next(u for u in users if u["id"] == worker_id)
+    assert disabled["is_active"] is False
+    rows = (await client.get("/api/v1/projects/OWN/members", headers=auth(owner_token))).json()[
+        "data"
+    ]
+    owner_row = next(row for row in rows if row["id"] == worker_id)
+    assert "project_owner" in owner_row["roles"]
+    r = await client.post(f"/api/v1/users/{worker_id}/enable", headers=auth(owner_token))
+    assert r.status_code == 200, r.text
 
 
 async def test_agent_membership_lifecycle(server, owner_token) -> None:
