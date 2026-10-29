@@ -4,18 +4,28 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
+from rdm.application.services.history_service import HistoryService
 from rdm.application.services.membership_service import MembershipService
-from rdm.application.services.workitem_service import WorkItemService
+from rdm.application.services.workitem_service import (
+    WorkItemService,
+    allowed_child_kinds,
+    allowed_parent_kinds,
+)
 from rdm.domain.actor import Actor
 from rdm.domain.workflow.loader import load_engine
 from rdm.interfaces.http.container import Container, get_actor, get_container
 from rdm.interfaces.http.schemas import (
+    ReparentIn,
     TransitionIn,
     WorkItemAssignIn,
     WorkItemCreateIn,
     WorkItemUpdateIn,
 )
-from rdm.interfaces.http.serializers import work_item_out, work_item_summary_out
+from rdm.interfaces.http.serializers import (
+    history_entry_out,
+    work_item_out,
+    work_item_summary_out,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["work-items"])
 
@@ -33,6 +43,7 @@ async def list_work_items(
     parent: str | None = None,
     sprint: str | None = None,
     q: str | None = None,
+    backlog: bool = False,
     include_deleted: bool = False,
     limit: int = 20,
     offset: int = 0,
@@ -49,6 +60,7 @@ async def list_work_items(
             parent_ref=parent,
             sprint_ref=sprint,
             q=q,
+            backlog=backlog,
             include_deleted=include_deleted,
             limit=limit,
             offset=offset,
@@ -87,17 +99,23 @@ async def get_work_item(
         service = WorkItemService(uow)
         project, item = await service.get_item(actor, ref, include_deleted=include_deleted)
         members = await _users_map(uow, project.id)
-        _, children = await service.list_items(
-            actor,
-            project_key=project.key,
-            parent_ref=ref,
-            include_deleted=include_deleted,
+        assert uow.work_items is not None
+        children = await uow.work_items.list_children(item.id)
+        parent_item = (
+            await uow.work_items.get(item.parent_id, include_deleted=True)
+            if item.parent_id
+            else None
         )
         allowed = load_engine().allowed(item.kind, item.status)
         data = work_item_out(item, project, members)
         meta = {
             "allowed_transitions": list(allowed),
             "children": [work_item_summary_out(c, project, members) for c in children],
+            "parent": work_item_summary_out(parent_item, project, members)
+            if parent_item is not None
+            else None,
+            "allowed_parent_kinds": allowed_parent_kinds(item.kind),
+            "allowed_child_kinds": allowed_child_kinds(item.kind),
         }
     return {"data": data, "meta": meta}
 
@@ -116,6 +134,43 @@ async def update_work_item(
         members = await _users_map(uow, project.id)
         out = work_item_out(item, project, members)
     return {"data": out}
+
+
+@router.get("/work-items/{ref}/history")
+async def list_work_item_history(
+    ref: str,
+    limit: int = 30,
+    before_seq: int | None = None,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        _project, _item, page = await HistoryService(uow).work_item_history(
+            actor,
+            ref,
+            limit=min(max(limit, 1), 100),
+            before_seq=before_seq,
+        )
+    return {
+        "data": [history_entry_out(entry) for entry in page.entries],
+        "meta": {"has_more": page.has_more, "next_before_seq": page.next_before_seq},
+    }
+
+
+@router.post("/work-items/{ref}/reparent")
+async def reparent_work_item(
+    ref: str,
+    body: ReparentIn,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project, item, meta = await WorkItemService(uow).reparent_item(
+            actor, ref, parent_ref=body.parent, row_version=body.row_version
+        )
+        members = await _users_map(uow, project.id)
+        out = work_item_out(item, project, members)
+    return {"data": out, "meta": meta}
 
 
 @router.post("/work-items/{ref}/assign")

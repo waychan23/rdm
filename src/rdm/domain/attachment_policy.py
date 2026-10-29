@@ -45,7 +45,23 @@ _BLOCKED_MIME_MARKERS = (
 _FORBIDDEN_CHARS_RE = re.compile(r'[\x00-\x1f/\\:*?"<>|]')
 _WHITESPACE_RE = re.compile(r"\s+")
 
+# Markdown image links produced by the web editor point at the authenticated
+# download endpoint. Only these ids are promoted temp -> active on save.
+_ATTACHMENT_URL_RE = re.compile(
+    r"/api/v1/attachments/(?P<id>[A-Za-z0-9]{10,32})/(?:download|content)"
+)
+
 MAX_FILENAME_LEN = 120
+
+
+def extract_attachment_ids(*texts: str | None) -> set[str]:
+    """Collect attachment ids referenced by markdown/HTML content."""
+    found: set[str] = set()
+    for text in texts:
+        if not text:
+            continue
+        found.update(match.group("id") for match in _ATTACHMENT_URL_RE.finditer(text))
+    return found
 
 
 def sanitize_filename(name: str) -> str:

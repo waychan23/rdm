@@ -22,6 +22,7 @@ from rdm.domain.entities import (
 )
 from rdm.domain.errors import ConflictVersion
 from rdm.infrastructure.db.models import (
+    SprintItemModel,
     WorkItemIssueModel,
     WorkItemModel,
     WorkItemStoryModel,
@@ -81,6 +82,8 @@ class WorkItemRepository:
         assignee_user_id: str | None = None,
         parent_id: str | None = None,
         q: str | None = None,
+        exclude_statuses: Sequence[str] | None = None,
+        backlog_only: bool = False,
         expand: bool = False,
         include_deleted: bool = False,
         limit: int = 50,
@@ -93,6 +96,17 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.kind == kind)
         if status is not None:
             stmt = stmt.where(WorkItemModel.status == status)
+        if exclude_statuses:
+            stmt = stmt.where(WorkItemModel.status.notin_(list(exclude_statuses)))
+        if backlog_only:
+            stmt = stmt.where(
+                ~select(SprintItemModel.id)
+                .where(
+                    SprintItemModel.work_item_id == WorkItemModel.id,
+                    SprintItemModel.deleted_at.is_(None),
+                )
+                .exists()
+            )
         if assignee_user_id is not None:
             stmt = stmt.where(WorkItemModel.assignee_user_id == assignee_user_id)
         if parent_id is not None:
@@ -113,6 +127,8 @@ class WorkItemRepository:
         assignee_user_id: str | None = None,
         parent_id: str | None = None,
         q: str | None = None,
+        exclude_statuses: Sequence[str] | None = None,
+        backlog_only: bool = False,
         include_deleted: bool = False,
     ) -> int:
         stmt = (
@@ -126,6 +142,17 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.kind == kind)
         if status is not None:
             stmt = stmt.where(WorkItemModel.status == status)
+        if exclude_statuses:
+            stmt = stmt.where(WorkItemModel.status.notin_(list(exclude_statuses)))
+        if backlog_only:
+            stmt = stmt.where(
+                ~select(SprintItemModel.id)
+                .where(
+                    SprintItemModel.work_item_id == WorkItemModel.id,
+                    SprintItemModel.deleted_at.is_(None),
+                )
+                .exists()
+            )
         if assignee_user_id is not None:
             stmt = stmt.where(WorkItemModel.assignee_user_id == assignee_user_id)
         if parent_id is not None:

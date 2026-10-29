@@ -247,3 +247,48 @@ async def test_epic_cannot_enter_sprint(server, owner_token: str) -> None:
     )
     assert r.status_code == 422
     assert r.json()["error"]["details"]["kind"] == "epic"
+
+
+async def test_backlog_filter_excludes_sprint_items_and_terminal(server, owner_token: str) -> None:
+    client, _settings, _app = server
+    await _project(client, owner_token)
+    picked = await _item(client, owner_token, {"kind": "story", "title": "in sprint"})
+    free = await _item(client, owner_token, {"kind": "story", "title": "free"})
+    done = await _item(client, owner_token, {"kind": "task", "title": "done", "task_type": "qa"})
+
+    detail = (
+        await client.get(f"{API}/work-items/{done['display_id']}", headers=auth(owner_token))
+    ).json()
+    await client.post(
+        f"{API}/work-items/{done['display_id']}/transition",
+        json={
+            "to": "CANCELLED",
+            "row_version": detail["data"]["row_version"],
+        },
+        headers=auth(owner_token),
+    )
+
+    sprint = (
+        await client.post(
+            f"{API}/projects/DEMO/sprints",
+            json={"name": "S"},
+            headers=auth(owner_token),
+        )
+    ).json()["data"]
+    r = await client.post(
+        f"{API}/sprints/{sprint['id']}/items",
+        json={"items": [picked["display_id"]]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+
+    r = await client.get(
+        f"{API}/projects/DEMO/work-items",
+        params={"backlog": "true", "limit": 100},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    ids = {item["display_id"] for item in r.json()["data"]}
+    assert free["display_id"] in ids
+    assert picked["display_id"] not in ids
+    assert done["display_id"] not in ids

@@ -211,16 +211,24 @@ def check_attachments(settings: Settings) -> CheckResult:
     store = LocalFileStore(settings.projects_dir)
     engine = create_engine(settings.db_sync_url)
     try:
+        inspector = inspect(engine)
+        if not inspector.has_table("attachment"):
+            return CheckResult("attachments", WARN, "attachment 表不存在，跳过")
+        columns = {col["name"] for col in inspector.get_columns("attachment")}
+        state_expr = "state" if "state" in columns else "'active'"
         with engine.connect() as conn:
             rows = conn.execute(
-                text("select rel_path, deleted_at is not null from attachment")
+                text(
+                    "select rel_path, deleted_at is not null, "
+                    f"{state_expr}, created_at from attachment"
+                )
             ).all()
     finally:
         engine.dispose()
 
     missing_live: list[str] = []
     known = set()
-    for rel_path, deleted in rows:
+    for rel_path, deleted, _state, _created in rows:
         known.add(rel_path)
         if not deleted and not store.exists(rel_path):
             missing_live.append(rel_path)
@@ -238,6 +246,35 @@ def check_attachments(settings: Settings) -> CheckResult:
             "attachments",
             WARN,
             f"{len(dangling)} 个磁盘文件无附件记录（如 {Path(dangling[0]).name}）",
+        )
+    temp_rows = [
+        (created, rel_path)
+        for rel_path, deleted, state, created in rows
+        if not deleted and state == "temp"
+    ]
+    if temp_rows:
+        oldest = min(str(created) for created, _rel in temp_rows)
+
+        def _stale(value: object) -> bool:
+            try:
+                parsed = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            except ValueError:
+                return False
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=dt.UTC)
+            return dt.datetime.now(dt.UTC) - parsed > dt.timedelta(hours=24)
+
+        stale = [row for row in temp_rows if _stale(row[0])]
+        if stale:
+            return CheckResult(
+                "attachments",
+                WARN,
+                f"{len(stale)} 个编辑器草稿图片超过 24h 未提交（最早 {oldest}），等待后续 GC",
+            )
+        return CheckResult(
+            "attachments",
+            OK,
+            f"{len(rows)} 条记录，{len(on_disk)} 个文件一致；{len(temp_rows)} 个 temp 草稿待提交",
         )
     return CheckResult("attachments", OK, f"{len(rows)} 条记录，{len(on_disk)} 个文件一致")
 

@@ -170,3 +170,77 @@ async def test_size_limit_enforced(tmp_path) -> None:
             )
             assert r.status_code == 413
             assert r.json()["error"]["code"] == "ATTACHMENT_TOO_LARGE"
+
+
+async def test_project_scoped_temp_image_commit_and_signed_url(server, owner_token) -> None:
+    from urllib.parse import urlparse
+
+    client, _settings, app = server
+    await _project(client, owner_token)
+    payload = b"\x89PNG\r\n\x1a\nfake"
+
+    # Editor upload: project-scoped and temp.
+    r = await client.post(
+        f"{API}/projects/DEMO/attachments",
+        files={"file": ("pasted.png", payload, "image/png")},
+        data={"owner_type": "project", "owner_ref": "DEMO", "state": "temp"},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+    temp_att = r.json()["data"]
+    assert temp_att["state"] == "temp"
+
+    # A second temp upload that is never referenced stays temp.
+    r = await client.post(
+        f"{API}/projects/DEMO/attachments",
+        files={"file": ("orphan.png", b"orphan", "image/png")},
+        data={"owner_type": "project", "state": "temp"},
+        headers=auth(owner_token),
+    )
+    orphan_id = r.json()["data"]["id"]
+
+    # Saving markdown that references the image promotes it.
+    r = await client.post(
+        f"{API}/projects/DEMO/work-items",
+        json={
+            "kind": "task",
+            "title": "带图任务",
+            "description_md": f"看图 ![x]({temp_att['download_url']})",
+        },
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+
+    r = await client.get(
+        f"{API}/projects/DEMO/attachments",
+        params={"owner_type": "project"},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    states = {a["id"]: a["state"] for a in r.json()["data"]}
+    assert states[temp_att["id"]] == "active"
+    assert states[orphan_id] == "temp"
+
+    # Default (non-editor) uploads remain active.
+    item = await _item(client, owner_token)
+    r = await client.post(
+        f"{API}/projects/DEMO/attachments",
+        files={"file": ("report.txt", b"r", "text/plain")},
+        data={"owner_type": "work_item", "owner_ref": item["display_id"]},
+        headers=auth(owner_token),
+    )
+    assert r.json()["data"]["state"] == "active"
+
+    # Short-lived signed URL downloads without a Bearer token.
+    signer = app.state.container.attachment_signer
+    signed = signer.signed_url(app.state.container.settings.base_url, temp_att["id"])
+    parsed = urlparse(signed)
+    r = await client.get(parsed.path + "?" + parsed.query)
+    assert r.status_code == 200, r.text
+    assert r.content == payload
+
+    # Tampered signature / missing signature is rejected.
+    r = await client.get(parsed.path + "?exp=9999999999&sig=bad")
+    assert r.status_code == 401
+    r = await client.get(parsed.path)
+    assert r.status_code == 401

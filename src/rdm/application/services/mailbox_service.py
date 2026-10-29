@@ -19,6 +19,7 @@ from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 
+from rdm.application.services.attachment_commit import commit_inline_images
 from rdm.application.services.membership_service import MembershipService
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.actor import Actor
@@ -173,6 +174,7 @@ class MailboxService:
             ref_items=ref_items,
             reply_to=reply_to,
         )
+        await commit_inline_images(self.uow, project.id, body_md)
         await self._append_message_event(project, actor, message, recipients, ref_items)
         return project, message, len(deliveries)
 

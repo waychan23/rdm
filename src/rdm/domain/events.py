@@ -1,7 +1,24 @@
 """Event types (docs/architecture.md §4.2) and payload constructors."""
 
+import datetime as dt
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
+
+
+@dataclass(frozen=True)
+class EventRecord:
+    """Read model row for history/audit queries (event is append-only)."""
+
+    id: int
+    seq: int
+    project_id: str | None
+    aggregate_type: str
+    aggregate_id: str
+    event_type: str
+    actor_user_id: str | None
+    payload: dict[str, Any]
+    occurred_at: dt.datetime
 
 
 class EventType(StrEnum):

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, ForeignKey, String, Text
+import datetime as dt
+
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from rdm.infrastructure.db.base import AuditMixin, Base, SoftDeleteMixin
@@ -55,6 +57,13 @@ class AttachmentModel(AuditMixin, SoftDeleteMixin, Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     rel_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    # temp = editor draft; active = referenced by saved markdown (§17.83).
+    state: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="active", server_default="active"
+    )
+    committed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_attachment_state_created_at", "state", "created_at"),)
 
 
 class WorkspaceModel(AuditMixin, SoftDeleteMixin, Base):

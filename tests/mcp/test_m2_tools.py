@@ -305,3 +305,67 @@ async def test_mailbox_mark_read_requires_ids(server, mcp_clients, empty) -> Non
     async with mcp_clients["client_for"](owner) as c:
         result = await call(c, "mailbox_mark_read", {"delivery_ids": empty})
         assert result["_is_error"]
+
+
+async def test_project_inline_images_and_signed_fetch_url(server, mcp_clients) -> None:
+    from urllib.parse import urlparse
+
+    rest, _settings, _app = server
+    owner_token = mcp_clients["owner_token"]
+    await _project(rest, owner_token)
+    headers = _hdr(owner_token)
+
+    r = await rest.post(
+        "/api/v1/projects/DEMO/work-items",
+        json={"kind": "task", "title": "带图任务"},
+        headers=headers,
+    )
+    assert r.status_code == 201, r.text
+    item = r.json()["data"]
+
+    image = b"\x89PNG\r\n\x1a\nfake"
+    r = await rest.post(
+        "/api/v1/projects/DEMO/attachments",
+        files={"file": ("shot.png", image, "image/png")},
+        data={"owner_type": "project", "state": "temp"},
+        headers=headers,
+    )
+    assert r.status_code == 201, r.text
+    att = r.json()["data"]
+    assert att["state"] == "temp"
+
+    r = await rest.patch(
+        f"/api/v1/work-items/{item['display_id']}",
+        json={
+            "row_version": item["row_version"],
+            "description_md": f"![shot]({att['download_url']})",
+        },
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
+
+    async with mcp_clients["client_for"](owner_token) as c:
+        detail = await call(c, "work_item_get", {"id": item["display_id"]})
+        assert not detail["_is_error"], detail
+        attachments = detail["meta"]["attachments"]
+        assert [a["id"] for a in attachments] == [att["id"]]
+        assert attachments[0]["state"] == "active"
+        fetch_url = attachments[0]["fetch_url"]
+        assert fetch_url.startswith("http://127.0.0.1:8765/api/v1/attachments/")
+
+        listed = await call(
+            c,
+            "attachment_list",
+            {"owner_type": "project", "project": "DEMO"},
+        )
+        assert not listed["_is_error"], listed
+        assert listed["data"][0]["id"] == att["id"]
+        assert listed["data"][0]["fetch_url"].startswith("http://")
+
+        parsed = urlparse(fetch_url)
+        r = await rest.get(parsed.path + "?" + parsed.query)
+        assert r.status_code == 200, r.text
+        assert r.content == image
+
+        r = await rest.get(parsed.path + "?exp=9999999999&sig=bad")
+        assert r.status_code == 401

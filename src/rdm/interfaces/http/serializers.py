@@ -199,10 +199,26 @@ def attachment_out(a: Attachment, users: dict[str, User] | None = None) -> dict:
         "size_bytes": a.size_bytes,
         "sha256": a.sha256,
         "download_url": f"/api/v1/attachments/{a.id}/download",
+        "state": a.state,
+        "committed_at": _iso(a.committed_at),
         "uploader": {"id": uploader.id, "name": uploader.name, "type": uploader.type}
         if uploader
         else {"id": a.uploader_user_id},
         "created_at": _iso(a.created_at),
+    }
+
+
+def history_entry_out(entry) -> dict:
+    return {
+        "id": entry.id,
+        "seq": entry.seq,
+        "event_type": entry.event_type,
+        "action": entry.action,
+        "occurred_at": _iso(entry.occurred_at),
+        "actor": entry.actor,
+        "changes": entry.changes,
+        "comment": entry.comment,
+        "meta": entry.meta,
     }
 
 

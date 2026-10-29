@@ -113,9 +113,22 @@ class ArtifactKind(StrEnum):
 
 
 class AttachmentOwnerType(StrEnum):
+    project = "project"
     work_item = "work_item"
     comment = "comment"
     message = "message"
+
+
+class AttachmentState(StrEnum):
+    """Draft vs. content-referenced attachments (web editor image paste).
+
+    Editor uploads start as `temp`; saving markdown that references the
+    attachment promotes it to `active`. Unreferenced temp rows are eligible
+    for asynchronous GC.
+    """
+
+    temp = "temp"
+    active = "active"
 
 
 class WorkspaceKind(StrEnum):

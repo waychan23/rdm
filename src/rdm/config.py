@@ -42,6 +42,16 @@ class Settings(BaseSettings):
         return self.data_dir / "webhook-secret"
 
     @property
+    def attachment_secret_path(self) -> Path:
+        """HMAC key for short-lived MCP attachment URLs (§17.85)."""
+        return self.data_dir / "attachment-secret"
+
+    @property
+    def base_url(self) -> str:
+        host = f"[{self.host}]" if ":" in self.host else self.host
+        return f"http://{host}:{self.port}"
+
+    @property
     def db_path(self) -> Path:
         return self.data_dir / "rdm.db"
 

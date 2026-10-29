@@ -66,11 +66,17 @@ class WorkItemUpdateIn(_Strict):
     repro_steps_md: str | None = None
     expected_behavior_md: str | None = None
     actual_behavior_md: str | None = None
+    source_story: str | None = None
     # task
     task_type: TaskType | None = None
     est_work_hours: float | None = Field(default=None, ge=0, le=9999.9)
     actual_work_hours: float | None = Field(default=None, ge=0, le=9999.9)
     code_branch: str | None = None
+
+
+class ReparentIn(_Strict):
+    parent: str | None = None
+    row_version: int
 
 
 class WorkItemAssignIn(_Strict):

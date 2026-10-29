@@ -10,7 +10,13 @@ from fastapi.responses import FileResponse
 from rdm.application.services.attachment_service import AttachmentService
 from rdm.application.services.membership_service import MembershipService
 from rdm.domain.actor import Actor
-from rdm.interfaces.http.container import Container, get_actor, get_container
+from rdm.domain.errors import AuthInvalidToken
+from rdm.interfaces.http.container import (
+    Container,
+    get_actor,
+    get_actor_optional,
+    get_container,
+)
 from rdm.interfaces.http.serializers import attachment_out
 
 router = APIRouter(prefix="/api/v1", tags=["attachments"])
@@ -27,7 +33,8 @@ async def upload_attachment(
     key: str,
     file: UploadFile = File(...),
     owner_type: str = Form(...),
-    owner_ref: str = Form(...),
+    owner_ref: str | None = Form(None),
+    state: str = Form("active"),
     container: Container = Depends(get_container),
     actor: Actor = Depends(get_actor),
 ) -> dict:
@@ -40,6 +47,7 @@ async def upload_attachment(
             filename=file.filename or "attachment",
             mime=file.content_type,
             stream=file,
+            state=state,
         )
         members = await MembershipService(uow).users_index(_project.id)
         uploader = await uow.users.get(attachment.uploader_user_id)
@@ -53,7 +61,7 @@ async def upload_attachment(
 async def list_attachments(
     key: str,
     owner_type: str,
-    owner_ref: str,
+    owner_ref: str | None = None,
     container: Container = Depends(get_container),
     actor: Actor = Depends(get_actor),
 ) -> dict:
@@ -68,11 +76,23 @@ async def list_attachments(
 @router.get("/attachments/{attachment_id}/download")
 async def download_attachment(
     attachment_id: str,
+    exp: int | None = None,
+    sig: str | None = None,
     container: Container = Depends(get_container),
-    actor: Actor = Depends(get_actor),
+    actor: Actor | None = Depends(get_actor_optional),
 ) -> FileResponse:
     async with container.uow() as uow:
-        attachment, path = await _service(container, uow).download(actor, attachment_id)
+        service = _service(container, uow)
+        if actor is None:
+            if (
+                exp is None
+                or sig is None
+                or not container.attachment_signer.verify(attachment_id, exp, sig)
+            ):
+                raise AuthInvalidToken("附件下载链接无效或已过期")
+            attachment, path = await service.download_unchecked(attachment_id)
+        else:
+            attachment, path = await service.download(actor, attachment_id)
         filename = attachment.filename
     quoted = quote(filename)
     return FileResponse(

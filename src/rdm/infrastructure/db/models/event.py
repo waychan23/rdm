@@ -51,6 +51,8 @@ class EventModel(Base):
             "aggregate_id",
             "id",
         ),
+        # Work-item history reads: newest-first by seq inside one project.
+        Index("ix_event_project_type_seq", "project_id", "aggregate_type", "seq"),
     )
 
 

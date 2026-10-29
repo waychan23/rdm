@@ -360,7 +360,7 @@ class MessageRef:
 class Attachment:
     id: str
     project_id: str
-    owner_type: str  # AttachmentOwnerType: work_item | comment | message
+    owner_type: str  # AttachmentOwnerType: project | work_item | comment | message
     owner_id: str
     uploader_user_id: str
     filename: str
@@ -368,6 +368,9 @@ class Attachment:
     size_bytes: int
     sha256: str
     rel_path: str  # data-dir relative path; never absolute
+    # AttachmentState: temp (editor draft) | active (referenced by saved content)
+    state: str = "active"
+    committed_at: dt.datetime | None = None
     created_at: dt.datetime = field(default_factory=_utcnow)
     created_by: str | None = None
     updated_at: dt.datetime | None = None

@@ -63,7 +63,21 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 - `NOT_FOUND`：id 错或不属于当前项目；重新 `work_item_get` / 查列表确认，**不要猜 id**。
 - **同一个错误连续出现两次**：停止重试，`mailbox_send` 给 accountable_human，附上错误原文与你尝试的操作。
 
-## 7. 禁止事项
+## 7. 图片与附件
+
+- 工作项描述、评论、Sprint 目标里的图片是 **project 级附件**，正文写成
+  `![说明](/api/v1/attachments/<id>/download)`；不要内嵌 base64。
+- `work_item_get` 的 `meta.attachments`、`comment_list` 每条评论的 `attachments`、
+  `attachment_list(owner_type="project", project=KEY)` 都会返回附件元数据。
+  其中 `state="temp"` 是编辑器草稿，`state="active"` 才是已保存内容。
+- 每个附件元数据带 `fetch_url`（15 分钟有效的签名下载链接），可直接
+  `curl -L "<fetch_url>" -o /tmp/image.png`，不需要额外 Bearer。
+  若没有 `fetch_url`，用 PAT：`curl -H "Authorization: Bearer $RDM_TOKEN"
+  http://127.0.0.1:8765<download_url> -o file`。不要猜附件 id。
+- 上传/删除附件只能走 Web/OpenAPI：`POST /projects/<key>/attachments`
+  （multipart，`owner_type=project` 或 `work_item`）；MCP 不传二进制。
+
+## 8. 禁止事项
 
 - 不要猜工作项/成员 id；先查询。
 - 不要尝试绕过 `work_item_transition` 改状态。

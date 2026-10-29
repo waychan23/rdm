@@ -89,6 +89,8 @@ class AttachmentRepository:
                 size_bytes=attachment.size_bytes,
                 sha256=attachment.sha256,
                 rel_path=attachment.rel_path,
+                state=attachment.state,
+                committed_at=attachment.committed_at,
                 created_at=attachment.created_at,
                 created_by=attachment.created_by,
             )
@@ -133,6 +135,61 @@ class AttachmentRepository:
                 AttachmentModel.deleted_at.is_(None),
             )
             .order_by(AttachmentModel.created_at, AttachmentModel.id)
+        )
+        rows = list((await self._s.execute(stmt)).scalars().all())
+        return [attachment_to_domain(r) for r in rows]
+
+    async def list_by_ids(
+        self,
+        project_id: str,
+        attachment_ids: Sequence[str],
+        *,
+        active_only: bool = False,
+    ) -> list[Attachment]:
+        if not attachment_ids:
+            return []
+        stmt = select(AttachmentModel).where(
+            AttachmentModel.project_id == project_id,
+            AttachmentModel.id.in_(attachment_ids),
+            AttachmentModel.deleted_at.is_(None),
+        )
+        if active_only:
+            stmt = stmt.where(AttachmentModel.state == "active")
+        stmt = stmt.order_by(AttachmentModel.created_at, AttachmentModel.id)
+        rows = list((await self._s.execute(stmt)).scalars().all())
+        return [attachment_to_domain(r) for r in rows]
+
+    async def commit_temp(
+        self, project_id: str, attachment_ids: Sequence[str], when: dt.datetime
+    ) -> int:
+        """Promote same-project, undeleted temp attachments to active."""
+        if not attachment_ids:
+            return 0
+        result = await self._s.execute(
+            update(AttachmentModel)
+            .where(
+                AttachmentModel.id.in_(attachment_ids),
+                AttachmentModel.project_id == project_id,
+                AttachmentModel.state == "temp",
+                AttachmentModel.deleted_at.is_(None),
+            )
+            .values(state="active", committed_at=when, updated_at=when)
+        )
+        return int(result.rowcount or 0)
+
+    async def list_temp_older_than(
+        self, cutoff: dt.datetime, *, limit: int = 100
+    ) -> list[Attachment]:
+        """GC candidate scan (doctor/worker); oldest temp uploads first."""
+        stmt = (
+            select(AttachmentModel)
+            .where(
+                AttachmentModel.state == "temp",
+                AttachmentModel.deleted_at.is_(None),
+                AttachmentModel.created_at < cutoff,
+            )
+            .order_by(AttachmentModel.created_at, AttachmentModel.id)
+            .limit(limit)
         )
         rows = list((await self._s.execute(stmt)).scalars().all())
         return [attachment_to_domain(r) for r in rows]

@@ -45,12 +45,12 @@
 | 工具 | 用途 | 关键入参 |
 |---|---|---|
 | `work_item_list` 【M1】 | 通用筛选：kind/status/assignee/sprint/parent/priority/keyword，分页 | `kind?, status?, assignee?, sprint?, parent?, q?, limit?, cursor?, include_deleted?` |
-| `work_item_get` 【M1】 | 详情 + 子项 + 评论 + artifacts + attachments + `allowed_transitions` | `id, expand?` |
+| `work_item_get` 【M1】 | 详情 + 子项 + 父项 + attachments（含正文内联图片）+ `allowed_transitions` + allowed parent/child kinds | `id` |
 | `my_work_list` 【M2】 | 我的待办（assignee=me 且非终态，按 priority/display_no 排序）；传 `status` 时按状态精确过滤；传 `project` 时只列该项目 | `status?, project?` |
 | `backlog_list` 【M2】 | ProductBacklog：**未进入任何 Sprint** 且非终态的 items（跨全部 sprint 链接差集） | `kind?, project?` |
 | `sprint_list` / `sprint_get` 【M2】 | Sprint 列表（可按状态过滤）/ 详情（含 items 与 status_counts） | `status?, project?` / `id` |
 | `member_list` 【M2】 | 项目成员（含 agent 的 manager、角色、可接 kinds、webhook 配置） | `type?, project?` |
-| `comment_list` 【M2】 | 某个 item 的讨论，含每条评论挂载的附件元数据 | `work_item_id, limit?, offset?` |
+| `comment_list` 【M2】 | 某个 item 的讨论，含每条评论挂载的附件与正文内联图片元数据 | `work_item_id, limit?, offset?` |
 
 ### 3.3 写入（工作项，7）【M1 全量】
 
@@ -84,9 +84,15 @@
 ### 3.6 产出物 / 附件 / 工作区（2）| 工具 | 用途 |
 |---|---|
 | `artifact_add` 【M2】 | 挂链接型产出物（设计稿/API 文档/仓库链接）；`owner_type` 仅暴露 project/item/comment（message 只走 REST），URL 限 http(s) | `owner_type, owner, kind, label, url` |
-| `attachment_list` 【M2】 | 列附件元数据 + download_url（不传二进制）；**上传/下载/删除走 REST**：`POST /projects/<key>/attachments`（multipart：file + owner_type + owner_ref，20MB 上限、可执行类型黑名单）、`GET /attachments/<id>/download`、`DELETE` | `owner, owner_type?` |
+| `attachment_list` 【M2】 | 列附件元数据 + `download_url` + 短时 `fetch_url`（不传二进制）；`owner_type=project` 时 `owner` 可省略（项目级内联图片）。**上传/下载/删除走 REST**：`POST /projects/<key>/attachments`（multipart：file + owner_type + owner_ref? + state?，20MB 上限、可执行类型黑名单）、`GET /attachments/<id>/download`、`DELETE` | `owner?, owner_type?, project?` |
 
 > 未列入 MCP 工具：项目/成员/token/workspace 的写操作（v1 走 Web/OpenAPI，保持人类掌控）；事件查询（v1 只记录，后续再加）。
+
+**附件图片约定（§17.83/§17.87）**：Web 编辑器粘贴的图片是 `owner_type=project` 的附件，正文以
+`/api/v1/attachments/{id}/download` 内嵌；保存后 `state=active`，未保存的是 `state=temp`。
+`work_item_get`、`comment_list`、`attachment_list` 返回的附件都带短时 `fetch_url`
+（15 分钟 HMAC 签名，可直接 `curl`，无需 Bearer）；PAT 客户端也可用 `download_url` + Bearer。
+`fetch_url` 只读、过期失效，不要缓存或转存。
 
 ## 4. 关键工具 Schema（节选）
 

@@ -21,6 +21,9 @@ wheels/
 /rdm-data/
 bootstrap-token
 
+# Local MCP project binding (per-workspace)
+.rdm/
+
 # Node / web build
 web-next/node_modules/
 web-next/dist/

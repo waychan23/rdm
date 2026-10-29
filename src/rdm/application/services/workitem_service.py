@@ -17,6 +17,7 @@ from decimal import Decimal
 from typing import Any
 
 from rdm.application import security
+from rdm.application.services.attachment_commit import commit_inline_images
 from rdm.domain.actor import Actor
 from rdm.domain.entities import (
     IssueFields,
@@ -72,6 +73,14 @@ _ALLOWED_PARENT: dict[str, set[str]] = {
     "issue": set(),
     "task": {"story", "issue"},
 }
+
+
+def allowed_parent_kinds(kind: str) -> list[str]:
+    return sorted(_ALLOWED_PARENT.get(kind, set()))
+
+
+def allowed_child_kinds(kind: str) -> list[str]:
+    return sorted(child for child, parents in _ALLOWED_PARENT.items() if kind in parents)
 
 
 class WorkItemService:
@@ -181,6 +190,7 @@ class WorkItemService:
         parent_ref: str | None = None,
         sprint_ref: str | None = None,
         q: str | None = None,
+        backlog: bool = False,
         include_deleted: bool = False,
         limit: int = 20,
         offset: int = 0,
@@ -204,6 +214,12 @@ class WorkItemService:
             ).id
         if include_deleted and not security.is_project_owner(actor, project.id):
             include_deleted = False
+        exclude_statuses: list[str] | None = None
+        if backlog:
+            engine = load_engine()
+            exclude_statuses = sorted(
+                {state for k in VALID_KINDS for state in engine.terminal_states(k)}
+            )
 
         if sprint_ref is not None:
             project, all_items = await self._list_in_sprint(
@@ -228,6 +244,8 @@ class WorkItemService:
             assignee_user_id=assignee_id,
             parent_id=parent_id,
             q=q,
+            exclude_statuses=exclude_statuses,
+            backlog_only=backlog,
             include_deleted=include_deleted,
         )
         items = await self.uow.work_items.list(
@@ -237,6 +255,8 @@ class WorkItemService:
             assignee_user_id=assignee_id,
             parent_id=parent_id,
             q=q,
+            exclude_statuses=exclude_statuses,
+            backlog_only=backlog,
             include_deleted=include_deleted,
             limit=min(limit, 100),
             offset=offset,
@@ -397,7 +417,7 @@ class WorkItemService:
             assignee_id = (await self.resolve_member(project.id, data["assignee"])).id
 
         self._check_kind_fields(kind, data)
-        fields = await self._build_fields(kind, data, actor)
+        fields = await self._build_fields(kind, data, actor, project.id)
 
         assert self.uow.work_items is not None
         display_no = await self.uow.allocate_display_no(project.id)
@@ -417,6 +437,7 @@ class WorkItemService:
         )
         await self.uow.work_items.add(item)
         await self.uow.flush()
+        await self._commit_inline_images(project.id, item)
         await self._append_event(
             project.id,
             item,
@@ -466,17 +487,87 @@ class WorkItemService:
                 setattr(item, key, new)
                 changes[key] = [old, new]
 
-        field_changes = await self._apply_kind_fields(item, payload, keys)
+        field_changes = await self._apply_kind_fields(item, payload, keys, actor)
         changes.update(field_changes)
 
         if not changes:
             return project, item
         assert self.uow.work_items is not None
         await self.uow.work_items.save(item)
+        await self._commit_inline_images(project.id, item)
         await self._append_event(
             project.id, item, EventType.WORK_ITEM_UPDATED, updated_payload(changes), actor=actor
         )
         return project, item
+
+    async def reparent_item(
+        self,
+        actor: Actor,
+        ref: str,
+        *,
+        parent_ref: str | None,
+        row_version: int,
+    ) -> tuple[Project, WorkItem, dict[str, Any]]:
+        """Change/clear a work item's parent (web child management)."""
+        project, item = await self.get_item(actor, ref)
+        if item.row_version != row_version:
+            from rdm.domain.errors import ConflictVersion
+
+            raise ConflictVersion(
+                f"{self.display_id(project, item)} 已被他人修改（当前版本 {item.row_version}），"
+                "请先重读再修改。",
+                details={"id": item.id, "current_version": item.row_version},
+            )
+
+        parent_ref = (parent_ref or "").strip() or None
+        new_parent: WorkItem | None = None
+        if parent_ref is not None:
+            new_parent = await self.resolve_item(actor, parent_ref)
+            if new_parent.project_id != project.id:
+                raise ValidationError("父项必须属于同一项目", details={"field": "parent"})
+            if new_parent.kind not in _ALLOWED_PARENT[item.kind]:
+                raise ValidationError(
+                    f"{item.kind} 的父项只能是 {allowed_parent_kinds(item.kind) or '无'}",
+                    details={
+                        "field": "parent",
+                        "allowed_parent_kinds": allowed_parent_kinds(item.kind),
+                    },
+                )
+            await self._assert_no_cycle(item, new_parent)
+
+        new_parent_id = new_parent.id if new_parent is not None else None
+        old_parent_id = item.parent_id
+        if new_parent_id == old_parent_id:
+            return project, item, {"row_version": item.row_version, "changed": False}
+
+        item.parent_id = new_parent_id
+        assert self.uow.work_items is not None
+        await self.uow.work_items.save(item)
+        await self._append_event(
+            project.id,
+            item,
+            EventType.WORK_ITEM_UPDATED,
+            updated_payload({"parent_id": [old_parent_id, new_parent_id]}),
+            actor=actor,
+        )
+        return project, item, {"row_version": item.row_version, "changed": True}
+
+    async def _assert_no_cycle(self, item: WorkItem, candidate_parent: WorkItem) -> None:
+        """Refuse a parent that is the item itself or one of its descendants."""
+        seen: set[str] = set()
+        cursor: WorkItem | None = candidate_parent
+        while cursor is not None and cursor.id not in seen:
+            if cursor.id == item.id:
+                raise ValidationError(
+                    "不能把工作项挂到它自己或其后代下面",
+                    details={"field": "parent", "work_item_id": item.id},
+                )
+            seen.add(cursor.id)
+            if cursor.parent_id is None:
+                cursor = None
+            else:
+                assert self.uow.work_items is not None
+                cursor = await self.uow.work_items.get(cursor.parent_id)
 
     async def assign_item(self, actor: Actor, ref: str, user_ref: str) -> tuple[Project, WorkItem]:
         project, item = await self.get_item(actor, ref)
@@ -723,7 +814,7 @@ class WorkItemService:
             )
 
     async def _build_fields(
-        self, kind: str, data: dict[str, Any], actor: Actor
+        self, kind: str, data: dict[str, Any], actor: Actor, project_id: str
     ) -> StoryFields | IssueFields | TaskFields | None:
         if kind == "story":
             return StoryFields(acceptance_criteria_md=data.get("acceptance_criteria_md"))
@@ -731,9 +822,10 @@ class WorkItemService:
             source_story_id = None
             if data.get("source_story"):
                 story = await self.resolve_item(actor, data["source_story"])
-                if story.kind != "story":
+                if story.kind != "story" or story.project_id != project_id:
                     raise ValidationError(
-                        "source_story 必须指向一个 story", details={"field": "source_story"}
+                        "source_story 必须是同项目的一个 story",
+                        details={"field": "source_story"},
                     )
                 source_story_id = story.id
             return IssueFields(
@@ -754,7 +846,7 @@ class WorkItemService:
         return None
 
     async def _apply_kind_fields(
-        self, item: WorkItem, payload: dict[str, Any], keys: set[str]
+        self, item: WorkItem, payload: dict[str, Any], keys: set[str], actor: Actor
     ) -> dict[str, list[Any]]:
         changes: dict[str, list[Any]] = {}
         if item.fields is None and item.kind == "epic":
@@ -774,6 +866,23 @@ class WorkItemService:
                 ]
                 item.fields = new
         elif item.kind == "issue" and isinstance(current, IssueFields):
+            source_story_id = current.source_story_id
+            if "source_story" in keys:
+                ref = payload.get("source_story")
+                if ref:
+                    story = await self.resolve_item(actor, ref)
+                    if (
+                        story.kind != "story"
+                        or story.id == item.id
+                        or story.project_id != item.project_id
+                    ):
+                        raise ValidationError(
+                            "source_story 必须是同项目的另一个 story",
+                            details={"field": "source_story"},
+                        )
+                    source_story_id = story.id
+                else:
+                    source_story_id = None
             values = {
                 "severity": payload.get("severity", current.severity),
                 "environment": payload.get("environment", current.environment),
@@ -782,16 +891,17 @@ class WorkItemService:
                     "expected_behavior_md", current.expected_behavior_md
                 ),
                 "actual_behavior_md": payload.get("actual_behavior_md", current.actual_behavior_md),
-                "source_story_id": current.source_story_id,
+                "source_story_id": source_story_id,
             }
-            # source_story input ref is not supported on update in M1.
             new = IssueFields(**values)
             if new != current:
-                for fname in KIND_FIELDS["issue"] - {"source_story"}:
+                for fname in KIND_FIELDS["issue"] - {"source_story", "source_story_id"}:
                     old = getattr(current, fname)
                     val = getattr(new, fname)
                     if old != val:
                         changes[fname] = [old, val]
+                if current.source_story_id != source_story_id:
+                    changes["source_story_id"] = [current.source_story_id, source_story_id]
                 item.fields = new
         elif item.kind == "task" and isinstance(current, TaskFields):
             # Absent keys keep the old value; explicit null is honored.
@@ -828,6 +938,19 @@ class WorkItemService:
         if item.fields is not None:
             snap["fields"] = {k: _json_value(v) for k, v in item.fields.__dict__.items()}
         return snap
+
+    async def _commit_inline_images(self, project_id: str, item: WorkItem) -> None:
+        """Promote editor images referenced by this item's saved markdown."""
+        fields = item.fields.__dict__ if item.fields is not None else {}
+        await commit_inline_images(
+            self.uow,
+            project_id,
+            item.description_md,
+            fields.get("acceptance_criteria_md"),
+            fields.get("repro_steps_md"),
+            fields.get("expected_behavior_md"),
+            fields.get("actual_behavior_md"),
+        )
 
     async def _append_event(
         self,

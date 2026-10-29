@@ -39,7 +39,7 @@ from rdm.domain.entities import (
     WorkItem,
     Workspace,
 )
-from rdm.domain.events import EventType
+from rdm.domain.events import EventRecord, EventType
 
 # Type aliases: inside the Protocol bodies below, a method named `list`
 # shadows the builtin, so `list[...]` annotations must use the alias.
@@ -230,6 +230,8 @@ class WorkItemRepository(Protocol):
         assignee_user_id: str | None = None,
         parent_id: str | None = None,
         q: str | None = None,
+        exclude_statuses: Sequence[str] | None = None,
+        backlog_only: bool = False,
         expand: bool = False,
         include_deleted: bool = False,
         limit: int = 50,
@@ -245,6 +247,8 @@ class WorkItemRepository(Protocol):
         assignee_user_id: str | None = None,
         parent_id: str | None = None,
         q: str | None = None,
+        exclude_statuses: Sequence[str] | None = None,
+        backlog_only: bool = False,
         include_deleted: bool = False,
     ) -> int: ...
 
@@ -333,6 +337,22 @@ class AttachmentRepository(Protocol):
 
     async def list_for_owners(
         self, project_id: str, owner_type: str, owner_ids: Sequence[str]
+    ) -> AttachmentList: ...
+
+    async def list_by_ids(
+        self,
+        project_id: str,
+        attachment_ids: Sequence[str],
+        *,
+        active_only: bool = False,
+    ) -> AttachmentList: ...
+
+    async def commit_temp(
+        self, project_id: str, attachment_ids: Sequence[str], when: dt.datetime
+    ) -> int: ...
+
+    async def list_temp_older_than(
+        self, cutoff: dt.datetime, *, limit: int = 100
     ) -> AttachmentList: ...
 
     async def soft_delete(self, attachment_id: str, actor_id: str, when: dt.datetime) -> bool: ...
@@ -504,6 +524,15 @@ class EventStore(Protocol):
     ) -> int:
         """Append an event inside the current transaction; returns event id."""
         ...
+
+    async def list_for_work_item(
+        self,
+        *,
+        project_id: str,
+        work_item_id: str,
+        limit: int,
+        before_seq: int | None = None,
+    ) -> list[EventRecord]: ...
 
 
 class UnitOfWork(Protocol):

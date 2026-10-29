@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from rdm.application import security
 from rdm.application.dto import validate_project_key
+from rdm.application.services.attachment_commit import commit_inline_images
 from rdm.application.services.membership_service import MembershipService
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Project
@@ -64,6 +65,7 @@ class ProjectService:
         )
         await self.uow.projects.add(project)
         await self.uow.flush()
+        await commit_inline_images(self.uow, project.id, project.description_md)
         # Creator becomes project owner; their agents join automatically.
         await MembershipService(self.uow).seed_owner_membership(
             project, human=creator, actor_id=actor.human_id
@@ -104,6 +106,7 @@ class ProjectService:
         if changes:
             assert self.uow.projects is not None
             await self.uow.projects.update(project)
+            await commit_inline_images(self.uow, project.id, project.description_md)
             seq = await self.uow.allocate_event_seq(project.org_id)
             assert self.uow.events is not None
             await self.uow.events.append(

@@ -326,6 +326,8 @@ def attachment_to_domain(row: AttachmentModel) -> Attachment:
         size_bytes=row.size_bytes,
         sha256=row.sha256,
         rel_path=row.rel_path,
+        state=row.state,
+        committed_at=row.committed_at,
         created_at=row.created_at,
         created_by=row.created_by,
         updated_at=row.updated_at,

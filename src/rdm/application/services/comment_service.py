@@ -13,6 +13,7 @@ from collections.abc import Sequence
 
 from rdm.application import security
 from rdm.application.ports import FileStore
+from rdm.application.services.attachment_commit import commit_inline_images
 from rdm.application.services.attachment_service import AttachmentService
 from rdm.application.services.mailbox_service import MailboxService
 from rdm.application.services.workitem_service import WorkItemService
@@ -78,6 +79,8 @@ class CommentService:
             await AttachmentService(self.uow, self._file_store).rebind_to_comment(
                 project, item, comment.id, attachment_ids
             )
+        # Inline editor images are project-scoped; saved body keeps them alive.
+        await commit_inline_images(self.uow, project.id, body_md)
 
         mentioned, unresolved = await self._resolve_mentions(project.id, body_md, actor)
         await self.mailbox.notify_mentions(actor, project, item, mentioned, body_md)
@@ -173,11 +176,11 @@ class CommentService:
         return project, comment, cascade
 
     async def list_for_item(
-        self, actor: Actor, item_ref: str
+        self, actor: Actor, item_ref: str, *, limit: int = 100, offset: int = 0
     ) -> tuple[Project, WorkItem, list[Comment]]:
         project, item = await self.items.get_item(actor, item_ref)
         assert self.uow.comments is not None
-        comments = await self.uow.comments.list_for_item(item.id)
+        comments = await self.uow.comments.list_for_item(item.id, limit=limit, offset=offset)
         return project, item, comments
 
     async def _resolve_mentions(

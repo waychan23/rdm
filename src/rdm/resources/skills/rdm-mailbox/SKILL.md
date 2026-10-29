@@ -48,3 +48,6 @@ description: rd-manager（rdm）站内信箱使用规范。当需要通过 rdm M
 - group 信箱用于广播给一组人；点对点协作不要用 group。
 - 信件是审计记录的一部分：事实、id、display_id 写准确，不要猜测名字或编号，
   先 `member_list` / `work_item_list` 查。
+- 信件正文里的图片是 project 级附件，写法同工作项：
+  `![说明](/api/v1/attachments/<id>/download)`；用 `attachment_list(owner_type="project", project=KEY)`
+  查元数据，`fetch_url` 可直接 curl 下载（15 分钟有效）。不要 base64、不要猜 id。

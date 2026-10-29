@@ -58,6 +58,9 @@ class WorkflowEngine:
     def is_terminal(self, kind: str, status: str) -> bool:
         return status in self._kind(kind).terminal
 
+    def terminal_states(self, kind: str) -> tuple[str, ...]:
+        return tuple(self._kind(kind).terminal)
+
     def allowed(self, kind: str, status: str) -> tuple[str, ...]:
         kw = self._kind(kind)
         if status not in kw.states:

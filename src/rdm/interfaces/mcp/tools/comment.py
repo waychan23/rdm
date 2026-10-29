@@ -9,8 +9,10 @@ from fastmcp import FastMCP
 from rdm.application.services.attachment_service import AttachmentService
 from rdm.application.services.comment_service import CommentService
 from rdm.application.services.membership_service import MembershipService
+from rdm.domain.attachment_policy import extract_attachment_ids
 from rdm.interfaces.http.container import Container
-from rdm.interfaces.http.serializers import attachment_out, comment_out
+from rdm.interfaces.http.serializers import comment_out
+from rdm.interfaces.mcp.tools._attachments import attachment_mcp_out
 from rdm.interfaces.mcp.tools._base import ok, run_tool
 
 
@@ -27,16 +29,35 @@ def register(mcp: FastMCP, container: Container) -> None:
             proj, _item, comments = await service.list_for_item(actor, work_item_id)
             comments = comments[offset : offset + min(limit, 100)]
             members = await MembershipService(uow).users_index(proj.id)
-            rows = await AttachmentService(uow, container.file_store).list_for_owners(
+            attachment_service = AttachmentService(uow, container.file_store)
+            rows = await attachment_service.list_for_owners(
                 proj.id, "comment", [c.id for c in comments]
             )
-            for att in rows:
+            inline_ids: set[str] = set()
+            for comment in comments:
+                inline_ids |= extract_attachment_ids(comment.body_md)
+            inline_rows = (
+                await uow.attachments.list_by_ids(proj.id, sorted(inline_ids), active_only=True)
+                if inline_ids
+                else []
+            )
+            for att in [*rows, *inline_rows]:
                 uploader = await uow.users.get(att.uploader_user_id)
                 if uploader is not None:
                     members[uploader.id] = uploader
-            by_comment: dict[str, list] = {}
-            for att in rows:
-                by_comment.setdefault(att.owner_id, []).append(attachment_out(att, members))
+            by_comment: dict[str, list] = {c.id: [] for c in comments}
+            seen: dict[str, set[str]] = {c.id: set() for c in comments}
+            for att in [*rows, *inline_rows]:
+                targets = (
+                    [att.owner_id]
+                    if att.owner_type == "comment" and att.owner_id in by_comment
+                    else [c.id for c in comments if att.id in extract_attachment_ids(c.body_md)]
+                )
+                for comment_id in targets:
+                    if att.id in seen[comment_id]:
+                        continue
+                    seen[comment_id].add(att.id)
+                    by_comment[comment_id].append(attachment_mcp_out(container, att, members))
             return ok([comment_out(c, members, by_comment.get(c.id, [])) for c in comments])
 
         return await run_tool(container, run)

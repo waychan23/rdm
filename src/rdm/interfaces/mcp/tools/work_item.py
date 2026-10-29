@@ -6,8 +6,13 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from rdm.application.services.attachment_service import AttachmentService
 from rdm.application.services.membership_service import MembershipService
-from rdm.application.services.workitem_service import WorkItemService
+from rdm.application.services.workitem_service import (
+    WorkItemService,
+    allowed_child_kinds,
+    allowed_parent_kinds,
+)
 from rdm.interfaces.http.container import Container
 from rdm.interfaces.http.schemas import (
     TransitionIn,
@@ -121,15 +126,46 @@ def register(mcp: FastMCP, container: Container) -> None:
             service = WorkItemService(uow)
             proj, item = await service.get_item(actor, id)
             members = await _users(uow, proj.id)
-            _, children = await service.list_items(actor, project_key=proj.key, parent_ref=id)
+            assert uow.work_items is not None
+            children = await uow.work_items.list_children(item.id)
             from rdm.domain.workflow.loader import load_engine
+            from rdm.interfaces.mcp.tools._attachments import attachment_mcp_out
 
             allowed = load_engine().allowed(item.kind, item.status)
+            parent_item = (
+                await uow.work_items.get(item.parent_id, include_deleted=True)
+                if item.parent_id
+                else None
+            )
+            attachment_service = AttachmentService(uow, container.file_store)
+            explicit = await attachment_service.list_for_owners(proj.id, "work_item", [item.id])
+            fields = item.fields.__dict__ if item.fields is not None else {}
+            inline = await attachment_service.inline_for_markdown(
+                proj.id,
+                item.description_md,
+                fields.get("acceptance_criteria_md"),
+                fields.get("repro_steps_md"),
+                fields.get("expected_behavior_md"),
+                fields.get("actual_behavior_md"),
+            )
+            seen: set[str] = set()
+            attachments = []
+            for attachment in [*explicit, *inline]:
+                if attachment.id in seen:
+                    continue
+                seen.add(attachment.id)
+                attachments.append(attachment_mcp_out(container, attachment, members))
             data = work_item_out(item, proj, members)
             return ok(
                 data,
                 allowed_transitions=list(allowed),
                 children=[work_item_summary_out(c, proj, members) for c in children],
+                parent=work_item_summary_out(parent_item, proj, members)
+                if parent_item is not None
+                else None,
+                allowed_parent_kinds=allowed_parent_kinds(item.kind),
+                allowed_child_kinds=allowed_child_kinds(item.kind),
+                attachments=attachments,
             )
 
         return await run_tool(container, run)
@@ -205,6 +241,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         repro_steps_md: str | None = None,
         expected_behavior_md: str | None = None,
         actual_behavior_md: str | None = None,
+        source_story: str | None = None,
         task_type: str | None = None,
         est_work_hours: float | None = None,
         actual_work_hours: float | None = None,
@@ -228,6 +265,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                 repro_steps_md=repro_steps_md,
                 expected_behavior_md=expected_behavior_md,
                 actual_behavior_md=actual_behavior_md,
+                source_story=source_story,
                 task_type=task_type,
                 est_work_hours=est_work_hours,
                 actual_work_hours=actual_work_hours,

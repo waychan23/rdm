@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from rdm.application.ports import FileStore
 from rdm.application.services.actor_service import ActorResolver
+from rdm.application.services.attachment_urls import AttachmentUrlSigner
 from rdm.application.services.auth_service import Authenticator
 from rdm.application.services.login_throttle import LoginThrottler
 from rdm.config import Settings
@@ -31,6 +32,7 @@ class Container:
         self.session_factory: async_sessionmaker[AsyncSession] = make_session_factory(self.engine)
         self.authenticator = Authenticator(self.session_factory)
         self.file_store: FileStore = LocalFileStore(settings.projects_dir)
+        self.attachment_signer = AttachmentUrlSigner.from_path(settings.attachment_secret_path)
         # One process-local login throttle shared for the app's life (§16.55).
         self.login_throttler = LoginThrottler()
 
@@ -55,6 +57,13 @@ async def get_actor(request: Request) -> Actor:
     """Resolve the actor from a Bearer credential (PAT or OAuth access token)."""
     actor, _token = await resolve_request_actor(request)
     return actor
+
+
+async def get_actor_optional(request: Request) -> Actor | None:
+    """Like get_actor, but no Authorization header yields None (signed URLs)."""
+    if not request.headers.get("authorization"):
+        return None
+    return await get_actor(request)
 
 
 async def get_actor_with_token(request: Request) -> tuple[Actor, UserToken]:

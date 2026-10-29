@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 
 from rdm.application import security
+from rdm.application.services.attachment_commit import commit_inline_images
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Project, Sprint, SprintItem, WorkItem
@@ -85,6 +86,7 @@ class SprintService:
         assert self.uow.sprints is not None
         await self.uow.sprints.add(sprint)
         await self._flush_translated()
+        await commit_inline_images(self.uow, project.id, sprint.goal_md)
         await self._event(
             project.id,
             sprint,
@@ -139,6 +141,7 @@ class SprintService:
                     ]
             assert self.uow.sprints is not None
             await self.uow.sprints.save_fields(sprint)
+            await commit_inline_images(self.uow, project.id, sprint.goal_md)
             await self._event(
                 project.id,
                 sprint,

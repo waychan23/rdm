@@ -11,6 +11,7 @@ import datetime as dt
 from typing import Any
 
 from rdm.application import security
+from rdm.application.services.attachment_commit import commit_inline_images
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Project, Workspace
@@ -78,6 +79,7 @@ class WorkspaceService:
         assert self.uow.workspaces is not None
         await self.uow.workspaces.add(workspace)
         await self.uow.flush()
+        await commit_inline_images(self.uow, project.id, workspace.description_md)
         await self._event(
             project.id,
             workspace,
@@ -133,6 +135,7 @@ class WorkspaceService:
 
         if changes:
             await self.uow.workspaces.save(workspace)
+            await commit_inline_images(self.uow, project.id, workspace.description_md)
             await self._event(
                 project.id,
                 workspace,
