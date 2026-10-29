@@ -21,7 +21,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from rdm.application.services.tokens import generate_token, hash_token
-from rdm.domain.constants import DEFAULT_ORG_ID
+from rdm.domain.constants import DEFAULT_ORG_ID, SCOPE_MCP, SCOPE_WEB
 from rdm.domain.entities import (
     OAuthAuthorizationCode,
     OAuthClient,
@@ -36,8 +36,6 @@ from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
 logger = logging.getLogger("rdm.oauth")
-
-SCOPE_MCP = "mcp"
 
 CODE_TTL = dt.timedelta(minutes=5)
 CONSENT_TTL = dt.timedelta(minutes=10)
@@ -128,6 +126,17 @@ class OAuthService:
     async def is_first_party(self, client_id: str) -> bool:
         client = await self.get_client(client_id)
         return bool(client and client.is_first_party)
+
+    async def allowed_scopes(self, client_id: str) -> list[str]:
+        """Scopes a client may request (§17.79).
+
+        The first-party browser client is the only one allowed the REST
+        audience; DCR clients only get the MCP audience. Registration already
+        restricts DCR metadata to ``SCOPE_MCP``, so this is the second lock on
+        the same door.
+        """
+        client = await self.get_client(client_id)
+        return [SCOPE_WEB] if client is not None and client.is_first_party else [SCOPE_MCP]
 
     # --- login tickets ------------------------------------------------
 

@@ -15,5 +15,12 @@ DEFAULT_ORG_NAME = "默认组织"
 # MCP clients still use dynamic client registration (§16.54).
 WEB_CLIENT_ID = "rdm-web"
 
+# OAuth scopes are audience separators, not permission levels (§17.79):
+# `web` is only issued to the first-party browser client and unlocks /api/v1;
+# `mcp` is only issued to DCR clients and unlocks /mcp. PATs carry no scope and
+# keep working on both paths. Fine-grained permissions stay in org/project roles.
+SCOPE_WEB = "web"
+SCOPE_MCP = "mcp"
+
 # The org role held by exactly one active human at any time.
 ORG_OWNER_ROLE = "org_owner"

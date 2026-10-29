@@ -14,6 +14,7 @@ from rdm.application.services.password_tickets import issue_ticket
 from rdm.domain.constants import (
     DEFAULT_ORG_ID,
     DEFAULT_ORG_NAME,
+    SCOPE_WEB,
     WEB_CLIENT_ID,
 )
 from rdm.domain.entities import OAuthClient, Organization, User
@@ -67,7 +68,8 @@ def seed_web_client(base_url: str, extra_redirect_uris: list[str] | None = None)
             "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
             "token_endpoint_auth_method": "none",
-            "scope": "mcp",
+            # The browser audience is REST, not MCP (§17.79).
+            "scope": SCOPE_WEB,
         },
         created_at=dt.datetime.now(dt.UTC),
     )

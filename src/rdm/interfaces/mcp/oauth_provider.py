@@ -24,6 +24,7 @@ from mcp.server.auth.provider import (
     AccessToken,
     AuthorizationCode,
     AuthorizationParams,
+    AuthorizeError,
     RefreshToken,
     RegistrationError,
     TokenError,
@@ -32,13 +33,13 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 
 from rdm.application.services.auth_service import Authenticator
 from rdm.application.services.oauth_service import (
-    SCOPE_MCP,
     ConsentParams,
     IssuedTokens,
     OAuthGrantError,
     OAuthService,
 )
 from rdm.application.services.tokens import hash_token
+from rdm.domain.constants import SCOPE_MCP
 from rdm.domain.enums import BEARER_KINDS, TokenKind
 from rdm.interfaces.mcp.request_scope import current_scope
 
@@ -117,18 +118,30 @@ class RdmOAuthProvider(OAuthProvider):
     ) -> str:
         scope = current_scope.get()
         if scope is None:
-            raise TokenError("invalid_request", "缺少请求上下文")
+            raise AuthorizeError(error="server_error", error_description="缺少请求上下文")
 
-        consent_params = ConsentParams(
-            state=params.state,
-            scopes=params.scopes or [],
-            code_challenge=params.code_challenge,
-            redirect_uri=str(params.redirect_uri),
-            redirect_uri_explicit=params.redirect_uri_provided_explicitly,
-            resource=params.resource,
-        )
         async with self._uow() as uow:
-            ticket = await OAuthService(uow).create_login_ticket(
+            service = OAuthService(uow)
+            # `web` and `mcp` are audience separators, not permissions
+            # (§17.79). The SDK already validated the request against the
+            # client's registered scope; this pins the client kind so a
+            # third-party client can never end up with the browser audience.
+            allowed = await service.allowed_scopes(client.client_id)
+            scopes = list(params.scopes or allowed)
+            if set(scopes) - set(allowed):
+                raise AuthorizeError(
+                    error="invalid_scope",
+                    error_description=f"该客户端只能申请 {' '.join(allowed)}",
+                )
+            consent_params = ConsentParams(
+                state=params.state,
+                scopes=scopes,
+                code_challenge=params.code_challenge,
+                redirect_uri=str(params.redirect_uri),
+                redirect_uri_explicit=params.redirect_uri_provided_explicitly,
+                resource=params.resource,
+            )
+            ticket = await service.create_login_ticket(
                 client_id=client.client_id, params=consent_params
             )
         return "/login?" + urlencode({"auth_key": ticket.raw_key})
@@ -234,6 +247,9 @@ class RdmOAuthProvider(OAuthProvider):
             row = await uow.tokens.get_by_hash(hash_token(token))
         if row is None or row.kind != TokenKind.oauth_access.value or not row.is_valid:
             return None
+        if SCOPE_MCP not in row.scopes:
+            # A browser (web) token must not unlock MCP (§17.79).
+            return None
         return AccessToken(
             token=token,
             client_id=row.client_id or "unknown",
@@ -254,6 +270,10 @@ class RdmOAuthProvider(OAuthProvider):
         try:
             row = await self._authenticator.authenticate_with_token(token, allow_kinds=BEARER_KINDS)
         except Exception:  # noqa: BLE001 - backend contract: never raise
+            return None
+        if row.kind == TokenKind.oauth_access.value and SCOPE_MCP not in row.scopes:
+            # PATs carry no scope and stay valid; only OAuth tokens are
+            # audience-bound to MCP (§17.79).
             return None
         return AccessToken(
             token=token,

@@ -265,3 +265,31 @@ async def test_refresh_rotation_reuse_and_revocation(server) -> None:
         revoke_data["client_secret"] = registered["client_secret"]
     r = await client.post("/revoke", data=revoke_data)
     assert r.status_code == 200, r.text
+
+
+async def test_mcp_token_cannot_call_rest(server) -> None:
+    """Scopes separate audiences: an MCP token is not a Web token (§17.79)."""
+    client, _settings, _app = server
+    (
+        _client_id,
+        _registered,
+        access,
+        _refresh,
+    ) = await test_authorize_requires_login_then_consent_and_token(server)
+    r = await client.get("/api/v1/whoami", headers={"Authorization": f"Bearer {access}"})
+    assert r.status_code == 401
+
+
+async def test_web_token_cannot_call_mcp(server) -> None:
+    """The mirror case: a browser token must not unlock MCP tools (§17.79)."""
+    from tests.conftest import OWNER_PASSWORD, web_login
+
+    client, _settings, app = server
+    await _ensure_owner_password(client)
+    access, _refresh = await web_login(client, "owner", OWNER_PASSWORD)
+    transport = StreamableHttpTransport(
+        "http://testserver/mcp", httpx_client_factory=_bearer_factory(app, access)
+    )
+    with pytest.raises(MCPError):
+        async with Client(transport) as mcp_client:
+            await mcp_client.list_tools()

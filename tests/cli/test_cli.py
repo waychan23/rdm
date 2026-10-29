@@ -31,7 +31,10 @@ def test_init_upgrade_status_idempotent(tmp_path: Path) -> None:
 
     result = runner.invoke(app, ["db", "status", "--data-dir", str(data_dir)])
     assert result.exit_code == 0, result.output
-    assert "0007" in result.output
+    # Revision-agnostic: current must equal head so new migrations don't churn
+    # this assertion.
+    revisions = dict(line.split(":", 1) for line in result.output.splitlines() if ":" in line)
+    assert revisions["current"].strip() == revisions["head"].strip()
     assert "up to date" in result.output
 
 

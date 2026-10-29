@@ -58,7 +58,7 @@ async def web_login(
             "state": "s",
             "code_challenge": challenge,
             "code_challenge_method": "S256",
-            "scope": "mcp",
+            "scope": "web",
         },
         follow_redirects=False,
     )
@@ -84,6 +84,8 @@ async def web_login(
     )
     assert r.status_code == 200, r.text
     body = r.json()
+    # The browser audience is REST, never MCP (§17.79).
+    assert body["scope"] == "web"
     return body["access_token"], body["refresh_token"]
 
 

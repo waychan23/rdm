@@ -10,7 +10,8 @@ const STATE_KEY = "rdm.pkce_state";
 const POST_LOGIN_KEY = "rdm.post_login";
 
 const CLIENT_ID = "rdm-web";
-const SCOPE = "mcp";
+// The browser audience is the REST API; MCP clients request `mcp` instead.
+const SCOPE = "web";
 
 export interface TokenSet {
   accessToken: string;

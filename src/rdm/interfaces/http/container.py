@@ -15,8 +15,9 @@ from rdm.application.services.auth_service import Authenticator
 from rdm.application.services.login_throttle import LoginThrottler
 from rdm.config import Settings
 from rdm.domain.actor import Actor
+from rdm.domain.constants import SCOPE_WEB
 from rdm.domain.entities import UserToken
-from rdm.domain.enums import BEARER_KINDS
+from rdm.domain.enums import BEARER_KINDS, TokenKind
 from rdm.domain.errors import AuthInvalidToken
 from rdm.infrastructure.db.session import make_engine, make_session_factory
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
@@ -69,5 +70,9 @@ async def resolve_request_actor(request: Request) -> tuple[Actor, UserToken]:
     token = await container.authenticator.authenticate_with_token(
         auth[7:].strip(), allow_kinds=BEARER_KINDS
     )
+    # PATs carry no scope (permanent automation path); OAuth access tokens are
+    # audience-bound to REST, so an MCP token cannot read the Web API (§17.79).
+    if token.kind == TokenKind.oauth_access.value and SCOPE_WEB not in token.scopes:
+        raise AuthInvalidToken("该凭据不能访问 Web API（scope 不匹配）")
     actor = await container.resolve_actor(token)
     return actor, token

@@ -57,7 +57,7 @@ def _owner_pat(base: str) -> str:
                 "state": "s",
                 "code_challenge": challenge,
                 "code_challenge_method": "S256",
-                "scope": "mcp",
+                "scope": "web",
             },
             follow_redirects=False,
         )
