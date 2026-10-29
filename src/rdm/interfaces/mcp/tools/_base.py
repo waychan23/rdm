@@ -66,6 +66,7 @@ _PROJECT_RECOVERY = {
     ],
     "do_not": [
         "不要猜测项目",
+        "不要基于信箱、未读数、最近活动、角色或 default_project 推荐项目",
         "不要让用户手动输入项目 ID",
         "不要让用户重新执行 rdm integrate 或重启服务",
     ],
@@ -79,6 +80,7 @@ _PROJECT_BINDING_INVALID_RECOVERY = {
     ],
     "do_not": [
         "不要静默切换到其他项目",
+        "不要基于信箱、未读数、最近活动或角色推荐新项目",
         "不要让用户手动输入项目 ID",
         "不要继续使用旧 project",
     ],

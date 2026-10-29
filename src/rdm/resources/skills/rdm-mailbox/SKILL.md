@@ -8,10 +8,15 @@ description: rd-manager（rdm）站内信箱使用规范。当需要通过 rdm M
 信箱是 human 与 agent 之间**唯一的异步协作通道**。你通过 `mailbox_check` / `mailbox_send` /
 `mailbox_mark_read` 三个工具使用它；硬规则在服务端，本规范讲时机与姿势。
 
-## 1. 开工先查信
+## 1. 开工先定项目，再查信
 
-每次开工按顺序：`whoami` → `mailbox_check`（默认只拉未读）→ 再看自己的任务
-（`my_work_list` 或 `work_item_list` assignee="me"）。出错被打回时也先查信，负责人的说明通常在信里。
+1. 先确认项目上下文（见 rdm-workflow §0）：读取工作区 `.rdm/project.json`。
+   - 有 `project`：调用 `project_bind(project=KEY)`。
+   - 没有：调用 `project_bind()` 拿 `options`，让用户**自己选**；不要推荐，不要根据信箱有无信、未读数、最近活动或角色推断。
+2. `mailbox_check(project=<绑定 KEY>)`。**只查当前绑定项目**。
+3. 绑定后不要遍历 `whoami.projects`，不要查询、处理或建议处理其他项目的信件；
+   除非用户明确要求处理某个其他项目。
+4. 后续默认只处理当前绑定项目的信件；`mailbox_send` / `mailbox_mark_read` 同理。
 
 - 增量拉取：把上一次响应的 `next_cursor` 作为 `since` 传回；`next_cursor` 为 null 表示没有更多。
 - 信件条目里的 `delivery_id` 是**你这一份投递**的 id；标记已读传它，不要传 message_id。

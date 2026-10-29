@@ -65,7 +65,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         """校验/返回当前工作目录的项目绑定；不读写文件，服务端无状态。
 
         项目上下文未确定时先调用本工具：
-        - project 为空：返回 options，让用户选择；
+        - project 为空：返回 options，让用户选择；不要推荐或替用户选择；
         - project=KEY：校验成员关系并返回 persist.content，由你写入
           .rdm/project.json；
         - current=旧 KEY：用于改绑，返回 change；必须先让用户确认再覆盖文件。
@@ -98,6 +98,14 @@ def register(mcp: FastMCP, container: Container) -> None:
                         "project": project_out(current_project) if current_project else None,
                         "current_status": current_status,
                         "options": options,
+                        "selection": {
+                            "mode": "user_choice_required",
+                            "rule": (
+                                "不要推荐或替用户选择；不要根据信箱、未读数、最近活动、"
+                                "角色或 default_project 推断。只展示 key 和 name，"
+                                "让用户自己选。"
+                            ),
+                        },
                     }
                 )
 

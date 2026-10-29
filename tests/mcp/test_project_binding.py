@@ -31,6 +31,8 @@ async def test_project_bind_returns_options_and_persist(server, mcp_clients) -> 
         assert not listed["_is_error"], listed
         assert listed["data"]["project"] is None
         assert {item["key"] for item in listed["data"]["options"]} == {"ALT", "DEMO"}
+        assert listed["data"]["selection"]["mode"] == "user_choice_required"
+        assert "不要推荐" in listed["data"]["selection"]["rule"]
 
         bound = await call(client, "project_bind", {"project": "DEMO"})
         assert not bound["_is_error"], bound
@@ -134,6 +136,43 @@ async def test_project_bind_rejects_archived_project(server, mcp_clients) -> Non
         assert {item["key"] for item in details["options"]} == {"ALT"}
 
 
+async def test_my_work_list_can_scope_to_bound_project(server, mcp_clients) -> None:
+    rest, _settings, _app = server
+    owner = mcp_clients["owner_token"]
+    token = await _multi_project_user(rest, owner)
+
+    async with mcp_clients["client_for"](owner) as owner_client:
+        for key in ("ALT", "DEMO"):
+            created = await call(
+                owner_client,
+                "work_item_create",
+                {
+                    "kind": "task",
+                    "title": f"{key} task",
+                    "project": key,
+                    "task_type": "qa",
+                    "assignee": "multi",
+                },
+            )
+            assert not created["_is_error"], created
+
+    async with mcp_clients["client_for"](token) as client:
+        scoped = await call(client, "my_work_list", {"project": "DEMO"})
+        assert not scoped["_is_error"], scoped
+        assert [item["title"] for item in scoped["data"]] == ["DEMO task"]
+
+        unscoped = await call(client, "my_work_list", {})
+        assert not unscoped["_is_error"], unscoped
+        assert {item["title"] for item in unscoped["data"]} == {"ALT task", "DEMO task"}
+
+
+async def test_project_scope_tool_descriptions(mcp_clients) -> None:
+    async with mcp_clients["client_for"](mcp_clients["owner_token"]) as client:
+        tools = {tool.name: tool for tool in await client.list_tools()}
+    assert "当前绑定项目" in tools["mailbox_check"].description
+    assert "当前绑定项目" in tools["my_work_list"].description
+
+
 async def test_whoami_includes_project_hint(server, mcp_clients) -> None:
     rest, _settings, _app = server
     token = await _multi_project_user(rest, mcp_clients["owner_token"])
@@ -142,3 +181,4 @@ async def test_whoami_includes_project_hint(server, mcp_clients) -> None:
         who = await call(client, "whoami", {})
         assert not who["_is_error"], who
         assert ".rdm/project.json" in who["data"]["project_hint"]
+        assert "不要遍历" in who["data"]["project_scope"]

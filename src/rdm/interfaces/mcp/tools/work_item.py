@@ -68,24 +68,28 @@ def register(mcp: FastMCP, container: Container) -> None:
         return await run_tool(container, run)
 
     @mcp.tool
-    async def my_work_list(status: str | None = None) -> Any:
+    async def my_work_list(status: str | None = None, project: str | None = None) -> Any:
         """我的待办：分配给我且非终态的工作项（传 status 时按该状态精确过滤）。
 
-        开工三步之一；认领任务用它找未负责人的任务时改用 backlog_list。
+        传 project=<工作区 .rdm/project.json 中的 KEY>，只列当前绑定项目；
+        不要遍历其他项目。开工三步之一；认领任务用它找未负责人的任务时
+        改用 backlog_list。
         """
 
         async def run(uow, actor):
             service = WorkItemService(uow)
-            items = await service.my_items(actor, status=status)
+            items = await service.my_items(actor, status=status, project_key=project)
             users_by_project: dict[str, dict] = {}
             out: list[dict] = []
             for item in items:
-                project = await uow.projects.get(item.project_id)
-                if project is None:
+                item_project = await uow.projects.get(item.project_id)
+                if item_project is None:
                     continue
                 if item.project_id not in users_by_project:
                     users_by_project[item.project_id] = await _users(uow, item.project_id)
-                out.append(work_item_summary_out(item, project, users_by_project[item.project_id]))
+                out.append(
+                    work_item_summary_out(item, item_project, users_by_project[item.project_id])
+                )
             return ok(out)
 
         return await run_tool(container, run)

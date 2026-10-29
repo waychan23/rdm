@@ -62,8 +62,14 @@ def register(mcp: FastMCP, container: Container) -> None:
                     "project_hint": (
                         "若当前目录应固定项目：读取工作区根目录 .rdm/project.json；"
                         "有 project 则调用 project_bind(project=KEY)，并在项目级工具上"
-                        "显式传 project=KEY；没有则用 projects 让用户选择一次，"
+                        "显式传 project=KEY；没有则用 projects 让用户自己选择，"
                         "把返回的 persist.content 写入 .rdm/project.json。"
+                        "不要推荐项目，不要根据信箱或未读数推断。"
+                    ),
+                    "project_scope": (
+                        "当前会话只处理 .rdm 绑定的项目；绑定时不要遍历 projects、"
+                        "不要查询/处理/建议处理其他项目的信件或工作项，"
+                        "除非用户明确要求。"
                     ),
                     "unread_count": unread,
                     "my_open_items": len(my_open),

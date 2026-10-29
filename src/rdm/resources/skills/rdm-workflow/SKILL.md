@@ -11,7 +11,7 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 
 1. 读取当前工作区根目录的 `.rdm/project.json`。
 2. 有 `{"version": 1, "project": "KEY"}`：调用 `project_bind(project="KEY")` 校验；之后所有项目级工具显式传 `project="KEY"`。不要询问用户。
-3. 没有：调用 `project_bind()` 拿到 `options`，把 `key/name/roles` 展示给用户选择一次；调用 `project_bind(project="KEY")`，把返回的 `persist.content` 写入 `.rdm/project.json`；之后项目级工具传 `project="KEY"`。
+3. 没有：调用 `project_bind()` 拿到 `options`，把 `key/name/roles` 展示给用户**自己选择**；不要推荐，不要根据信箱有无信、未读数、最近活动或角色推断。调用 `project_bind(project="KEY")`，把返回的 `persist.content` 写入 `.rdm/project.json`；之后项目级工具传 `project="KEY"`。
    带 `project` 参数的工具包括 `work_item_list`、`backlog_list`、`sprint_list`、`member_list`、`work_item_create`、`sprint_create`、`mailbox_check`、`mailbox_send`、`artifact_add`、`attachment_list`、`project_get`；按 id 操作的工具（如 `work_item_get`、`work_item_transition`、`sprint_manage`）不需要传。
 4. 收到 `PROJECT_REQUIRED` / `PROJECT_BINDING_INVALID` 时，按 `details.recovery` 自愈：读文件 → `project_bind` → 带 `project` 重试。**不要**要求用户重新执行 `rdm integrate`，**不要**让用户手输项目 ID。
 5. 改绑：`project_bind(project=NEW, current=OLD)`，先向用户确认返回的 `change`，再覆盖 `.rdm/project.json`。单次跨项目操作直接传 `project=OTHER`，不要改绑文件。
@@ -22,10 +22,10 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 每次开始工作前按顺序调用：
 
 1. `whoami` —— 确认身份、角色、未读信件数（unread_count）和我的未终态工作项数。
-2. `mailbox_check` —— 拉取分配给你的信件与上下文（默认只拉未读；带 `since` 游标做增量拉取，把上一次返回的 `next_cursor` 传回去）。
-3. `my_work_list` —— 列出分配给你的未终态工作项（也可用 `work_item_list` 参数 `assignee="me"`，`"me"` 是保留字，服务端解析为你的成员 id）。
+2. `mailbox_check(project=<绑定 KEY>)` —— 拉取当前绑定项目的信件与上下文（默认只拉未读；带 `since` 游标做增量拉取，把上一次返回的 `next_cursor` 传回去）。
+3. `my_work_list(project=<绑定 KEY>)` —— 列出当前绑定项目分配给你的未终态工作项（也可用 `work_item_list` 参数 `assignee="me"` + `project=<KEY>`，`"me"` 是保留字，服务端解析为你的成员 id）。
 
-不要在没有上下文时直接改状态或发信。信箱（查信/回信/@mention/已读）的详细规范见 rdm-mailbox skill。
+**绑定后只处理该项目**：不要遍历 `whoami.projects`，不要查询、处理或建议处理其他项目的信件/工作项，除非用户明确要求。不要在没有上下文时直接改状态或发信。信箱（查信/回信/@mention/已读）的详细规范见 rdm-mailbox skill。
 
 ## 2. 认领工作项
 

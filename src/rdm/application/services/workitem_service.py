@@ -319,11 +319,18 @@ class WorkItemService:
         items.sort(key=lambda i: (-i.priority, i.display_no))
         return project, items
 
-    async def my_items(self, actor: Actor, *, status: str | None = None) -> list[WorkItem]:
-        """Items assigned to me across every project I belong to (§17)."""
+    async def my_items(
+        self, actor: Actor, *, status: str | None = None, project_key: str | None = None
+    ) -> list[WorkItem]:
+        """Items assigned to me; scoped to project_key when given (§17)."""
         assert self.uow.work_items is not None
+        if project_key is not None:
+            project = await self.resolve_project(actor, project_key)
+            project_ids = [project.id]
+        else:
+            project_ids = actor.project_ids()
         items: list[WorkItem] = []
-        for project_id in actor.project_ids():
+        for project_id in project_ids:
             items.extend(
                 await self.uow.work_items.list(
                     project_id,

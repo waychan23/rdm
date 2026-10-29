@@ -38,7 +38,7 @@
 | `whoami` 【M1】 | 当前身份与工作台：member、roles、项目、可接受 kind、未读信件数、我的未终态 items 数 | – | `{member, project, roles, unread_count, my_open_items, project_hint}` |
 | `project_get` 【M1】 | 项目概况：成员摘要、当前 Sprint、各状态计数 | `project?` | 项目 + 成员 + sprint 摘要 |
 | `workflow_get` 【M1】 | 拉取流程定义（状态、转换、终态、gate），**skill 引导 agent 时先调它** | `kind?` | `{kinds: {...}}` |
-| `project_bind` 【M5】 | 校验/返回项目目录绑定；`project` 为空时返回可访问项目 options；不读写文件、无服务端状态 | `project?, current?` | `{project, options, persist, change?, use_project}` |
+| `project_bind` 【M5】 | 校验/返回项目目录绑定；`project` 为空时返回可访问项目 options（带 `selection=user_choice_required`，禁止推荐）；不读写文件、无服务端状态 | `project?, current?` | `{project, options, selection, persist, change?, use_project}` |
 
 ### 3.2 查询（8）
 
@@ -46,7 +46,7 @@
 |---|---|---|
 | `work_item_list` 【M1】 | 通用筛选：kind/status/assignee/sprint/parent/priority/keyword，分页 | `kind?, status?, assignee?, sprint?, parent?, q?, limit?, cursor?, include_deleted?` |
 | `work_item_get` 【M1】 | 详情 + 子项 + 评论 + artifacts + attachments + `allowed_transitions` | `id, expand?` |
-| `my_work_list` 【M2】 | 我的待办（assignee=me 且非终态，按 priority/display_no 排序）；传 `status` 时按状态精确过滤 | `status?` |
+| `my_work_list` 【M2】 | 我的待办（assignee=me 且非终态，按 priority/display_no 排序）；传 `status` 时按状态精确过滤；传 `project` 时只列该项目 | `status?, project?` |
 | `backlog_list` 【M2】 | ProductBacklog：**未进入任何 Sprint** 且非终态的 items（跨全部 sprint 链接差集） | `kind?, project?` |
 | `sprint_list` / `sprint_get` 【M2】 | Sprint 列表（可按状态过滤）/ 详情（含 items 与 status_counts） | `status?, project?` / `id` |
 | `member_list` 【M2】 | 项目成员（含 agent 的 manager、角色、可接 kinds、webhook 配置） | `type?, project?` |
@@ -77,7 +77,7 @@
 
 | 工具 | 用途 |
 |---|---|
-| `mailbox_check` 【M1】 | 增量拉取（`since` 游标 = 上一页最后一条 delivery id，默认未读，§16.28）；返回 `message_id`、`reply_to_id`、发件人、标题、正文、关联 item id |
+| `mailbox_check` 【M1】 | 增量拉取（`since` 游标 = 上一页最后一条 delivery id，默认未读，§16.28）；**必须传当前绑定项目的 `project`**，只查该项目 | `since?, unread_only?, limit?, project?` |
 | `mailbox_send` 【M1】 | 发信：`to[]/cc[]`（member 或 group mailbox 名）、subject、body_md、`refs[]`（work_item ids）、`reply_to`（上一封信的 message_id，形成服务端回信链路） |
 | `mailbox_mark_read` 【M2】 | 批量标记已读（传 delivery id，即信件条目中的 delivery_id） | `delivery_ids[]` |
 
@@ -158,9 +158,10 @@ MCP 请求不携带 cwd；绑定事实源是客户端工作区根目录的 `.rdm
 ```
 
 - agent 开工时读取 `.rdm/project.json`；有 `project` 就调用 `project_bind(project=KEY)` 校验，并在项目级工具上显式传 `project=KEY`。
-- 没有文件时调用 `project_bind()` 拿 `options`，让用户选择一次；`project_bind(project=KEY)` 成功后把返回的 `persist.content` 写入 `.rdm/project.json`。
+- 没有文件时调用 `project_bind()` 拿 `options`，让用户选择一次；返回的 `selection.mode=user_choice_required` 明确禁止 agent 推荐或代选（不得根据信箱、未读数、最近活动、角色推断）。`project_bind(project=KEY)` 成功后把返回的 `persist.content` 写入 `.rdm/project.json`。
 - 改绑用 `project_bind(project=NEW, current=OLD)`；返回 `change` 与 `requires_confirmation=true`，用户确认后再覆盖文件。校验失败不覆盖旧文件。
 - 单次跨项目操作直接传 `project=OTHER`，不要改绑文件。
+- **绑定后只处理该项目的信件/工作项**：不要遍历 `whoami.projects`，不要查询、处理或建议处理其他项目的内容，除非用户明确要求。`mailbox_check` / `mailbox_send` / `my_work_list` 都应带 `project=<绑定 KEY>`。
 - `PROJECT_REQUIRED` / `PROJECT_BINDING_INVALID` 的 `details.recovery` 写明 agent 自愈步骤：读文件 → `project_bind` → 带 `project` 重试；不要让用户重新执行 integrate 或手输项目 ID。
 
 ## 5. 错误码 → agent 指引
@@ -180,7 +181,7 @@ MCP 请求不携带 cwd；绑定事实源是客户端工作区根目录的 `.rdm
 
 `rdm-workflow` 与 `rdm-mailbox` 两个随包 skill（`rdm skills install` 安装）分别承担工作流与信箱的软引导，内容大纲：
 
-1. 开工前：先按 §4.1 读取/建立 `.rdm/project.json` 并调用 `project_bind`，再 `whoami` → `mailbox_check` → `my_work_list`（三步定工作上下文；`work_item_list(assignee="me")` 等价）。
+1. 开工前：先按 §4.1 读取/建立 `.rdm/project.json` 并调用 `project_bind`；之后 `whoami` → `mailbox_check(project=<KEY>)` → `my_work_list(project=<KEY>)`（三步定工作上下文；`work_item_list(assignee="me", project=<KEY>)` 等价）。
 2. 认领：确认 `assignee` 是自己 → 若可认领用 `work_item_update` 或 `work_item_assign` → 状态 `IN_PROGRESS`。
 3. 推进：**每次改状态前先看 `allowed_transitions`**；gate 被拒时不要去试别的转换，而是看 `blocking_children` 并处理/通知。
 4. 协作：跨 agent 传递信息一律走 `mailbox_send`（附 `refs`），不要靠 commit message/代码注释。
