@@ -27,7 +27,11 @@ def register(mcp: FastMCP, container: Container) -> None:
 
         async def run(uow, actor):
             body = await MailboxService(uow).check(
-                actor, since=since, unread_only=unread_only, limit=limit
+                actor,
+                project_key=project,
+                since=since,
+                unread_only=unread_only,
+                limit=limit,
             )
             return ok(body)
 

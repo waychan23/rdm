@@ -1,10 +1,11 @@
-"""MCP tool catalogue and key input schemas (M2: 27 tools, §16.51)."""
+"""MCP tool catalogue and key input schemas (M5: 28 tools, §17.80)."""
 
 EXPECTED_TOOLS = {
-    # 3.1 identity / context (3)
+    # 3.1 identity / context (4)
     "whoami",
     "project_get",
     "workflow_get",
+    "project_bind",
     # 3.2 queries (8)
     "work_item_list",
     "work_item_get",
@@ -37,12 +38,12 @@ EXPECTED_TOOLS = {
 }
 
 
-async def test_exactly_27_tools_registered(mcp_clients) -> None:
+async def test_exactly_28_tools_registered(mcp_clients) -> None:
     owner = mcp_clients["owner_token"]
     async with mcp_clients["client_for"](owner) as client:
         tools = await client.list_tools()
     assert {t.name for t in tools} == EXPECTED_TOOLS
-    assert len(tools) == 27
+    assert len(tools) == 28
 
 
 async def test_transition_schema_requires_to_and_version(mcp_clients) -> None:

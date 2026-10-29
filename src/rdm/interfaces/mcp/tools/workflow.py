@@ -20,7 +20,8 @@ def register(mcp: FastMCP, container: Container) -> None:
     async def whoami() -> Any:
         """当前身份与工作台：user、org 角色、项目、未读信件数、我的未终态工作项数。
 
-        开工三步的第一步。不要在未调用 whoami 时假设自己的身份或项目。
+        开工上下文的第一步（先按 skill 第 0 步处理 .rdm 项目绑定）。
+        不要在未调用 whoami 时假设自己的身份或项目。
         """
 
         async def run(uow, actor):
@@ -58,6 +59,12 @@ def register(mcp: FastMCP, container: Container) -> None:
                         for p in projects
                     ],
                     "default_project": project_out(default) if default else None,
+                    "project_hint": (
+                        "若当前目录应固定项目：读取工作区根目录 .rdm/project.json；"
+                        "有 project 则调用 project_bind(project=KEY)，并在项目级工具上"
+                        "显式传 project=KEY；没有则用 projects 让用户选择一次，"
+                        "把返回的 persist.content 写入 .rdm/project.json。"
+                    ),
                     "unread_count": unread,
                     "my_open_items": len(my_open),
                 }

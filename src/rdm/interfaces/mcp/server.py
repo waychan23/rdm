@@ -1,4 +1,4 @@
-"""FastMCP factory: register every MCP tool module (27 tools, M2)."""
+"""FastMCP factory: register every MCP tool module (28 tools, M5)."""
 
 from __future__ import annotations
 
@@ -18,6 +18,9 @@ from rdm.interfaces.mcp.tools import (
     member as member_tools,
 )
 from rdm.interfaces.mcp.tools import (
+    project as project_tools,
+)
+from rdm.interfaces.mcp.tools import (
     sprint as sprint_tools,
 )
 from rdm.interfaces.mcp.tools import (
@@ -32,6 +35,7 @@ def build_mcp(container: Container, auth) -> FastMCP:  # type: ignore[no-untyped
     mcp = FastMCP("rdm", auth=auth)
     # Context tools: enhanced whoami replaces the M0 version.
     workflow_tools.register(mcp, container)
+    project_tools.register(mcp, container)
     work_item_tools.register(mcp, container)
     comment_tools.register(mcp, container)
     sprint_tools.register(mcp, container)

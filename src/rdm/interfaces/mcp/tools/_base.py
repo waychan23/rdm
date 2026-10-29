@@ -55,6 +55,48 @@ def ok(data: Any, **meta: Any) -> dict[str, Any]:
     return {"data": data, "meta": meta}
 
 
+_PROJECT_RECOVERY = {
+    "steps": [
+        "读取当前工作区根目录的 .rdm/project.json。",
+        '若存在 {"project": "KEY"}，调用 project_bind(project="KEY")，'
+        '然后带 project="KEY" 重试原工具。',
+        "若不存在，把 details.options 展示给用户并让其选择一次；"
+        "调用 project_bind(project=KEY)，把返回的 persist.content 写入 "
+        ".rdm/project.json，然后带 project=KEY 重试原工具。",
+    ],
+    "do_not": [
+        "不要猜测项目",
+        "不要让用户手动输入项目 ID",
+        "不要让用户重新执行 rdm integrate 或重启服务",
+    ],
+}
+
+_PROJECT_BINDING_INVALID_RECOVERY = {
+    "steps": [
+        "把 details.options 展示给用户并让其重新选择一次。",
+        "调用 project_bind(project=NEW, current=OLD)。",
+        "用户确认后覆盖 .rdm/project.json，然后带 project=NEW 重试原工具。",
+    ],
+    "do_not": [
+        "不要静默切换到其他项目",
+        "不要让用户手动输入项目 ID",
+        "不要继续使用旧 project",
+    ],
+}
+
+
+def _enrich_error(exc: RdmError) -> dict[str, Any]:
+    """Attach agent-actionable recovery steps to project-context errors."""
+    envelope = exc.to_envelope()
+    details = envelope["error"].setdefault("details", {})
+    code = details.get("code")
+    if code == "PROJECT_REQUIRED":
+        details.setdefault("recovery", _PROJECT_RECOVERY)
+    elif code == "PROJECT_BINDING_INVALID":
+        details.setdefault("recovery", _PROJECT_BINDING_INVALID_RECOVERY)
+    return envelope
+
+
 def _pydantic_envelope(exc: PydanticValidationError) -> dict[str, Any]:
     fields = [
         {"field": ".".join(str(part) for part in err["loc"]), "message": err["msg"]}
@@ -71,7 +113,7 @@ async def run_tool(container: Container, fn: Callable[[Any, Actor], Awaitable[An
             actor = await resolve_actor(uow)
             return await fn(uow, actor)
     except RdmError as exc:
-        return ToolResult(structured_content=exc.to_envelope(), is_error=True)
+        return ToolResult(structured_content=_enrich_error(exc), is_error=True)
     except PydanticValidationError as exc:
         return ToolResult(structured_content=_pydantic_envelope(exc), is_error=True)
     except Exception:

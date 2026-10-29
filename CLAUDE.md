@@ -18,7 +18,7 @@ human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，两个组
 ## 前端需求归属
 
 - 所有新需求、新页面、交互改动、UI/前端缺陷，只在 `web-next/` 实现。
-- 前后端共享 REST/MCP 契约（MCP 27 工具签名锁死）。
+- 前后端共享 REST/MCP 契约（MCP 工具新增/签名变更须在 `docs/architecture.md` §17 记裁决，当前 28 个）。
 
 ## 常用命令
 
@@ -47,5 +47,5 @@ human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，两个组
 
 ## 后端铁律
 
-业务规则只进 domain/application；MCP 27 工具锁死；UoW 唯一提交点；仅回环绑定；
+业务规则只进 domain/application；MCP 工具变更须在 §17 记裁决（当前 28 个）；UoW 唯一提交点；仅回环绑定；
 PAT 是永久自动化路径。细节与历史裁决见 `docs/architecture.md` §16/§17（冲突以编号靠后的裁决为准）。

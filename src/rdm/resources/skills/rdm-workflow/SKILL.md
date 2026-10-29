@@ -7,6 +7,16 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 
 你通过 rdm 的 MCP 工具在一个受管控的工作流系统中干活。硬约束（状态机、gate、权限）在服务端，你无法绕过；本规范告诉你**何时该调哪个工具、出错时怎么办**。
 
+## 0. 项目上下文（每次会话先做）
+
+1. 读取当前工作区根目录的 `.rdm/project.json`。
+2. 有 `{"version": 1, "project": "KEY"}`：调用 `project_bind(project="KEY")` 校验；之后所有项目级工具显式传 `project="KEY"`。不要询问用户。
+3. 没有：调用 `project_bind()` 拿到 `options`，把 `key/name/roles` 展示给用户选择一次；调用 `project_bind(project="KEY")`，把返回的 `persist.content` 写入 `.rdm/project.json`；之后项目级工具传 `project="KEY"`。
+   带 `project` 参数的工具包括 `work_item_list`、`backlog_list`、`sprint_list`、`member_list`、`work_item_create`、`sprint_create`、`mailbox_check`、`mailbox_send`、`artifact_add`、`attachment_list`、`project_get`；按 id 操作的工具（如 `work_item_get`、`work_item_transition`、`sprint_manage`）不需要传。
+4. 收到 `PROJECT_REQUIRED` / `PROJECT_BINDING_INVALID` 时，按 `details.recovery` 自愈：读文件 → `project_bind` → 带 `project` 重试。**不要**要求用户重新执行 `rdm integrate`，**不要**让用户手输项目 ID。
+5. 改绑：`project_bind(project=NEW, current=OLD)`，先向用户确认返回的 `change`，再覆盖 `.rdm/project.json`。单次跨项目操作直接传 `project=OTHER`，不要改绑文件。
+6. `.rdm/project.json` 不含密钥；是否提交由用户决定（希望每个开发者本地选择时加入 `.gitignore`）。
+
 ## 1. 开工三步：建立上下文
 
 每次开始工作前按顺序调用：

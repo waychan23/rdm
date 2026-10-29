@@ -101,14 +101,17 @@ class WorkItemService:
                 "或让 Org Owner/project-director 创建项目。",
                 details={"code": "NO_PROJECT"},
             )
-        names = []
+        options: list[dict[str, Any]] = []
         for pid in ids:
             project = await self.uow.projects.get(pid)
             if project is not None:
-                names.append(project.key)
+                options.append({"key": project.key, "name": project.name})
+        options.sort(key=lambda item: item["key"])
+        names = [item["key"] for item in options]
         raise ValidationError(
-            f"你属于多个项目 {names}，请指定项目（project 参数或 RDM_PROJECT）。",
-            details={"code": "PROJECT_REQUIRED", "projects": names},
+            f"当前操作缺少项目上下文；你属于多个项目 {names}。"
+            "请显式传 project（MCP 可先调用 project_bind 选择；CLI 可用 RDM_PROJECT）。",
+            details={"code": "PROJECT_REQUIRED", "projects": names, "options": options},
         )
 
     async def resolve_member(self, project_id: str, ref: str) -> User:
