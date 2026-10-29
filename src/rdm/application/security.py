@@ -22,10 +22,10 @@ from rdm.domain.errors import Forbidden, NotFound
 
 _PRIVILEGED_ROLES = {"project_owner", "manager", "sprint_manager"}
 
-# Human-review gate (architecture §16.52, tightened in §17): a worker may move
-# their own item through working states, but completion of epic/story/task is a
-# human privilege. The check is on identity type, so an agent acting on behalf
-# of a human manager still cannot close an item.
+# Human-review gate (architecture §16.52, tightened in §17.70): completion of
+# epic/story/task is a human privilege, enforced purely on identity type. An
+# agent acting on behalf of a human manager still cannot close an item; any
+# human who can transition the item (assignee or privileged role) may.
 COMPLETION_STATES = {"DONE"}
 
 
@@ -138,9 +138,7 @@ def require_can_transition(actor: Actor, item: WorkItem, to_state: str, display_
                 "assignee_user_id": item.assignee_user_id,
             },
         )
-    if to_state in COMPLETION_STATES and (
-        actor.is_agent or not (set(actor.project_roles(item.project_id)) & _PRIVILEGED_ROLES)
-    ):
+    if to_state in COMPLETION_STATES and actor.is_agent:
         raise Forbidden(
             f"{actor.name} 不能把 {display_id} 推到 {to_state}：完成态（DONE）"
             "必须由 human 身份评审收口；请完成后停在 TO_REVIEW/TO_TEST 并通知负责人。",

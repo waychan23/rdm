@@ -176,8 +176,8 @@ async def test_worker_can_only_transition_own_item(server, owner_token: str) -> 
     assert r.status_code == 403 and r.json()["error"]["code"] == "FORBIDDEN"
 
 
-async def test_worker_cannot_self_complete_done(server, owner_token: str) -> None:
-    """Review gate: even the assignee worker may not push their item to DONE."""
+async def test_human_worker_can_self_complete_done(server, owner_token: str) -> None:
+    """Review gate is identity-type only (§17.70): a human assignee may close."""
     client, _s, _app = server
     await _bootstrap_project(client, owner_token)
     _id, worker_token = await _user_token(client, owner_token, "dev", ["worker"])
@@ -197,19 +197,9 @@ async def test_worker_cannot_self_complete_done(server, owner_token: str) -> Non
     assert (await move("IN_PROGRESS", 0)).status_code == 200
     r = await move("TO_REVIEW", 1)
     assert r.status_code == 200
-    blocked = await move("DONE", 2)
-    assert blocked.status_code == 403
-    assert blocked.json()["error"]["code"] == "FORBIDDEN"
-    assert blocked.json()["error"]["details"]["target_state"] == "DONE"
-
-    # Manager closes it after review.
-    _mgr_id, mgr_token = await _user_token(client, owner_token, "tl", ["manager"])
-    r = await client.post(
-        f"{API}/work-items/{mine['display_id']}/transition",
-        json={"to": "DONE", "row_version": 2},
-        headers=auth(mgr_token),
-    )
-    assert r.status_code == 200, r.text
+    closed = await move("DONE", 2)
+    assert closed.status_code == 200, closed.text
+    assert closed.json()["data"]["status"] == "DONE"
 
     # Issue CLOSED_DONE is a QA close-out, not a review: worker may do it.
     issue = await _create(
