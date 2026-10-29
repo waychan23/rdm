@@ -1,11 +1,16 @@
 /*
  * App shell rail. NavLink only accepts className (not the primitives xcss
- * prop), so layout and interaction states live here with ADS tokens.
+ * prop), so layout and interaction states live here with ADS tokens. The same
+ * applies to the router Link wrapping the topbar user name.
  *
  * Width is fixed at 80px (space.1000): four CJK characters at 12px still fit
  * inside the 60px label box, and the rail never resizes with its content.
  * Vertical overflow stays scrollable but the scrollbar is hidden so the rail
  * silhouette stays clean on short viewports.
+ *
+ * Items are grouped (org-level above, project-level below) and separated by a
+ * divider; the groups carry the item gap so the rail's own gap only spaces the
+ * groups and the divider apart.
  */
 .rdm-rail {
   flex: 0 0 var(--ds-space-1000, 80px);
@@ -23,9 +28,33 @@
   -ms-overflow-style: none;
 }
 
+.rdm-topbar-user {
+  text-decoration: none;
+}
+
+.rdm-topbar-user:focus-visible {
+  outline: 2px solid var(--ds-border-focused);
+  outline-offset: var(--ds-space-025, 2px);
+  border-radius: var(--ds-radius-small);
+}
+
 .rdm-rail::-webkit-scrollbar {
   width: 0;
   height: 0;
+}
+
+.rdm-rail-group {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--ds-space-050, 4px);
+}
+
+.rdm-rail-divider {
+  flex: 0 0 auto;
+  block-size: 1px;
+  margin-block: var(--ds-space-050, 4px);
+  background-color: var(--ds-border);
 }
 
 .rdm-rail-item {

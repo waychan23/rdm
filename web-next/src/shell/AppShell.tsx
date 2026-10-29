@@ -36,6 +36,16 @@ const styles = cssMap({
     cursor: "pointer",
     fontWeight: "var(--ds-font-weight-medium)",
   },
+  userLink: {
+    display: "inline-flex",
+    alignItems: "center",
+    paddingBlock: "var(--ds-space-025)",
+    paddingInline: "var(--ds-space-075)",
+    borderRadius: "var(--ds-radius-small)",
+    "&:hover": {
+      backgroundColor: "var(--ds-background-neutral-subtle-hovered)",
+    },
+  },
   shell: {
     display: "flex",
     flexDirection: "column",
@@ -152,13 +162,17 @@ export default function AppShell() {
               </Box>
             ) : null}
           </Box>
-          <Text color="color.text.subtle" testId="topbar-current-user">
-            {who
-              ? who.identity.act_as
-                ? `${who.identity.name}（以 ${who.user.name} 身份）`
-                : who.user.name
-              : "—"}
-          </Text>
+          <Link to="/settings" className="rdm-topbar-user" data-testid="topbar-current-user">
+            <Box xcss={styles.userLink}>
+              <Text color="color.text.subtle">
+                {who
+                  ? who.identity.act_as
+                    ? `${who.identity.name}（以 ${who.user.name} 身份）`
+                    : who.user.name
+                  : "—"}
+              </Text>
+            </Box>
+          </Link>
           <IconButton
             icon={(iconProps) => <LogOutIcon {...iconProps} />}
             label="登出"
@@ -171,22 +185,35 @@ export default function AppShell() {
 
       <Box xcss={styles.body}>
         <nav className="rdm-rail" aria-label="主导航" data-testid="app-sidebar">
-          <RailItem to="/projects" label="项目" testId="projects" icon={GridIcon} end />
-          {(who?.org_roles.includes("org_owner") ||
-            who?.org_roles.includes("user_manager")) && (
-            <RailItem to="/org/users" label="用户" testId="org-users" icon={PeopleIcon} />
-          )}
-          <RailItem to="/settings" label="我的" testId="settings" icon={SettingsIcon} end />
-          {projectKey &&
-            PROJECT_NAV.map((entry) => (
-              <RailItem
-                key={entry.label}
-                to={entry.to(projectKey)}
-                label={entry.label}
-                testId={`project-${entry.testId}`}
-                icon={entry.icon}
+          <div className="rdm-rail-group" data-testid="rail-group-org">
+            <RailItem to="/projects" label="项目" testId="projects" icon={GridIcon} end />
+            {(who?.org_roles.includes("org_owner") ||
+              who?.org_roles.includes("user_manager")) && (
+              <RailItem to="/org/users" label="用户" testId="org-users" icon={PeopleIcon} />
+            )}
+            <RailItem to="/settings" label="我的" testId="settings" icon={SettingsIcon} end />
+          </div>
+          {projectKey && (
+            <>
+              <div
+                className="rdm-rail-divider"
+                role="separator"
+                aria-orientation="horizontal"
+                data-testid="rail-divider"
               />
-            ))}
+              <div className="rdm-rail-group" data-testid="rail-group-project" data-project={projectKey}>
+                {PROJECT_NAV.map((entry) => (
+                  <RailItem
+                    key={entry.label}
+                    to={entry.to(projectKey)}
+                    label={entry.label}
+                    testId={`project-${entry.testId}`}
+                    icon={entry.icon}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </nav>
         <Box as="main" xcss={styles.content} testId="app-content">
           <Outlet />
