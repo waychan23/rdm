@@ -165,7 +165,7 @@ def project_create(
     url: UrlOpt = DEFAULT_URL,
     token: TokenOpt = None,
 ) -> None:
-    """Create a project (Owner only)."""
+    """Create a project (org_owner or project-director)."""
     from rdm.interfaces.cli import client
 
     client.run_project_create(url, client.resolve_token(token), key, name, description)
