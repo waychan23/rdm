@@ -51,6 +51,8 @@ export default function SettingsPage() {
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const [pendingOwnerId, setPendingOwnerId] = useState<string | null>(null);
+  const [reassigning, setReassigning] = useState(false);
 
   const { data, loading } = useAsync<{ project: Project; members: ProjectMemberRow[] }>(
      async () => {
@@ -91,15 +93,26 @@ export default function SettingsPage() {
      }
   };
 
-  const saveOwner = async (userId: string | null) => {
-     if (!userId || userId === data?.project.owner_user_id) return;
-     try {
-       await api.post(`/projects/${projectKey}/transfer-owner`, { user_id: userId });
-       reload();
-       notify.success("项目经理已改派");
-     } catch (e) {
-       notify.error("改派失败", errorCause(e)?.message);
-     }
+  const reassignOwner = async () => {
+    if (!pendingOwnerId || reassigning) return;
+    if (pendingOwnerId === data?.project.owner_user_id) {
+      setPendingOwnerId(null);
+      return;
+    }
+    setReassigning(true);
+    try {
+      await api.post(`/projects/${projectKey}/transfer-owner`, {
+        user_id: pendingOwnerId,
+      });
+      setOwnerId(pendingOwnerId);
+      setPendingOwnerId(null);
+      reload();
+      notify.success("项目经理已改派");
+    } catch (e) {
+      notify.error("改派失败", errorCause(e)?.message);
+    } finally {
+      setReassigning(false);
+    }
   };
 
   const archive = async () => {
@@ -127,6 +140,7 @@ export default function SettingsPage() {
      roles: m.roles,
   }));
   const owner = humans.find((h) => h.user.id === data.project.owner_user_id);
+  const pendingOwner = humans.find((h) => h.user.id === pendingOwnerId);
 
   return (
      <Page testId="page-project-settings">
@@ -205,7 +219,9 @@ export default function SettingsPage() {
            <Select
              inputId="project-owner"
              options={humans.map((h) => ({
-               label: `${h.user.name}${h.roles.includes("project_owner") ? "（Owner）" : ""}`,
+               label: `${h.user.name}${
+                 h.user.id === data.project.owner_user_id ? "（当前项目经理）" : ""
+               }`,
                value: h.user.id,
              }))}
              value={
@@ -215,13 +231,29 @@ export default function SettingsPage() {
              }
              onChange={(opt) => {
                const id = (opt as { value: string } | null)?.value ?? null;
-               setOwnerId(id);
-               void saveOwner(id);
+               if (id && id !== data.project.owner_user_id) {
+                 setPendingOwnerId(id);
+               }
              }}
              isClearable={false}
            />
          </Stack>
        </Box>
+
+       <ConfirmDialog
+         open={pendingOwnerId !== null}
+         title="改派项目经理"
+         confirmLabel="改派"
+         busy={reassigning}
+         testId="project-owner-transfer-dialog"
+         onClose={() => {
+           if (!reassigning) setPendingOwnerId(null);
+         }}
+         onConfirm={() => void reassignOwner()}
+       >
+         确定把项目经理从 {owner?.user.name ?? "—"} 改派给{" "}
+         {pendingOwner?.user.name ?? "—"}？改派后原项目经理会失去项目 owner 权限。
+       </ConfirmDialog>
 
        <ConfirmDialog
          open={confirmArchive}

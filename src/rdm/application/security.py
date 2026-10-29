@@ -5,8 +5,9 @@ Two layers:
   (user administration), ``project_director`` (create projects / reassign
   project owners);
 - project: ``project_owner`` / ``manager`` / ``sprint_manager`` / ``worker``
-  granted through ``ProjectMember`` rows. Org owners implicitly hold every
-  project role.
+  granted through ``ProjectMember`` rows. ``project_owner`` is the single role
+  mirrored from ``project.owner_user_id`` and can only change via
+  ``transfer_project_owner``. Org owners implicitly hold every project role.
 
 Project roles are always resolved from the **human** the credential belongs
 to; an agent identity never carries roles. The agent identity itself matters

@@ -19,6 +19,7 @@ import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { token } from "@atlaskit/tokens";
+import { portalMenuProps } from "../lib/portalMenu";
 
 import { cardBorder } from "../components/cardBorder";
 import FormField from "../components/FormField";
@@ -267,7 +268,7 @@ export default function MailboxPage() {
             <ModalBody>
               <Stack space="space.150">
                 <FormField label="收件人" htmlFor="mail-to">
-                  <Select<Option, true>
+                  <Select<Option, true> {...portalMenuProps}
                     inputId="mail-to"
                     isMulti
                     options={memberOptions}

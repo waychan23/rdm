@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
@@ -17,10 +17,8 @@ import SettingsIcon from "@atlaskit/icon/core/settings";
 import LogOutIcon from "@atlaskit/icon/core/log-out";
 import { token } from "@atlaskit/tokens";
 
-import { api } from "../lib/api";
-import { logout } from "../lib/auth";
+import { logout, refreshSession, useCurrentUser } from "../lib/auth";
 import { safePostLoginPath } from "../lib/oauth";
-import type { Whoami } from "../types";
 import "../styles/shell.css";
 
 const styles = cssMap({
@@ -98,22 +96,12 @@ export default function AppShell() {
   const projectKey = params.key ?? "";
   const navigate = useNavigate();
   const location = useLocation();
-  const [who, setWho] = useState<Whoami | null>(null);
+  const who = useCurrentUser();
 
   useEffect(() => {
-    let alive = true;
-    const load = () => {
-      api
-        .get<Whoami>("/whoami")
-        .then((res) => alive && setWho(res.data))
-        .catch(() => alive && setWho(null));
-    };
-    load();
-    const timer = window.setInterval(load, 60_000);
-    return () => {
-      alive = false;
-      window.clearInterval(timer);
-    };
+    void refreshSession();
+    const timer = window.setInterval(() => void refreshSession(), 60_000);
+    return () => window.clearInterval(timer);
   }, [projectKey]);
 
   const onLogout = async () => {

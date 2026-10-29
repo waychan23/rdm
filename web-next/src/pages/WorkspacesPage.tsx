@@ -17,6 +17,7 @@ import Spinner from "@atlaskit/spinner";
 import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack } from "@atlaskit/primitives/compiled";
+import { portalMenuProps } from "../lib/portalMenu";
 
 import FormField from "../components/FormField";
 import { Page, PageHeader } from "../components/Page";
@@ -228,7 +229,7 @@ export default function WorkspacesPage() {
                   />
                 </FormField>
                 <FormField label="类型">
-                  <Select
+                  <Select {...portalMenuProps}
                     options={KIND_OPTIONS}
                     value={form.kind}
                     onChange={(o) => o && setForm({ ...form, kind: o as Option })}

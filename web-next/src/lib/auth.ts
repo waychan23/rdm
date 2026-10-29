@@ -44,6 +44,18 @@ export async function reloadSession(): Promise<Whoami | null> {
   return ensureSession();
 }
 
+/**
+ * Re-fetch identity without clearing the current one first (no rail/topbar
+ * flicker). Used by the AppShell poll and after self-affecting changes such as
+ * transferring Org Owner.
+ */
+export async function refreshSession(): Promise<Whoami | null> {
+  const user = await fetchWhoami();
+  currentUser = user;
+  emit();
+  return user;
+}
+
 export interface LoginResult {
   must_reset: boolean;
   redirect_to?: string;

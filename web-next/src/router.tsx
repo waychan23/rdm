@@ -36,6 +36,15 @@ async function requireAuth({ request }: LoaderFunctionArgs) {
   return null;
 }
 
+/** Org users is only for org owners / user managers; direct URLs must bounce. */
+async function requireOrgAdmin() {
+  const user = await ensureSession();
+  const allowed =
+    !!user &&
+    (user.org_roles.includes("org_owner") || user.org_roles.includes("user_manager"));
+  return allowed ? null : redirect("/projects");
+}
+
 function withSuspense(node: ReactNode) {
   return (
     <Suspense
@@ -74,7 +83,7 @@ export const router = createBrowserRouter([
       { path: "projects/:key/members", Component: () => withSuspense(<MembersPage />) },
       { path: "projects/:key/settings", Component: () => withSuspense(<SettingsPage />) },
       { path: "projects/:key/items/:id", Component: () => withSuspense(<ItemPage />) },
-      { path: "org/users", Component: () => withSuspense(<OrgUsersPage />) },
+      { path: "org/users", loader: requireOrgAdmin, Component: () => withSuspense(<OrgUsersPage />) },
       { path: "settings", Component: () => withSuspense(<PersonalSettingsPage />) },
       { path: "*", Component: () => withSuspense(<NotFoundPage />) },
     ],

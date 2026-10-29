@@ -155,8 +155,8 @@ export default function ProjectsPage() {
                   <Lozenge appearance={p.status === "archived" ? "default" : "success"}>
                     {p.status === "archived" ? "已归档" : "进行中"}
                   </Lozenge>
-                  {(p.roles ?? []).includes("project_owner") && (
-                    <Lozenge appearance="inprogress">Owner</Lozenge>
+                  {p.owner_user_id === me?.user.id && (
+                    <Lozenge appearance="inprogress">项目经理</Lozenge>
                   )}
                 </Inline>
               </Stack>

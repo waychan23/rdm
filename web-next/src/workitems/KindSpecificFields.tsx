@@ -2,6 +2,7 @@ import { Box, Stack } from "@atlaskit/primitives/compiled";
 import Select from "@atlaskit/select";
 import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";
+import { portalMenuProps } from "../lib/portalMenu";
 
 import FormField from "../components/FormField";
 import { SEVERITY_OPTIONS, TASK_TYPE_OPTIONS } from "./constants";
@@ -54,7 +55,7 @@ export default function KindSpecificFields({
     return (
       <Stack space="space.150">
         <FormField label="严重度" htmlFor="wi-severity">
-          <Select
+          <Select {...portalMenuProps}
             inputId="wi-severity"
             options={SEVERITY_OPTIONS}
             value={SEVERITY_OPTIONS.find((o) => o.value === issue.severity)}
@@ -85,7 +86,7 @@ export default function KindSpecificFields({
     return (
       <Stack space="space.150">
         <FormField label="任务类型" htmlFor="wi-task-type">
-          <Select
+          <Select {...portalMenuProps}
             inputId="wi-task-type"
             options={TASK_TYPE_OPTIONS}
             value={TASK_TYPE_OPTIONS.find((o) => o.value === task.task_type)}

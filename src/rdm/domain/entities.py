@@ -40,6 +40,9 @@ class Project:
     key: str
     name: str
     description_md: str | None = None
+    # Single source of truth for the project owner ("项目经理"). The owner's
+    # ProjectMember row mirrors it with the project_owner role; that role is
+    # only changed by transfer_project_owner.
     owner_user_id: str | None = None
     status: ProjectStatus = ProjectStatus.active
     item_seq: int = 0

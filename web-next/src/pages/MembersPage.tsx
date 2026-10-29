@@ -13,7 +13,7 @@ import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
-import type { OrgUser, ProjectMemberRow } from "../types";
+import type { OrgUser, Project, ProjectMemberRow } from "../types";
 import { AddMemberDialog, MemberEditDialog } from "../members/memberForms";
 import "../styles/table.css";
 
@@ -77,6 +77,12 @@ export default function MembersPage() {
     async () => (await api.get<OrgUser[]>("/users?type=human")).data,
     [projectKey, nonce],
   );
+  // project.owner_user_id is the single source of truth for the 项目经理 badge.
+  const { data: project } = useAsync<Project>(
+    async () => (await api.get<Project>(`/projects/${projectKey}`)).data,
+    [projectKey, nonce],
+  );
+  const ownerUserId = project?.owner_user_id ?? null;
 
   const reload = () => setNonce((n) => n + 1);
 
@@ -169,6 +175,7 @@ export default function MembersPage() {
               <MemberGroup
                 key={m.id}
                 member={m}
+                isOwner={m.id === ownerUserId}
                 onEdit={() => setEditMember(m)}
                 onRemove={() => setRemoveTarget(m)}
               />
@@ -186,6 +193,7 @@ export default function MembersPage() {
       <MemberEditDialog
         open={editMember !== null}
         member={editMember}
+        ownerUserId={ownerUserId}
         onClose={() => setEditMember(null)}
         onSave={saveRoles}
       />
@@ -206,10 +214,12 @@ export default function MembersPage() {
 
 function MemberGroup({
   member,
+  isOwner,
   onEdit,
   onRemove,
 }: {
   member: ProjectMemberRow;
+  isOwner: boolean;
   onEdit: () => void;
   onRemove: () => void;
 }) {
@@ -219,9 +229,7 @@ function MemberGroup({
         <td>
           <Inline space="space.100" alignBlock="center">
             <Text weight="medium">{member.name}</Text>
-            {member.id && member.roles.includes("project_owner") && (
-              <Lozenge appearance="inprogress">Owner</Lozenge>
-            )}
+            {isOwner && <Lozenge appearance="inprogress">项目经理</Lozenge>}
           </Inline>
         </td>
         <td>
@@ -235,7 +243,7 @@ function MemberGroup({
               </Text>
             ) : (
               member.roles.map((r) => (
-                <Lozenge key={r} appearance="new">
+                <Lozenge key={r} appearance={r === "project_owner" ? "inprogress" : "new"}>
                   {r}
                 </Lozenge>
               ))

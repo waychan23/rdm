@@ -16,7 +16,14 @@ from rdm.application.services import password_tickets
 from rdm.application.services.tokens import generate_token, hash_token
 from rdm.domain.actor import Actor
 from rdm.domain.entities import ProjectMember, User, UserToken
-from rdm.domain.enums import AcceptKind, OrgRole, PasswordTicketKind, TokenKind, UserType
+from rdm.domain.enums import (
+    AcceptKind,
+    OrgRole,
+    PasswordTicketKind,
+    ProjectStatus,
+    TokenKind,
+    UserType,
+)
 from rdm.domain.errors import Forbidden, NotFound, ValidationError
 from rdm.domain.events import EventType, updated_payload
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
@@ -164,6 +171,18 @@ class UserService:
         if user.is_org_owner:
             # Org owners can only step down by transferring the role (§17).
             raise Forbidden("不能停用 Org Owner，请先转让 Org Owner 角色")
+        if not active:
+            # Project owners are mirrored from project.owner_user_id; an
+            # inactive owner would leave the project without an active manager.
+            assert self.uow.projects is not None
+            owned = [
+                p
+                for p in await self.uow.projects.list_all()
+                if p.owner_user_id == user.id and p.status == ProjectStatus.active
+            ]
+            if owned:
+                keys = ", ".join(p.key for p in owned)
+                raise Forbidden(f"该用户是项目 {keys} 的项目经理，请先转让项目经理再停用")
         user.is_active = active
         await self.uow.users.update(user)
         if not active:

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -22,12 +23,18 @@ import FormField from "../components/FormField";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
-import { useCurrentUser } from "../lib/auth";
+import { refreshSession, useCurrentUser } from "../lib/auth";
 import { useNotify } from "../lib/flags";
 import type { OrgUser } from "../types";
 import "../styles/table.css";
 
 const ASSIGNABLE_ROLES = ["user_manager", "project_director"];
+
+// The API returns a root-relative path; the UI must show/copy a complete URL
+// so it can be sent to the user as-is.
+function absoluteUrl(path: string): string {
+  return new URL(path, window.location.origin).toString();
+}
 
 const styles = cssMap({
   centered: {
@@ -39,6 +46,7 @@ const styles = cssMap({
 
 export default function OrgUsersPage() {
   const notify = useNotify();
+  const navigate = useNavigate();
   const me = useCurrentUser();
   const isOwner = !!me?.org_roles.includes("org_owner");
   const [nonce, setNonce] = useState(0);
@@ -76,7 +84,7 @@ export default function OrgUsersPage() {
         name: name.trim(),
         email: email || null,
       });
-      setCreatedUrl(res.data.password_reset_url);
+      setCreatedUrl(absoluteUrl(res.data.password_reset_url));
       setName("");
       setEmail("");
       reload();
@@ -101,8 +109,9 @@ export default function OrgUsersPage() {
       const res = await api.post<{ password_reset_url: string }>(
         `/users/${user.id}/password-reset-token`,
       );
-      setResetUrl(res.data.password_reset_url);
-      void copy(res.data.password_reset_url);
+      const url = absoluteUrl(res.data.password_reset_url);
+      setResetUrl(url);
+      void copy(url);
     } catch (e) {
       notify.error("生成链接失败", errorCause(e)?.message);
     }
@@ -153,7 +162,10 @@ export default function OrgUsersPage() {
       await api.post("/org/transfer-owner", { user_id: confirmTransfer.id });
       setConfirmTransfer(null);
       notify.success("已转让 Org Owner");
-      reload();
+      // The caller just lost org_owner; refresh the identity store and leave
+      // the org-admin page instead of waiting for the next request to 403.
+      await refreshSession();
+      navigate("/projects");
     } catch (e) {
       notify.error("转让失败", errorCause(e)?.message);
     }
@@ -256,7 +268,7 @@ export default function OrgUsersPage() {
                 {createdUrl && (
                   <SectionMessage appearance="success" title="一次性设置密码链接（24 小时）">
                     <Stack space="space.100">
-                      <code>{createdUrl}</code>
+                      <code style={{ wordBreak: "break-all" }}>{createdUrl}</code>
                       <Inline>
                         <Button
                           spacing="compact"
@@ -365,7 +377,7 @@ export default function OrgUsersPage() {
             </ModalHeader>
             <ModalBody>
               <SectionMessage appearance="information" title="一次性链接（24 小时）">
-                <code>{resetUrl}</code>
+                <code style={{ wordBreak: "break-all" }}>{resetUrl}</code>
               </SectionMessage>
             </ModalBody>
             <ModalFooter>

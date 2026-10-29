@@ -21,6 +21,7 @@ from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
 VALID_ROLES = {r.value for r in ProjectRole}
+PROJECT_OWNER_ROLE = ProjectRole.project_owner.value
 
 
 @dataclass
@@ -146,16 +147,24 @@ class MembershipService:
             raise ValidationError(
                 "agent 的项目成员关系随其 human 自动维护", details={"field": "user_id"}
             )
-        _check_roles(roles)
         membership = await self.uow.memberships.get(project.id, user_id)
         if membership is None:
             raise NotFound("用户不是该项目成员", details={"user_id": user_id})
 
-        losing_owner = "project_owner" in membership.roles and "project_owner" not in roles
-        if losing_owner:
-            await self._assert_other_project_owner(project.id, user_id)
+        # `project.owner_user_id` is the single source of truth. Its mirrored
+        # project_owner role cannot be granted or revoked here — only
+        # transfer_project_owner() may change the owner.
+        is_owner = project.owner_user_id == user_id
+        if PROJECT_OWNER_ROLE in roles and not is_owner:
+            raise ValidationError(
+                "project_owner 只能通过「转让项目经理」变更",
+                details={"field": "roles", "project_id": project.id},
+            )
+        remaining = [r for r in roles if r != PROJECT_OWNER_ROLE]
+        _check_roles(remaining)
+        normalized = ([PROJECT_OWNER_ROLE] if is_owner else []) + remaining
 
-        membership.roles = list(dict.fromkeys(roles))
+        membership.roles = list(dict.fromkeys(normalized))
         await self.uow.memberships.update(membership)
         await self._append_event(
             project,
@@ -180,8 +189,11 @@ class MembershipService:
         membership = await self.uow.memberships.get(project.id, user_id)
         if membership is None:
             raise NotFound("用户不是该项目成员", details={"user_id": user_id})
-        if "project_owner" in membership.roles:
-            await self._assert_other_project_owner(project.id, user_id)
+        if project.owner_user_id == user_id:
+            raise ValidationError(
+                "项目经理不能直接移出项目；请先转让项目经理",
+                details={"user_id": user_id, "project_id": project.id},
+            )
 
         now = dt.datetime.now(dt.UTC)
         await self.uow.memberships.soft_delete(membership.id, actor.human_id, now)
@@ -217,17 +229,21 @@ class MembershipService:
             raise ValidationError("目标用户还不是项目成员", details={"field": "user_id"})
 
         old_owner_id = project.owner_user_id
-        old_membership = (
-            await self.uow.memberships.get(project.id, old_owner_id) if old_owner_id else None
-        )
-        if old_membership is not None and old_membership.id != target_membership.id:
-            old_membership.roles = [
-                r for r in old_membership.roles if r != ProjectRole.project_owner.value
-            ] or [ProjectRole.worker.value]
-            await self.uow.memberships.update(old_membership)
+        # Heal any drift: remove the owner role from every other membership.
+        # The invariant is exactly one project_owner, mirrored by
+        # project.owner_user_id.
+        for membership in await self.uow.memberships.list_by_project(project.id):
+            if membership.user_id == target.id:
+                continue
+            if PROJECT_OWNER_ROLE not in membership.roles:
+                continue
+            membership.roles = [r for r in membership.roles if r != PROJECT_OWNER_ROLE] or [
+                ProjectRole.worker.value
+            ]
+            await self.uow.memberships.update(membership)
 
         target_membership.roles = list(
-            dict.fromkeys([*target_membership.roles, ProjectRole.project_owner.value])
+            dict.fromkeys([*target_membership.roles, PROJECT_OWNER_ROLE])
         )
         await self.uow.memberships.update(target_membership)
         project.owner_user_id = target.id
@@ -259,7 +275,7 @@ class MembershipService:
             org_id=project.org_id,
             project_id=project.id,
             user_id=human.id,
-            roles=[ProjectRole.project_owner.value],
+            roles=[PROJECT_OWNER_ROLE],
             auto_added=False,
             created_by=actor_id,
         )
@@ -315,21 +331,6 @@ class MembershipService:
 
         await MailboxService(self.uow).ensure_indiv(project_id, agent.id)
 
-    async def _assert_other_project_owner(self, project_id: str, user_id: str) -> None:
-        assert self.uow.memberships is not None and self.uow.users is not None
-        for membership in await self.uow.memberships.list_by_project(project_id):
-            if membership.user_id == user_id:
-                continue
-            if ProjectRole.project_owner.value not in membership.roles:
-                continue
-            user = await self.uow.users.get(membership.user_id)
-            if user is not None and user.is_active:
-                return
-        raise ValidationError(
-            "项目必须至少保留一个启用状态的 project_owner",
-            details={"project_id": project_id},
-        )
-
     async def _append_event(
         self,
         project: Project,
@@ -357,3 +358,8 @@ def _check_roles(roles: list[str]) -> None:
     bad = [r for r in roles if r not in VALID_ROLES]
     if bad:
         raise ValidationError(f"未知项目角色 {bad}", details={"field": "roles"})
+    if PROJECT_OWNER_ROLE in roles:
+        raise ValidationError(
+            "project_owner 只能通过「转让项目经理」变更",
+            details={"field": "roles"},
+        )

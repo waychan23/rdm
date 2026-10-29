@@ -84,6 +84,79 @@ async def test_org_role_matrix(server, owner_token) -> None:
     assert r.status_code == 403
 
 
+async def test_project_owner_is_single_source_of_truth(server, owner_token) -> None:
+    """project.owner_user_id owns the only project_owner role; generic role
+    edits cannot grant/revoke it and the owner cannot be removed directly."""
+    client, _settings, _app = server
+    owner_id = await _owner_id(client, owner_token)
+    r = await client.post(
+        "/api/v1/projects", headers=auth(owner_token), json={"key": "OWN", "name": "Own"}
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["data"]["owner_user_id"] == owner_id
+
+    worker_id = await create_human(client, owner_token, "owner-target")
+    # Adding a member can never mint a second owner.
+    r = await client.post(
+        "/api/v1/projects/OWN/members",
+        headers=auth(owner_token),
+        json={"user_id": worker_id, "roles": ["project_owner"]},
+    )
+    assert r.status_code == 422
+    await add_to_project(client, owner_token, "OWN", worker_id, ["worker"])
+
+    # Generic role editing cannot grant or revoke project_owner.
+    r = await client.patch(
+        f"/api/v1/projects/OWN/members/{worker_id}",
+        headers=auth(owner_token),
+        json={"roles": ["project_owner"]},
+    )
+    assert r.status_code == 422
+
+    # The owner cannot be removed without transferring first.
+    r = await client.delete(f"/api/v1/projects/OWN/members/{owner_id}", headers=auth(owner_token))
+    assert r.status_code == 422
+
+    # Transfer moves the field and the mirrored role together.
+    r = await client.post(
+        "/api/v1/projects/OWN/transfer-owner",
+        headers=auth(owner_token),
+        json={"user_id": worker_id},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["owner_user_id"] == worker_id
+
+    rows = (await client.get("/api/v1/projects/OWN/members", headers=auth(owner_token))).json()[
+        "data"
+    ]
+    by_id = {row["id"]: row for row in rows}
+    assert "project_owner" not in by_id[owner_id]["roles"]
+    assert by_id[worker_id]["roles"].count("project_owner") == 1
+    assert sum("project_owner" in row["roles"] for row in rows) == 1
+
+    # The owner keeps the mirrored role through generic edits, even if omitted.
+    r = await client.patch(
+        f"/api/v1/projects/OWN/members/{worker_id}",
+        headers=auth(owner_token),
+        json={"roles": ["manager"]},
+    )
+    assert r.status_code == 200, r.text
+    assert set(r.json()["data"]["roles"]) == {"project_owner", "manager"}
+    r = await client.patch(
+        f"/api/v1/projects/OWN/members/{worker_id}",
+        headers=auth(owner_token),
+        json={"roles": []},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["roles"] == ["project_owner"]
+    r = await client.delete(f"/api/v1/projects/OWN/members/{worker_id}", headers=auth(owner_token))
+    assert r.status_code == 422
+
+    # An active project owner cannot be disabled without transferring first.
+    r = await client.post(f"/api/v1/users/{worker_id}/disable", headers=auth(owner_token))
+    assert r.status_code == 403
+
+
 async def test_agent_membership_lifecycle(server, owner_token) -> None:
     client, _settings, _app = server
     await client.post(

@@ -12,6 +12,7 @@ import Spinner from "@atlaskit/spinner";
 import { Box, Inline, Text } from "@atlaskit/primitives/compiled";
 import TextButton from "../../components/TextButton";
 import { token } from "@atlaskit/tokens";
+import { portalMenuProps } from "../../lib/portalMenu";
 
 import { api, errorCause } from "../../lib/api";
 import { formatDate, formatSize } from "../../lib/format";
@@ -366,7 +367,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
 
           <div className="rdm-item-field" data-testid="item-field-transition">
             <div className="rdm-item-section-label">流转到</div>
-            <Select
+            <Select {...portalMenuProps}
               options={allowed.map((s) => ({ label: s, value: s }))}
               placeholder="选择目标状态"
               value={null}
@@ -382,7 +383,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
 
           <div className="rdm-item-field" data-testid="item-field-assignee">
             <div className="rdm-item-section-label">负责人</div>
-            <Select
+            <Select {...portalMenuProps}
               options={memberOptions}
               value={memberOptions.find((o) => o.value === item.assignee?.id) ?? null}
               placeholder="未指派"

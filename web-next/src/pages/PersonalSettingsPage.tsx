@@ -15,6 +15,7 @@ import SectionMessage from "@atlaskit/section-message";
 import Select from "@atlaskit/select";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
+import { portalMenuProps } from "../lib/portalMenu";
 
 import FormField from "../components/FormField";
 import { Page, PageHeader } from "../components/Page";
@@ -411,7 +412,7 @@ export default function PersonalSettingsPage() {
                    />
                  </FormField>
                  <FormField label="使用身份">
-                   <Select
+                   <Select {...portalMenuProps}
                      inputId="token-act-as"
                      placeholder="本人"
                      options={(agents ?? []).map((a) => ({
@@ -482,7 +483,7 @@ export default function PersonalSettingsPage() {
                    />
                  </FormField>
                  <FormField label="可接任务类型">
-                   <Select
+                   <Select {...portalMenuProps}
                      inputId="agent-kinds"
                      isMulti
                      options={ACCEPT_KINDS}
@@ -506,7 +507,7 @@ export default function PersonalSettingsPage() {
                    />
                  </FormField>
                  <FormField label="Webhook 格式">
-                   <Select
+                   <Select {...portalMenuProps}
                      inputId="agent-fmt"
                      options={WEBHOOK_FORMATS}
                      value={WEBHOOK_FORMATS.find((f) => f.value === agentForm.notify_webhook_format)}
@@ -564,7 +565,7 @@ export default function PersonalSettingsPage() {
                    />
                  </FormField>
                  <FormField label="格式">
-                   <Select
+                   <Select {...portalMenuProps}
                      inputId="edit-fmt"
                      options={WEBHOOK_FORMATS}
                      value={WEBHOOK_FORMATS.find((f) => f.value === editFmt)}

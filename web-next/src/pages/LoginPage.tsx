@@ -106,7 +106,7 @@ export default function LoginPage() {
               <Textfield
                 id="login-name"
                 value={name}
-                placeholder="owner"
+                placeholder="请输入用户名"
                 autoComplete="username"
                 autoFocus
                 testId="login-username"
