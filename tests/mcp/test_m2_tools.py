@@ -251,6 +251,54 @@ async def test_mailbox_mark_read_tool(server, mcp_clients) -> None:
         assert again["data"]["messages"] == []
 
 
+async def test_mailbox_send_reply_chain(server, mcp_clients) -> None:
+    rest, _settings, _app = server
+    owner = mcp_clients["owner_token"]
+    await _project(rest, owner)
+    worker = await _make_member(rest, owner, "replier")
+
+    async with mcp_clients["client_for"](owner) as owner_c:
+        sent = await call(
+            owner_c,
+            "mailbox_send",
+            {
+                "to": ["replier"],
+                "subject": "联调问题",
+                "body_md": "这里怎么处理？",
+                "project": "DEMO",
+            },
+        )
+        assert not sent["_is_error"], sent
+        parent_id = sent["data"]["message_id"]
+
+    async with mcp_clients["client_for"](worker) as worker_c:
+        inbox = await call(worker_c, "mailbox_check", {"project": "DEMO"})
+        parent = inbox["data"]["messages"][0]
+        assert parent["message_id"] == parent_id
+        assert parent["reply_to_id"] is None
+        reply = await call(
+            worker_c,
+            "mailbox_send",
+            {
+                "to": ["owner"],
+                "subject": "Re: 联调问题",
+                "body_md": "按 A 方案处理。",
+                "reply_to": parent_id,
+                "project": "DEMO",
+            },
+        )
+        assert not reply["_is_error"], reply
+        assert reply["data"]["reply_to_id"] == parent_id
+        assert reply["data"]["message_id"] != parent_id
+
+    async with mcp_clients["client_for"](owner) as owner_c:
+        inbox = await call(owner_c, "mailbox_check", {"project": "DEMO"})
+        replies = [m for m in inbox["data"]["messages"] if m["reply_to_id"] == parent_id]
+        assert len(replies) == 1
+        assert replies[0]["subject"] == "Re: 联调问题"
+        assert replies[0]["from"]["name"] == "replier"
+
+
 @pytest.mark.parametrize("empty", [[]])
 async def test_mailbox_mark_read_requires_ids(server, mcp_clients, empty) -> None:
     owner = mcp_clients["owner_token"]

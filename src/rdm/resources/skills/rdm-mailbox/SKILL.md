@@ -22,7 +22,8 @@ description: rd-manager（rdm）站内信箱使用规范。当需要通过 rdm M
 
 - `mailbox_send`：`to`/`cc` 传成员 name/id 或 group 信箱名；`refs` 附相关工作项
   （`KEY-42` 或 ULID），让对方一键定位上下文。
-- 同一事项的后续沟通用回信链路（带 reply_to），不要新发标题相近的信。
+- 同一事项的后续沟通必须带 `reply_to`（`mailbox_check` 返回的 `message_id`），服务端会记录
+  `reply_to_id` 形成回信链路；不要新发标题相近的「Re:」信。响应里的 `reply_to_id` 可用于核对。
 - **不要重复发送**同一内容；对方没立刻回不是重发理由（不保证实时，转做别的任务）。
 - 一条信说清：发生了什么、需要对方做什么、关联哪个工作项。
 

@@ -75,8 +75,8 @@
 
 | 工具 | 用途 |
 |---|---|
-| `mailbox_check` 【M1】 | 增量拉取（`since` 游标 = 上一页最后一条 delivery id，默认未读，§16.28）；返回发件人、标题、摘要、关联 item id |
-| `mailbox_send` 【M1】 | 发信：`to[]/cc[]`（member 或 group mailbox 名）、subject、body_md、`refs[]`（work_item ids） |
+| `mailbox_check` 【M1】 | 增量拉取（`since` 游标 = 上一页最后一条 delivery id，默认未读，§16.28）；返回 `message_id`、`reply_to_id`、发件人、标题、正文、关联 item id |
+| `mailbox_send` 【M1】 | 发信：`to[]/cc[]`（member 或 group mailbox 名）、subject、body_md、`refs[]`（work_item ids）、`reply_to`（上一封信的 message_id，形成服务端回信链路） |
 | `mailbox_mark_read` 【M2】 | 批量标记已读（传 delivery id，即信件条目中的 delivery_id） | `delivery_ids[]` |
 
 ### 3.6 产出物 / 附件 / 工作区（2）

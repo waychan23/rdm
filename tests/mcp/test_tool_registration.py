@@ -74,3 +74,4 @@ async def test_m2_tool_schemas(mcp_clients) -> None:
     assert "url" in tools["artifact_add"].input_schema["properties"]
 
     assert tools["mailbox_mark_read"].input_schema["properties"]["delivery_ids"]["type"] == "array"
+    assert "reply_to" in tools["mailbox_send"].input_schema["properties"]

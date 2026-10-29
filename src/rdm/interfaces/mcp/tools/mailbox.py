@@ -40,12 +40,15 @@ def register(mcp: FastMCP, container: Container) -> None:
         body_md: str,
         cc: list[str] | None = None,
         refs: list[str] | None = None,
+        reply_to: str | None = None,
         project: str | None = None,
     ) -> Any:
         """给成员或 group 信箱发信；跨 human/agent 协作的唯一通道。
 
         to/cc 传成员 name/id 或 group 名；refs 附工作项 id（KEY-42/ULID）。
-        不要重复发送同一内容，同一事项用回信（M1 回信走 OpenAPI reply_to）。
+        reply_to 传同一事项上一封信的 message_id（mailbox_check 返回的
+        message_id），服务端记录 reply_to_id 形成回信链路；不要用「Re: 原题」
+        另起一封新信。不要重复发送同一内容。
         """
 
         async def run(uow, actor):
@@ -57,8 +60,15 @@ def register(mcp: FastMCP, container: Container) -> None:
                 subject=subject,
                 body_md=body_md,
                 refs=refs or [],
+                reply_to=reply_to,
             )
-            return ok({"message_id": message.id, "deliveries": count})
+            return ok(
+                {
+                    "message_id": message.id,
+                    "reply_to_id": message.reply_to_id,
+                    "deliveries": count,
+                }
+            )
 
         return await run_tool(container, run)
 

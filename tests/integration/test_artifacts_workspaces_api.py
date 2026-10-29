@@ -155,6 +155,58 @@ async def test_workspace_owner_manager_only_crud(server, owner_token) -> None:
         assert types == {"workspace.added", "workspace.updated", "workspace.deleted"}
 
 
+async def test_workspace_location_is_free_form(server, owner_token) -> None:
+    """Workspace storage location is optional and free-form (any format)."""
+    client, _settings, _app = server
+    await _project(client, owner_token)
+
+    locations = ["/mnt/team/repo", "git@github.com:x/y.git", "s3://bucket/path"]
+    for index, location in enumerate(locations):
+        r = await client.post(
+            f"{API}/projects/DEMO/workspaces",
+            json={"name": f"ws-{index}", "kind": "other", "url": location},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 201, r.text
+        ws = r.json()["data"]
+        assert ws["url"] == location
+
+        updated = f"{location}-updated"
+        r = await client.patch(
+            f"{API}/workspaces/{ws['id']}",
+            json={"url": updated},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["data"]["url"] == updated
+
+    # Omitted / whitespace-only are allowed and normalized to "".
+    for name, extra in [("omitted", {}), ("blank", {"url": "   "})]:
+        r = await client.post(
+            f"{API}/projects/DEMO/workspaces",
+            json={"name": name, "kind": "other", **extra},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 201, r.text
+        assert r.json()["data"]["url"] == ""
+
+    # PATCH can clear an existing location.
+    r = await client.post(
+        f"{API}/projects/DEMO/workspaces",
+        json={"name": "clear-me", "kind": "other", "url": "s3://x/y"},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+    wid = r.json()["data"]["id"]
+    r = await client.patch(
+        f"{API}/workspaces/{wid}",
+        json={"url": ""},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["url"] == ""
+
+
 async def test_member_profile_disable_and_token_listing(server, owner_token) -> None:
     client, _settings, _app = server
     await _project(client, owner_token)

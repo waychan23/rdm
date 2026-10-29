@@ -20,7 +20,8 @@ Kind = Literal["git_repo", "doc_repo", "design", "other"]
 class WorkspaceIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     kind: Kind = "other"
-    url: str = Field(min_length=1, max_length=1000)
+    # 存储位置：可选，不限定格式（http/git/挂载路径/s3:// 等均可）。
+    url: str | None = Field(default=None, max_length=1000)
     description_md: str | None = None
     default_branch: str | None = Field(default=None, max_length=200)
 
@@ -28,7 +29,7 @@ class WorkspaceIn(BaseModel):
 class WorkspacePatchIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     kind: Kind | None = None
-    url: str | None = Field(default=None, min_length=1, max_length=1000)
+    url: str | None = Field(default=None, max_length=1000)
     description_md: str | None = None
     default_branch: str | None = Field(default=None, max_length=200)
 

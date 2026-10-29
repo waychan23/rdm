@@ -11,7 +11,6 @@ import datetime as dt
 from typing import Any
 
 from rdm.application import security
-from rdm.application.services.url_policy import ensure_http_url
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Project, Workspace
@@ -27,6 +26,14 @@ from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
 VALID_KINDS = {k.value for k in WorkspaceKind}
+
+
+def _normalize_location(value: Any) -> str:
+    """Storage location: optional free-form text (http, git SSH, mount path…)."""
+    location = (value or "").strip()
+    if len(location) > 1000:
+        raise ValidationError("存储位置不能超过 1000 字符", details={"field": "url"})
+    return location
 
 
 class WorkspaceService:
@@ -56,7 +63,7 @@ class WorkspaceService:
                 f"kind 必须是 {sorted(VALID_KINDS)}，收到 {kind!r}",
                 details={"field": "kind", "value": kind},
             )
-        url = ensure_http_url(data.get("url") or "")
+        url = _normalize_location(data.get("url"))
         workspace = Workspace(
             id=new_id(),
             project_id=project.id,
@@ -110,7 +117,7 @@ class WorkspaceService:
                 changes["kind"] = [workspace.kind, kind]
                 workspace.kind = kind
         if "url" in data:
-            url = ensure_http_url(data["url"])
+            url = _normalize_location(data["url"])
             if url != workspace.url:
                 changes["url"] = [workspace.url, url]
                 workspace.url = url

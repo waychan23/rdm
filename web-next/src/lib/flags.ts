@@ -19,8 +19,17 @@ export function useNotify(): Notify {
           description,
           isAutoDismiss: true,
         }),
-      error: (title, description) =>
-        flags.showFlag({ appearance: "error", title, description }),
+      error: (title, description) => {
+        // Non-normal appearances hide Atlaskit's built-in dismiss button, and
+        // error flags are persistent. Add an explicit close action.
+        let dismiss: () => void = () => {};
+        dismiss = flags.showFlag({
+          appearance: "error",
+          title,
+          description,
+          actions: [{ content: "关闭", onClick: () => dismiss() }],
+        });
+      },
     }),
     [flags],
   );

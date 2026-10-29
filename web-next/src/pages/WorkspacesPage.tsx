@@ -13,6 +13,7 @@ import ModalDialog, {
   ModalTransition,
 } from "@atlaskit/modal-dialog";
 import Select from "@atlaskit/select";
+import SectionMessage from "@atlaskit/section-message";
 import Spinner from "@atlaskit/spinner";
 import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";
@@ -43,6 +44,8 @@ interface Option {
   value: string;
 }
 
+const isHttpLocation = (value: string) => /^https?:\/\//i.test(value);
+
 export default function WorkspacesPage() {
   const { key: projectKey = "" } = useParams();
   const notify = useNotify();
@@ -51,19 +54,18 @@ export default function WorkspacesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [form, setForm] = useState<{
     id: string;
     name: string;
     kind: Option;
-    url: string;
-    default_branch: string;
+    location: string;
     description_md: string;
   }>({
     id: "",
     name: "",
     kind: KIND_OPTIONS[0],
-    url: "",
-    default_branch: "",
+    location: "",
     description_md: "",
   });
 
@@ -75,37 +77,37 @@ export default function WorkspacesPage() {
   const reload = () => setNonce((n) => n + 1);
 
   const openCreate = () => {
+    setSaveError(null);
     setForm({
       id: "",
       name: "",
       kind: KIND_OPTIONS[0],
-      url: "",
-      default_branch: "",
+      location: "",
       description_md: "",
     });
     setDialogOpen(true);
   };
 
   const openEdit = (w: Workspace) => {
+    setSaveError(null);
     setForm({
       id: w.id,
       name: w.name,
       kind: KIND_OPTIONS.find((k) => k.value === w.kind) ?? KIND_OPTIONS[0],
-      url: w.url,
-      default_branch: w.default_branch ?? "",
+      location: w.url,
       description_md: w.description_md ?? "",
     });
     setDialogOpen(true);
   };
 
   const save = async () => {
-    if (!form.name.trim() || !form.url.trim() || saving) return;
+    if (!form.name.trim() || saving) return;
+    setSaveError(null);
     setSaving(true);
     const payload = {
       name: form.name,
       kind: form.kind.value,
-      url: form.url,
-      default_branch: form.default_branch || null,
+      url: form.location.trim(),
       description_md: form.description_md || null,
     };
     try {
@@ -114,7 +116,7 @@ export default function WorkspacesPage() {
       setDialogOpen(false);
       reload();
     } catch (e) {
-      notify.error("保存失败", errorCause(e)?.message);
+      setSaveError(errorCause(e)?.message ?? "请稍后重试");
     } finally {
       setSaving(false);
     }
@@ -163,10 +165,7 @@ export default function WorkspacesPage() {
               <th scope="col" className="col-type">
                 类型
               </th>
-              <th scope="col">URL</th>
-              <th scope="col" className="col-branch">
-                默认分支
-              </th>
+              <th scope="col">存储位置</th>
               <th scope="col" className="col-actions">
                 操作
               </th>
@@ -178,11 +177,14 @@ export default function WorkspacesPage() {
                 <td>{w.name}</td>
                 <td className="cell-meta">{w.kind}</td>
                 <td>
-                  <Link href={w.url} target="_blank" testId={`workspace-link-${w.id}`}>
-                    {w.url}
-                  </Link>
+                  {isHttpLocation(w.url) ? (
+                    <Link href={w.url} target="_blank" testId={`workspace-link-${w.id}`}>
+                      {w.url}
+                    </Link>
+                  ) : (
+                    <span data-testid={`workspace-location-${w.id}`}>{w.url || "—"}</span>
+                  )}
                 </td>
-                <td className="cell-meta">{w.default_branch ?? "—"}</td>
                 <td>
                   <Inline space="space.100">
                     <Button
@@ -219,6 +221,19 @@ export default function WorkspacesPage() {
               <ModalTitle>{form.id ? "编辑工作区" : "登记工作区"}</ModalTitle>
             </ModalHeader>
             <ModalBody>
+              {saveError && (
+                <Box paddingBlockEnd="space.150">
+                  <SectionMessage
+                    appearance="error"
+                    title="保存失败"
+                    testId="workspace-save-error"
+                    isDismissible
+                    onDismiss={() => setSaveError(null)}
+                  >
+                    {saveError}
+                  </SectionMessage>
+                </Box>
+              )}
               <Stack space="space.150">
                 <FormField label="名称" htmlFor="ws-name">
                   <Textfield
@@ -235,22 +250,17 @@ export default function WorkspacesPage() {
                     onChange={(o) => o && setForm({ ...form, kind: o as Option })}
                   />
                 </FormField>
-                <FormField label="URL" htmlFor="ws-url">
+                <FormField
+                  label="存储位置"
+                  htmlFor="ws-location"
+                  hint="可选；支持 http(s)、git SSH、挂载路径、s3:// 等任意格式。"
+                >
                   <Textfield
-                    id="ws-url"
-                    value={form.url}
-                    testId="workspace-form-url"
-                    onChange={(e) => setForm({ ...form, url: e.currentTarget.value })}
-                  />
-                </FormField>
-                <FormField label="默认分支" htmlFor="ws-branch">
-                  <Textfield
-                    id="ws-branch"
-                    value={form.default_branch}
-                    testId="workspace-form-branch"
-                    onChange={(e) =>
-                      setForm({ ...form, default_branch: e.currentTarget.value })
-                    }
+                    id="ws-location"
+                    value={form.location}
+                    placeholder="可选，如 https://… / git@github.com:org/repo.git"
+                    testId="workspace-form-location"
+                    onChange={(e) => setForm({ ...form, location: e.currentTarget.value })}
                   />
                 </FormField>
                 <FormField label="描述" htmlFor="ws-desc">
@@ -276,6 +286,7 @@ export default function WorkspacesPage() {
               <Button
                 appearance="primary"
                 isLoading={saving}
+                isDisabled={!form.name.trim()}
                 testId="workspace-form-submit"
                 onClick={() => void save()}
               >
