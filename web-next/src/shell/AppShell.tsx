@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { Link, NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import IconButton from "@atlaskit/button/icon/button";
 import Badge from "@atlaskit/badge";
@@ -18,6 +18,7 @@ import ArrowOutIcon from "@atlaskit/icon/core/arrow-left";
 
 import { api } from "../lib/api";
 import { logout } from "../lib/auth";
+import { safePostLoginPath } from "../lib/oauth";
 import type { Whoami } from "../types";
 
 const topbarStyles = xcss({
@@ -100,6 +101,7 @@ export default function AppShell() {
   const params = useParams<{ key?: string }>();
   const projectKey = params.key ?? "";
   const navigate = useNavigate();
+  const location = useLocation();
   const [who, setWho] = useState<Whoami | null>(null);
 
   useEffect(() => {
@@ -119,8 +121,9 @@ export default function AppShell() {
   }, [projectKey]);
 
   const onLogout = async () => {
+    const returnTo = safePostLoginPath(location.pathname + location.search);
     await logout();
-    navigate("/login");
+    navigate(`/login?redirect=${encodeURIComponent(returnTo)}`);
   };
 
   return (
