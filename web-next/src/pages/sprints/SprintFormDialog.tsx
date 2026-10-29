@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import Button from "@atlaskit/button/default/button";
 import ModalDialog, {
@@ -8,10 +8,12 @@ import ModalDialog, {
   ModalTitle,
   ModalTransition,
 } from "@atlaskit/modal-dialog";
-import Textfield from "@atlaskit/textfield";
-import TextArea from "@atlaskit/textarea";
 import { DatePicker } from "@atlaskit/datetime-picker";
-import { Stack } from "@atlaskit/primitives";
+import { Inline, Stack } from "@atlaskit/primitives";
+import TextArea from "@atlaskit/textarea";
+import Textfield from "@atlaskit/textfield";
+
+import FormField from "../../components/FormField";
 
 export interface SprintFormValues {
   name: string;
@@ -28,12 +30,6 @@ interface Props {
   onSave: (values: SprintFormValues) => Promise<void> | void;
 }
 
-const labelStyle = {
-  display: "block",
-  fontWeight: "var(--ds-font-weight-medium, 500)",
-  marginBottom: 4,
-} as const;
-
 export default function SprintFormDialog({ open, title, initial, onClose, onSave }: Props) {
   const [name, setName] = useState(initial?.name ?? "");
   const [goal, setGoal] = useState(initial?.goal_md ?? "");
@@ -41,71 +37,88 @@ export default function SprintFormDialog({ open, title, initial, onClose, onSave
   const [end, setEnd] = useState(initial?.end_date ?? "");
   const [saving, setSaving] = useState(false);
 
+  // The dialog component stays mounted while closed; reload the form from
+  // `initial` every time it opens so edit reflects the selected sprint.
+  useEffect(() => {
+    if (!open) return;
+    setName(initial?.name ?? "");
+    setGoal(initial?.goal_md ?? "");
+    setStart(initial?.start_date ?? "");
+    setEnd(initial?.end_date ?? "");
+    setSaving(false);
+    // `initial` is a fresh object each render; only re-seed on open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const submit = async () => {
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    try {
+      await onSave({
+        name: name.trim(),
+        goal_md: goal,
+        start_date: start || null,
+        end_date: end || null,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog onClose={onClose} width="440px">
+        <ModalDialog onClose={onClose} width="440px" testId="sprint-form-dialog">
           <ModalHeader>
             <ModalTitle>{title}</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.150">
-              <Stack space="space.050">
-                <label htmlFor="sprint-name" style={labelStyle}>
-                  名称
-                </label>
+              <FormField label="名称" htmlFor="sprint-name">
                 <Textfield
                   id="sprint-name"
                   value={name}
                   autoFocus
+                  testId="sprint-form-name"
                   onChange={(e) => setName(e.currentTarget.value)}
                 />
-              </Stack>
-              <Stack space="space.050">
-                <label htmlFor="sprint-goal" style={labelStyle}>
-                  目标（Markdown）
-                </label>
+              </FormField>
+              <FormField label="目标（Markdown）" htmlFor="sprint-goal">
                 <TextArea
                   id="sprint-goal"
                   value={goal}
                   minimumRows={3}
+                  testId="sprint-form-goal"
                   onChange={(e) => setGoal(e.currentTarget.value)}
                 />
-              </Stack>
-              <Stack space="space.050">
-                <span style={labelStyle}>起止日期</span>
-                <div style={{ display: "flex", gap: 8 }}>
+              </FormField>
+              <FormField label="起止日期">
+                <Inline space="space.100">
                   <DatePicker
                     placeholder="开始"
                     value={start || ""}
+                    testId="sprint-form-start"
                     onChange={(v) => setStart(v)}
                   />
                   <DatePicker
                     placeholder="结束"
                     value={end || ""}
+                    testId="sprint-form-end"
                     onChange={(v) => setEnd(v)}
                   />
-                </div>
-              </Stack>
+                </Inline>
+              </FormField>
             </Stack>
           </ModalBody>
           <ModalFooter>
-            <Button appearance="subtle" onClick={onClose}>
+            <Button appearance="subtle" onClick={onClose} testId="sprint-form-cancel">
               取消
             </Button>
             <Button
               appearance="primary"
               isLoading={saving}
-              onClick={async () => {
-                if (!name.trim()) return;
-                setSaving(true);
-                await onSave({
-                  name: name.trim(),
-                  goal_md: goal,
-                  start_date: start || null,
-                  end_date: end || null,
-                });
-              }}
+              onClick={() => void submit()}
+              testId="sprint-form-submit"
             >
               保存
             </Button>

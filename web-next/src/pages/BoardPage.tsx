@@ -4,18 +4,33 @@ import { useNavigate, useParams } from "react-router-dom";
 import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import Button from "@atlaskit/button/default/button";
 import Checkbox from "@atlaskit/checkbox";
-import Heading from "@atlaskit/heading";
-import Spinner from "@atlaskit/spinner";
 import EmptyState from "@atlaskit/empty-state";
-import { Box, Inline } from "@atlaskit/primitives";
-import { token } from "@atlaskit/tokens";
+import Spinner from "@atlaskit/spinner";
+import { Box, Inline, xcss } from "@atlaskit/primitives";
 
+import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 import type { WorkItem, WorkflowDto } from "../types";
 import { KIND_OPTIONS } from "../workitems/constants";
 import BoardCard from "./board/BoardCard";
 import BoardColumn from "./board/BoardColumn";
+
+const boardStyles = xcss({
+  display: "flex",
+  flex: "1",
+  minHeight: "0",
+  gap: "space.150",
+  overflowX: "auto",
+  alignItems: "stretch",
+});
+
+const loadingStyles = xcss({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flex: "1",
+});
 
 export default function BoardPage() {
   const { key: projectKey = "" } = useParams();
@@ -132,43 +147,40 @@ export default function BoardPage() {
     navigate(`/projects/${projectKey}/items/${item.id}`);
 
   return (
-    <Box
-      padding="space.300"
-      style={{ display: "flex", flexDirection: "column", height: "100%" }}
-    >
-      <Inline space="space.200" alignBlock="center">
-        <Heading size="large">看板</Heading>
-        <Inline space="space.050" alignBlock="center">
-          {KIND_OPTIONS.map((k) => (
-            <Button
-              key={k.value}
-              appearance={kind === k.value ? "primary" : "default"}
-              spacing="compact"
-              onClick={() => setKind(k.value)}
-            >
-              {k.label}
-            </Button>
-          ))}
-        </Inline>
-        <Checkbox
-          label="显示终态列"
-          isChecked={showTerminal}
-          onChange={(e) => setShowTerminal(e.currentTarget.checked)}
-        />
-      </Inline>
+    <Page fill testId="page-board">
+      <PageHeader
+        title="看板"
+        testId="board-header"
+        actions={
+          <Inline space="space.100" alignBlock="center">
+            <Inline space="space.050" alignBlock="center" testId="board-kind-filter">
+              {KIND_OPTIONS.map((k) => (
+                <Button
+                  key={k.value}
+                  appearance={kind === k.value ? "primary" : "default"}
+                  spacing="compact"
+                  testId={`board-kind-${k.value}`}
+                  onClick={() => setKind(k.value)}
+                >
+                  {k.label}
+                </Button>
+              ))}
+            </Inline>
+            <Checkbox
+              label="显示终态列"
+              isChecked={showTerminal}
+              testId="board-show-terminal"
+              onChange={(e) => setShowTerminal(e.currentTarget.checked)}
+            />
+          </Inline>
+        }
+      />
 
-      <Box
-        style={{
-          flex: 1,
-          display: "flex",
-          gap: token("space.100"),
-          overflowX: "auto",
-          alignItems: "stretch",
-          marginTop: token("space.200"),
-        }}
-      >
+      <Box xcss={boardStyles} testId="board-columns">
         {loading ? (
-          <Spinner size="large" />
+          <Box xcss={loadingStyles} testId="board-loading">
+            <Spinner size="large" />
+          </Box>
         ) : columns.length === 0 ? (
           <EmptyState header="该类型暂无工作流列" />
         ) : (
@@ -183,6 +195,6 @@ export default function BoardPage() {
           ))
         )}
       </Box>
-    </Box>
+    </Page>
   );
 }

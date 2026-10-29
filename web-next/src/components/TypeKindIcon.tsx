@@ -8,14 +8,28 @@ const LABELS: Record<string, string> = {
   task: "任",
 };
 
-// Bold accent backgrounds (color.background.accent.*.subtle) carry white text;
-// 16px rounded letter chip, one accent per work-item kind.
-const COLORS: Record<string, string> = {
-  epic: token("color.background.accent.gray.subtle"),
-  story: token("color.background.accent.green.subtle"),
-  issue: token("color.background.accent.red.subtle"),
-  task: token("color.background.accent.blue.subtle"),
+// Subtle accent fill + the matching *bolder* accent text keeps AA contrast
+// (white text on subtle backgrounds does not pass).
+const COLORS: Record<string, { background: string; foreground: string }> = {
+  epic: {
+    background: token("color.background.accent.gray.subtle"),
+    foreground: token("color.text.accent.gray.bolder"),
+  },
+  story: {
+    background: token("color.background.accent.green.subtle"),
+    foreground: token("color.text.accent.green.bolder"),
+  },
+  issue: {
+    background: token("color.background.accent.red.subtle"),
+    foreground: token("color.text.accent.red.bolder"),
+  },
+  task: {
+    background: token("color.background.accent.blue.subtle"),
+    foreground: token("color.text.accent.blue.bolder"),
+  },
 };
+
+const FALLBACK = COLORS.epic;
 
 const chipStyle: CSSProperties = {
   display: "inline-flex",
@@ -26,16 +40,21 @@ const chipStyle: CSSProperties = {
   borderRadius: token("radius.small"),
   font: token("font.body.small"),
   fontWeight: token("font.weight.medium"),
-  color: token("color.text.inverse"),
   flexShrink: 0,
 };
 
 export default function TypeKindIcon({ kind }: { kind: string }) {
+  const colors = COLORS[kind] ?? FALLBACK;
   return (
     <span
-      style={{ ...chipStyle, backgroundColor: COLORS[kind] ?? token("color.background.accent.gray.subtle") }}
+      style={{
+        ...chipStyle,
+        backgroundColor: colors.background,
+        color: colors.foreground,
+      }}
       aria-label={`类型 ${kind}`}
       role="img"
+      data-testid={`type-icon-${kind}`}
     >
       {LABELS[kind] ?? kind}
     </span>

@@ -8,10 +8,11 @@ import ModalDialog, {
   ModalTitle,
   ModalTransition,
 } from "@atlaskit/modal-dialog";
-import Textfield from "@atlaskit/textfield";
-import TextArea from "@atlaskit/textarea";
 import { Stack } from "@atlaskit/primitives";
+import TextArea from "@atlaskit/textarea";
+import Textfield from "@atlaskit/textfield";
 
+import FormField from "../components/FormField";
 import { api, errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 import type { WorkItem } from "../types";
@@ -23,12 +24,6 @@ interface Props {
   onClose: () => void;
   onSaved: (item: WorkItem) => void;
 }
-
-const labelStyle = {
-  display: "block",
-  fontWeight: "var(--ds-font-weight-medium, 500)",
-  marginBottom: 4,
-} as const;
 
 export default function EditWorkItemDialog({ open, item, onClose, onSaved }: Props) {
   const notify = useNotify();
@@ -97,37 +92,30 @@ export default function EditWorkItemDialog({ open, item, onClose, onSaved }: Pro
   return (
     <ModalTransition>
       {open && item && (
-        <ModalDialog onClose={onClose} width="560px">
+        <ModalDialog onClose={onClose} width="560px" testId="work-item-edit-dialog">
           <ModalHeader>
             <ModalTitle>编辑工作项</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.150">
-              <Stack space="space.050">
-                <label htmlFor="wi-edit-title" style={labelStyle}>
-                  标题
-                </label>
+              <FormField label="标题" htmlFor="wi-edit-title">
                 <Textfield
                   id="wi-edit-title"
                   value={title}
+                  testId="work-item-edit-title"
                   onChange={(e) => setTitle(e.currentTarget.value)}
                 />
-              </Stack>
-              <Stack space="space.050">
-                <label htmlFor="wi-edit-desc" style={labelStyle}>
-                  描述（Markdown）
-                </label>
+              </FormField>
+              <FormField label="描述（Markdown）" htmlFor="wi-edit-desc">
                 <TextArea
                   id="wi-edit-desc"
                   value={description}
                   minimumRows={4}
+                  testId="work-item-edit-description"
                   onChange={(e) => setDescription(e.currentTarget.value)}
                 />
-              </Stack>
-              <Stack space="space.050">
-                <label htmlFor="wi-edit-priority" style={labelStyle}>
-                  优先级
-                </label>
+              </FormField>
+              <FormField label="优先级" htmlFor="wi-edit-priority">
                 <Textfield
                   id="wi-edit-priority"
                   type="number"
@@ -135,9 +123,10 @@ export default function EditWorkItemDialog({ open, item, onClose, onSaved }: Pro
                   max={99}
                   width={120}
                   value={priority}
+                  testId="work-item-edit-priority"
                   onChange={(e) => setPriority(Number(e.currentTarget.value))}
                 />
-              </Stack>
+              </FormField>
               <KindSpecificFields
                 kind={item.kind}
                 acceptance={acceptance}
@@ -150,10 +139,15 @@ export default function EditWorkItemDialog({ open, item, onClose, onSaved }: Pro
             </Stack>
           </ModalBody>
           <ModalFooter>
-            <Button appearance="subtle" onClick={onClose}>
+            <Button appearance="subtle" onClick={onClose} testId="work-item-edit-cancel">
               取消
             </Button>
-            <Button appearance="primary" isLoading={saving} onClick={save}>
+            <Button
+              appearance="primary"
+              isLoading={saving}
+              testId="work-item-edit-submit"
+              onClick={() => void save()}
+            >
               保存
             </Button>
           </ModalFooter>

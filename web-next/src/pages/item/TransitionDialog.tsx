@@ -26,6 +26,7 @@ export default function TransitionDialog({ to, onCancel, onConfirm }: Props) {
       {to && (
         <ModalDialog
           onClose={onCancel}
+          testId="transition-dialog"
           onCloseComplete={(_e) => {
             setReason("");
             setSaving(false);
@@ -40,19 +41,25 @@ export default function TransitionDialog({ to, onCancel, onConfirm }: Props) {
               value={reason}
               minimumRows={3}
               placeholder="流转原因（可留空）"
+              testId="transition-reason"
               onChange={(e) => setReason(e.currentTarget.value)}
             />
           </ModalBody>
           <ModalFooter>
-            <Button appearance="subtle" onClick={onCancel}>
+            <Button appearance="subtle" onClick={onCancel} testId="transition-cancel">
               取消
             </Button>
             <Button
               appearance="primary"
               isLoading={saving}
+              testId="transition-confirm"
               onClick={async () => {
                 setSaving(true);
-                await onConfirm(reason.trim() || null);
+                try {
+                  await onConfirm(reason.trim() || null);
+                } finally {
+                  setSaving(false);
+                }
               }}
             >
               流转

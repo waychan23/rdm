@@ -1,21 +1,17 @@
 import { useCallback, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 
 import Button from "@atlaskit/button/default/button";
+import Drawer from "@atlaskit/drawer";
+import EmptyState from "@atlaskit/empty-state";
 import Heading from "@atlaskit/heading";
 import Spinner from "@atlaskit/spinner";
-import Drawer from "@atlaskit/drawer";
 import Textfield from "@atlaskit/textfield";
-import ModalDialog, {
-  ModalBody,
-  ModalFooter,
-  ModalHeader,
-  ModalTitle,
-  ModalTransition,
-} from "@atlaskit/modal-dialog";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives";
-import { token } from "@atlaskit/tokens";
 
+import ConfirmDialog from "../components/ConfirmDialog";
+import { Page, PageHeader } from "../components/Page";
+import TextButton from "../components/TextButton";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
@@ -29,6 +25,8 @@ function sprintLozenge(status: string) {
   if (status === "CLOSED") return <StatusLozenge status="DONE" />;
   return <StatusLozenge status="TODO" />;
 }
+
+const centeredRow = { display: "flex", justifyContent: "center" } as const;
 
 export default function SprintsPage() {
   const { key: projectKey = "" } = useParams();
@@ -128,33 +126,65 @@ export default function SprintsPage() {
   };
 
   return (
-    <Box padding="space.300">
-      <Inline spread="space-between" alignBlock="center">
-        <Heading size="large">Sprint · {projectKey}</Heading>
-        <Button appearance="primary" onClick={() => setShowCreate(true)}>
-          新建 Sprint
-        </Button>
-      </Inline>
+    <Page testId="page-sprints">
+      <PageHeader
+        title={`Sprint · ${projectKey}`}
+        testId="sprints-header"
+        actions={
+          <Button
+            appearance="primary"
+            testId="sprint-create-button"
+            onClick={() => setShowCreate(true)}
+          >
+            新建 Sprint
+          </Button>
+        }
+      />
 
       {loading ? (
-        <Box padding="space.400">
+        <Box padding="space.400" style={centeredRow} testId="sprints-loading">
           <Spinner size="large" />
         </Box>
+      ) : (sprints ?? []).length === 0 ? (
+        <Box testId="sprints-empty">
+          <EmptyState
+            header="还没有 Sprint"
+            description="点击右上角「新建 Sprint」规划第一个迭代。"
+          />
+        </Box>
       ) : (
-        <table className="rdm-table" style={{ marginTop: token("space.200") }}>
+        <table className="rdm-table" aria-label="Sprint 列表" data-testid="sprint-table">
           <thead>
             <tr>
-              <th>名称</th>
-              <th style={{ width: 110 }}>状态</th>
-              <th style={{ width: 120 }}>开始</th>
-              <th style={{ width: 120 }}>结束</th>
+              <th scope="col">名称</th>
+              <th scope="col" className="col-status">
+                状态
+              </th>
+              <th scope="col" className="col-start">
+                开始
+              </th>
+              <th scope="col" className="col-end">
+                结束
+              </th>
             </tr>
           </thead>
           <tbody>
             {(sprints ?? []).map((s) => (
-              <tr key={s.id} onClick={() => openDetail(s.id)}>
+              <tr
+                key={s.id}
+                data-clickable="true"
+                tabIndex={0}
+                data-testid={`sprint-row-${s.id}`}
+                onClick={() => void openDetail(s.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    void openDetail(s.id);
+                  }
+                }}
+              >
                 <td>
-                  <TextButtonLink>{s.name}</TextButtonLink>
+                  <Text color="color.link">{s.name}</Text>
                 </td>
                 <td>
                   <span onClick={(e) => e.stopPropagation()}>{sprintLozenge(s.status)}</span>
@@ -202,128 +232,144 @@ export default function SprintsPage() {
         }}
         width="wide"
         label="Sprint 详情"
+        testId="sprint-detail-drawer"
       >
         {detail && (
-          <Stack space="space.200">
-            <Inline space="space.150" alignBlock="center">
-              {sprintLozenge(detail.status)}
-              <Heading size="large">{detail.name}</Heading>
-              {detail.status !== "CLOSED" && (
-                <Button spacing="compact" onClick={() => setShowEdit(true)}>
-                  编辑
-                </Button>
-              )}
-            </Inline>
-            {detail.goal_md && (
-              <Text size="small" color="color.text.subtlest">
-                {detail.goal_md}
-              </Text>
-            )}
-            <Inline space="space.075" shouldWrap>
-              {Object.entries(detail.status_counts).map(([s, n]) => (
-                <StatusLozenge key={s} status={s}>
-                  {`${s}: ${n}`}
-                </StatusLozenge>
-              ))}
-            </Inline>
-
-            <Text weight="semibold">工作项</Text>
-            <table className="rdm-table">
-              <thead>
-                <tr>
-                  <th style={{ width: 110 }}>ID</th>
-                  <th>标题</th>
-                  <th style={{ width: 120 }}>状态</th>
-                  <th style={{ width: 70 }}>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.items.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <Link to={`/projects/${projectKey}/items/${row.display_id}`}>
-                        {row.display_id}
-                      </Link>
-                    </td>
-                    <td>{row.title}</td>
-                    <td>
-                      <StatusLozenge status={row.status} />
-                    </td>
-                    <td>
-                      {detail.status !== "CLOSED" && (
-                        <button
-                          type="button"
-                          style={{
-                            background: "none",
-                            border: "none",
-                            color: token("color.text.danger"),
-                            cursor: "pointer",
-                            padding: 0,
-                          }}
-                          onClick={() => removeItem(row.display_id)}
-                        >
-                          移出
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {detail.status !== "CLOSED" && (
-              <Stack space="space.150">
-                <Inline space="space.100">
-                  <Textfield
-                    placeholder="工作项 display_id（如 DEMO-3），回车加入"
-                    value={itemRef}
-                    onChange={(e) => setItemRef(e.currentTarget.value)}
-                    onKeyDown={(e) => e.key === "Enter" && void addItem()}
-                  />
-                  <Button isLoading={busy} onClick={() => void addItem()}>
-                    加入
+          <Box padding="space.300" testId="sprint-detail">
+            <Stack space="space.200">
+              <Inline space="space.150" alignBlock="center">
+                {sprintLozenge(detail.status)}
+                <Heading size="medium">{detail.name}</Heading>
+                {detail.status !== "CLOSED" && (
+                  <Button
+                    spacing="compact"
+                    testId="sprint-detail-edit"
+                    onClick={() => setShowEdit(true)}
+                  >
+                    编辑
                   </Button>
-                </Inline>
-                <Inline space="space.100">
-                  {detail.status === "PLANNED" && (
-                    <Button appearance="primary" onClick={() => void startSprint()}>
-                      启动
+                )}
+              </Inline>
+              {detail.goal_md && (
+                <Text size="small" color="color.text.subtlest">
+                  {detail.goal_md}
+                </Text>
+              )}
+              <Inline space="space.075" shouldWrap>
+                {Object.entries(detail.status_counts).map(([s, n]) => (
+                  <StatusLozenge key={s} status={s}>
+                    {`${s}: ${n}`}
+                  </StatusLozenge>
+                ))}
+              </Inline>
+
+              <Heading size="small">工作项</Heading>
+              {detail.items.length === 0 ? (
+                <Text size="small" color="color.text.subtlest">
+                  该 Sprint 还没有工作项。
+                </Text>
+              ) : (
+                <table
+                  className="rdm-table"
+                  aria-label="Sprint 工作项"
+                  data-testid="sprint-detail-items"
+                >
+                  <thead>
+                    <tr>
+                      <th scope="col" className="col-id">
+                        ID
+                      </th>
+                      <th scope="col">标题</th>
+                      <th scope="col" className="col-status">
+                        状态
+                      </th>
+                      <th scope="col" className="col-count">
+                        操作
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detail.items.map((row) => (
+                      <tr key={row.id} data-testid={`sprint-item-row-${row.display_id}`}>
+                        <td>
+                          <Text color="color.link">{row.display_id}</Text>
+                        </td>
+                        <td>{row.title}</td>
+                        <td>
+                          <StatusLozenge status={row.status} />
+                        </td>
+                        <td>
+                          {detail.status !== "CLOSED" && (
+                            <TextButton
+                              danger
+                              data-testid={`sprint-item-remove-${row.display_id}`}
+                              onClick={() => void removeItem(row.display_id)}
+                            >
+                              移出
+                            </TextButton>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {detail.status !== "CLOSED" && (
+                <Stack space="space.150">
+                  <Inline space="space.100">
+                    <Textfield
+                      placeholder="工作项 display_id（如 DEMO-3），回车加入"
+                      value={itemRef}
+                      testId="sprint-item-input"
+                      onChange={(e) => setItemRef(e.currentTarget.value)}
+                      onKeyDown={(e) => e.key === "Enter" && void addItem()}
+                    />
+                    <Button
+                      isLoading={busy}
+                      testId="sprint-item-add"
+                      onClick={() => void addItem()}
+                    >
+                      加入
                     </Button>
-                  )}
-                  {detail.status === "ACTIVE" && (
-                    <Button appearance="warning" onClick={() => setConfirmClose(true)}>
-                      关闭
-                    </Button>
-                  )}
-                </Inline>
-              </Stack>
-            )}
-          </Stack>
+                  </Inline>
+                  <Inline space="space.100">
+                    {detail.status === "PLANNED" && (
+                      <Button
+                        appearance="primary"
+                        testId="sprint-start"
+                        onClick={() => void startSprint()}
+                      >
+                        启动
+                      </Button>
+                    )}
+                    {detail.status === "ACTIVE" && (
+                      <Button
+                        appearance="warning"
+                        testId="sprint-close"
+                        onClick={() => setConfirmClose(true)}
+                      >
+                        关闭
+                      </Button>
+                    )}
+                  </Inline>
+                </Stack>
+              )}
+            </Stack>
+          </Box>
         )}
       </Drawer>
 
-      <ModalTransition>
-        {confirmClose && (
-          <ModalDialog onClose={() => setConfirmClose(false)} width="420px">
-            <ModalHeader>
-              <ModalTitle>关闭 Sprint</ModalTitle>
-            </ModalHeader>
-            <ModalBody>关闭后不能再加项；未终态项需先移出。确认关闭？</ModalBody>
-            <ModalFooter>
-              <Button appearance="subtle" onClick={() => setConfirmClose(false)}>
-                取消
-              </Button>
-              <Button appearance="primary" onClick={() => void doClose()}>
-                确认关闭
-              </Button>
-            </ModalFooter>
-          </ModalDialog>
-        )}
-      </ModalTransition>
-    </Box>
+      <ConfirmDialog
+        open={confirmClose}
+        title="关闭 Sprint"
+        confirmLabel="确认关闭"
+        testId="sprint-close-dialog"
+        onClose={() => setConfirmClose(false)}
+        onConfirm={() => void doClose()}
+      >
+        关闭后不能再加项；未终态项需先移出。确认关闭？
+      </ConfirmDialog>
+    </Page>
   );
-}
-
-function TextButtonLink({ children }: { children: React.ReactNode }) {
-  return <span style={{ color: token("color.link"), cursor: "pointer" }}>{children}</span>;
 }

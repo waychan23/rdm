@@ -2,11 +2,13 @@ import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import Button from "@atlaskit/button/default/button";
-import Heading from "@atlaskit/heading";
+import EmptyState from "@atlaskit/empty-state";
 import Lozenge from "@atlaskit/lozenge";
 import Spinner from "@atlaskit/spinner";
-import { Box, Inline, Text } from "@atlaskit/primitives";
+import { Box, Inline, Text, xcss } from "@atlaskit/primitives";
 
+import ConfirmDialog from "../components/ConfirmDialog";
+import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
@@ -14,9 +16,15 @@ import type { OrgUser, ProjectMemberRow } from "../types";
 import { AddMemberDialog, MemberEditDialog } from "../members/memberForms";
 import "../styles/table.css";
 
+const centeredStyles = xcss({
+  display: "flex",
+  justifyContent: "center",
+  padding: "space.400",
+});
+
 function AgentRow({ agent }: { agent: NonNullable<ProjectMemberRow["agents"]>[number] }) {
   return (
-    <tr className="rdm-table-child" style={{ cursor: "default" }}>
+    <tr className="rdm-table-child" data-testid={`member-agent-row-${agent.user.id}`}>
       <td>
         <Inline space="space.100" alignBlock="center">
           <span className="rdm-indent" aria-hidden>
@@ -55,6 +63,7 @@ export default function MembersPage() {
 
   const [showAdd, setShowAdd] = useState(false);
   const [editMember, setEditMember] = useState<ProjectMemberRow | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<ProjectMemberRow | null>(null);
   const [nonce, setNonce] = useState(0);
 
   const { data: members, loading } = useAsync<ProjectMemberRow[]>(
@@ -93,43 +102,63 @@ export default function MembersPage() {
     }
   };
 
-  const remove = async (member: ProjectMemberRow) => {
-    const extra =
-      member.agents && member.agents.length > 0
-        ? `其 ${member.agents.length} 个 agent 也会随同移出项目。`
-        : "";
-    if (!window.confirm(`确定把 ${member.name} 移出项目？${extra}`)) return;
+  const remove = async () => {
+    if (!removeTarget) return;
     try {
-      await api.del(`/projects/${projectKey}/members/${member.id}`);
+      await api.del(`/projects/${projectKey}/members/${removeTarget.id}`);
+      setRemoveTarget(null);
       reload();
     } catch (e) {
       notify.error("移除失败", errorCause(e)?.message);
     }
   };
 
+  const removeExtra =
+    removeTarget?.agents && removeTarget.agents.length > 0
+      ? `其 ${removeTarget.agents.length} 个 agent 也会随同移出项目。`
+      : "";
+
   return (
-    <Box padding="space.300">
-      <Inline spread="space-between" alignBlock="center">
-        <Heading size="large">成员 · {projectKey}</Heading>
-        <Button appearance="primary" onClick={() => setShowAdd(true)}>
-          添加成员
-        </Button>
-      </Inline>
+    <Page testId="page-members">
+      <PageHeader
+        title={`成员 · ${projectKey}`}
+        testId="members-header"
+        actions={
+          <Button appearance="primary" testId="member-add-button" onClick={() => setShowAdd(true)}>
+            添加成员
+          </Button>
+        }
+      />
 
       {loading ? (
-        <Box padding="space.400">
+        <Box xcss={centeredStyles} testId="members-loading">
           <Spinner size="large" />
         </Box>
+      ) : (members ?? []).length === 0 ? (
+        <Box testId="members-empty">
+          <EmptyState
+            header="项目还没有成员"
+            description="点击右上角「添加成员」把组织内的用户加入项目。"
+          />
+        </Box>
       ) : (
-        <table className="rdm-table" style={{ marginTop: 16 }}>
+        <table className="rdm-table" aria-label="项目成员" data-testid="member-table">
           <thead>
             <tr>
-              <th style={{ width: 220 }}>名称</th>
-              <th style={{ width: 90 }}>类型</th>
-              <th>项目角色</th>
-              <th>Webhook</th>
-              <th style={{ width: 70 }}>活跃</th>
-              <th style={{ width: 160 }}>操作</th>
+              <th scope="col" className="col-name">
+                名称
+              </th>
+              <th scope="col" className="col-type">
+                类型
+              </th>
+              <th scope="col">项目角色</th>
+              <th scope="col">Webhook</th>
+              <th scope="col" className="col-active">
+                活跃
+              </th>
+              <th scope="col" className="col-actions">
+                操作
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -138,7 +167,7 @@ export default function MembersPage() {
                 key={m.id}
                 member={m}
                 onEdit={() => setEditMember(m)}
-                onRemove={() => remove(m)}
+                onRemove={() => setRemoveTarget(m)}
               />
             ))}
           </tbody>
@@ -157,7 +186,18 @@ export default function MembersPage() {
         onClose={() => setEditMember(null)}
         onSave={saveRoles}
       />
-    </Box>
+      <ConfirmDialog
+        open={removeTarget !== null}
+        title="移出项目"
+        danger
+        confirmLabel="移出"
+        testId="member-remove-dialog"
+        onClose={() => setRemoveTarget(null)}
+        onConfirm={() => void remove()}
+      >
+        确定把 {removeTarget?.name} 移出项目？{removeExtra}
+      </ConfirmDialog>
+    </Page>
   );
 }
 
@@ -172,7 +212,7 @@ function MemberGroup({
 }) {
   return (
     <>
-      <tr style={{ cursor: "default" }}>
+      <tr data-testid={`member-row-${member.id}`}>
         <td>
           <Inline space="space.100" alignBlock="center">
             <Text weight="medium">{member.name}</Text>
@@ -210,12 +250,17 @@ function MemberGroup({
             {member.is_active ? "是" : "否"}
           </Lozenge>
         </td>
-        <td onClick={(e) => e.stopPropagation()}>
+        <td>
           <Inline space="space.100">
-            <Button spacing="compact" onClick={onEdit}>
+            <Button spacing="compact" testId={`member-edit-${member.id}`} onClick={onEdit}>
               角色
             </Button>
-            <Button spacing="compact" appearance="subtle" onClick={onRemove}>
+            <Button
+              spacing="compact"
+              appearance="danger"
+              testId={`member-remove-${member.id}`}
+              onClick={onRemove}
+            >
               移出
             </Button>
           </Inline>

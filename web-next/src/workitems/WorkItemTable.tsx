@@ -27,20 +27,45 @@ export default function WorkItemTable({
 }: Props) {
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-      <table className="rdm-table">
+    <div
+      style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
+      data-testid="work-item-table-container"
+    >
+      <table className="rdm-table" aria-label="工作项列表" data-testid="work-item-table">
         <thead>
           <tr>
-            <th className="col-title">标题</th>
-            <th style={{ width: 140 }}>状态</th>
-            <th style={{ width: 110 }}>优先级</th>
-            <th style={{ width: 180 }}>负责人</th>
-            <th style={{ width: 160 }}>创建时间</th>
+            <th scope="col" className="col-title">
+              标题
+            </th>
+            <th scope="col" className="col-status">
+              状态
+            </th>
+            <th scope="col" className="col-priority">
+              优先级
+            </th>
+            <th scope="col" className="col-person">
+              负责人
+            </th>
+            <th scope="col" className="col-date">
+              创建时间
+            </th>
           </tr>
         </thead>
         <tbody>
           {items.map((row) => (
-            <tr key={row.id} onClick={() => onOpen(row)}>
+            <tr
+              key={row.id}
+              data-clickable="true"
+              tabIndex={0}
+              data-testid={`work-item-row-${row.display_id}`}
+              onClick={() => onOpen(row)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onOpen(row);
+                }
+              }}
+            >
               <td>
                 <span className="cell-title">
                   <TypeKindIcon kind={row.kind} />
@@ -64,8 +89,8 @@ export default function WorkItemTable({
           ))}
         </tbody>
       </table>
-      <div className="rdm-pager">
-        <Text size="small" color="color.text.subtlest">
+      <div className="rdm-pager" data-testid="work-item-pager">
+        <Text size="small" color="color.text.subtlest" testId="work-item-total">
           共 {total} 条
         </Text>
         <Pagination

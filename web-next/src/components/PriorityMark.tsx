@@ -4,7 +4,7 @@ import { Inline, Text } from "@atlaskit/primitives";
 export default function PriorityMark({ priority }: { priority: number | null | undefined }) {
   const unset = priority == null;
   return (
-    <Inline space="space.100" alignBlock="center">
+    <Inline space="space.100" alignBlock="center" testId="priority-mark">
       <span
         style={{
           width: token("space.100"),

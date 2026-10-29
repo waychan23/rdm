@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+import Button from "@atlaskit/button/default/button";
 import Heading from "@atlaskit/heading";
 import Spinner from "@atlaskit/spinner";
 import { Box, Stack, Text, xcss } from "@atlaskit/primitives";
@@ -13,6 +14,7 @@ const wrapStyles = xcss({
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+  backgroundColor: "elevation.surface.sunken",
 });
 
 export default function AuthCallbackPage() {
@@ -44,24 +46,20 @@ export default function AuthCallbackPage() {
   }, [params, navigate]);
 
   return (
-    <Box xcss={wrapStyles}>
+    <Box xcss={wrapStyles} testId="page-auth-callback">
       <Stack space="space.200" alignInline="center">
         {error ? (
-          <>
-            <Heading size="large">登录未完成</Heading>
+          <Stack space="space.150" alignInline="center">
+            <Heading size="large" as="h1">登录未完成</Heading>
             <Text>{error}</Text>
-            <Text>
-              <a
-                href="/login"
-                onClick={(e) => {
-                  e.preventDefault();
-                  void beginLogin("/projects");
-                }}
-              >
-                重新登录
-              </a>
-            </Text>
-          </>
+            <Button
+              appearance="primary"
+              testId="auth-callback-retry"
+              onClick={() => void beginLogin("/projects")}
+            >
+              重新登录
+            </Button>
+          </Stack>
         ) : (
           <>
             <Spinner size="large" />

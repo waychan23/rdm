@@ -2,43 +2,118 @@
  * Compact, borderless data table (ADS tokens only): 32px header band,
  * 40px rows, no zebra/grid lines, hover row background. Semantic <table>.
  * Runtime CSS vars for color use the short legacy names emitted by
- * setGlobalTheme (--ds-background-*/--ds-text-*/--ds-border/--ds-link).
+ * setGlobalTheme (--ds-background-… / --ds-text-… / --ds-border / --ds-link).
  */
 .rdm-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+  line-height: 20px;
   color: var(--ds-text);
 }
 
 .rdm-table thead th {
   height: 32px;
-  text-align: left;
   padding: 0 var(--ds-space-200, 16px);
   background: var(--ds-surface-sunken, #f8f8f8);
   color: var(--ds-text-subtlest);
   font-size: 12px;
+  line-height: 16px;
   font-weight: var(--ds-font-weight-medium, 500);
+  text-align: left;
+  /* Explicit: th defaults to baseline in some UA stylesheets, which makes the
+     label sit low in the 32px band. */
+  vertical-align: middle;
   white-space: nowrap;
 }
 
 .rdm-table tbody td {
   height: 40px;
   padding: 0 var(--ds-space-200, 16px);
+  vertical-align: middle;
   border-bottom: none;
   white-space: nowrap;
 }
 
-.rdm-table tbody tr {
+/* Only interactive rows get pointer/hover/focus affordances. */
+.rdm-table tbody tr[data-clickable="true"] {
   cursor: pointer;
 }
 
-.rdm-table tbody tr:hover {
+.rdm-table tbody tr[data-clickable="true"]:hover {
   background: var(--ds-background-neutral-subtle-hovered);
 }
 
+.rdm-table tbody tr[data-clickable="true"]:focus-visible {
+  outline: 2px solid var(--ds-border-focused);
+  outline-offset: -2px;
+}
+
+/* Column widths used by the tables (kept here so pages stay layout-free). */
 .rdm-table .col-title {
   min-width: 280px;
+}
+
+.rdm-table .col-status {
+  width: 120px;
+}
+
+.rdm-table .col-priority {
+  width: 110px;
+}
+
+.rdm-table .col-person {
+  width: 180px;
+}
+
+.rdm-table .col-date {
+  width: 160px;
+}
+
+.rdm-table .col-name {
+  width: 220px;
+}
+
+.rdm-table .col-type {
+  width: 100px;
+}
+
+.rdm-table .col-id {
+  width: 120px;
+}
+
+.rdm-table .col-start,
+.rdm-table .col-end {
+  width: 120px;
+}
+
+.rdm-table .col-active {
+  width: 90px;
+}
+
+.rdm-table .col-branch {
+  width: 120px;
+}
+
+.rdm-table .col-label {
+  width: 150px;
+}
+
+.rdm-table .col-created,
+.rdm-table .col-expires {
+  width: 120px;
+}
+
+.rdm-table .col-count {
+  width: 70px;
+}
+
+.rdm-table .col-actions {
+  width: 200px;
+}
+
+.rdm-table .col-actions-wide {
+  width: 340px;
 }
 
 .rdm-table .cell-title {

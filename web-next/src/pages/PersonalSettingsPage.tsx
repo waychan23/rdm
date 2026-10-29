@@ -10,12 +10,13 @@ import ModalDialog, {
   ModalTitle,
   ModalTransition,
 } from "@atlaskit/modal-dialog";
-import Select from "@atlaskit/select";
 import SectionMessage from "@atlaskit/section-message";
-import Spinner from "@atlaskit/spinner";
+import Select from "@atlaskit/select";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text, xcss } from "@atlaskit/primitives";
 
+import FormField from "../components/FormField";
+import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
@@ -23,7 +24,6 @@ import { beginLogin } from "../lib/oauth";
 import type { OrgUser, Token } from "../types";
 import "../styles/table.css";
 
-const sectionStyles = xcss({ marginTop: "space.400" });
 const formStyles = xcss({ maxWidth: "520px" });
 
 const ACCEPT_KINDS = [
@@ -36,6 +36,12 @@ const WEBHOOK_FORMATS = [
   { label: "dingtalk", value: "dingtalk" },
   { label: "feishu", value: "feishu" },
 ];
+
+const emptyHint = (
+  <Text size="small" color="color.text.subtlest">
+    暂无记录
+  </Text>
+);
 
 export default function PersonalSettingsPage() {
   const notify = useNotify();
@@ -174,34 +180,39 @@ export default function PersonalSettingsPage() {
   };
 
   return (
-    <Box padding="space.300">
-      <Heading size="large">我的设置</Heading>
+    <Page testId="page-personal-settings">
+      <PageHeader title="我的设置" testId="personal-settings-header" />
 
-      <Box xcss={sectionStyles}>
+      <Box testId="personal-password-section">
         <Stack space="space.150" xcss={formStyles}>
-          <Text weight="semibold">修改密码</Text>
-          <Stack space="space.050">
-            <label htmlFor="old-pw">原密码</label>
+          <Heading size="small">修改密码</Heading>
+          <FormField label="原密码" htmlFor="old-pw">
             <Textfield
               id="old-pw"
               type="password"
               autoComplete="current-password"
               value={oldPw}
+              testId="personal-old-password"
               onChange={(e) => setOldPw(e.currentTarget.value)}
             />
-          </Stack>
-          <Stack space="space.050">
-            <label htmlFor="new-pw">新密码（8–128 位）</label>
+          </FormField>
+          <FormField label="新密码（8–128 位）" htmlFor="new-pw">
             <Textfield
               id="new-pw"
               type="password"
               autoComplete="new-password"
               value={newPw}
+              testId="personal-new-password"
               onChange={(e) => setNewPw(e.currentTarget.value)}
             />
-          </Stack>
+          </FormField>
           <Inline>
-            <Button appearance="primary" onClick={changePassword} isDisabled={!oldPw || !newPw}>
+            <Button
+              appearance="primary"
+              testId="personal-change-password"
+              onClick={changePassword}
+              isDisabled={!oldPw || !newPw}
+            >
               修改密码
             </Button>
           </Inline>
@@ -211,116 +222,157 @@ export default function PersonalSettingsPage() {
         </Stack>
       </Box>
 
-      <Box xcss={sectionStyles}>
-        <Inline spread="space-between" alignBlock="center">
-          <Text weight="semibold">访问令牌（PAT）</Text>
-          <Button
-            onClick={() => {
-              setIssued("");
-              setTokenOpen(true);
-            }}
-          >
-            创建令牌
-          </Button>
-        </Inline>
-        <table className="rdm-table" style={{ marginTop: 8 }}>
-          <thead>
-            <tr>
-              <th style={{ width: 150 }}>标签</th>
-              <th style={{ width: 150 }}>使用身份</th>
-              <th style={{ width: 120 }}>创建</th>
-              <th style={{ width: 120 }}>过期</th>
-              <th style={{ width: 90 }}>状态</th>
-              <th style={{ width: 90 }}>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(tokens ?? []).map((t) => (
-              <tr key={t.id} style={{ cursor: "default" }}>
-                <td className="cell-meta">{t.label ?? "—"}</td>
-                <td className="cell-meta">
-                  {t.act_as_user_id
-                    ? `agent ${agents?.find((a) => a.id === t.act_as_user_id)?.name ?? ""}`
-                    : "本人"}
-                </td>
-                <td className="cell-meta">{t.created_at.slice(0, 10)}</td>
-                <td className="cell-meta">{t.expires_at ? t.expires_at.slice(0, 10) : "永久"}</td>
-                <td>
-                  <Lozenge appearance={t.is_valid ? "success" : "default"}>
-                    {t.is_valid ? "有效" : "已吊销"}
-                  </Lozenge>
-                </td>
-                <td>
-                  {t.is_valid && (
-                    <Button
-                      spacing="compact"
-                      appearance="danger"
-                      onClick={() => void revokeToken(t.id)}
-                    >
-                      吊销
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <Box testId="personal-tokens-section">
+        <Stack space="space.200">
+          <Inline spread="space-between" alignBlock="center">
+            <Heading size="small">访问令牌（PAT）</Heading>
+            <Button
+              testId="personal-token-create-button"
+              onClick={() => {
+                setIssued("");
+                setTokenOpen(true);
+              }}
+            >
+              创建令牌
+            </Button>
+          </Inline>
+          {(tokens ?? []).length === 0 ? (
+            emptyHint
+          ) : (
+            <table className="rdm-table" aria-label="访问令牌" data-testid="personal-token-table">
+              <thead>
+                <tr>
+                  <th scope="col" className="col-label">
+                    标签
+                  </th>
+                  <th scope="col" className="col-label">
+                    使用身份
+                  </th>
+                  <th scope="col" className="col-created">
+                    创建
+                  </th>
+                  <th scope="col" className="col-expires">
+                    过期
+                  </th>
+                  <th scope="col" className="col-active">
+                    状态
+                  </th>
+                  <th scope="col" className="col-active">
+                    操作
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {(tokens ?? []).map((t) => (
+                  <tr key={t.id} data-testid={`personal-token-row-${t.id}`}>
+                    <td className="cell-meta">{t.label ?? "—"}</td>
+                    <td className="cell-meta">
+                      {t.act_as_user_id
+                        ? `agent ${agents?.find((a) => a.id === t.act_as_user_id)?.name ?? ""}`
+                        : "本人"}
+                    </td>
+                    <td className="cell-meta">{t.created_at.slice(0, 10)}</td>
+                    <td className="cell-meta">
+                      {t.expires_at ? t.expires_at.slice(0, 10) : "永久"}
+                    </td>
+                    <td>
+                      <Lozenge appearance={t.is_valid ? "success" : "default"}>
+                        {t.is_valid ? "有效" : "已吊销"}
+                      </Lozenge>
+                    </td>
+                    <td>
+                      {t.is_valid && (
+                        <Button
+                          spacing="compact"
+                          appearance="danger"
+                          testId={`personal-token-revoke-${t.id}`}
+                          onClick={() => void revokeToken(t.id)}
+                        >
+                          吊销
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Stack>
       </Box>
 
-      <Box xcss={sectionStyles}>
-        <Inline spread="space-between" alignBlock="center">
-          <Stack space="space.050">
-            <Text weight="semibold">Agent 账号</Text>
-            <Text size="small" color="color.text.subtlest">
-              你创建的 agent 会自动加入你所在的项目；成员管理中它们折叠在你名下。
-            </Text>
-          </Stack>
-          <Button onClick={() => setAgentOpen(true)}>创建 Agent</Button>
-        </Inline>
-        <table className="rdm-table" style={{ marginTop: 8 }}>
-          <thead>
-            <tr>
-              <th style={{ width: 180 }}>名称</th>
-              <th>可接任务类型</th>
-              <th>Webhook</th>
-              <th style={{ width: 90 }}>状态</th>
-              <th style={{ width: 160 }}>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(agents ?? []).map((a) => (
-              <tr key={a.id} style={{ cursor: "default" }}>
-                <td>
-                  <Inline space="space.100" alignBlock="center">
-                    <Text>{a.name}</Text>
-                    <Lozenge appearance="warning">agent</Lozenge>
-                  </Inline>
-                </td>
-                <td className="cell-meta">{(a.accept_kinds ?? []).join(", ") || "—"}</td>
-                <td className="cell-meta">{a.notify_webhook ?? "—"}</td>
-                <td>
-                  <Lozenge appearance={a.is_active ? "success" : "default"}>
-                    {a.is_active ? "启用" : "停用"}
-                  </Lozenge>
-                </td>
-                <td>
-                  <Inline space="space.100">
-                    <Button spacing="compact" onClick={() => setEditAgent(a)}>
-                      通知
-                    </Button>
-                    <Button
-                      spacing="compact"
-                      appearance={a.is_active ? "danger" : "default"}
-                      onClick={() => void toggleAgent(a)}
-                    >
-                      {a.is_active ? "停用" : "启用"}
-                    </Button>
-                  </Inline>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <Box testId="personal-agents-section">
+        <Stack space="space.200">
+          <Inline spread="space-between" alignBlock="center">
+            <Stack space="space.050">
+              <Heading size="small">Agent 账号</Heading>
+              <Text size="small" color="color.text.subtlest">
+                你创建的 agent 会自动加入你所在的项目；成员管理中它们折叠在你名下。
+              </Text>
+            </Stack>
+            <Button testId="personal-agent-create-button" onClick={() => setAgentOpen(true)}>
+              创建 Agent
+            </Button>
+          </Inline>
+          {(agents ?? []).length === 0 ? (
+            emptyHint
+          ) : (
+            <table className="rdm-table" aria-label="Agent 账号" data-testid="personal-agent-table">
+              <thead>
+                <tr>
+                  <th scope="col" className="col-person">
+                    名称
+                  </th>
+                  <th scope="col">可接任务类型</th>
+                  <th scope="col">Webhook</th>
+                  <th scope="col" className="col-active">
+                    状态
+                  </th>
+                  <th scope="col" className="col-date">
+                    操作
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {(agents ?? []).map((a) => (
+                  <tr key={a.id} data-testid={`personal-agent-row-${a.id}`}>
+                    <td>
+                      <Inline space="space.100" alignBlock="center">
+                        <Text>{a.name}</Text>
+                        <Lozenge appearance="warning">agent</Lozenge>
+                      </Inline>
+                    </td>
+                    <td className="cell-meta">{(a.accept_kinds ?? []).join(", ") || "—"}</td>
+                    <td className="cell-meta">{a.notify_webhook ?? "—"}</td>
+                    <td>
+                      <Lozenge appearance={a.is_active ? "success" : "default"}>
+                        {a.is_active ? "启用" : "停用"}
+                      </Lozenge>
+                    </td>
+                    <td>
+                      <Inline space="space.100">
+                        <Button
+                          spacing="compact"
+                          testId={`personal-agent-notify-${a.id}`}
+                          onClick={() => setEditAgent(a)}
+                        >
+                          通知
+                        </Button>
+                        <Button
+                          spacing="compact"
+                          appearance={a.is_active ? "danger" : "default"}
+                          testId={`personal-agent-toggle-${a.id}`}
+                          onClick={() => void toggleAgent(a)}
+                        >
+                          {a.is_active ? "停用" : "启用"}
+                        </Button>
+                      </Inline>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Stack>
       </Box>
 
       <ModalTransition>
@@ -329,33 +381,31 @@ export default function PersonalSettingsPage() {
             onClose={() => setTokenOpen(false)}
             width="520px"
             label="创建访问令牌"
+            testId="personal-token-dialog"
           >
             <ModalHeader>
               <ModalTitle>创建访问令牌</ModalTitle>
             </ModalHeader>
             <ModalBody>
               <Stack space="space.150">
-                <Stack space="space.050">
-                  <label htmlFor="token-label">标签</label>
+                <FormField label="标签" htmlFor="token-label">
                   <Textfield
                     id="token-label"
                     value={tokenLabel}
+                    testId="personal-token-label"
                     onChange={(e) => setTokenLabel(e.currentTarget.value)}
                   />
-                </Stack>
-                <Stack space="space.050">
-                  <label htmlFor="token-days">有效期（天，留空=永久）</label>
+                </FormField>
+                <FormField label="有效期（天，留空=永久）" htmlFor="token-days">
                   <Textfield
                     id="token-days"
                     type="number"
                     value={tokenDays}
+                    testId="personal-token-days"
                     onChange={(e) => setTokenDays(e.currentTarget.value)}
                   />
-                </Stack>
-                <Stack space="space.050">
-                  <Text size="small" weight="medium">
-                    使用身份
-                  </Text>
+                </FormField>
+                <FormField label="使用身份">
                   <Select
                     inputId="token-act-as"
                     placeholder="本人"
@@ -376,7 +426,7 @@ export default function PersonalSettingsPage() {
                     }
                     isClearable
                   />
-                </Stack>
+                </FormField>
                 {issued && (
                   <SectionMessage appearance="success" title="令牌只显示一次">
                     <code>{issued}</code>
@@ -385,10 +435,19 @@ export default function PersonalSettingsPage() {
               </Stack>
             </ModalBody>
             <ModalFooter>
-              <Button appearance="subtle" onClick={() => setTokenOpen(false)}>
+              <Button
+                appearance="subtle"
+                testId="personal-token-dialog-close"
+                onClick={() => setTokenOpen(false)}
+              >
                 关闭
               </Button>
-              <Button appearance="primary" onClick={createToken} isLoading={savingToken}>
+              <Button
+                appearance="primary"
+                onClick={createToken}
+                isLoading={savingToken}
+                testId="personal-token-submit"
+              >
                 创建
               </Button>
             </ModalFooter>
@@ -398,24 +457,26 @@ export default function PersonalSettingsPage() {
 
       <ModalTransition>
         {agentOpen && (
-          <ModalDialog onClose={() => setAgentOpen(false)} width="520px" label="创建 Agent">
+          <ModalDialog
+            onClose={() => setAgentOpen(false)}
+            width="520px"
+            label="创建 Agent"
+            testId="personal-agent-dialog"
+          >
             <ModalHeader>
               <ModalTitle>创建 Agent</ModalTitle>
             </ModalHeader>
             <ModalBody>
               <Stack space="space.150">
-                <Stack space="space.050">
-                  <label htmlFor="agent-name">名称</label>
+                <FormField label="名称" htmlFor="agent-name">
                   <Textfield
                     id="agent-name"
                     value={agentForm.name}
+                    testId="personal-agent-name"
                     onChange={(e) => setAgentForm({ ...agentForm, name: e.currentTarget.value })}
                   />
-                </Stack>
-                <Stack space="space.050">
-                  <Text size="small" weight="medium">
-                    可接任务类型
-                  </Text>
+                </FormField>
+                <FormField label="可接任务类型">
                   <Select
                     inputId="agent-kinds"
                     isMulti
@@ -428,21 +489,18 @@ export default function PersonalSettingsPage() {
                       })
                     }
                   />
-                </Stack>
-                <Stack space="space.050">
-                  <label htmlFor="agent-hook">Webhook URL（可选）</label>
+                </FormField>
+                <FormField label="Webhook URL（可选）" htmlFor="agent-hook">
                   <Textfield
                     id="agent-hook"
                     value={agentForm.notify_webhook}
+                    testId="personal-agent-hook"
                     onChange={(e) =>
                       setAgentForm({ ...agentForm, notify_webhook: e.currentTarget.value })
                     }
                   />
-                </Stack>
-                <Stack space="space.050">
-                  <Text size="small" weight="medium">
-                    Webhook 格式
-                  </Text>
+                </FormField>
+                <FormField label="Webhook 格式">
                   <Select
                     inputId="agent-fmt"
                     options={WEBHOOK_FORMATS}
@@ -455,11 +513,15 @@ export default function PersonalSettingsPage() {
                       })
                     }
                   />
-                </Stack>
+                </FormField>
               </Stack>
             </ModalBody>
             <ModalFooter>
-              <Button appearance="subtle" onClick={() => setAgentOpen(false)}>
+              <Button
+                appearance="subtle"
+                testId="personal-agent-cancel"
+                onClick={() => setAgentOpen(false)}
+              >
                 取消
               </Button>
               <Button
@@ -467,6 +529,7 @@ export default function PersonalSettingsPage() {
                 onClick={createAgent}
                 isLoading={savingAgent}
                 isDisabled={!agentForm.name.trim()}
+                testId="personal-agent-submit"
               >
                 创建
               </Button>
@@ -477,24 +540,25 @@ export default function PersonalSettingsPage() {
 
       <ModalTransition>
         {editAgent && (
-          <ModalDialog onClose={() => setEditAgent(null)} label={`通知设置 · ${editAgent.name}`}>
+          <ModalDialog
+            onClose={() => setEditAgent(null)}
+            label={`通知设置 · ${editAgent.name}`}
+            testId="personal-agent-notify-dialog"
+          >
             <ModalHeader>
               <ModalTitle>通知设置 · {editAgent.name}</ModalTitle>
             </ModalHeader>
             <ModalBody>
               <Stack space="space.150">
-                <Stack space="space.050">
-                  <label htmlFor="edit-hook">Webhook URL</label>
+                <FormField label="Webhook URL" htmlFor="edit-hook">
                   <Textfield
                     id="edit-hook"
                     value={editHook}
+                    testId="personal-agent-notify-hook"
                     onChange={(e) => setEditHook(e.currentTarget.value)}
                   />
-                </Stack>
-                <Stack space="space.050">
-                  <Text size="small" weight="medium">
-                    格式
-                  </Text>
+                </FormField>
+                <FormField label="格式">
                   <Select
                     inputId="edit-fmt"
                     options={WEBHOOK_FORMATS}
@@ -503,20 +567,28 @@ export default function PersonalSettingsPage() {
                       setEditFmt((opt as { value: string } | null)?.value ?? "generic")
                     }
                   />
-                </Stack>
+                </FormField>
               </Stack>
             </ModalBody>
             <ModalFooter>
-              <Button appearance="subtle" onClick={() => setEditAgent(null)}>
+              <Button
+                appearance="subtle"
+                testId="personal-agent-notify-cancel"
+                onClick={() => setEditAgent(null)}
+              >
                 取消
               </Button>
-              <Button appearance="primary" onClick={saveAgent}>
+              <Button
+                appearance="primary"
+                testId="personal-agent-notify-save"
+                onClick={saveAgent}
+              >
                 保存
               </Button>
             </ModalFooter>
           </ModalDialog>
         )}
       </ModalTransition>
-    </Box>
+    </Page>
   );
 }

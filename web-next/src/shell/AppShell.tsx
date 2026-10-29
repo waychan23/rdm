@@ -1,9 +1,8 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import IconButton from "@atlaskit/button/icon/button";
 import Badge from "@atlaskit/badge";
-import { token } from "@atlaskit/tokens";
 import { Box, Inline, Text, xcss } from "@atlaskit/primitives";
 import NotificationIcon from "@atlaskit/icon/core/notification";
 import GridIcon from "@atlaskit/icon/core/grid";
@@ -14,12 +13,13 @@ import EmailIcon from "@atlaskit/icon/core/email";
 import FolderIcon from "@atlaskit/icon/core/folder-open";
 import PeopleIcon from "@atlaskit/icon/core/people-group";
 import SettingsIcon from "@atlaskit/icon/core/settings";
-import ArrowOutIcon from "@atlaskit/icon/core/arrow-left";
+import LogOutIcon from "@atlaskit/icon/core/log-out";
 
 import { api } from "../lib/api";
 import { logout } from "../lib/auth";
 import { safePostLoginPath } from "../lib/oauth";
 import type { Whoami } from "../types";
+import "../styles/shell.css";
 
 const topbarStyles = xcss({
   height: "space.600",
@@ -40,33 +40,41 @@ const crumbLinkStyles = xcss({
   fontWeight: "font.weight.medium",
 });
 
+const shellStyles = xcss({
+  display: "flex",
+  flexDirection: "column",
+  height: "100vh",
+  overflow: "hidden",
+  backgroundColor: "elevation.surface",
+  color: "color.text",
+});
+
 const bodyStyles = xcss({
   display: "flex",
-  minHeight: "calc(100vh - space.600)",
+  flex: "1",
+  minHeight: "0",
 });
 
 const railStyles = xcss({
   width: "space.800",
-  backgroundColor: "color.background.neutral.subtle",
+  backgroundColor: "elevation.surface.sunken",
   borderRight: "1px solid",
   borderColor: "color.border",
-  paddingBlockStart: "space.100",
+  padding: "space.100",
+  display: "flex",
+  flexDirection: "column",
+  gap: "space.050",
   flexShrink: 0,
+  overflowY: "auto",
 });
 
-// NavLink renders an inline <a> and does not accept the xcss prop, so size
-// and color it directly (all values come from tokens).
-const railItemStyle = (isActive: boolean): CSSProperties => ({
+const contentStyles = xcss({
+  flex: "1",
+  minWidth: "0",
+  minHeight: "0",
   display: "flex",
-  width: "100%",
-  height: token("space.600"),
   flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: token("space.025"),
-  textDecoration: "none",
-  backgroundColor: isActive ? token("color.background.selected") : undefined,
-  color: isActive ? token("color.text.selected") : token("color.text.subtlest"),
+  overflow: "auto",
 });
 
 const bellBadgeStyles = xcss({
@@ -76,7 +84,7 @@ const bellBadgeStyles = xcss({
   pointerEvents: "none",
 });
 
-const bellWrapperStyles0 = xcss({
+const bellWrapperStyles = xcss({
   display: "inline-flex",
   position: "relative",
 });
@@ -84,17 +92,23 @@ const bellWrapperStyles0 = xcss({
 interface NavEntry {
   to: (key: string) => string;
   label: string;
+  testId: string;
   icon: (props: { label: string }) => ReactNode;
 }
 
 const PROJECT_NAV: NavEntry[] = [
-  { to: (k) => `/projects/${k}/board`, label: "看板", icon: BoardIcon },
-  { to: (k) => `/projects/${k}/backlog`, label: "工作项", icon: BacklogIcon },
-  { to: (k) => `/projects/${k}/sprints`, label: "迭代", icon: CalendarIcon },
-  { to: (k) => `/projects/${k}/mailbox`, label: "信箱", icon: EmailIcon },
-  { to: (k) => `/projects/${k}/workspaces`, label: "工作区", icon: FolderIcon },
-  { to: (k) => `/projects/${k}/members`, label: "成员", icon: PeopleIcon },
-  { to: (k) => `/projects/${k}/settings`, label: "设置", icon: SettingsIcon },
+  { to: (k) => `/projects/${k}/board`, label: "看板", testId: "board", icon: BoardIcon },
+  { to: (k) => `/projects/${k}/backlog`, label: "工作项", testId: "backlog", icon: BacklogIcon },
+  { to: (k) => `/projects/${k}/sprints`, label: "迭代", testId: "sprints", icon: CalendarIcon },
+  { to: (k) => `/projects/${k}/mailbox`, label: "信箱", testId: "mailbox", icon: EmailIcon },
+  {
+    to: (k) => `/projects/${k}/workspaces`,
+    label: "工作区",
+    testId: "workspaces",
+    icon: FolderIcon,
+  },
+  { to: (k) => `/projects/${k}/members`, label: "成员", testId: "members", icon: PeopleIcon },
+  { to: (k) => `/projects/${k}/settings`, label: "设置", testId: "project-settings", icon: SettingsIcon },
 ];
 
 export default function AppShell() {
@@ -127,25 +141,28 @@ export default function AppShell() {
   };
 
   return (
-    <Box xcss={shellStyles}>
-      <Box as="header" xcss={topbarStyles}>
+    <Box xcss={shellStyles} testId="app-shell">
+      <Box as="header" xcss={topbarStyles} testId="app-topbar">
         <Inline space="space.100" alignBlock="center">
-          <Link to="/projects">
+          <Link to="/projects" data-testid="topbar-home">
             <Box xcss={crumbLinkStyles}>rdm</Box>
           </Link>
           {projectKey && (
             <>
               <Text color="color.text.subtlest">/</Text>
-              <Text color="color.text.subtlest">{projectKey}</Text>
+              <Text color="color.text.subtlest" testId="topbar-project-key">
+                {projectKey}
+              </Text>
             </>
           )}
         </Inline>
         <Inline space="space.150" alignBlock="center">
-          <Box xcss={bellWrapperStyles0}>
+          <Box xcss={bellWrapperStyles}>
             <IconButton
               icon={(iconProps) => <NotificationIcon {...iconProps} spacing="spacious" />}
               label="信箱"
               appearance="subtle"
+              testId="topbar-mailbox"
               onClick={() => projectKey && navigate(`/projects/${projectKey}/mailbox`)}
             />
             {who?.unread_count ? (
@@ -154,7 +171,7 @@ export default function AppShell() {
               </Box>
             ) : null}
           </Box>
-          <Text color="color.text.subtle">
+          <Text color="color.text.subtle" testId="topbar-current-user">
             {who
               ? who.identity.act_as
                 ? `${who.identity.name}（以 ${who.user.name} 身份）`
@@ -162,33 +179,35 @@ export default function AppShell() {
               : "—"}
           </Text>
           <IconButton
-            icon={(iconProps) => <ArrowOutIcon {...iconProps} />}
+            icon={(iconProps) => <LogOutIcon {...iconProps} />}
             label="登出"
             appearance="subtle"
+            testId="topbar-logout"
             onClick={onLogout}
           />
         </Inline>
       </Box>
 
       <Box xcss={bodyStyles}>
-        <Box as="nav" xcss={railStyles} aria-label="主导航">
-          <RailItem to="/projects" label="项目" icon={GridIcon} end />
+        <Box as="nav" xcss={railStyles} aria-label="主导航" testId="app-sidebar">
+          <RailItem to="/projects" label="项目" testId="projects" icon={GridIcon} end />
           {(who?.org_roles.includes("org_owner") ||
             who?.org_roles.includes("user_manager")) && (
-            <RailItem to="/org/users" label="用户" icon={PeopleIcon} />
+            <RailItem to="/org/users" label="用户" testId="org-users" icon={PeopleIcon} />
           )}
-          <RailItem to="/settings" label="我的" icon={SettingsIcon} end />
+          <RailItem to="/settings" label="我的" testId="settings" icon={SettingsIcon} end />
           {projectKey &&
             PROJECT_NAV.map((entry) => (
               <RailItem
                 key={entry.label}
                 to={entry.to(projectKey)}
                 label={entry.label}
+                testId={`project-${entry.testId}`}
                 icon={entry.icon}
               />
             ))}
         </Box>
-        <Box as="main" xcss={contentStyles}>
+        <Box as="main" xcss={contentStyles} testId="app-content">
           <Outlet />
         </Box>
       </Box>
@@ -196,30 +215,21 @@ export default function AppShell() {
   );
 }
 
-const shellStyles = xcss({
-  minHeight: "100vh",
-  backgroundColor: "elevation.surface",
-  color: "color.text",
-});
-
-const contentStyles = xcss({
-  flex: 1,
-  minWidth: "0",
-});
-
 function RailItem({
   to,
   label,
+  testId,
   icon: Icon,
   end,
 }: {
   to: string;
   label: string;
+  testId: string;
   icon: (props: { label: string }) => ReactNode;
   end?: boolean;
 }) {
   return (
-    <NavLink to={to} end={end} style={({ isActive }) => railItemStyle(isActive)}>
+    <NavLink to={to} end={end} className="rdm-rail-item" data-testid={`rail-item-${testId}`}>
       <Icon label={label} />
       <Text size="small" color="inherit">
         {label}

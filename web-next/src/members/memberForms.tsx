@@ -8,9 +8,10 @@ import ModalDialog, {
   ModalTitle,
   ModalTransition,
 } from "@atlaskit/modal-dialog";
-import Select from "@atlaskit/select";
 import { Box, Stack, Text } from "@atlaskit/primitives";
+import Select from "@atlaskit/select";
 
+import FormField from "../components/FormField";
 import type { OrgUser, ProjectMemberRow } from "../types";
 
 export const PROJECT_ROLES = [
@@ -60,16 +61,17 @@ export function AddMemberDialog({
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog onClose={onClose}>
+        <ModalDialog onClose={onClose} testId="member-add-dialog">
           <ModalHeader>
             <ModalTitle>添加项目成员</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.200">
-              <Stack space="space.050">
-                <Text size="small" weight="medium">
-                  组织用户
-                </Text>
+              <FormField
+                label="组织用户"
+                htmlFor="add-member-user"
+                hint="该用户名下的 agent 会自动加入项目；agent 不需要也不能单独添加。"
+              >
                 <Select
                   inputId="add-member-user"
                   placeholder="选择组织内的 human 用户"
@@ -87,14 +89,8 @@ export function AddMemberDialog({
                   }
                   isClearable
                 />
-                <Text size="small" color="color.text.subtlest">
-                  该用户名下的 agent 会自动加入项目；agent 不需要也不能单独添加。
-                </Text>
-              </Stack>
-              <Stack space="space.050">
-                <Text size="small" weight="medium">
-                  项目角色
-                </Text>
+              </FormField>
+              <FormField label="项目角色">
                 <Select
                   inputId="add-member-roles"
                   isMulti
@@ -104,14 +100,20 @@ export function AddMemberDialog({
                     setRoles((opts as readonly { value: string }[]).map((o) => o.value))
                   }
                 />
-              </Stack>
+              </FormField>
             </Stack>
           </ModalBody>
           <ModalFooter>
-            <Button appearance="subtle" onClick={onClose}>
+            <Button appearance="subtle" onClick={onClose} testId="member-add-cancel">
               取消
             </Button>
-            <Button appearance="primary" onClick={submit} isLoading={saving} isDisabled={!userId}>
+            <Button
+              appearance="primary"
+              onClick={submit}
+              isLoading={saving}
+              isDisabled={!userId}
+              testId="member-add-submit"
+            >
               添加
             </Button>
           </ModalFooter>
@@ -153,7 +155,7 @@ export function MemberEditDialog({
   return (
     <ModalTransition>
       {open && member && (
-        <ModalDialog onClose={onClose}>
+        <ModalDialog onClose={onClose} testId="member-edit-dialog">
           <ModalHeader>
             <ModalTitle>项目角色 · {member.name}</ModalTitle>
           </ModalHeader>
@@ -174,10 +176,15 @@ export function MemberEditDialog({
             </Box>
           </ModalBody>
           <ModalFooter>
-            <Button appearance="subtle" onClick={onClose}>
+            <Button appearance="subtle" onClick={onClose} testId="member-edit-cancel">
               取消
             </Button>
-            <Button appearance="primary" onClick={submit} isLoading={saving}>
+            <Button
+              appearance="primary"
+              onClick={submit}
+              isLoading={saving}
+              testId="member-edit-submit"
+            >
               保存
             </Button>
           </ModalFooter>

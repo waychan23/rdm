@@ -8,11 +8,12 @@ import ModalDialog, {
   ModalTitle,
   ModalTransition,
 } from "@atlaskit/modal-dialog";
+import { Stack, Text } from "@atlaskit/primitives";
 import { RadioGroup } from "@atlaskit/radio";
-import Textfield from "@atlaskit/textfield";
 import TextArea from "@atlaskit/textarea";
-import { Stack } from "@atlaskit/primitives";
+import Textfield from "@atlaskit/textfield";
 
+import FormField from "../components/FormField";
 import { api, errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 import type { WorkItem } from "../types";
@@ -25,12 +26,6 @@ interface Props {
   onClose: () => void;
   onCreated: (item: WorkItem) => void;
 }
-
-const labelStyle = {
-  display: "block",
-  fontWeight: "var(--ds-font-weight-medium, 500)",
-  marginBottom: 4,
-} as const;
 
 export default function CreateWorkItemDialog({ open, projectKey, onClose, onCreated }: Props) {
   const notify = useNotify();
@@ -100,47 +95,42 @@ export default function CreateWorkItemDialog({ open, projectKey, onClose, onCrea
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog onClose={onClose} width="520px">
+        <ModalDialog onClose={onClose} width="520px" testId="work-item-create-dialog">
           <ModalHeader>
             <ModalTitle>新建工作项</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.150">
-              <div>
-                <span style={labelStyle}>类型</span>
+              <Stack space="space.050">
+                <Text size="small" weight="medium" color="color.text.subtle">
+                  类型
+                </Text>
                 <RadioGroup
                   options={KIND_OPTIONS.map((k) => ({ name: "kind", value: k.value, label: k.label }))}
                   value={kind}
                   onChange={(e) => setKind(e.currentTarget.value)}
                 />
-              </div>
-              <Stack space="space.050">
-                <label htmlFor="wi-title" style={labelStyle}>
-                  标题
-                </label>
+              </Stack>
+              <FormField label="标题" htmlFor="wi-title">
                 <Textfield
                   id="wi-title"
                   value={title}
                   placeholder="工作项标题"
+                  testId="work-item-create-title"
                   onChange={(e) => setTitle(e.currentTarget.value)}
-                  onKeyDown={(e) => e.key === "Enter" && submit()}
+                  onKeyDown={(e) => e.key === "Enter" && void submit()}
                 />
-              </Stack>
-              <Stack space="space.050">
-                <label htmlFor="wi-desc" style={labelStyle}>
-                  描述（Markdown）
-                </label>
+              </FormField>
+              <FormField label="描述（Markdown）" htmlFor="wi-desc">
                 <TextArea
                   id="wi-desc"
                   value={description}
                   minimumRows={4}
+                  testId="work-item-create-description"
                   onChange={(e) => setDescription(e.currentTarget.value)}
                 />
-              </Stack>
-              <Stack space="space.050">
-                <label htmlFor="wi-priority" style={labelStyle}>
-                  优先级
-                </label>
+              </FormField>
+              <FormField label="优先级" htmlFor="wi-priority">
                 <Textfield
                   id="wi-priority"
                   type="number"
@@ -148,21 +138,20 @@ export default function CreateWorkItemDialog({ open, projectKey, onClose, onCrea
                   max={99}
                   width={120}
                   value={priority}
+                  testId="work-item-create-priority"
                   onChange={(e) => setPriority(Number(e.currentTarget.value))}
                 />
-              </Stack>
+              </FormField>
               {kind !== "epic" && (
-                <Stack space="space.050">
-                  <label htmlFor="wi-parent" style={labelStyle}>
-                    父项（display id，可空）
-                  </label>
+                <FormField label="父项（display id，可空）" htmlFor="wi-parent">
                   <Textfield
                     id="wi-parent"
                     value={parentRef}
                     placeholder="如 RDM-12"
+                    testId="work-item-create-parent"
                     onChange={(e) => setParentRef(e.currentTarget.value)}
                   />
-                </Stack>
+                </FormField>
               )}
               <KindSpecificFields
                 kind={kind}
@@ -176,10 +165,15 @@ export default function CreateWorkItemDialog({ open, projectKey, onClose, onCrea
             </Stack>
           </ModalBody>
           <ModalFooter>
-            <Button appearance="subtle" onClick={onClose}>
+            <Button appearance="subtle" onClick={onClose} testId="work-item-create-cancel">
               取消
             </Button>
-            <Button appearance="primary" isLoading={saving} onClick={submit}>
+            <Button
+              appearance="primary"
+              isLoading={saving}
+              testId="work-item-create-submit"
+              onClick={() => void submit()}
+            >
               创建
             </Button>
           </ModalFooter>

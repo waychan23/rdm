@@ -11,8 +11,8 @@ export default function ItemPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="rdm-item-overlay">
-      <div className="rdm-item-backdrop">
+    <div className="rdm-item-overlay" data-testid="item-overlay">
+      <div className="rdm-item-backdrop" data-testid="item-backdrop">
         <BacklogPage />
       </div>
       <ItemPanel

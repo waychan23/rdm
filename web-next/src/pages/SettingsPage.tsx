@@ -6,10 +6,13 @@ import Heading from "@atlaskit/heading";
 import Lozenge from "@atlaskit/lozenge";
 import Select from "@atlaskit/select";
 import Spinner from "@atlaskit/spinner";
-import Textfield from "@atlaskit/textfield";
 import TextArea from "@atlaskit/textarea";
+import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text, xcss } from "@atlaskit/primitives";
 
+import ConfirmDialog from "../components/ConfirmDialog";
+import FormField from "../components/FormField";
+import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
@@ -27,6 +30,14 @@ const infoBlock = xcss({
 
 const nameCellStyles = xcss({ gridColumn: "1 / -1" });
 
+const formStyles = xcss({ maxWidth: "520px" });
+
+const centeredStyles = xcss({
+  display: "flex",
+  justifyContent: "center",
+  padding: "space.400",
+});
+
 export default function SettingsPage() {
   const { key: projectKey = "" } = useParams();
   const notify = useNotify();
@@ -36,6 +47,7 @@ export default function SettingsPage() {
   const [description, setDescription] = useState("");
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
 
   const { data, loading } = useAsync<{ project: Project; members: ProjectMemberRow[] }>(
     async () => {
@@ -67,7 +79,7 @@ export default function SettingsPage() {
         name,
         description_md: description,
       });
-      await reload();
+      reload();
       notify.success("项目已保存");
     } catch (e) {
       notify.error("保存失败", errorCause(e)?.message);
@@ -80,7 +92,7 @@ export default function SettingsPage() {
     if (!userId || userId === data?.project.owner_user_id) return;
     try {
       await api.post(`/projects/${projectKey}/transfer-owner`, { user_id: userId });
-      await reload();
+      reload();
       notify.success("项目经理已改派");
     } catch (e) {
       notify.error("改派失败", errorCause(e)?.message);
@@ -88,10 +100,10 @@ export default function SettingsPage() {
   };
 
   const archive = async () => {
-    if (!window.confirm(`归档项目 ${projectKey}？归档后仍可只读访问。`)) return;
+    setConfirmArchive(false);
     try {
       await api.post(`/projects/${projectKey}/archive`);
-      await reload();
+      reload();
     } catch (e) {
       notify.error("归档失败", errorCause(e)?.message);
     }
@@ -99,9 +111,11 @@ export default function SettingsPage() {
 
   if (loading || !data) {
     return (
-      <Box padding="space.400">
-        <Spinner size="large" />
-      </Box>
+      <Page testId="page-project-settings">
+        <Box xcss={centeredStyles} testId="project-settings-loading">
+          <Spinner size="large" />
+        </Box>
+      </Page>
     );
   }
 
@@ -112,10 +126,10 @@ export default function SettingsPage() {
   const owner = humans.find((h) => h.user.id === data.project.owner_user_id);
 
   return (
-    <Box padding="space.300">
-      <Heading size="large">项目设置 · {projectKey}</Heading>
+    <Page testId="page-project-settings">
+      <PageHeader title={`项目设置 · ${projectKey}`} testId="project-settings-header" />
 
-      <Box xcss={infoBlock} style={{ marginTop: 16, marginBottom: 16 }}>
+      <Box xcss={infoBlock} testId="project-settings-info">
         <Stack space="space.050">
           <Text size="small" color="color.text.subtlest">
             项目 ID
@@ -138,33 +152,39 @@ export default function SettingsPage() {
         </Stack>
       </Box>
 
-      <Box as="form" onSubmit={saveProject} style={{ maxWidth: 520 }}>
+      <Box as="form" onSubmit={saveProject} xcss={formStyles} testId="project-settings-form">
         <Stack space="space.150">
-          <Text weight="semibold">基本信息</Text>
-          <Stack space="space.050">
-            <label htmlFor="project-name">名称</label>
+          <Heading size="small">基本信息</Heading>
+          <FormField label="名称" htmlFor="project-name">
             <Textfield
               id="project-name"
               value={name}
+              testId="project-settings-name"
               onChange={(e) => setName(e.currentTarget.value)}
             />
-          </Stack>
-          <Stack space="space.050">
-            <label htmlFor="project-desc">描述</label>
+          </FormField>
+          <FormField label="描述" htmlFor="project-desc">
             <TextArea
               id="project-desc"
               value={description}
               minimumRows={3}
+              testId="project-settings-description"
               onChange={(e) => setDescription(e.currentTarget.value)}
             />
-          </Stack>
+          </FormField>
           <Inline space="space.100">
-            <Button type="submit" appearance="primary" isLoading={saving}>
+            <Button
+              type="submit"
+              appearance="primary"
+              isLoading={saving}
+              testId="project-settings-save"
+            >
               保存
             </Button>
             <Button
               appearance="danger"
-              onClick={archive}
+              testId="project-archive-button"
+              onClick={() => setConfirmArchive(true)}
               isDisabled={data.project.status === "archived"}
             >
               归档项目
@@ -173,9 +193,9 @@ export default function SettingsPage() {
         </Stack>
       </Box>
 
-      <Box style={{ maxWidth: 520, marginTop: 32 }}>
+      <Box xcss={formStyles} testId="project-owner-section">
         <Stack space="space.150">
-          <Text weight="semibold">项目经理（Project Owner）</Text>
+          <Heading size="small">项目经理（Project Owner）</Heading>
           <Text size="small" color="color.text.subtlest">
             project-director / Org Owner 或现任项目经理可以改派；目标必须是项目内启用的 human。
           </Text>
@@ -199,6 +219,18 @@ export default function SettingsPage() {
           />
         </Stack>
       </Box>
-    </Box>
+
+      <ConfirmDialog
+        open={confirmArchive}
+        title="归档项目"
+        confirmLabel="归档"
+        danger
+        testId="project-archive-dialog"
+        onClose={() => setConfirmArchive(false)}
+        onConfirm={() => void archive()}
+      >
+        归档项目 {projectKey}？归档后仍可只读访问。
+      </ConfirmDialog>
+    </Page>
   );
 }

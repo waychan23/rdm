@@ -7,6 +7,7 @@ import SectionMessage from "@atlaskit/section-message";
 import Textfield from "@atlaskit/textfield";
 import { Box, Stack, Text, xcss } from "@atlaskit/primitives";
 
+import FormField from "../components/FormField";
 import { api, errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 
@@ -15,21 +16,19 @@ const wrapStyles = xcss({
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  backgroundColor: "color.background.neutral.subtle",
+  padding: "space.300",
+  backgroundColor: "elevation.surface.sunken",
 });
 
 const cardStyles = xcss({
   width: "380px",
+  maxWidth: "100%",
   padding: "space.300",
   backgroundColor: "elevation.surface",
   border: "1px solid",
   borderColor: "color.border",
   borderRadius: "radius.small",
-});
-
-const labelStyles = xcss({
-  fontWeight: "font.weight.medium",
-  marginBlockEnd: "space.050",
+  boxShadow: "elevation.shadow.raised",
 });
 
 export default function SetPasswordPage() {
@@ -62,7 +61,7 @@ export default function SetPasswordPage() {
 
   if (!ticket) {
     return (
-      <Box xcss={wrapStyles}>
+      <Box xcss={wrapStyles} testId="page-set-password">
         <Box xcss={cardStyles}>
           <SectionMessage appearance="error" title="链接无效">
             缺少 ticket 参数，请向管理员重新索取设置密码链接。
@@ -73,16 +72,17 @@ export default function SetPasswordPage() {
   }
 
   return (
-    <Box xcss={wrapStyles}>
+    <Box xcss={wrapStyles} testId="page-set-password">
       <Box xcss={cardStyles}>
         {done ? (
           <Stack space="space.200">
-            <Heading size="large">密码已设置</Heading>
+            <Heading size="large" as="h1">密码已设置</Heading>
             <SectionMessage appearance="success" title="完成">
               现在用新密码登录。
             </SectionMessage>
             <Button
               appearance="primary"
+              testId="set-password-goto-login"
               onClick={() => {
                 window.location.assign(
                   authKey ? `/login?auth_key=${encodeURIComponent(authKey)}` : "/login",
@@ -93,36 +93,37 @@ export default function SetPasswordPage() {
             </Button>
           </Stack>
         ) : (
-          <Box as="form" onSubmit={submit}>
+          <Box as="form" onSubmit={submit} testId="set-password-form">
             <Stack space="space.200">
-              <Heading size="large">设置密码</Heading>
+              <Heading size="large" as="h1">设置密码</Heading>
               <Text color="color.text.subtlest">密码长度 8–128 位，请妥善保管。</Text>
-              <Stack space="space.050">
-                <Box as="label" xcss={labelStyles} htmlFor="set-password">
-                  新密码
-                </Box>
+              <FormField label="新密码" htmlFor="set-password">
                 <Textfield
                   id="set-password"
                   type="password"
                   autoComplete="new-password"
                   value={password}
                   autoFocus
+                  testId="set-password-new"
                   onChange={(e) => setPassword(e.currentTarget.value)}
                 />
-              </Stack>
-              <Stack space="space.050">
-                <Box as="label" xcss={labelStyles} htmlFor="set-password-confirm">
-                  确认新密码
-                </Box>
+              </FormField>
+              <FormField label="确认新密码" htmlFor="set-password-confirm">
                 <Textfield
                   id="set-password-confirm"
                   type="password"
                   autoComplete="new-password"
                   value={confirm}
+                  testId="set-password-confirm"
                   onChange={(e) => setConfirm(e.currentTarget.value)}
                 />
-              </Stack>
-              <Button type="submit" appearance="primary" isLoading={loading}>
+              </FormField>
+              <Button
+                type="submit"
+                appearance="primary"
+                isLoading={loading}
+                testId="set-password-submit"
+              >
                 保存
               </Button>
             </Stack>

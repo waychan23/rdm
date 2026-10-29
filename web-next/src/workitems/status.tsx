@@ -32,5 +32,12 @@ export default function StatusLozenge({
   status: string;
   children?: ReactNode;
 }) {
-  return <Lozenge appearance={APPEARANCE[statusTone(status)]}>{children ?? status}</Lozenge>;
+  return (
+    <Lozenge
+      appearance={APPEARANCE[statusTone(status)]}
+      testId={`status-lozenge-${status}`}
+    >
+      {children ?? status}
+    </Lozenge>
+  );
 }

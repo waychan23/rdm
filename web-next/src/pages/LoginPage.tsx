@@ -8,6 +8,7 @@ import Spinner from "@atlaskit/spinner";
 import Textfield from "@atlaskit/textfield";
 import { Box, Stack, Text, xcss } from "@atlaskit/primitives";
 
+import FormField from "../components/FormField";
 import { errorCause } from "../lib/api";
 import { submitLogin } from "../lib/auth";
 import { useNotify } from "../lib/flags";
@@ -18,21 +19,19 @@ const wrapStyles = xcss({
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  backgroundColor: "color.background.neutral.subtle",
+  padding: "space.300",
+  backgroundColor: "elevation.surface.sunken",
 });
 
 const cardStyles = xcss({
   width: "360px",
+  maxWidth: "100%",
   padding: "space.300",
   backgroundColor: "elevation.surface",
   border: "1px solid",
   borderColor: "color.border",
   borderRadius: "radius.small",
-});
-
-const labelStyles = xcss({
-  fontWeight: "font.weight.medium",
-  marginBlockEnd: "space.050",
+  boxShadow: "elevation.shadow.raised",
 });
 
 export default function LoginPage() {
@@ -87,7 +86,7 @@ export default function LoginPage() {
 
   if (!authKey) {
     return (
-      <Box xcss={wrapStyles}>
+      <Box xcss={wrapStyles} testId="login-redirecting">
         <Stack space="space.200" alignInline="center">
           <Spinner size="large" />
           <Text color="color.text.subtlest">正在跳转到登录…</Text>
@@ -97,42 +96,44 @@ export default function LoginPage() {
   }
 
   return (
-    <Box xcss={wrapStyles}>
+    <Box xcss={wrapStyles} testId="page-login">
       <Box xcss={cardStyles}>
-        <Box as="form" onSubmit={submit}>
+        <Box as="form" onSubmit={submit} testId="login-form">
           <Stack space="space.200">
-            <Heading size="large">rd-manager 登录</Heading>
-            <Stack space="space.050">
-              <Box as="label" xcss={labelStyles} htmlFor="login-name">
-                用户名
-              </Box>
+            <Heading size="large" as="h1">rd-manager 登录</Heading>
+            <FormField label="用户名" htmlFor="login-name">
               <Textfield
                 id="login-name"
                 value={name}
                 placeholder="owner"
                 autoComplete="username"
                 autoFocus
+                testId="login-username"
                 onChange={(e) => setName(e.currentTarget.value)}
               />
-            </Stack>
-            <Stack space="space.050">
-              <Box as="label" xcss={labelStyles} htmlFor="login-password">
-                密码
-              </Box>
+            </FormField>
+            <FormField label="密码" htmlFor="login-password">
               <Textfield
                 id="login-password"
                 type="password"
                 value={password}
                 autoComplete="current-password"
+                testId="login-password"
                 onChange={(e) => setPassword(e.currentTarget.value)}
               />
-            </Stack>
+            </FormField>
             <Checkbox
               label="记住我（7 天内免登录）"
               isChecked={remember}
+              testId="login-remember"
               onChange={(e) => setRemember(e.currentTarget.checked)}
             />
-            <Button type="submit" appearance="primary" isLoading={loading}>
+            <Button
+              type="submit"
+              appearance="primary"
+              isLoading={loading}
+              testId="login-submit"
+            >
               登录
             </Button>
             <Text size="small" color="color.text.subtlest">

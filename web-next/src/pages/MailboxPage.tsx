@@ -3,7 +3,8 @@ import { Link, useParams } from "react-router-dom";
 
 import Button from "@atlaskit/button/default/button";
 import Checkbox from "@atlaskit/checkbox";
-import Heading from "@atlaskit/heading";
+import EmptyState from "@atlaskit/empty-state";
+import Lozenge from "@atlaskit/lozenge";
 import ModalDialog, {
   ModalBody,
   ModalFooter,
@@ -12,14 +13,15 @@ import ModalDialog, {
   ModalTransition,
 } from "@atlaskit/modal-dialog";
 import Select from "@atlaskit/select";
-import Textfield from "@atlaskit/textfield";
-import TextArea from "@atlaskit/textarea";
-import EmptyState from "@atlaskit/empty-state";
 import Spinner from "@atlaskit/spinner";
-import Lozenge from "@atlaskit/lozenge";
+import TextArea from "@atlaskit/textarea";
+import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text, xcss } from "@atlaskit/primitives";
 import { token } from "@atlaskit/tokens";
 
+import FormField from "../components/FormField";
+import { Page, PageHeader } from "../components/Page";
+import TextButton from "../components/TextButton";
 import { api, errorCause } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { useNotify } from "../lib/flags";
@@ -34,8 +36,10 @@ const card = xcss({
   backgroundColor: "elevation.surface",
 });
 
-const mailListStyles = xcss({
-  marginTop: "space.200",
+const centeredStyles = xcss({
+  display: "flex",
+  justifyContent: "center",
+  padding: "space.400",
 });
 
 interface Option {
@@ -141,41 +145,55 @@ export default function MailboxPage() {
   const memberOptions: Option[] = members.map((m) => ({ label: m.name, value: m.name }));
 
   return (
-    <Box padding="space.300">
-      <Inline spread="space-between" alignBlock="center">
-        <Heading size="large">信箱 · {projectKey}</Heading>
-        <Inline space="space.100" alignBlock="center">
-          <Checkbox
-            label="仅未读"
-            isChecked={unreadOnly}
-            onChange={(e) => setUnreadOnly(e.currentTarget.checked)}
-          />
-          <Button appearance="primary" onClick={() => setShowCompose(true)}>
-            发信
-          </Button>
-          <Button
-            isDisabled={selected.size === 0}
-            onClick={() => void markRead([...selected])}
-          >
-            标记已读
-          </Button>
-        </Inline>
-      </Inline>
+    <Page testId="page-mailbox">
+      <PageHeader
+        title={`信箱 · ${projectKey}`}
+        testId="mailbox-header"
+        actions={
+          <Inline space="space.100" alignBlock="center">
+            <Checkbox
+              label="仅未读"
+              isChecked={unreadOnly}
+              testId="mailbox-unread-only"
+              onChange={(e) => setUnreadOnly(e.currentTarget.checked)}
+            />
+            <Button
+              appearance="primary"
+              testId="mailbox-compose-button"
+              onClick={() => setShowCompose(true)}
+            >
+              发信
+            </Button>
+            <Button
+              isDisabled={selected.size === 0}
+              testId="mailbox-mark-read"
+              onClick={() => void markRead([...selected])}
+            >
+              标记已读
+            </Button>
+          </Inline>
+        }
+      />
 
-      <Stack space="space.100" xcss={mailListStyles}>
-        {loading ? (
+      {loading ? (
+        <Box xcss={centeredStyles} testId="mailbox-loading">
           <Spinner size="large" />
-        ) : messages.length === 0 ? (
-          <EmptyState header="没有信件" />
-        ) : (
-          messages.map((m) => (
+        </Box>
+      ) : messages.length === 0 ? (
+        <Box testId="mailbox-empty">
+          <EmptyState header="没有信件" description="有新站内信时会出现在这里。" />
+        </Box>
+      ) : (
+        <Stack space="space.100" testId="mailbox-list">
+          {messages.map((m) => (
             <Box
               key={m.delivery_id}
               xcss={card}
+              testId={`mailbox-item-${m.delivery_id}`}
               style={
                 m.read_at
                   ? undefined
-                  : { borderLeft: `3px solid ${token("color.border.selected")}` }
+                  : { borderInlineStart: `3px solid ${token("color.border.selected")}` }
               }
             >
               <Stack space="space.075">
@@ -183,6 +201,7 @@ export default function MailboxPage() {
                   {!m.read_at && (
                     <Checkbox
                       isChecked={selected.has(m.delivery_id)}
+                      testId={`mailbox-item-select-${m.delivery_id}`}
                       onChange={() => toggle(m.delivery_id)}
                     />
                   )}
@@ -192,17 +211,29 @@ export default function MailboxPage() {
                     {formatDate(m.created_at)}
                   </Text>
                   {!m.read_at && (
-                    <TextButton onClick={() => void markRead([m.delivery_id])}>标已读</TextButton>
+                    <TextButton
+                      data-testid={`mailbox-item-mark-read-${m.delivery_id}`}
+                      onClick={() => void markRead([m.delivery_id])}
+                    >
+                      标已读
+                    </TextButton>
                   )}
                 </Inline>
-                <div style={{ whiteSpace: "pre-wrap", paddingLeft: 24 }}>{m.body_md}</div>
+                <Box as="div" style={{ whiteSpace: "pre-wrap" }} paddingInlineStart="space.300">
+                  {m.body_md}
+                </Box>
                 {m.refs.length > 0 && (
                   <Inline space="space.100">
                     <Text size="small" color="color.text.subtlest">
                       关联：
                     </Text>
                     {m.refs.map((r) => (
-                      <Link key={r} to={`/projects/${projectKey}/items/${r}`}>
+                      <Link
+                        key={r}
+                        className="rdm-link"
+                        to={`/projects/${projectKey}/items/${r}`}
+                        data-testid={`mailbox-item-ref-${r}`}
+                      >
                         {r}
                       </Link>
                     ))}
@@ -210,26 +241,31 @@ export default function MailboxPage() {
                 )}
               </Stack>
             </Box>
-          ))
-        )}
-      </Stack>
+          ))}
+        </Stack>
+      )}
 
       {nextCursor && (
         <Box paddingBlock="space.200" style={{ textAlign: "center" }}>
-          <Button onClick={() => void fetchPage(nextCursor, false, unreadOnly)}>加载更多</Button>
+          <Button testId="mailbox-load-more" onClick={() => void fetchPage(nextCursor, false, unreadOnly)}>
+            加载更多
+          </Button>
         </Box>
       )}
 
       <ModalTransition>
         {showCompose && (
-          <ModalDialog onClose={() => setShowCompose(false)} width="520px">
+          <ModalDialog
+            onClose={() => setShowCompose(false)}
+            width="520px"
+            testId="mailbox-compose-dialog"
+          >
             <ModalHeader>
               <ModalTitle>发站内信</ModalTitle>
             </ModalHeader>
             <ModalBody>
               <Stack space="space.150">
-                <Stack space="space.050">
-                  <label htmlFor="mail-to">收件人</label>
+                <FormField label="收件人" htmlFor="mail-to">
                   <Select<Option, true>
                     inputId="mail-to"
                     isMulti
@@ -238,57 +274,46 @@ export default function MailboxPage() {
                     onChange={(opts) => setCompose({ ...compose, to: opts as Option[] })}
                     placeholder="选择成员"
                   />
-                </Stack>
-                <Stack space="space.050">
-                  <label htmlFor="mail-subject">主题</label>
+                </FormField>
+                <FormField label="主题" htmlFor="mail-subject">
                   <Textfield
                     id="mail-subject"
                     value={compose.subject}
+                    testId="mailbox-compose-subject"
                     onChange={(e) => setCompose({ ...compose, subject: e.currentTarget.value })}
                   />
-                </Stack>
-                <Stack space="space.050">
-                  <label htmlFor="mail-body">正文（Markdown）</label>
+                </FormField>
+                <FormField label="正文（Markdown）" htmlFor="mail-body">
                   <TextArea
                     id="mail-body"
                     value={compose.body}
                     minimumRows={5}
+                    testId="mailbox-compose-body"
                     onChange={(e) => setCompose({ ...compose, body: e.currentTarget.value })}
                   />
-                </Stack>
+                </FormField>
               </Stack>
             </ModalBody>
             <ModalFooter>
-              <Button appearance="subtle" onClick={() => setShowCompose(false)}>
+              <Button
+                appearance="subtle"
+                testId="mailbox-compose-cancel"
+                onClick={() => setShowCompose(false)}
+              >
                 取消
               </Button>
-              <Button appearance="primary" isLoading={sending} onClick={() => void send()}>
+              <Button
+                appearance="primary"
+                isLoading={sending}
+                testId="mailbox-compose-submit"
+                onClick={() => void send()}
+              >
                 发送
               </Button>
             </ModalFooter>
           </ModalDialog>
         )}
       </ModalTransition>
-    </Box>
-  );
-}
-
-function TextButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        marginLeft: "auto",
-        background: "none",
-        border: "none",
-        color: token("color.link"),
-        cursor: "pointer",
-        padding: 0,
-        font: "inherit",
-      }}
-    >
-      {children}
-    </button>
+    </Page>
   );
 }

@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 
 import Button from "@atlaskit/button/default/button";
-import Heading from "@atlaskit/heading";
+import EmptyState from "@atlaskit/empty-state";
+import Link from "@atlaskit/link";
 import ModalDialog, {
   ModalBody,
   ModalFooter,
@@ -10,12 +11,14 @@ import ModalDialog, {
   ModalTitle,
   ModalTransition,
 } from "@atlaskit/modal-dialog";
-import Textfield from "@atlaskit/textfield";
-import TextArea from "@atlaskit/textarea";
 import Select from "@atlaskit/select";
 import Spinner from "@atlaskit/spinner";
-import { Box, Inline, Stack } from "@atlaskit/primitives";
+import TextArea from "@atlaskit/textarea";
+import Textfield from "@atlaskit/textfield";
+import { Box, Inline, Stack, xcss } from "@atlaskit/primitives";
 
+import FormField from "../components/FormField";
+import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
@@ -24,6 +27,12 @@ import "../styles/table.css";
 
 const KINDS = ["git_repo", "doc_repo", "design", "other"];
 const KIND_OPTIONS = KINDS.map((v) => ({ label: v, value: v }));
+
+const centeredStyles = xcss({
+  display: "flex",
+  justifyContent: "center",
+  padding: "space.400",
+});
 
 interface Option {
   label: string;
@@ -120,46 +129,71 @@ export default function WorkspacesPage() {
   };
 
   return (
-    <Box padding="space.300">
-      <Inline spread="space-between" alignBlock="center">
-        <Heading size="large">工作区 · {projectKey}</Heading>
-        <Button appearance="primary" onClick={openCreate}>
-          登记工作区
-        </Button>
-      </Inline>
+    <Page testId="page-workspaces">
+      <PageHeader
+        title={`工作区 · ${projectKey}`}
+        testId="workspaces-header"
+        actions={
+          <Button appearance="primary" testId="workspace-create-button" onClick={openCreate}>
+            登记工作区
+          </Button>
+        }
+      />
 
       {loading ? (
-        <Box padding="space.400">
+        <Box xcss={centeredStyles} testId="workspaces-loading">
           <Spinner size="large" />
         </Box>
+      ) : (workspaces ?? []).length === 0 ? (
+        <Box testId="workspaces-empty">
+          <EmptyState
+            header="还没有登记工作区"
+            description="登记仓库、文档或设计资源，方便团队成员快速跳转。"
+          />
+        </Box>
       ) : (
-        <table className="rdm-table" style={{ marginTop: 16 }}>
+        <table className="rdm-table" aria-label="工作区列表" data-testid="workspace-table">
           <thead>
             <tr>
-              <th>名称</th>
-              <th style={{ width: 120 }}>类型</th>
-              <th>URL</th>
-              <th style={{ width: 110 }}>默认分支</th>
-              <th style={{ width: 150 }}>操作</th>
+              <th scope="col">名称</th>
+              <th scope="col" className="col-type">
+                类型
+              </th>
+              <th scope="col">URL</th>
+              <th scope="col" className="col-branch">
+                默认分支
+              </th>
+              <th scope="col" className="col-actions">
+                操作
+              </th>
             </tr>
           </thead>
           <tbody>
             {(workspaces ?? []).map((w) => (
-              <tr key={w.id} style={{ cursor: "default" }}>
+              <tr key={w.id} data-testid={`workspace-row-${w.id}`}>
                 <td>{w.name}</td>
                 <td className="cell-meta">{w.kind}</td>
                 <td>
-                  <a href={w.url} target="_blank" rel="noreferrer">
+                  <Link href={w.url} target="_blank" testId={`workspace-link-${w.id}`}>
                     {w.url}
-                  </a>
+                  </Link>
                 </td>
                 <td className="cell-meta">{w.default_branch ?? "—"}</td>
-                <td onClick={(e) => e.stopPropagation()}>
+                <td>
                   <Inline space="space.100">
-                    <Button spacing="compact" onClick={() => openEdit(w)}>
+                    <Button
+                      spacing="compact"
+                      testId={`workspace-edit-${w.id}`}
+                      onClick={() => openEdit(w)}
+                    >
                       编辑
                     </Button>
-                    <Button spacing="compact" appearance="danger" onClick={() => setConfirmId(w.id)}>
+                    <Button
+                      spacing="compact"
+                      appearance="danger"
+                      testId={`workspace-delete-${w.id}`}
+                      onClick={() => setConfirmId(w.id)}
+                    >
                       删除
                     </Button>
                   </Inline>
@@ -172,63 +206,75 @@ export default function WorkspacesPage() {
 
       <ModalTransition>
         {dialogOpen && (
-          <ModalDialog onClose={() => setDialogOpen(false)} width="460px">
+          <ModalDialog
+            onClose={() => setDialogOpen(false)}
+            width="460px"
+            testId="workspace-form-dialog"
+          >
             <ModalHeader>
               <ModalTitle>{form.id ? "编辑工作区" : "登记工作区"}</ModalTitle>
             </ModalHeader>
             <ModalBody>
               <Stack space="space.150">
-                <Stack space="space.050">
-                  <label htmlFor="ws-name">名称</label>
+                <FormField label="名称" htmlFor="ws-name">
                   <Textfield
                     id="ws-name"
                     value={form.name}
+                    testId="workspace-form-name"
                     onChange={(e) => setForm({ ...form, name: e.currentTarget.value })}
                   />
-                </Stack>
-                <Stack space="space.050">
-                  <label>类型</label>
+                </FormField>
+                <FormField label="类型">
                   <Select
                     options={KIND_OPTIONS}
                     value={form.kind}
                     onChange={(o) => o && setForm({ ...form, kind: o as Option })}
                   />
-                </Stack>
-                <Stack space="space.050">
-                  <label htmlFor="ws-url">URL</label>
+                </FormField>
+                <FormField label="URL" htmlFor="ws-url">
                   <Textfield
                     id="ws-url"
                     value={form.url}
+                    testId="workspace-form-url"
                     onChange={(e) => setForm({ ...form, url: e.currentTarget.value })}
                   />
-                </Stack>
-                <Stack space="space.050">
-                  <label htmlFor="ws-branch">默认分支</label>
+                </FormField>
+                <FormField label="默认分支" htmlFor="ws-branch">
                   <Textfield
                     id="ws-branch"
                     value={form.default_branch}
+                    testId="workspace-form-branch"
                     onChange={(e) =>
                       setForm({ ...form, default_branch: e.currentTarget.value })
                     }
                   />
-                </Stack>
-                <Stack space="space.050">
-                  <label htmlFor="ws-desc">描述</label>
+                </FormField>
+                <FormField label="描述" htmlFor="ws-desc">
                   <TextArea
                     id="ws-desc"
                     value={form.description_md}
+                    testId="workspace-form-description"
                     onChange={(e) =>
                       setForm({ ...form, description_md: e.currentTarget.value })
                     }
                   />
-                </Stack>
+                </FormField>
               </Stack>
             </ModalBody>
             <ModalFooter>
-              <Button appearance="subtle" onClick={() => setDialogOpen(false)}>
+              <Button
+                appearance="subtle"
+                testId="workspace-form-cancel"
+                onClick={() => setDialogOpen(false)}
+              >
                 取消
               </Button>
-              <Button appearance="primary" isLoading={saving} onClick={() => void save()}>
+              <Button
+                appearance="primary"
+                isLoading={saving}
+                testId="workspace-form-submit"
+                onClick={() => void save()}
+              >
                 保存
               </Button>
             </ModalFooter>
@@ -238,22 +284,34 @@ export default function WorkspacesPage() {
 
       <ModalTransition>
         {confirmId && (
-          <ModalDialog onClose={() => setConfirmId(null)} width="420px">
+          <ModalDialog
+            onClose={() => setConfirmId(null)}
+            width="420px"
+            testId="workspace-delete-dialog"
+          >
             <ModalHeader>
               <ModalTitle>确认删除</ModalTitle>
             </ModalHeader>
             <ModalBody>删除该工作区？软删可恢复。</ModalBody>
             <ModalFooter>
-              <Button appearance="subtle" onClick={() => setConfirmId(null)}>
+              <Button
+                appearance="subtle"
+                testId="workspace-delete-cancel"
+                onClick={() => setConfirmId(null)}
+              >
                 取消
               </Button>
-              <Button appearance="danger" onClick={() => void remove()}>
+              <Button
+                appearance="danger"
+                testId="workspace-delete-confirm"
+                onClick={() => void remove()}
+              >
                 删除
               </Button>
             </ModalFooter>
           </ModalDialog>
         )}
       </ModalTransition>
-    </Box>
+    </Page>
   );
 }

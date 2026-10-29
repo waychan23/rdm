@@ -21,7 +21,7 @@ const wrapStyles = xcss({
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  backgroundColor: "color.background.neutral.subtle",
+  backgroundColor: "elevation.surface.sunken",
   padding: "space.300",
 });
 
@@ -35,6 +35,7 @@ const cardStyles = xcss({
   border: "1px solid",
   borderColor: "color.border",
   borderRadius: "radius.small",
+  boxShadow: "elevation.shadow.raised",
 });
 
 // Consent is authenticated by the one-shot capability key in the URL (§17);
@@ -98,24 +99,24 @@ export default function ConsentPage() {
   };
 
   return (
-    <Box xcss={wrapStyles}>
+    <Box xcss={wrapStyles} testId="page-consent">
       <Box xcss={cardStyles}>
         {error ? (
-          <Stack space="space.200">
-            <Heading size="large">授权不可用</Heading>
+          <Stack space="space.200" testId="consent-error">
+            <Heading size="large" as="h1">授权不可用</Heading>
             <Text>{error}</Text>
             <Text size="small" color="color.text.subtlest">
               授权链接有效期 10 分钟且只能使用一次，请回到终端重新发起登录。
             </Text>
           </Stack>
         ) : !info ? (
-          <Inline space="space.150" alignBlock="center">
+          <Inline space="space.150" alignBlock="center" testId="consent-loading">
             <Spinner size="small" />
             <Text color="color.text.subtlest">加载授权请求…</Text>
           </Inline>
         ) : (
-          <Stack space="space.200">
-            <Heading size="large">授权访问 rdm</Heading>
+          <Stack space="space.200" testId="consent-form">
+            <Heading size="large" as="h1">授权访问 rdm</Heading>
             <Text>
               应用 <Text weight="bold">{info.client.client_name || info.client.client_id}</Text>{" "}
               请求访问你的 rdm 工作区（scope: {info.scopes.join(" ")}）。
@@ -149,10 +150,15 @@ export default function ConsentPage() {
               </Stack>
             )}
             <Inline space="space.100" xcss={actionsStyles}>
-              <Button onClick={() => decide(false)} isLoading={loading}>
+              <Button testId="consent-deny" onClick={() => decide(false)} isLoading={loading}>
                 拒绝
               </Button>
-              <Button appearance="primary" onClick={() => decide(true)} isLoading={loading}>
+              <Button
+                appearance="primary"
+                testId="consent-allow"
+                onClick={() => decide(true)}
+                isLoading={loading}
+              >
                 允许
               </Button>
             </Inline>

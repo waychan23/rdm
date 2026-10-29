@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+import { Inline, Stack, Text } from "@atlaskit/primitives";
 import { token } from "@atlaskit/tokens";
 
 import StatusLozenge from "../../workitems/status";
@@ -30,6 +31,7 @@ export default function BoardColumn({ status, count, children }: Props) {
   return (
     <div
       ref={ref}
+      data-testid={`board-column-${status}`}
       style={{
         flex: "0 0 280px",
         background: isOver
@@ -39,25 +41,18 @@ export default function BoardColumn({ status, count, children }: Props) {
         padding: token("space.100"),
         display: "flex",
         flexDirection: "column",
+        gap: token("space.100"),
         outline: isOver ? `2px dashed ${token("color.border.focused")}` : "none",
         outlineOffset: "-2px",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          height: 32,
-          padding: `0 ${token("space.100")} ${token("space.100")}`,
-        }}
-      >
+      <Inline spread="space-between" alignBlock="center" space="space.100">
         <StatusLozenge status={status} />
-        <span style={{ color: token("color.text.subtlest"), fontSize: 12 }}>{count}</span>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: token("space.100"), minHeight: 80 }}>
-        {children}
-      </div>
+        <Text size="small" color="color.text.subtlest" testId={`board-column-count-${status}`}>
+          {count}
+        </Text>
+      </Inline>
+      <Stack space="space.100">{children}</Stack>
     </div>
   );
 }

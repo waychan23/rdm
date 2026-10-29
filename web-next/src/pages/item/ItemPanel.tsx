@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import Button from "@atlaskit/button/default/button";
+import IconButton from "@atlaskit/button/icon/button";
+import Heading from "@atlaskit/heading";
+import CrossIcon from "@atlaskit/icon/core/cross";
+import Link from "@atlaskit/link";
 import Select from "@atlaskit/select";
 import TextArea from "@atlaskit/textarea";
 import SectionMessage from "@atlaskit/section-message";
@@ -220,11 +224,15 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
 
   if (loadError) {
     return (
-      <aside className="rdm-item-panel">
+      <aside className="rdm-item-panel" aria-label="工作项详情" data-testid="item-panel">
         <Box padding="space.400">
           <SectionMessage appearance="error">工作项加载失败或已被删除。</SectionMessage>
           <Box paddingBlockStart="space.200">
-            <Button appearance="primary" onClick={onClose}>
+            <Button
+              appearance="primary"
+              testId="item-panel-error-back"
+              onClick={onClose}
+            >
               返回列表
             </Button>
           </Box>
@@ -234,8 +242,8 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   }
   if (!bundle) {
     return (
-      <aside className="rdm-item-panel">
-        <Box padding="space.400">
+      <aside className="rdm-item-panel" aria-label="工作项详情" data-testid="item-panel">
+        <Box padding="space.400" testId="item-panel-loading">
           <Spinner size="large" />
         </Box>
       </aside>
@@ -246,77 +254,103 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   const memberOptions = members.map((m) => ({ label: m.name, value: m.id }));
 
   return (
-    <aside className="rdm-item-panel">
-      <header className="rdm-item-head">
-        <button className="rdm-item-close" title="关闭" onClick={onClose}>
-          ›
-        </button>
+    <aside className="rdm-item-panel" aria-label="工作项详情" data-testid="item-panel">
+      <header className="rdm-item-head" data-testid="item-panel-header">
+        <IconButton
+          icon={(iconProps) => <CrossIcon {...iconProps} />}
+          label="关闭"
+          appearance="subtle"
+          testId="item-panel-close"
+          onClick={onClose}
+        />
         <TypeKindIcon kind={item.kind} />
-        <Text weight="medium" color="color.link">
+        <Text weight="medium" color="color.link" testId="item-panel-display-id">
           {item.display_id}
         </Text>
-        <TextButton onClick={() => setShowEdit(true)}>编辑</TextButton>
+        <TextButton data-testid="item-panel-edit" onClick={() => setShowEdit(true)}>
+          编辑
+        </TextButton>
       </header>
 
       <div className="rdm-item-body">
-        <section className="rdm-item-content">
-          <h1 className="rdm-item-title">{item.title}</h1>
+        <section className="rdm-item-content" data-testid="item-panel-content">
+          <Box paddingBlockEnd="space.200">
+            <Heading size="medium" as="h2" testId="item-panel-title">
+              {item.title}
+            </Heading>
+          </Box>
 
           <div className="rdm-item-section-label">描述</div>
           {item.description_md ? (
-            <div className="rdm-item-desc">
+            <div className="rdm-item-desc" data-testid="item-panel-description">
               <MarkdownText source={item.description_md} />
             </div>
           ) : (
-            <div className="rdm-item-desc rdm-item-desc-empty">未填写描述</div>
+            <div
+              className="rdm-item-desc rdm-item-desc-empty"
+              data-testid="item-panel-description-empty"
+            >
+              未填写描述
+            </div>
           )}
 
           {item.fields && Object.keys(item.fields).length > 0 && (
             <>
               <div className="rdm-item-section-label">特型字段</div>
-              <pre style={{ fontSize: 12, color: token("color.text.subtle") }}>
+              <pre
+                style={{ font: token("font.body.small"), color: token("color.text.subtle") }}
+                data-testid="item-panel-fields-json"
+              >
                 {JSON.stringify(item.fields, null, 2)}
               </pre>
             </>
           )}
 
           <div className="rdm-item-section-label">子项（{children.length}）</div>
-          {children.map((c) => (
-            <div key={c.id} className="rdm-item-child" onClick={() => onOpenItem(c.id)}>
-              <TypeKindIcon kind={c.kind} />
-              <span className="rdm-item-child-id">{c.display_id}</span>
-              <span className="rdm-item-child-title">{c.title}</span>
-              <StatusLozenge status={c.status} />
-            </div>
-          ))}
+          <div data-testid="item-panel-children">
+            {children.map((c) => (
+              <div key={c.id} className="rdm-item-child" onClick={() => onOpenItem(c.id)}>
+                <TypeKindIcon kind={c.kind} />
+                <span className="rdm-item-child-id">{c.display_id}</span>
+                <span className="rdm-item-child-title">{c.title}</span>
+                <StatusLozenge status={c.status} />
+              </div>
+            ))}
+          </div>
 
           <div className="rdm-item-section-label">评论</div>
-          {comments.length === 0 && (
-            <Text size="small" color="color.text.subtlest">
-              还没有评论
-            </Text>
-          )}
-          {comments.map((c) => (
-            <div key={c.id} className="rdm-item-comment">
-              <div className="rdm-item-comment-head">
-                <PersonCell name={c.author.name ?? c.author.id} />
-                <Text size="small" color="color.text.subtlest">
-                  {formatDate(c.created_at)}
-                </Text>
-              </div>
-              <MarkdownText source={c.body_md} />
-              {c.attachments?.map((a) => (
-                <div key={a.id} className="rdm-item-att" style={{ marginTop: 4 }}>
-                  <TextButton onClick={() => api.download(a.download_url, a.filename)}>
-                    📎 {a.filename}
-                  </TextButton>
+          <div data-testid="item-panel-comments">
+            {comments.length === 0 && (
+              <Text size="small" color="color.text.subtlest">
+                还没有评论
+              </Text>
+            )}
+            {comments.map((c) => (
+              <div key={c.id} className="rdm-item-comment" data-testid={`item-comment-${c.id}`}>
+                <div className="rdm-item-comment-head">
+                  <PersonCell name={c.author.name ?? c.author.id} />
+                  <Text size="small" color="color.text.subtlest">
+                    {formatDate(c.created_at)}
+                  </Text>
                 </div>
-              ))}
-            </div>
-          ))}
+                <MarkdownText source={c.body_md} />
+                {c.attachments?.map((a) => (
+                  <div
+                    key={a.id}
+                    className="rdm-item-att"
+                    style={{ marginTop: token("space.050") }}
+                  >
+                    <TextButton onClick={() => api.download(a.download_url, a.filename)}>
+                      📎 {a.filename}
+                    </TextButton>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
         </section>
 
-        <section className="rdm-item-fields">
+        <section className="rdm-item-fields" data-testid="item-panel-fields">
           {gateMessage && (
             <Box paddingBlockEnd="space.150">
               <SectionMessage appearance="warning" onDismiss={() => setGateMessage(null)}>
@@ -325,12 +359,12 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             </Box>
           )}
 
-          <div className="rdm-item-field">
+          <div className="rdm-item-field" data-testid="item-field-status">
             <div className="rdm-item-section-label">状态</div>
             <StatusLozenge status={item.status} />
           </div>
 
-          <div className="rdm-item-field">
+          <div className="rdm-item-field" data-testid="item-field-transition">
             <div className="rdm-item-section-label">流转到</div>
             <Select
               options={allowed.map((s) => ({ label: s, value: s }))}
@@ -341,12 +375,12 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             />
           </div>
 
-          <div className="rdm-item-field">
+          <div className="rdm-item-field" data-testid="item-field-priority">
             <div className="rdm-item-section-label">优先级</div>
             <PriorityMark priority={item.priority} />
           </div>
 
-          <div className="rdm-item-field">
+          <div className="rdm-item-field" data-testid="item-field-assignee">
             <div className="rdm-item-section-label">负责人</div>
             <Select
               options={memberOptions}
@@ -370,7 +404,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             </Text>
           </div>
 
-          <div className="rdm-item-field">
+          <div className="rdm-item-field" data-testid="item-field-attachments">
             <div className="rdm-item-section-label">附件</div>
             <input
               ref={attachFileInput}
@@ -379,11 +413,15 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
               hidden
               onChange={(e) => void uploadFiles(e.target.files, false)}
             />
-            <Button isLoading={uploading} onClick={() => attachFileInput.current?.click()}>
+            <Button
+              isLoading={uploading}
+              testId="item-attachment-upload"
+              onClick={() => attachFileInput.current?.click()}
+            >
               上传附件
             </Button>
             {attachments.map((a) => (
-              <div key={a.id} className="rdm-item-att">
+              <div key={a.id} className="rdm-item-att" data-testid={`item-attachment-${a.id}`}>
                 <TextButton onClick={() => api.download(a.download_url, a.filename)}>
                   <span className="rdm-item-att-name">{a.filename}</span>
                 </TextButton>
@@ -397,13 +435,17 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             ))}
           </div>
 
-          <div className="rdm-item-field">
+          <div className="rdm-item-field" data-testid="item-field-artifacts">
             <div className="rdm-item-section-label">产出物</div>
             {artifacts.map((art) => (
-              <div key={art.id} className="rdm-item-att">
-                <a href={art.url} target="_blank" rel="noreferrer" className="rdm-item-att-name">
+              <div key={art.id} className="rdm-item-att" data-testid={`item-artifact-${art.id}`}>
+                <Link
+                  href={art.url}
+                  target="_blank"
+                  testId={`item-artifact-link-${art.id}`}
+                >
                   {art.label}
-                </a>
+                </Link>
                 <Text size="small" color="color.text.subtlest">
                   {art.kind}
                 </Text>
@@ -412,16 +454,19 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                 </TextButton>
               </div>
             ))}
-            <Button onClick={() => setShowArtifact(true)}>挂产出物</Button>
+            <Button testId="item-artifact-add" onClick={() => setShowArtifact(true)}>
+              挂产出物
+            </Button>
           </div>
         </section>
       </div>
 
-      <footer className="rdm-item-comment-bar">
+      <footer className="rdm-item-comment-bar" data-testid="item-comment-bar">
         <TextArea
           value={draft}
           minimumRows={2}
           placeholder="写评论；@成员名 会给对方发站内信"
+          testId="item-comment-input"
           onChange={(e) => setDraft(e.currentTarget.value)}
         />
         {pendingFiles.length > 0 && (
@@ -441,8 +486,18 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             hidden
             onChange={(e) => void uploadFiles(e.target.files, true)}
           />
-          <Button onClick={() => commentFileInput.current?.click()}>添加附件</Button>
-          <Button appearance="primary" isLoading={savingComment} onClick={() => void postComment()}>
+          <Button
+            testId="item-comment-attach"
+            onClick={() => commentFileInput.current?.click()}
+          >
+            添加附件
+          </Button>
+          <Button
+            appearance="primary"
+            isLoading={savingComment}
+            testId="item-comment-submit"
+            onClick={() => void postComment()}
+          >
             提交评论
           </Button>
         </div>

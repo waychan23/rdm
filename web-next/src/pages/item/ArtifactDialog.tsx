@@ -8,9 +8,11 @@ import ModalDialog, {
   ModalTitle,
   ModalTransition,
 } from "@atlaskit/modal-dialog";
-import Textfield from "@atlaskit/textfield";
-import Select from "@atlaskit/select";
 import { Stack } from "@atlaskit/primitives";
+import Select from "@atlaskit/select";
+import Textfield from "@atlaskit/textfield";
+
+import FormField from "../../components/FormField";
 
 export const ARTIFACT_KINDS = ["link", "doc", "design", "api_doc", "repo", "other"];
 
@@ -31,53 +33,57 @@ export default function ArtifactDialog({ open, onClose, onSave }: Props) {
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog onClose={onClose} width="440px">
+        <ModalDialog onClose={onClose} width="440px" testId="artifact-dialog">
           <ModalHeader>
             <ModalTitle>挂载产出物</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.150">
-              <Stack space="space.050">
-                <label htmlFor="art-kind">类型</label>
+              <FormField label="类型" htmlFor="art-kind">
                 <Select
                   inputId="art-kind"
                   options={options}
                   value={options.find((o) => o.value === kind)}
                   onChange={(opt) => opt && setKind((opt as { value: string }).value)}
                 />
-              </Stack>
-              <Stack space="space.050">
-                <label htmlFor="art-label">标题</label>
+              </FormField>
+              <FormField label="标题" htmlFor="art-label">
                 <Textfield
                   id="art-label"
                   value={label}
+                  testId="artifact-label"
                   onChange={(e) => setLabel(e.currentTarget.value)}
                 />
-              </Stack>
-              <Stack space="space.050">
-                <label htmlFor="art-url">URL</label>
+              </FormField>
+              <FormField label="URL" htmlFor="art-url">
                 <Textfield
                   id="art-url"
                   value={url}
                   placeholder="https://…"
+                  testId="artifact-url"
                   onChange={(e) => setUrl(e.currentTarget.value)}
                 />
-              </Stack>
+              </FormField>
             </Stack>
           </ModalBody>
           <ModalFooter>
-            <Button appearance="subtle" onClick={onClose}>
+            <Button appearance="subtle" onClick={onClose} testId="artifact-cancel">
               取消
             </Button>
             <Button
               appearance="primary"
               isLoading={saving}
+              testId="artifact-submit"
               onClick={async () => {
                 if (!label.trim() || !url.trim()) return;
                 setSaving(true);
-                await onSave({ kind, label: label.trim(), url: url.trim() });
-                setLabel("");
-                setUrl("");
+                try {
+                  await onSave({ kind, label: label.trim(), url: url.trim() });
+                  setLabel("");
+                  setUrl("");
+                } finally {
+                  setSaving(false);
+                }
               }}
             >
               保存

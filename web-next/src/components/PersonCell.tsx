@@ -3,7 +3,11 @@ import { Inline, Text } from "@atlaskit/primitives";
 
 export default function PersonCell({ name }: { name?: string | null }) {
   return (
-    <Inline space="space.100" alignBlock="center">
+    <Inline
+      space="space.100"
+      alignBlock="center"
+      testId={name ? "person-cell" : "person-cell-unassigned"}
+    >
       <Avatar
         appearance="circle"
         size="small"
