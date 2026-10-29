@@ -1,28 +1,30 @@
 import type { ReactNode } from "react";
 
+import { cssMap } from "@atlaskit/css";
 import Heading from "@atlaskit/heading";
-import { Box, Inline, Stack, Text, xcss } from "@atlaskit/primitives";
+import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
 // Shared page frame. ADS page rhythm: 24px inset, 24px between the header
 // block and the page content. `fill` is for list/board pages that must keep
 // their own vertical scroll area inside the shell.
-const pageStyles = xcss({
-  display: "flex",
-  flexDirection: "column",
-  gap: "space.300",
-  padding: "space.300",
-  minWidth: "0",
-});
-
-const fillPageStyles = xcss({
-  display: "flex",
-  flexDirection: "column",
-  gap: "space.300",
-  padding: "space.300",
-  minWidth: "0",
-  flex: "1",
-  minHeight: "0",
-  height: "100%",
+const styles = cssMap({
+  page: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--ds-space-300)",
+    padding: "var(--ds-space-300)",
+    minWidth: "0",
+  },
+  fillPage: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--ds-space-300)",
+    padding: "var(--ds-space-300)",
+    minWidth: "0",
+    flex: "1",
+    minHeight: "0",
+    height: "100%",
+  },
 });
 
 export function Page({
@@ -35,7 +37,7 @@ export function Page({
   fill?: boolean;
 }) {
   return (
-    <Box xcss={fill ? fillPageStyles : pageStyles} testId={testId}>
+    <Box xcss={fill ? styles.fillPage : styles.page} testId={testId}>
       {children}
     </Box>
   );

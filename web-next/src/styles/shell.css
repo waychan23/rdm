@@ -1,10 +1,38 @@
 /*
  * App shell rail. NavLink only accepts className (not the primitives xcss
- * prop), so interaction states live here with ADS runtime CSS variables.
+ * prop), so layout and interaction states live here with ADS tokens.
+ *
+ * Width is fixed at 80px (space.1000): four CJK characters at 12px still fit
+ * inside the 60px label box, and the rail never resizes with its content.
+ * Vertical overflow stays scrollable but the scrollbar is hidden so the rail
+ * silhouette stays clean on short viewports.
  */
+.rdm-rail {
+  flex: 0 0 var(--ds-space-1000, 80px);
+  width: var(--ds-space-1000, 80px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-050, 4px);
+  padding: var(--ds-space-100, 8px);
+  background-color: var(--ds-surface-sunken, #f8f8f8);
+  border-inline-end: 1px solid var(--ds-border);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.rdm-rail::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 .rdm-rail-item {
+  box-sizing: border-box;
   display: flex;
   width: 100%;
+  flex: 0 0 auto;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -17,6 +45,14 @@
   transition:
     background-color 100ms ease-out,
     color 100ms ease-out;
+}
+
+.rdm-rail-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--ds-font-body-small, 12px/16px sans-serif);
 }
 
 .rdm-rail-item:hover {

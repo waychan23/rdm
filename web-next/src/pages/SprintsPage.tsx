@@ -7,7 +7,7 @@ import EmptyState from "@atlaskit/empty-state";
 import Heading from "@atlaskit/heading";
 import Spinner from "@atlaskit/spinner";
 import Textfield from "@atlaskit/textfield";
-import { Box, Inline, Stack, Text } from "@atlaskit/primitives";
+import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
 import ConfirmDialog from "../components/ConfirmDialog";
 import { Page, PageHeader } from "../components/Page";

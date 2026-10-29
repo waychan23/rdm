@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-import { Inline, Stack, Text } from "@atlaskit/primitives";
+import { Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { token } from "@atlaskit/tokens";
 
 import StatusLozenge from "../../workitems/status";

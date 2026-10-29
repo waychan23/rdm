@@ -8,7 +8,7 @@ import ModalDialog, {
   ModalTitle,
   ModalTransition,
 } from "@atlaskit/modal-dialog";
-import { Stack } from "@atlaskit/primitives";
+import { Stack } from "@atlaskit/primitives/compiled";
 import Select from "@atlaskit/select";
 import Textfield from "@atlaskit/textfield";
 

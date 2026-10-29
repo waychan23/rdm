@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 
+import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
 import EmptyState from "@atlaskit/empty-state";
 import Lozenge from "@atlaskit/lozenge";
 import Spinner from "@atlaskit/spinner";
-import { Box, Inline, Text, xcss } from "@atlaskit/primitives";
+import { Box, Inline, Text } from "@atlaskit/primitives/compiled";
 
 import ConfirmDialog from "../components/ConfirmDialog";
 import { Page, PageHeader } from "../components/Page";
@@ -16,10 +17,12 @@ import type { OrgUser, ProjectMemberRow } from "../types";
 import { AddMemberDialog, MemberEditDialog } from "../members/memberForms";
 import "../styles/table.css";
 
-const centeredStyles = xcss({
-  display: "flex",
-  justifyContent: "center",
-  padding: "space.400",
+const styles = cssMap({
+  centered: {
+    display: "flex",
+    justifyContent: "center",
+    padding: "var(--ds-space-400)",
+  },
 });
 
 function AgentRow({ agent }: { agent: NonNullable<ProjectMemberRow["agents"]>[number] }) {
@@ -131,7 +134,7 @@ export default function MembersPage() {
       />
 
       {loading ? (
-        <Box xcss={centeredStyles} testId="members-loading">
+        <Box xcss={styles.centered} testId="members-loading">
           <Spinner size="large" />
         </Box>
       ) : (members ?? []).length === 0 ? (

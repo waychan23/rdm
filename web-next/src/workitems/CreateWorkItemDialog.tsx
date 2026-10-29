@@ -8,7 +8,7 @@ import ModalDialog, {
   ModalTitle,
   ModalTransition,
 } from "@atlaskit/modal-dialog";
-import { Stack, Text } from "@atlaskit/primitives";
+import { Stack, Text } from "@atlaskit/primitives/compiled";
 import { RadioGroup } from "@atlaskit/radio";
 import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";

@@ -1,37 +1,38 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
 import Checkbox from "@atlaskit/checkbox";
 import Heading from "@atlaskit/heading";
 import Spinner from "@atlaskit/spinner";
 import Textfield from "@atlaskit/textfield";
-import { Box, Stack, Text, xcss } from "@atlaskit/primitives";
+import { Box, Stack, Text } from "@atlaskit/primitives/compiled";
 
+import { cardBorder } from "../components/cardBorder";
 import FormField from "../components/FormField";
 import { errorCause } from "../lib/api";
 import { submitLogin } from "../lib/auth";
 import { useNotify } from "../lib/flags";
 import { beginLogin, getAccessToken, safePostLoginPath } from "../lib/oauth";
 
-const wrapStyles = xcss({
-  minHeight: "100vh",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "space.300",
-  backgroundColor: "elevation.surface.sunken",
-});
-
-const cardStyles = xcss({
-  width: "360px",
-  maxWidth: "100%",
-  padding: "space.300",
-  backgroundColor: "elevation.surface",
-  border: "1px solid",
-  borderColor: "color.border",
-  borderRadius: "radius.small",
-  boxShadow: "elevation.shadow.raised",
+const styles = cssMap({
+  wrap: {
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "var(--ds-space-300)",
+    backgroundColor: "var(--ds-surface-sunken)",
+  },
+  card: {
+    width: "360px",
+    maxWidth: "100%",
+    padding: "var(--ds-space-300)",
+    backgroundColor: "var(--ds-surface)",
+    borderRadius: "var(--ds-radius-small)",
+    boxShadow: "var(--ds-shadow-raised)",
+  },
 });
 
 export default function LoginPage() {
@@ -86,7 +87,7 @@ export default function LoginPage() {
 
   if (!authKey) {
     return (
-      <Box xcss={wrapStyles} testId="login-redirecting">
+      <Box xcss={styles.wrap} testId="login-redirecting">
         <Stack space="space.200" alignInline="center">
           <Spinner size="large" />
           <Text color="color.text.subtlest">正在跳转到登录…</Text>
@@ -96,8 +97,8 @@ export default function LoginPage() {
   }
 
   return (
-    <Box xcss={wrapStyles} testId="page-login">
-      <Box xcss={cardStyles}>
+    <Box xcss={styles.wrap} testId="page-login">
+      <Box xcss={styles.card} style={cardBorder}>
         <Box as="form" onSubmit={submit} testId="login-form">
           <Stack space="space.200">
             <Heading size="large" as="h1">rd-manager 登录</Heading>

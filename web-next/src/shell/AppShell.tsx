@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 
+import { cssMap } from "@atlaskit/css";
 import IconButton from "@atlaskit/button/icon/button";
 import Badge from "@atlaskit/badge";
-import { Box, Inline, Text, xcss } from "@atlaskit/primitives";
+import { Box, Inline, Text } from "@atlaskit/primitives/compiled";
 import NotificationIcon from "@atlaskit/icon/core/notification";
 import GridIcon from "@atlaskit/icon/core/grid";
 import BoardIcon from "@atlaskit/icon/core/board";
@@ -14,6 +15,7 @@ import FolderIcon from "@atlaskit/icon/core/folder-open";
 import PeopleIcon from "@atlaskit/icon/core/people-group";
 import SettingsIcon from "@atlaskit/icon/core/settings";
 import LogOutIcon from "@atlaskit/icon/core/log-out";
+import { token } from "@atlaskit/tokens";
 
 import { api } from "../lib/api";
 import { logout } from "../lib/auth";
@@ -21,72 +23,52 @@ import { safePostLoginPath } from "../lib/oauth";
 import type { Whoami } from "../types";
 import "../styles/shell.css";
 
-const topbarStyles = xcss({
-  height: "space.600",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  paddingInline: "space.300",
-  backgroundColor: "elevation.surface",
-  borderBottom: "1px solid",
-  borderColor: "color.border",
-  flexShrink: 0,
-});
-
-const crumbLinkStyles = xcss({
-  color: "color.link",
-  textDecoration: "none",
-  cursor: "pointer",
-  fontWeight: "font.weight.medium",
-});
-
-const shellStyles = xcss({
-  display: "flex",
-  flexDirection: "column",
-  height: "100vh",
-  overflow: "hidden",
-  backgroundColor: "elevation.surface",
-  color: "color.text",
-});
-
-const bodyStyles = xcss({
-  display: "flex",
-  flex: "1",
-  minHeight: "0",
-});
-
-const railStyles = xcss({
-  width: "space.800",
-  backgroundColor: "elevation.surface.sunken",
-  borderRight: "1px solid",
-  borderColor: "color.border",
-  padding: "space.100",
-  display: "flex",
-  flexDirection: "column",
-  gap: "space.050",
-  flexShrink: 0,
-  overflowY: "auto",
-});
-
-const contentStyles = xcss({
-  flex: "1",
-  minWidth: "0",
-  minHeight: "0",
-  display: "flex",
-  flexDirection: "column",
-  overflow: "auto",
-});
-
-const bellBadgeStyles = xcss({
-  position: "absolute",
-  top: "space.050",
-  insetInlineEnd: "space.050",
-  pointerEvents: "none",
-});
-
-const bellWrapperStyles = xcss({
-  display: "inline-flex",
-  position: "relative",
+const styles = cssMap({
+  topbar: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingInline: "var(--ds-space-300)",
+    backgroundColor: "var(--ds-surface)",
+    flexShrink: 0,
+  },
+  crumbLink: {
+    color: "var(--ds-link)",
+    textDecoration: "none",
+    cursor: "pointer",
+    fontWeight: "var(--ds-font-weight-medium)",
+  },
+  shell: {
+    display: "flex",
+    flexDirection: "column",
+    height: "100vh",
+    overflow: "hidden",
+    backgroundColor: "var(--ds-surface)",
+    color: "var(--ds-text)",
+  },
+  body: {
+    display: "flex",
+    flex: "1",
+    minHeight: "0",
+  },
+  content: {
+    flex: "1",
+    minWidth: "0",
+    minHeight: "0",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "auto",
+  },
+  bellBadge: {
+    position: "absolute",
+    top: "var(--ds-space-050)",
+    insetInlineEnd: "var(--ds-space-050)",
+    pointerEvents: "none",
+  },
+  bellWrapper: {
+    display: "inline-flex",
+    position: "relative",
+  },
 });
 
 interface NavEntry {
@@ -141,11 +123,18 @@ export default function AppShell() {
   };
 
   return (
-    <Box xcss={shellStyles} testId="app-shell">
-      <Box as="header" xcss={topbarStyles} testId="app-topbar">
+    <Box xcss={styles.shell} testId="app-shell">
+      {/* cssMap's height type only accepts raw dimensions, so the topbar height
+          is applied as the spacing token at runtime. */}
+      <Box
+        as="header"
+        xcss={styles.topbar}
+        style={{ height: token("space.600"), borderBlockEnd: `1px solid ${token("color.border")}` }}
+        testId="app-topbar"
+      >
         <Inline space="space.100" alignBlock="center">
           <Link to="/projects" data-testid="topbar-home">
-            <Box xcss={crumbLinkStyles}>rdm</Box>
+            <Box xcss={styles.crumbLink}>rdm</Box>
           </Link>
           {projectKey && (
             <>
@@ -157,7 +146,7 @@ export default function AppShell() {
           )}
         </Inline>
         <Inline space="space.150" alignBlock="center">
-          <Box xcss={bellWrapperStyles}>
+          <Box xcss={styles.bellWrapper}>
             <IconButton
               icon={(iconProps) => <NotificationIcon {...iconProps} spacing="spacious" />}
               label="信箱"
@@ -166,7 +155,7 @@ export default function AppShell() {
               onClick={() => projectKey && navigate(`/projects/${projectKey}/mailbox`)}
             />
             {who?.unread_count ? (
-              <Box xcss={bellBadgeStyles}>
+              <Box xcss={styles.bellBadge}>
                 <Badge appearance="danger">{who.unread_count}</Badge>
               </Box>
             ) : null}
@@ -188,8 +177,8 @@ export default function AppShell() {
         </Inline>
       </Box>
 
-      <Box xcss={bodyStyles}>
-        <Box as="nav" xcss={railStyles} aria-label="主导航" testId="app-sidebar">
+      <Box xcss={styles.body}>
+        <nav className="rdm-rail" aria-label="主导航" data-testid="app-sidebar">
           <RailItem to="/projects" label="项目" testId="projects" icon={GridIcon} end />
           {(who?.org_roles.includes("org_owner") ||
             who?.org_roles.includes("user_manager")) && (
@@ -206,8 +195,8 @@ export default function AppShell() {
                 icon={entry.icon}
               />
             ))}
-        </Box>
-        <Box as="main" xcss={contentStyles} testId="app-content">
+        </nav>
+        <Box as="main" xcss={styles.content} testId="app-content">
           <Outlet />
         </Box>
       </Box>
@@ -231,9 +220,7 @@ function RailItem({
   return (
     <NavLink to={to} end={end} className="rdm-rail-item" data-testid={`rail-item-${testId}`}>
       <Icon label={label} />
-      <Text size="small" color="inherit">
-        {label}
-      </Text>
+      <span className="rdm-rail-label">{label}</span>
     </NavLink>
   );
 }

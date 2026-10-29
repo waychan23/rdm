@@ -1,20 +1,23 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
 import Heading from "@atlaskit/heading";
 import Spinner from "@atlaskit/spinner";
-import { Box, Stack, Text, xcss } from "@atlaskit/primitives";
+import { Box, Stack, Text } from "@atlaskit/primitives/compiled";
 
 import { reloadSession } from "../lib/auth";
 import { beginLogin, completeLogin, takePostLoginPath } from "../lib/oauth";
 
-const wrapStyles = xcss({
-  minHeight: "100vh",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  backgroundColor: "elevation.surface.sunken",
+const styles = cssMap({
+  wrap: {
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "var(--ds-surface-sunken)",
+  },
 });
 
 export default function AuthCallbackPage() {
@@ -46,7 +49,7 @@ export default function AuthCallbackPage() {
   }, [params, navigate]);
 
   return (
-    <Box xcss={wrapStyles} testId="page-auth-callback">
+    <Box xcss={styles.wrap} testId="page-auth-callback">
       <Stack space="space.200" alignInline="center">
         {error ? (
           <Stack space="space.150" alignInline="center">

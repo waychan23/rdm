@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
 import Checkbox from "@atlaskit/checkbox";
 import EmptyState from "@atlaskit/empty-state";
@@ -8,7 +9,7 @@ import SectionMessage from "@atlaskit/section-message";
 import Select from "@atlaskit/select";
 import Spinner from "@atlaskit/spinner";
 import Textfield from "@atlaskit/textfield";
-import { Box, Inline, xcss } from "@atlaskit/primitives";
+import { Box, Inline } from "@atlaskit/primitives/compiled";
 
 import { Page, PageHeader } from "../components/Page";
 import { api } from "../lib/api";
@@ -24,25 +25,27 @@ interface Option {
   value: string;
 }
 
-const contentStyles = xcss({
-  display: "flex",
-  flexDirection: "column",
-  flex: "1",
-  minHeight: "0",
-});
+const pageStyles = cssMap({
+  content: {
+    display: "flex",
+    flexDirection: "column",
+    flex: "1",
+    minHeight: "0",
+  },
 
-const centeredStyles = xcss({
-  display: "flex",
-  justifyContent: "center",
-  padding: "space.400",
-});
+  centered: {
+    display: "flex",
+    justifyContent: "center",
+    padding: "var(--ds-space-400)",
+  },
 
-const filterWidthStyles = xcss({
-  width: "140px",
-});
+  filterWidth: {
+    width: "140px",
+  },
 
-const searchWidthStyles = xcss({
-  width: "180px",
+  searchWidth: {
+    width: "180px",
+  },
 });
 
 export default function BacklogPage() {
@@ -145,7 +148,7 @@ export default function BacklogPage() {
             onChange={(e) => toggleKind(k.value, e.currentTarget.checked)}
           />
         ))}
-        <Box xcss={filterWidthStyles} testId="work-item-filter-status">
+        <Box xcss={pageStyles.filterWidth} testId="work-item-filter-status">
           <Select<Option>
             options={statusOptions}
             value={status}
@@ -158,7 +161,7 @@ export default function BacklogPage() {
             placeholder="状态"
           />
         </Box>
-        <Box xcss={filterWidthStyles} testId="work-item-filter-assignee">
+        <Box xcss={pageStyles.filterWidth} testId="work-item-filter-assignee">
           <Select<Option>
             options={assigneeOptions}
             value={assignee}
@@ -171,7 +174,7 @@ export default function BacklogPage() {
             placeholder="负责人"
           />
         </Box>
-        <Box xcss={searchWidthStyles}>
+        <Box xcss={pageStyles.searchWidth}>
           <Textfield
             placeholder="搜索标题"
             value={qInput}
@@ -193,9 +196,9 @@ export default function BacklogPage() {
         </Box>
       </Inline>
 
-      <Box xcss={contentStyles} testId="backlog-content">
+      <Box xcss={pageStyles.content} testId="backlog-content">
         {itemsState.loading ? (
-          <Box xcss={centeredStyles} testId="work-item-loading">
+          <Box xcss={pageStyles.centered} testId="work-item-loading">
             <Spinner size="large" />
           </Box>
         ) : itemsState.error ? (

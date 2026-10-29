@@ -1,34 +1,35 @@
 import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
 import Heading from "@atlaskit/heading";
 import SectionMessage from "@atlaskit/section-message";
 import Textfield from "@atlaskit/textfield";
-import { Box, Stack, Text, xcss } from "@atlaskit/primitives";
+import { Box, Stack, Text } from "@atlaskit/primitives/compiled";
 
+import { cardBorder } from "../components/cardBorder";
 import FormField from "../components/FormField";
 import { api, errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 
-const wrapStyles = xcss({
-  minHeight: "100vh",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "space.300",
-  backgroundColor: "elevation.surface.sunken",
-});
-
-const cardStyles = xcss({
-  width: "380px",
-  maxWidth: "100%",
-  padding: "space.300",
-  backgroundColor: "elevation.surface",
-  border: "1px solid",
-  borderColor: "color.border",
-  borderRadius: "radius.small",
-  boxShadow: "elevation.shadow.raised",
+const styles = cssMap({
+  wrap: {
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "var(--ds-space-300)",
+    backgroundColor: "var(--ds-surface-sunken)",
+  },
+  card: {
+    width: "380px",
+    maxWidth: "100%",
+    padding: "var(--ds-space-300)",
+    backgroundColor: "var(--ds-surface)",
+    borderRadius: "var(--ds-radius-small)",
+    boxShadow: "var(--ds-shadow-raised)",
+  },
 });
 
 export default function SetPasswordPage() {
@@ -61,8 +62,8 @@ export default function SetPasswordPage() {
 
   if (!ticket) {
     return (
-      <Box xcss={wrapStyles} testId="page-set-password">
-        <Box xcss={cardStyles}>
+      <Box xcss={styles.wrap} testId="page-set-password">
+        <Box xcss={styles.card} style={cardBorder}>
           <SectionMessage appearance="error" title="链接无效">
             缺少 ticket 参数，请向管理员重新索取设置密码链接。
           </SectionMessage>
@@ -72,8 +73,8 @@ export default function SetPasswordPage() {
   }
 
   return (
-    <Box xcss={wrapStyles} testId="page-set-password">
-      <Box xcss={cardStyles}>
+    <Box xcss={styles.wrap} testId="page-set-password">
+      <Box xcss={styles.card} style={cardBorder}>
         {done ? (
           <Stack space="space.200">
             <Heading size="large" as="h1">密码已设置</Heading>

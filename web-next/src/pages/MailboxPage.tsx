@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
 import Checkbox from "@atlaskit/checkbox";
 import EmptyState from "@atlaskit/empty-state";
@@ -16,9 +17,10 @@ import Select from "@atlaskit/select";
 import Spinner from "@atlaskit/spinner";
 import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";
-import { Box, Inline, Stack, Text, xcss } from "@atlaskit/primitives";
+import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { token } from "@atlaskit/tokens";
 
+import { cardBorder } from "../components/cardBorder";
 import FormField from "../components/FormField";
 import { Page, PageHeader } from "../components/Page";
 import TextButton from "../components/TextButton";
@@ -28,18 +30,17 @@ import { useNotify } from "../lib/flags";
 import type { MailMessage, Mailbox, OrgUser, ProjectMemberRow } from "../types";
 import { flattenMembers } from "../lib/members";
 
-const card = xcss({
-  border: "1px solid",
-  borderColor: "color.border",
-  borderRadius: "radius.small",
-  padding: "space.150",
-  backgroundColor: "elevation.surface",
-});
-
-const centeredStyles = xcss({
-  display: "flex",
-  justifyContent: "center",
-  padding: "space.400",
+const styles = cssMap({
+  card: {
+    borderRadius: "var(--ds-radius-small)",
+    padding: "var(--ds-space-150)",
+    backgroundColor: "var(--ds-surface)",
+  },
+  centered: {
+    display: "flex",
+    justifyContent: "center",
+    padding: "var(--ds-space-400)",
+  },
 });
 
 interface Option {
@@ -176,7 +177,7 @@ export default function MailboxPage() {
       />
 
       {loading ? (
-        <Box xcss={centeredStyles} testId="mailbox-loading">
+        <Box xcss={styles.centered} testId="mailbox-loading">
           <Spinner size="large" />
         </Box>
       ) : messages.length === 0 ? (
@@ -188,12 +189,12 @@ export default function MailboxPage() {
           {messages.map((m) => (
             <Box
               key={m.delivery_id}
-              xcss={card}
+              xcss={styles.card}
               testId={`mailbox-item-${m.delivery_id}`}
               style={
                 m.read_at
-                  ? undefined
-                  : { borderInlineStart: `3px solid ${token("color.border.selected")}` }
+                  ? cardBorder
+                  : { ...cardBorder, borderInlineStart: `3px solid ${token("color.border.selected")}` }
               }
             >
               <Stack space="space.075">

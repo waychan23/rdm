@@ -1,5 +1,5 @@
 import { token } from "@atlaskit/tokens";
-import { Inline, Text } from "@atlaskit/primitives";
+import { Inline, Text } from "@atlaskit/primitives/compiled";
 
 export default function PriorityMark({ priority }: { priority: number | null | undefined }) {
   const unset = priority == null;

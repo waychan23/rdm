@@ -1,5 +1,5 @@
 import Pagination from "@atlaskit/pagination";
-import { Text } from "@atlaskit/primitives";
+import { Text } from "@atlaskit/primitives/compiled";
 
 import PersonCell from "../components/PersonCell";
 import PriorityMark from "../components/PriorityMark";

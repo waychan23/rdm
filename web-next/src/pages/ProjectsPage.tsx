@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
 import EmptyState from "@atlaskit/empty-state";
 import Lozenge from "@atlaskit/lozenge";
@@ -15,8 +16,9 @@ import SectionMessage from "@atlaskit/section-message";
 import Spinner from "@atlaskit/spinner";
 import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";
-import { Box, Grid, Inline, Stack, Text, xcss } from "@atlaskit/primitives";
+import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
+import { cardBorder } from "../components/cardBorder";
 import FormField from "../components/FormField";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
@@ -25,33 +27,35 @@ import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
 import type { Project } from "../types";
 
-const cardStyles = xcss({
-  display: "block",
-  width: "100%",
-  padding: "space.250",
-  border: "1px solid",
-  borderColor: "color.border",
-  borderRadius: "radius.small",
-  backgroundColor: "elevation.surface",
-  color: "color.text",
-  font: "inherit",
-  textAlign: "start",
-  cursor: "pointer",
-  ":hover": {
-    backgroundColor: "elevation.surface.raised.hovered",
-    borderColor: "color.border.focused",
+const styles = cssMap({
+  card: {
+    display: "block",
+    width: "100%",
+    padding: "var(--ds-space-250)",
+    borderRadius: "var(--ds-radius-small)",
+    backgroundColor: "var(--ds-surface)",
+    color: "var(--ds-text)",
+    textAlign: "start",
+    cursor: "pointer",
+    "&:hover": {
+      backgroundColor: "var(--ds-surface-raised-hovered)",
+    },
+    "&:focus-visible": {
+      outline: "2px solid",
+      outlineColor: "var(--ds-border-focused)",
+      outlineOffset: "var(--ds-space-025)",
+    },
   },
-  ":focus-visible": {
-    outline: "2px solid",
-    outlineColor: "color.border.focused",
-    outlineOffset: "space.025",
+  loading: {
+    display: "flex",
+    justifyContent: "center",
+    padding: "var(--ds-space-400)",
   },
-});
-
-const loadingStyles = xcss({
-  display: "flex",
-  justifyContent: "center",
-  padding: "space.400",
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+    gap: "var(--ds-space-200)",
+  },
 });
 
 const FORM_INITIAL = { key: "", name: "", description_md: "" };
@@ -106,7 +110,7 @@ export default function ProjectsPage() {
       />
 
       {loading ? (
-        <Box xcss={loadingStyles} testId="projects-loading">
+        <Box xcss={styles.loading} testId="projects-loading">
           <Spinner size="large" />
         </Box>
       ) : error ? (
@@ -125,17 +129,14 @@ export default function ProjectsPage() {
           />
         </Box>
       ) : (
-        <Grid
-          gap="space.200"
-          templateColumns="repeat(auto-fill, minmax(240px, 1fr))"
-          testId="projects-grid"
-        >
+        <Box xcss={styles.grid} testId="projects-grid">
           {(projects ?? []).map((p) => (
             <Box
               key={p.id}
               role="button"
               tabIndex={0}
-              xcss={cardStyles}
+              xcss={styles.card}
+              style={cardBorder}
               testId={`project-card-${p.key}`}
               onClick={() => navigate(`/projects/${p.key}`)}
               onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
@@ -161,7 +162,7 @@ export default function ProjectsPage() {
               </Stack>
             </Box>
           ))}
-        </Grid>
+        </Box>
       )}
 
       <ModalTransition>

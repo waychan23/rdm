@@ -9,7 +9,7 @@ import Select from "@atlaskit/select";
 import TextArea from "@atlaskit/textarea";
 import SectionMessage from "@atlaskit/section-message";
 import Spinner from "@atlaskit/spinner";
-import { Box, Inline, Text } from "@atlaskit/primitives";
+import { Box, Inline, Text } from "@atlaskit/primitives/compiled";
 import TextButton from "../../components/TextButton";
 import { token } from "@atlaskit/tokens";
 

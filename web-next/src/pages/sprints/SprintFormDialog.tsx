@@ -9,7 +9,7 @@ import ModalDialog, {
   ModalTransition,
 } from "@atlaskit/modal-dialog";
 import { DatePicker } from "@atlaskit/datetime-picker";
-import { Inline, Stack } from "@atlaskit/primitives";
+import { Inline, Stack } from "@atlaskit/primitives/compiled";
 import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";
 

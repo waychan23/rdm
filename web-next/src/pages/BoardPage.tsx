@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { cssMap } from "@atlaskit/css";
 import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import Button from "@atlaskit/button/default/button";
 import Checkbox from "@atlaskit/checkbox";
 import EmptyState from "@atlaskit/empty-state";
 import Spinner from "@atlaskit/spinner";
-import { Box, Inline, xcss } from "@atlaskit/primitives";
+import { Box, Inline } from "@atlaskit/primitives/compiled";
 
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
@@ -16,20 +17,21 @@ import { KIND_OPTIONS } from "../workitems/constants";
 import BoardCard from "./board/BoardCard";
 import BoardColumn from "./board/BoardColumn";
 
-const boardStyles = xcss({
-  display: "flex",
-  flex: "1",
-  minHeight: "0",
-  gap: "space.150",
-  overflowX: "auto",
-  alignItems: "stretch",
-});
-
-const loadingStyles = xcss({
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  flex: "1",
+const styles = cssMap({
+  board: {
+    display: "flex",
+    flex: "1",
+    minHeight: "0",
+    gap: "var(--ds-space-150)",
+    overflowX: "auto",
+    alignItems: "stretch",
+  },
+  loading: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: "1",
+  },
 });
 
 export default function BoardPage() {
@@ -176,9 +178,9 @@ export default function BoardPage() {
         }
       />
 
-      <Box xcss={boardStyles} testId="board-columns">
+      <Box xcss={styles.board} testId="board-columns">
         {loading ? (
-          <Box xcss={loadingStyles} testId="board-loading">
+          <Box xcss={styles.loading} testId="board-loading">
             <Spinner size="large" />
           </Box>
         ) : columns.length === 0 ? (

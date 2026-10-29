@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 
+import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
 import EmptyState from "@atlaskit/empty-state";
 import Link from "@atlaskit/link";
@@ -15,7 +16,7 @@ import Select from "@atlaskit/select";
 import Spinner from "@atlaskit/spinner";
 import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";
-import { Box, Inline, Stack, xcss } from "@atlaskit/primitives";
+import { Box, Inline, Stack } from "@atlaskit/primitives/compiled";
 
 import FormField from "../components/FormField";
 import { Page, PageHeader } from "../components/Page";
@@ -28,10 +29,12 @@ import "../styles/table.css";
 const KINDS = ["git_repo", "doc_repo", "design", "other"];
 const KIND_OPTIONS = KINDS.map((v) => ({ label: v, value: v }));
 
-const centeredStyles = xcss({
-  display: "flex",
-  justifyContent: "center",
-  padding: "space.400",
+const styles = cssMap({
+  centered: {
+    display: "flex",
+    justifyContent: "center",
+    padding: "var(--ds-space-400)",
+  },
 });
 
 interface Option {
@@ -141,7 +144,7 @@ export default function WorkspacesPage() {
       />
 
       {loading ? (
-        <Box xcss={centeredStyles} testId="workspaces-loading">
+        <Box xcss={styles.centered} testId="workspaces-loading">
           <Spinner size="large" />
         </Box>
       ) : (workspaces ?? []).length === 0 ? (

@@ -39,7 +39,7 @@ human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，两个组
   `npx @atlaskit/ads-cli search/docs ... [--json]` 确认组件名、token 名、用法；查不到再用 `atlaskit_*` fallback 工具。
 - 颜色、间距、圆角、阴影、字体、层级一律走 `@atlaskit/tokens`（`token('…')` / CSS 变量 `var(--ds-…)`），
   不写裸 hex/rgb、不手造间距值；无法避免的例外（markdown 排版等）在同行注释说明。
-- 优先用 `@atlaskit/*` 组件；自定义布局用 `@atlaskit/primitives` + `@atlaskit/css`（xcss）。
+- 优先用 `@atlaskit/*` 组件；自定义布局用 `@atlaskit/primitives/compiled` + `@atlaskit/css` 的 `cssMap`（Compiled 插件已接入，见 `web-next/vite.config.ts`）。
 - 中文排版只允许在 `src/styles/global.css` 的字体栈**追加** CJK fallback（PingFang/YaHei/Noto），不引字体包、不改 token 值。
 - 深色模式不做（固定 light）；a11y 工具开发时可用，但本期没有 UI 走查/lint/截图门禁，不要自行新建。
 - 认证：所有 `/api/v1` 请求由 `lib/api.ts` 注入 Bearer 并在 401 时单飞刷新；不要在页面里手写 token。

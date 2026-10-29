@@ -3,7 +3,7 @@ import type { LoaderFunctionArgs } from "react-router-dom";
 import { Navigate, createBrowserRouter, redirect } from "react-router-dom";
 
 import Spinner from "@atlaskit/spinner";
-import { Box } from "@atlaskit/primitives";
+import { Box } from "@atlaskit/primitives/compiled";
 
 import { ensureSession } from "./lib/auth";
 import AppShell from "./shell/AppShell";

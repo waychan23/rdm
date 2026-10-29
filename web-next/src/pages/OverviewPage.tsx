@@ -1,10 +1,12 @@
 import { useNavigate, useParams } from "react-router-dom";
 
+import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
 import Heading from "@atlaskit/heading";
 import Spinner from "@atlaskit/spinner";
-import { Box, Grid, Inline, Stack, Text, xcss } from "@atlaskit/primitives";
+import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
+import { cardBorder } from "../components/cardBorder";
 import { Page, PageHeader } from "../components/Page";
 import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
@@ -28,18 +30,28 @@ interface Overview {
 
 const kindLabel = (k: string) => KIND_OPTIONS.find((o) => o.value === k)?.label ?? k;
 
-const cardStyles = xcss({
-  border: "1px solid",
-  borderColor: "color.border",
-  borderRadius: "radius.small",
-  padding: "space.250",
-  backgroundColor: "elevation.surface",
-});
-
-const centeredStyles = xcss({
-  display: "flex",
-  justifyContent: "center",
-  padding: "space.400",
+const styles = cssMap({
+  card: {
+    borderRadius: "var(--ds-radius-small)",
+    padding: "var(--ds-space-250)",
+    backgroundColor: "var(--ds-surface)",
+  },
+  centered: {
+    display: "flex",
+    justifyContent: "center",
+    padding: "var(--ds-space-400)",
+  },
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: "var(--ds-space-200)",
+  },
+  panelsGrid: {
+    display: "grid",
+    gridTemplateColumns: "360px 360px",
+    gap: "var(--ds-space-200)",
+    alignItems: "start",
+  },
 });
 
 export default function OverviewPage() {
@@ -55,7 +67,7 @@ export default function OverviewPage() {
   if (loading || !data) {
     return (
       <Page testId="page-project-overview">
-        <Box xcss={centeredStyles} testId="overview-loading">
+        <Box xcss={styles.centered} testId="overview-loading">
           <Spinner size="large" />
         </Box>
       </Page>
@@ -92,13 +104,9 @@ export default function OverviewPage() {
         }
       />
 
-      <Grid
-        gap="space.200"
-        templateColumns="1fr 1fr 1fr 1fr"
-        testId="overview-stats"
-      >
+      <Box xcss={styles.statsGrid} testId="overview-stats">
         {stats.map((s) => (
-          <Box key={s.label} xcss={cardStyles} testId={s.testId}>
+          <Box key={s.label} xcss={styles.card} style={cardBorder} testId={s.testId}>
             <Stack space="space.050">
               <Text size="large" weight="bold">
                 {s.value}
@@ -109,15 +117,10 @@ export default function OverviewPage() {
             </Stack>
           </Box>
         ))}
-      </Grid>
+      </Box>
 
-      <Grid
-        gap="space.200"
-        templateColumns="360px 360px"
-        alignItems="start"
-        testId="overview-panels"
-      >
-        <Box xcss={cardStyles} testId="overview-by-kind">
+      <Box xcss={styles.panelsGrid} testId="overview-panels">
+        <Box xcss={styles.card} style={cardBorder} testId="overview-by-kind">
           <Stack space="space.150">
             <Heading size="small">类型分布</Heading>
             {Object.entries(data.by_kind).map(([kind, count]) => (
@@ -132,7 +135,7 @@ export default function OverviewPage() {
           </Stack>
         </Box>
 
-        <Box xcss={cardStyles} testId="overview-by-status">
+        <Box xcss={styles.card} style={cardBorder} testId="overview-by-status">
           <Stack space="space.150">
             <Heading size="small">状态分布</Heading>
             {Object.entries(data.by_status).map(([status, count]) => (
@@ -145,7 +148,7 @@ export default function OverviewPage() {
         </Box>
 
         {data.active_sprint && (
-          <Box xcss={cardStyles} testId="overview-active-sprint">
+          <Box xcss={styles.card} style={cardBorder} testId="overview-active-sprint">
             <Stack space="space.150">
               <Heading size="small">进行中迭代 · {data.active_sprint.name}</Heading>
               <Text size="small" color="color.text.subtlest">
@@ -160,7 +163,7 @@ export default function OverviewPage() {
             </Stack>
           </Box>
         )}
-      </Grid>
+      </Box>
     </Page>
   );
 }

@@ -1,4 +1,4 @@
-import { Box, Stack } from "@atlaskit/primitives";
+import { Box, Stack } from "@atlaskit/primitives/compiled";
 import Select from "@atlaskit/select";
 import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";

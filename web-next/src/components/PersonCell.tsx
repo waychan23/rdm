@@ -1,5 +1,5 @@
 import Avatar from "@atlaskit/avatar";
-import { Inline, Text } from "@atlaskit/primitives";
+import { Inline, Text } from "@atlaskit/primitives/compiled";
 
 export default function PersonCell({ name }: { name?: string | null }) {
   return (

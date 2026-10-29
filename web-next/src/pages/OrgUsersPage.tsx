@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
 import Checkbox from "@atlaskit/checkbox";
 import EmptyState from "@atlaskit/empty-state";
@@ -14,7 +15,7 @@ import ModalDialog, {
 import SectionMessage from "@atlaskit/section-message";
 import Spinner from "@atlaskit/spinner";
 import Textfield from "@atlaskit/textfield";
-import { Box, Inline, Stack, Text, xcss } from "@atlaskit/primitives";
+import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
 import ConfirmDialog from "../components/ConfirmDialog";
 import FormField from "../components/FormField";
@@ -28,10 +29,12 @@ import "../styles/table.css";
 
 const ASSIGNABLE_ROLES = ["user_manager", "project_director"];
 
-const centeredStyles = xcss({
-  display: "flex",
-  justifyContent: "center",
-  padding: "space.400",
+const styles = cssMap({
+  centered: {
+    display: "flex",
+    justifyContent: "center",
+    padding: "var(--ds-space-400)",
+  },
 });
 
 export default function OrgUsersPage() {
@@ -173,7 +176,7 @@ export default function OrgUsersPage() {
       />
 
       {loading ? (
-        <Box xcss={centeredStyles} testId="org-users-loading">
+        <Box xcss={styles.centered} testId="org-users-loading">
           <Spinner size="large" />
         </Box>
       ) : humans.length === 0 ? (

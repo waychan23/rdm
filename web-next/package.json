@@ -32,6 +32,7 @@
     "@atlaskit/textarea": "^10.2.7",
     "@atlaskit/textfield": "^10.2.6",
     "@atlaskit/tokens": "^20.8.2",
+    "@compiled/react": "^1.0.2",
     "dompurify": "^3.4.17",
     "marked": "^18.1.2",
     "react": "^18.3.1",
@@ -39,6 +40,7 @@
     "react-router-dom": "^6.30.0"
   },
   "devDependencies": {
+    "@compiled/vite-plugin": "^2.0.4",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",

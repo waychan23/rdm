@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { draggable } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-import { Box, Inline, Stack, Text } from "@atlaskit/primitives";
+import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { token } from "@atlaskit/tokens";
 
 import PersonCell from "../../components/PersonCell";
