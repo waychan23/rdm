@@ -69,6 +69,16 @@ async def resolve_ticket(
     return ticket
 
 
+async def inspect_ticket(uow: SqlAlchemyUnitOfWork, raw: str) -> PasswordTicket | None:
+    """Look up a ticket without consuming or rejecting it.
+
+    The set-password page evaluates the link as soon as it opens, so it needs
+    the row (and its expired/consumed state) instead of a ValidationError.
+    """
+    assert uow.password_tickets is not None
+    return await uow.password_tickets.get_by_hash(hash_token(raw))
+
+
 async def consume_ticket(uow: SqlAlchemyUnitOfWork, ticket: PasswordTicket) -> None:
     assert uow.password_tickets is not None
     await uow.password_tickets.consume(ticket.id, dt.datetime.now(dt.UTC))

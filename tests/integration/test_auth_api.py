@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlparse
 
 from sqlalchemy import update
 
-from rdm.infrastructure.db.models import UserTokenModel
+from rdm.infrastructure.db.models import PasswordTicketModel, UserTokenModel
 from tests.conftest import OWNER_PASSWORD, ensure_owner_access, web_login
 from tests.support import PASSWORD, create_agent, create_human, login_pat
 
@@ -167,6 +167,69 @@ async def test_reset_link_sets_new_password(server, owner_token) -> None:
         "/api/v1/auth/set-password", json={"ticket": ticket, "new_password": "AnotherPw88"}
     )
     assert r.status_code == 422
+
+
+async def test_password_ticket_status_is_non_consuming(server, owner_token) -> None:
+    """The set-password page evaluates the link on load; checking must not burn it."""
+    client, _settings, app = server
+    user_id = await create_human(client, owner_token, "dave")
+
+    r = await client.post("/api/v1/auth/password-ticket/check", json={"ticket": "x" * 32})
+    assert r.status_code == 200
+    assert r.json()["data"] == {
+        "valid": False,
+        "reason": "not_found",
+        "kind": None,
+        "expires_at": None,
+    }
+
+    r = await client.post(
+        f"/api/v1/users/{user_id}/password-reset-token", headers=auth(owner_token)
+    )
+    assert r.status_code == 201, r.text
+    ticket = parse_qs(urlparse(r.json()["data"]["password_reset_url"]).query)["ticket"][0]
+
+    # Repeated checks keep reporting the same valid state.
+    for _ in range(2):
+        r = await client.post("/api/v1/auth/password-ticket/check", json={"ticket": ticket})
+        data = r.json()["data"]
+        assert data["valid"] is True
+        assert data["reason"] is None
+        assert data["kind"] == "reset"
+
+    # Reissuing a link invalidates the previous one; it was never used, so the
+    # page must not claim it "was used" (consumed covers both cases).
+    r = await client.post(
+        f"/api/v1/users/{user_id}/password-reset-token", headers=auth(owner_token)
+    )
+    newer_ticket = parse_qs(urlparse(r.json()["data"]["password_reset_url"]).query)["ticket"][0]
+    r = await client.post("/api/v1/auth/password-ticket/check", json={"ticket": ticket})
+    assert r.json()["data"]["valid"] is False
+    assert r.json()["data"]["reason"] == "consumed"
+
+    r = await client.post(
+        "/api/v1/auth/set-password", json={"ticket": newer_ticket, "new_password": "DaveNewPw77"}
+    )
+    assert r.status_code == 200
+    r = await client.post("/api/v1/auth/password-ticket/check", json={"ticket": newer_ticket})
+    assert r.json()["data"]["valid"] is False
+    assert r.json()["data"]["reason"] == "consumed"
+
+    # An expired link is reported before the user types a password.
+    r = await client.post(
+        f"/api/v1/users/{user_id}/password-reset-token", headers=auth(owner_token)
+    )
+    expired_ticket = parse_qs(urlparse(r.json()["data"]["password_reset_url"]).query)["ticket"][0]
+    container = app.state.container
+    async with container.uow() as uow:
+        await uow.session.execute(  # type: ignore[union-attr]
+            update(PasswordTicketModel)
+            .where(PasswordTicketModel.consumed_at.is_(None))
+            .values(expires_at=dt.datetime.now(dt.UTC) - dt.timedelta(minutes=1))
+        )
+    r = await client.post("/api/v1/auth/password-ticket/check", json={"ticket": expired_ticket})
+    assert r.json()["data"]["valid"] is False
+    assert r.json()["data"]["reason"] == "expired"
 
 
 async def test_login_throttle_returns_429(server) -> None:

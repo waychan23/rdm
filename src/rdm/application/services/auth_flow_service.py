@@ -85,6 +85,35 @@ class AuthFlowService:
 
     # --- password management -----------------------------------------
 
+    async def password_ticket_status(self, *, ticket: str) -> dict[str, Any]:
+        """Report whether a password-setting link is still usable (no consumption).
+
+        The SPA calls this when the set-password page opens, so an expired or
+        already-used link is reported before the user types a password.
+        """
+        row = await password_tickets.inspect_ticket(self.uow, ticket)
+        reason: str | None = None
+        if row is None:
+            reason = "not_found"
+        elif row.consumed_at is not None:
+            # Consumed either by a successful set-password or by reissuing a
+            # newer link (invalidate_kind); the row cannot tell them apart.
+            reason = "consumed"
+        elif row.is_expired:
+            reason = "expired"
+        if reason is None:
+            assert row is not None
+            assert self.uow.users is not None
+            user = await self.uow.users.get(row.user_id)
+            if user is None or not user.is_human:
+                reason = "user_missing"
+        return {
+            "valid": reason is None,
+            "reason": reason,
+            "kind": None if row is None else row.kind,
+            "expires_at": None if row is None else row.expires_at.isoformat(),
+        }
+
     async def set_password(self, *, ticket: str, new_password: str) -> dict[str, Any]:
         """Consume a bootstrap/reset/must_reset ticket and set a new password."""
         row = await password_tickets.resolve_ticket(self.uow, ticket)

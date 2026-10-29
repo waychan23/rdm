@@ -38,6 +38,11 @@ class SetPasswordIn(BaseModel):
     new_password: str = Field(min_length=1, max_length=200)
 
 
+class PasswordTicketIn(BaseModel):
+    # Ticket is a secret, so it travels in the body rather than a URL path.
+    ticket: str = Field(min_length=8)
+
+
 class PasswordChangeIn(BaseModel):
     old_password: str = Field(min_length=1)
     new_password: str = Field(min_length=1, max_length=200)
@@ -70,6 +75,17 @@ async def login(
         throttler.record_failure(host, body.name)
         raise
     throttler.reset(host, body.name)
+    return {"data": result}
+
+
+@router.post("/auth/password-ticket/check")
+async def check_password_ticket(
+    body: PasswordTicketIn,
+    container: Container = Depends(get_container),
+) -> dict:
+    """Validate a password-setting link without consuming it (page-load check)."""
+    async with container.uow() as uow:
+        result = await AuthFlowService(uow).password_ticket_status(ticket=body.ticket)
     return {"data": result}
 
 
