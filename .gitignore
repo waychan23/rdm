@@ -22,9 +22,6 @@ wheels/
 bootstrap-token
 
 # Node / web build
-web/node_modules/
-web/dist/
-src/rdm/resources/web-dist/
 web-next/node_modules/
 web-next/dist/
 src/rdm/resources/web-next-dist/
