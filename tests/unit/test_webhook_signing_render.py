@@ -7,7 +7,8 @@ import hmac
 import json
 
 from rdm.application.services.webhook_notify import build_view, render_payload
-from rdm.domain.entities import Member, Project
+from rdm.domain.constants import DEFAULT_ORG_ID
+from rdm.domain.entities import Project, User
 from rdm.infrastructure.webhook.signing import WebhookSecretStore, sign
 
 
@@ -30,8 +31,8 @@ def test_secret_store_creates_0600_file(tmp_path) -> None:
 
 
 def _view(event: str, data: dict) -> dict:
-    project = Project(id="p1", key="DEMO", name="DEMO")
-    actor = Member(id="m1", project_id="p1", type="human", name="tl")
+    project = Project(id="p1", org_id=DEFAULT_ORG_ID, key="DEMO", name="DEMO")
+    actor = User(id="m1", org_id=DEFAULT_ORG_ID, type="human", name="tl")
     return build_view(logical_event=event, project=project, event_id=7, actor=actor, data=data)
 
 

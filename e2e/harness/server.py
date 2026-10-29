@@ -9,6 +9,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 
@@ -80,16 +81,41 @@ def start_server(root: Path, *, log_path: Path | None = None) -> Server:
         process.kill()
         raise RuntimeError("test server did not become healthy in 30s")
 
-    # Lifespan bootstrap writes the token on first start. Health can answer
-    # before the lifespan context finishes flushing, so poll for the file.
-    token_path = data_dir / "bootstrap-token"
+    owner_token = _bootstrap_owner_token(base_url, process)
+    return Server(process, base_url, data_dir, owner_token, port)
+
+
+def _bootstrap_owner_token(base_url: str, process: subprocess.Popen) -> str:
+    """Set the owner password through the bootstrap URL, then mint a PAT."""
+    from e2e.harness.rest import PASSWORD, RestClient
+
+    # Health can answer before the lifespan bootstrap flushed; retry briefly.
+    ticket = None
     deadline = time.time() + 15
     while time.time() < deadline:
-        if token_path.exists():
-            break
-        time.sleep(0.1)
-    if not token_path.exists():
+        try:
+            r = httpx.post(f"{base_url}/api/v1/local/owner-recovery", timeout=2, trust_env=False)
+            if r.status_code == 200:
+                path = r.json()["data"]["set_password_url"]
+                ticket = parse_qs(urlparse(path).query)["ticket"][0]
+                break
+        except httpx.HTTPError:
+            pass
+        time.sleep(0.2)
+    if ticket is None:
         process.kill()
-        raise RuntimeError("bootstrap token was not written")
-    owner_token = token_path.read_text(encoding="utf-8").strip()
-    return Server(process, base_url, data_dir, owner_token, port)
+        raise RuntimeError("owner recovery endpoint did not become ready")
+    r = httpx.post(
+        f"{base_url}/api/v1/auth/set-password",
+        json={"ticket": ticket, "new_password": PASSWORD},
+        timeout=10,
+        trust_env=False,
+    )
+    if r.status_code != 200:
+        process.kill()
+        raise RuntimeError(f"setting owner password failed: {r.text}")
+    client = RestClient(base_url, token="")
+    try:
+        return client.login_pat("owner")
+    finally:
+        client.close()

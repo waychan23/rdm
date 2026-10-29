@@ -30,16 +30,9 @@ async def _setup(client: httpx.AsyncClient, token: str) -> dict:
 async def _member(
     client: httpx.AsyncClient, owner: str, name: str, roles: list[str] | None = None
 ) -> str:
-    r = await client.post(
-        f"{API}/projects/DEMO/members",
-        json={"name": name, "type": "human", "roles": roles or ["worker"]},
-        headers=auth(owner),
-    )
-    assert r.status_code == 201, r.text
-    mid = r.json()["data"]["id"]
-    r = await client.post(f"{API}/members/{mid}/tokens", json={"label": "t"}, headers=auth(owner))
-    assert r.status_code == 201, r.text
-    return r.json()["data"]["token"]
+    from tests.support import make_member
+
+    return (await make_member(client, owner, "DEMO", name, roles or ["worker"]))[1]
 
 
 async def _upload(client: httpx.AsyncClient, token: str, display_id: str, name: str) -> dict:

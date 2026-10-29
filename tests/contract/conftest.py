@@ -25,6 +25,17 @@ async def engine(db_url: str) -> AsyncIterator[AsyncEngine]:
     eng = make_engine(db_url)
     async with eng.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        from sqlalchemy import text
+
+        from rdm.domain.constants import DEFAULT_ORG_ID, DEFAULT_ORG_NAME
+
+        await conn.execute(
+            text(
+                "insert into organization(id,name,event_seq,created_at) "
+                "values (:id,:name,0,CURRENT_TIMESTAMP)"
+            ),
+            {"id": DEFAULT_ORG_ID, "name": DEFAULT_ORG_NAME},
+        )
     yield eng
     await eng.dispose()
 

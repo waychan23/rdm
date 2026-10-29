@@ -14,7 +14,8 @@ from typing import Any
 from rdm.application import security
 from rdm.application.services.url_policy import ensure_http_url
 from rdm.application.services.workitem_service import WorkItemService
-from rdm.domain.entities import Artifact, Member, Project
+from rdm.domain.actor import Actor
+from rdm.domain.entities import Artifact, Project
 from rdm.domain.enums import ArtifactOwnerType
 from rdm.domain.errors import NotFound, ValidationError
 from rdm.domain.events import EventType, created_payload, deleted_payload
@@ -38,7 +39,7 @@ class ArtifactService:
         self.items = WorkItemService(uow)
 
     async def resolve_owner(
-        self, actor: Member, project: Project, owner_type: str, owner_ref: str
+        self, actor: Actor, project: Project, owner_type: str, owner_ref: str
     ) -> str:
         if owner_type not in VALID_OWNER_TYPES:
             raise ValidationError(
@@ -67,7 +68,7 @@ class ArtifactService:
         return message.id
 
     async def add(
-        self, actor: Member, project_key: str | None, data: dict[str, Any]
+        self, actor: Actor, project_key: str | None, data: dict[str, Any]
     ) -> tuple[Project, Artifact]:
         project = await self.items.resolve_project(actor, project_key)
         owner_type = data.get("owner_type")
@@ -123,7 +124,7 @@ class ArtifactService:
         return project, artifact
 
     async def list_for(
-        self, actor: Member, project_key: str, owner_type: str, owner_ref: str
+        self, actor: Actor, project_key: str, owner_type: str, owner_ref: str
     ) -> tuple[Project, list[Artifact]]:
         project = await self.items.resolve_project(actor, project_key)
         owner_id = await self.resolve_owner(actor, project, owner_type, owner_ref)
@@ -131,12 +132,12 @@ class ArtifactService:
         artifacts = await self.uow.artifacts.list_for_owner(project.id, owner_type, owner_id)
         return project, artifacts
 
-    async def delete(self, actor: Member, artifact_id: str) -> tuple[Project, Artifact]:
+    async def delete(self, actor: Actor, artifact_id: str) -> tuple[Project, Artifact]:
         assert self.uow.artifacts is not None and self.uow.projects is not None
         artifact = await self.uow.artifacts.get(artifact_id)
         if artifact is None:
             raise NotFound(f"产出物 {artifact_id} 不存在", details={"artifact_id": artifact_id})
-        security.assert_same_project(actor, artifact.project_id)
+        security.assert_project_access(actor, artifact.project_id)
         project = await self.uow.projects.get(artifact.project_id)
         assert project is not None
         now = dt.datetime.now(dt.UTC)
@@ -159,18 +160,22 @@ class ArtifactService:
         project_id: str,
         artifact: Artifact,
         event_type: EventType,
-        actor: Member,
+        actor: Actor,
         payload: dict[str, Any],
     ) -> None:
-        seq = await self.uow.allocate_event_seq(project_id)
+        assert self.uow.projects is not None
+        project = await self.uow.projects.get(project_id)
+        org_id = project.org_id if project is not None else actor.org_id
+        seq = await self.uow.allocate_event_seq(org_id)
         assert self.uow.events is not None
         await self.uow.events.append(
+            org_id=org_id,
             project_id=project_id,
             seq=seq,
             aggregate_type="artifact",
             aggregate_id=artifact.id,
             aggregate_version=0,
             event_type=event_type,
-            actor_member_id=actor.id,
+            actor_user_id=actor.id,
             payload=payload,
         )

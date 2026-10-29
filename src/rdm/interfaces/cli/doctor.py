@@ -89,71 +89,55 @@ def check_database(settings: Settings) -> CheckResult:
     return CheckResult("database", OK, f"revision {current_label}")
 
 
-def _check_secret_file(path: Path, label: str) -> tuple[str, str]:
-    """Return (status, detail) for a bootstrap token/password file."""
-    if not path.exists():
-        return WARN, f"{label} 缺失（{path}）"
-    mode = path.stat().st_mode & 0o777
-    if mode != 0o600:
-        return WARN, f"{label} 权限为 {mode:03o}，应为 0600"
-    return OK, f"{label} 存在且权限 0600"
-
-
-def check_bootstrap_credentials(settings: Settings) -> CheckResult:
-    """bootstrap-token/bootstrap-password files and their DB consistency."""
+def check_bootstrap(settings: Settings) -> CheckResult:
+    """Organization bootstrap state (no secret files any more, §17)."""
     if not settings.db_path.exists():
         return CheckResult("bootstrap", OK, "数据库不存在，跳过")
 
     engine = create_engine(settings.db_sync_url)
     try:
         with engine.connect() as conn:
-            project_count = conn.execute(
-                text("select count(*) from project where deleted_at is null")
-            ).scalar()
-            if not project_count:
+            tables = set(inspect(conn).get_table_names())
+            if "organization" not in tables:
+                return CheckResult("bootstrap", FAIL, "数据库结构过旧：需要 rdm db upgrade")
+            org = conn.execute(text("select count(*) from organization")).scalar()
+            if not org:
                 return CheckResult("bootstrap", OK, "尚未 bootstrap（首次 rdm serve 生成）")
-            row = conn.execute(
+            owners = conn.execute(
                 text(
-                    "select p.owner_member_id from project p "
-                    "where lower(p.key) = 'rdm' and p.deleted_at is null"
+                    "select id, name, password_hash, must_reset_password, is_active "
+                    "from users where deleted_at is null and type = 'human' "
+                    "and org_roles like '%org_owner%'"
                 )
-            ).first()
-            token_status, token_detail = _check_secret_file(
-                settings.bootstrap_token_path, "bootstrap-token"
-            )
-            pw_status, pw_detail = _check_secret_file(
-                settings.bootstrap_password_path, "bootstrap-password"
-            )
-            db_detail = ""
-            if row is not None and row[0]:
-                import hashlib
-
-                raw_token = (
-                    settings.bootstrap_token_path.read_text(encoding="utf-8").strip()
-                    if settings.bootstrap_token_path.exists()
-                    else ""
+            ).all()
+            if len(owners) != 1:
+                return CheckResult(
+                    "bootstrap", FAIL, f"应有且仅有 1 个 Org Owner，实际 {len(owners)} 个"
                 )
-                token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-                valid_pat = conn.execute(
+            owner = owners[0]
+            if not owner.is_active:
+                return CheckResult("bootstrap", FAIL, "Org Owner 已停用")
+            if owner.password_hash is None or owner.must_reset_password:
+                pending = conn.execute(
                     text(
-                        "select 1 from member_token where member_id = :m "
-                        "and token_hash = :h and kind = 'pat' and revoked_at is null limit 1"
+                        "select count(*) from password_set_token "
+                        "where user_id = :u and kind = 'bootstrap' "
+                        "and consumed_at is null and expires_at > CURRENT_TIMESTAMP"
                     ),
-                    {"m": row[0], "h": token_hash},
-                ).first()
-                if raw_token and valid_pat is None:
-                    token_status = WARN
-                    db_detail = "；bootstrap-token 与库中有效 PAT 不一致（建议轮换）"
+                    {"u": owner.id},
+                ).scalar()
+                if pending:
+                    return CheckResult(
+                        "bootstrap", WARN, "Org Owner 尚未设置密码（bootstrap-url 应在日志中）"
+                    )
+                return CheckResult(
+                    "bootstrap",
+                    WARN,
+                    "Org Owner 尚未设置密码且 bootstrap-url 已失效；执行 rdm account recover-owner",
+                )
+            return CheckResult("bootstrap", OK, f"Org Owner {owner.name} 已就绪")
     finally:
         engine.dispose()
-
-    status = (
-        FAIL
-        if FAIL in (token_status, pw_status)
-        else (WARN if WARN in (token_status, pw_status) else OK)
-    )
-    detail = f"{token_detail}；{pw_detail}{db_detail}"
-    return CheckResult("bootstrap", status, detail)
 
 
 def check_workflow(_settings: Settings) -> CheckResult:
@@ -262,7 +246,7 @@ def run_checks(settings: Settings, *, include_endpoint: bool = True) -> list[Che
     checks = [
         check_data_dir(settings),
         check_database(settings),
-        check_bootstrap_credentials(settings),
+        check_bootstrap(settings),
         check_workflow(settings),
         check_outbox(settings),
         check_attachments(settings),

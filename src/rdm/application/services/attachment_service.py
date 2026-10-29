@@ -15,8 +15,9 @@ from typing import Any
 from rdm.application import security
 from rdm.application.ports import FileStore
 from rdm.application.services.workitem_service import WorkItemService
+from rdm.domain.actor import Actor
 from rdm.domain.attachment_policy import ensure_allowed_type, sanitize_filename
-from rdm.domain.entities import Attachment, Member, Project, WorkItem
+from rdm.domain.entities import Attachment, Project, WorkItem
 from rdm.domain.enums import AttachmentOwnerType
 from rdm.domain.errors import Forbidden, NotFound, ValidationError
 from rdm.domain.events import EventType
@@ -40,7 +41,7 @@ class AttachmentService:
     # --- owner resolution -------------------------------------------------
 
     async def resolve_owner(
-        self, actor: Member, project: Project, owner_type: str, owner_ref: str
+        self, actor: Actor, project: Project, owner_type: str, owner_ref: str
     ) -> tuple[str, str | None]:
         """Validate the polymorphic owner; return (owner_id, display_id)."""
         if owner_type not in {t.value for t in AttachmentOwnerType}:
@@ -70,7 +71,7 @@ class AttachmentService:
 
     async def upload(
         self,
-        actor: Member,
+        actor: Actor,
         project_key: str | None,
         *,
         owner_type: str,
@@ -91,7 +92,7 @@ class AttachmentService:
             project_id=project.id,
             owner_type=owner_type,
             owner_id=owner_id,
-            uploader_member_id=actor.id,
+            uploader_user_id=actor.id,
             filename=safe_name,
             mime=mime,
             size_bytes=saved.size_bytes,
@@ -121,20 +122,20 @@ class AttachmentService:
         )
         return project, attachment
 
-    async def soft_delete(self, actor: Member, attachment_id: str) -> tuple[Project, Attachment]:
+    async def soft_delete(self, actor: Actor, attachment_id: str) -> tuple[Project, Attachment]:
         assert self.uow.attachments is not None and self.uow.projects is not None
         attachment = await self.uow.attachments.get(attachment_id)
         if attachment is None:
             raise NotFound(f"附件 {attachment_id} 不存在", details={"attachment_id": attachment_id})
-        security.assert_same_project(actor, attachment.project_id)
-        if attachment.uploader_member_id != actor.id and not (
-            security.is_owner(actor) or "manager" in actor.roles
+        security.assert_project_access(actor, attachment.project_id)
+        if attachment.uploader_user_id != actor.id and not (
+            security.can_manage_sprint(actor, attachment.project_id)
         ):
             raise Forbidden(
                 f"成员 {actor.name} 不能删除该附件：仅上传者或 Owner/Manager 可删除。",
                 details={
                     "attachment_id": attachment_id,
-                    "uploader_member_id": attachment.uploader_member_id,
+                    "uploader_user_id": attachment.uploader_user_id,
                 },
             )
         project = await self.uow.projects.get(attachment.project_id)
@@ -183,7 +184,7 @@ class AttachmentService:
     # --- reads ------------------------------------------------------------
 
     async def list_for(
-        self, actor: Member, project_key: str, owner_type: str, owner_ref: str
+        self, actor: Actor, project_key: str, owner_type: str, owner_ref: str
     ) -> tuple[Project, list[Attachment]]:
         project = await self.items.resolve_project(actor, project_key)
         owner_id, _display_id = await self.resolve_owner(actor, project, owner_type, owner_ref)
@@ -197,12 +198,12 @@ class AttachmentService:
         assert self.uow.attachments is not None
         return await self.uow.attachments.list_for_owners(project_id, owner_type, owner_ids)
 
-    async def download(self, actor: Member, attachment_id: str) -> tuple[Attachment, Path]:
+    async def download(self, actor: Actor, attachment_id: str) -> tuple[Attachment, Path]:
         assert self.uow.attachments is not None
         attachment = await self.uow.attachments.get(attachment_id)
         if attachment is None:
             raise NotFound(f"附件 {attachment_id} 不存在", details={"attachment_id": attachment_id})
-        security.assert_same_project(actor, attachment.project_id)
+        security.assert_project_access(actor, attachment.project_id)
         path = self.files.abspath(attachment.rel_path)
         if not path.is_file():
             raise NotFound(
@@ -218,18 +219,22 @@ class AttachmentService:
         project_id: str,
         attachment: Attachment,
         event_type: EventType,
-        actor: Member,
+        actor: Actor,
         payload: dict[str, Any],
     ) -> None:
-        seq = await self.uow.allocate_event_seq(project_id)
+        assert self.uow.projects is not None
+        project = await self.uow.projects.get(project_id)
+        org_id = project.org_id if project is not None else actor.org_id
+        seq = await self.uow.allocate_event_seq(org_id)
         assert self.uow.events is not None
         await self.uow.events.append(
+            org_id=org_id,
             project_id=project_id,
             seq=seq,
             aggregate_type="attachment",
             aggregate_id=attachment.id,
             aggregate_version=0,
             event_type=event_type,
-            actor_member_id=actor.id,
+            actor_user_id=actor.id,
             payload=payload,
         )

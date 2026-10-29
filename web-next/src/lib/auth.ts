@@ -1,74 +1,85 @@
-// Console session state. The browser authenticates with the HttpOnly
-// rdm_session cookie issued by POST /api/v1/auth/login; this module only
-// tracks the current member for the router guard and the top bar.
-//
-// A module singleton (not context) so router loaders can call ensureSession()
-// outside the React tree; components subscribe with useCurrentMember().
+// Stateless session state (§17). Tokens live in localStorage (see oauth.ts);
+// this module caches the current whoami payload for the router guard and the
+// top bar. A module singleton (not context) so router loaders can call
+// ensureSession() outside the React tree; components subscribe with
+// useCurrentUser().
 import { useSyncExternalStore } from "react";
 
 import { api } from "./api";
+import { clearTokens, getAccessToken } from "./oauth";
+import type { Whoami } from "../types";
 
-export interface AuthMember {
-  id: string;
-  project_id: string;
-  type: string;
-  name: string;
-  roles: string[];
-  is_active: boolean;
-}
-
-let currentMember: AuthMember | null = null;
-let readiness: Promise<AuthMember | null> | null = null;
+let currentUser: Whoami | null = null;
+let readiness: Promise<Whoami | null> | null = null;
 const listeners = new Set<() => void>();
 
 function emit() {
   listeners.forEach((l) => l());
 }
 
-async function fetchMe(): Promise<AuthMember | null> {
+async function fetchWhoami(): Promise<Whoami | null> {
+  if (!getAccessToken()) return null;
   try {
-    return (await api.get<AuthMember>("/auth/me")).data;
+    return (await api.get<Whoami>("/whoami")).data;
   } catch {
     return null;
   }
 }
 
-/** Resolve the session once per page load; reuse the in-flight promise. */
-export function ensureSession(): Promise<AuthMember | null> {
-  if (currentMember) return Promise.resolve(currentMember);
-  readiness ??= fetchMe().then((m) => {
-    currentMember = m;
+/** Resolve the identity once per page load; reuse the in-flight promise. */
+export function ensureSession(): Promise<Whoami | null> {
+  if (currentUser) return Promise.resolve(currentUser);
+  readiness ??= fetchWhoami().then((u) => {
+    currentUser = u;
     emit();
-    return m;
+    return u;
   });
   return readiness;
 }
 
-export async function login(projectKey: string, name: string, password: string) {
-  const member = (
-    await api.post<AuthMember>("/auth/login", {
-      project_key: projectKey,
+/** Replace the cached identity after a fresh login/callback. */
+export async function reloadSession(): Promise<Whoami | null> {
+  readiness = null;
+  currentUser = null;
+  return ensureSession();
+}
+
+export interface LoginResult {
+  must_reset: boolean;
+  redirect_to?: string;
+  set_password_url?: string;
+}
+
+/** Submit the SPA login form for an OAuth login ticket. */
+export async function submitLogin(
+  authKey: string,
+  name: string,
+  password: string,
+  remember: boolean,
+): Promise<LoginResult> {
+  return (
+    await api.post<LoginResult>("/auth/login", {
+      auth_key: authKey,
       name,
       password,
+      remember,
     })
   ).data;
-  currentMember = member;
-  readiness = Promise.resolve(member);
-  emit();
-  return member;
 }
 
 export async function logout() {
   try {
-    await api.post("/auth/logout", {});
+    if (getAccessToken()) await api.post("/auth/logout", {});
   } finally {
-    clearSession();
+    clearTokens();
+    currentUser = null;
+    readiness = null;
+    emit();
   }
 }
 
-/** Drop cached identity after the API reports a 401 (expired session). */
 export function clearSession() {
-  currentMember = null;
+  currentUser = null;
   readiness = null;
   emit();
 }
@@ -80,20 +91,10 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-export function useCurrentMember(): AuthMember | null {
+export function useCurrentUser(): Whoami | null {
   return useSyncExternalStore(
     subscribe,
-    () => currentMember,
+    () => currentUser,
     () => null,
   );
-}
-
-const PROJECT_KEY_STORAGE = "rdm.projectKey";
-
-export function rememberedProjectKey(): string {
-  return localStorage.getItem(PROJECT_KEY_STORAGE) || "RDM";
-}
-
-export function rememberProjectKey(key: string) {
-  localStorage.setItem(PROJECT_KEY_STORAGE, key);
 }

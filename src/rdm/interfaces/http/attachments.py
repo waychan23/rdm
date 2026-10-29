@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import FileResponse
 
 from rdm.application.services.attachment_service import AttachmentService
-from rdm.application.services.member_service import MemberService
-from rdm.domain.entities import Member
+from rdm.application.services.membership_service import MembershipService
+from rdm.domain.actor import Actor
 from rdm.interfaces.http.container import Container, get_actor, get_container
 from rdm.interfaces.http.serializers import attachment_out
 
@@ -29,7 +29,7 @@ async def upload_attachment(
     owner_type: str = Form(...),
     owner_ref: str = Form(...),
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
         _project, attachment = await _service(container, uow).upload(
@@ -41,8 +41,8 @@ async def upload_attachment(
             mime=file.content_type,
             stream=file,
         )
-        members = {m.id: m for m in await MemberService(uow).list_members(_project.id)}
-        uploader = await uow.members.get(attachment.uploader_member_id)
+        members = await MembershipService(uow).users_index(_project.id)
+        uploader = await uow.users.get(attachment.uploader_user_id)
         if uploader is not None:
             members[uploader.id] = uploader
         out = attachment_out(attachment, members)
@@ -55,13 +55,13 @@ async def list_attachments(
     owner_type: str,
     owner_ref: str,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
         _project, attachments = await _service(container, uow).list_for(
             actor, key, owner_type, owner_ref
         )
-        members = {m.id: m for m in await MemberService(uow).list_members(_project.id)}
+        members = await MembershipService(uow).users_index(_project.id)
     return {"data": [attachment_out(a, members) for a in attachments]}
 
 
@@ -69,7 +69,7 @@ async def list_attachments(
 async def download_attachment(
     attachment_id: str,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> FileResponse:
     async with container.uow() as uow:
         attachment, path = await _service(container, uow).download(actor, attachment_id)
@@ -88,7 +88,7 @@ async def download_attachment(
 async def delete_attachment(
     attachment_id: str,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> None:
     async with container.uow() as uow:
         await _service(container, uow).soft_delete(actor, attachment_id)

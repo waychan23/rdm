@@ -2,9 +2,9 @@
 
 - /mcp* and the OAuth 2.1 endpoints (/authorize, /token, /register, /revoke,
   /.well-known/*) go to the FastMCP sub-app (architecture §16.34/54)
-- everything else is served by StaticFiles when web-dist exists, with
-  history-route fallback to index.html for navigations (but not /assets)
-- without a built web-dist, unknown paths get a JSON 404 so API tests and
+- everything else is served by StaticFiles from the single web-next bundle,
+  with history-route fallback to index.html for navigations (but not /assets)
+- without a built bundle, unknown paths get a JSON 404 so API tests and
   headless servers behave exactly like M0
 """
 

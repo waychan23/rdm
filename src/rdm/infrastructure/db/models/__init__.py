@@ -15,11 +15,18 @@ from rdm.infrastructure.db.models.mailbox import (
     MessageModel,
     MessageRefModel,
 )
-from rdm.infrastructure.db.models.member import MemberTokenModel, ProjectMemberModel
+from rdm.infrastructure.db.models.membership import ProjectMemberModel
 from rdm.infrastructure.db.models.oauth import (
     OAuthAuthorizationCodeModel,
     OAuthClientModel,
     OAuthConsentModel,
+    OAuthLoginTicketModel,
+)
+from rdm.infrastructure.db.models.organization import (
+    OrganizationModel,
+    PasswordTicketModel,
+    UserModel,
+    UserTokenModel,
 )
 from rdm.infrastructure.db.models.project import ProjectModel
 from rdm.infrastructure.db.models.sprint import SprintItemModel, SprintModel
@@ -32,9 +39,12 @@ from rdm.infrastructure.db.models.workitem import (
 
 __all__ = [
     "Base",
+    "OrganizationModel",
+    "UserModel",
+    "UserTokenModel",
+    "PasswordTicketModel",
     "ProjectModel",
     "ProjectMemberModel",
-    "MemberTokenModel",
     "WorkItemModel",
     "WorkItemStoryModel",
     "WorkItemIssueModel",
@@ -55,4 +65,5 @@ __all__ = [
     "OAuthClientModel",
     "OAuthAuthorizationCodeModel",
     "OAuthConsentModel",
+    "OAuthLoginTicketModel",
 ]

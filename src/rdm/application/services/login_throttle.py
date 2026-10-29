@@ -1,7 +1,7 @@
-"""In-memory login failure throttle (architecture §16.55).
+"""In-memory login failure throttle (architecture §16.55/§17).
 
 Process-local and reset on restart, which is sufficient for the
-single-process local deployment. Keys are (client host, project, username).
+single-process local deployment. Keys are (client host, username).
 """
 
 from __future__ import annotations
@@ -19,13 +19,13 @@ class LoginThrottler:
     def __init__(self, *, max_failures: int = MAX_FAILURES, window: int = WINDOW_SECONDS) -> None:
         self._max = max_failures
         self._window = window
-        self._failures: dict[tuple[str, str, str], deque[float]] = defaultdict(deque)
+        self._failures: dict[tuple[str, str], deque[float]] = defaultdict(deque)
 
-    def _key(self, host: str | None, project_key: str, name: str) -> tuple[str, str, str]:
-        return (host or "-", project_key.strip(), name.strip())
+    def _key(self, host: str | None, name: str) -> tuple[str, str]:
+        return (host or "-", name.strip().lower())
 
-    def check(self, host: str | None, project_key: str, name: str) -> None:
-        key = self._key(host, project_key, name)
+    def check(self, host: str | None, name: str) -> None:
+        key = self._key(host, name)
         now = time.monotonic()
         bucket = self._failures[key]
         while bucket and now - bucket[0] > self._window:
@@ -36,8 +36,8 @@ class LoginThrottler:
                 details={"retry_after_seconds": self._window},
             )
 
-    def record_failure(self, host: str | None, project_key: str, name: str) -> None:
-        self._failures[self._key(host, project_key, name)].append(time.monotonic())
+    def record_failure(self, host: str | None, name: str) -> None:
+        self._failures[self._key(host, name)].append(time.monotonic())
 
-    def reset(self, host: str | None, project_key: str, name: str) -> None:
-        self._failures.pop(self._key(host, project_key, name), None)
+    def reset(self, host: str | None, name: str) -> None:
+        self._failures.pop(self._key(host, name), None)

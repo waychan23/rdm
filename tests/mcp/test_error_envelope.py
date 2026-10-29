@@ -5,7 +5,7 @@ structured_content is the same {error:{code,message,details}} envelope REST
 returns (architecture §16.23).
 """
 
-from mcp_helpers import call
+from tests.mcp.mcp_helpers import call
 
 
 async def _make_story_with_open_task(mcp_clients, owner_client) -> tuple[str, str]:

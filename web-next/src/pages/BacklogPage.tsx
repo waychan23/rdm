@@ -12,7 +12,8 @@ import { Box, Inline, Stack, Text } from "@atlaskit/primitives";
 
 import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
-import type { Member, WorkItem, WorkflowDto } from "../types";
+import type { ProjectMemberRow, WorkItem, WorkflowDto } from "../types";
+import { flattenMembers } from "../lib/members";
 import { KIND_OPTIONS, PAGE_SIZE } from "../workitems/constants";
 import WorkItemTable from "../workitems/WorkItemTable";
 import CreateWorkItemDialog from "../workitems/CreateWorkItemDialog";
@@ -35,8 +36,8 @@ export default function BacklogPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
 
-  const membersState = useAsync<Member[]>(
-    async () => (await api.get<Member[]>(`/projects/${projectKey}/members`)).data,
+  const membersState = useAsync<ProjectMemberRow[]>(
+    async () => (await api.get<ProjectMemberRow[]>(`/projects/${projectKey}/members`)).data,
     [projectKey],
   );
   const workflowState = useAsync<WorkflowDto>(
@@ -55,7 +56,7 @@ export default function BacklogPage() {
   const assigneeOptions = useMemo<Option[]>(() => {
     return [
       { label: "我的", value: "me" },
-      ...(membersState.data ?? []).map((m) => ({ label: m.name, value: m.id })),
+      ...flattenMembers(membersState.data ?? []).map((m) => ({ label: m.name, value: m.id })),
     ];
   }, [membersState.data]);
 

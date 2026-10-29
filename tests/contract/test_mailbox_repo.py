@@ -4,30 +4,31 @@ from __future__ import annotations
 
 import datetime as dt
 
+from rdm.domain.constants import DEFAULT_ORG_ID
 from rdm.domain.entities import (
     Mailbox,
-    Member,
     Message,
     MessageDelivery,
     Project,
+    User,
 )
 from rdm.domain.enums import RecipientType
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
 
-async def _setup(uow: SqlAlchemyUnitOfWork) -> tuple[Project, Member, Mailbox]:
-    project = Project(id=new_id(), key="RDM", name="RDM")
-    member = Member(id=new_id(), project_id=project.id, type="human", name="dev")
+async def _setup(uow: SqlAlchemyUnitOfWork) -> tuple[Project, User, Mailbox]:
+    project = Project(id=new_id(), org_id=DEFAULT_ORG_ID, key="RDM", name="RDM")
+    member = User(id=new_id(), org_id=project.org_id, type="human", name="dev")
     mailbox = Mailbox(
         id=new_id(),
         project_id=project.id,
         kind="indiv",
-        owner_member_id=member.id,
+        owner_user_id=member.id,
     )
-    assert uow.projects is not None and uow.members is not None and uow.mailboxes is not None
+    assert uow.projects is not None and uow.users is not None and uow.mailboxes is not None
     await uow.projects.add(project)
-    await uow.members.add(member)
+    await uow.users.add(member)
     await uow.mailboxes.add(mailbox)
     return project, member, mailbox
 
@@ -44,7 +45,7 @@ async def _fan_out(
         message = Message(
             id=new_id(),
             project_id=project.id,
-            from_member_id=member_id,
+            from_user_id=member_id,
             subject=f"s{i}",
             body_md="b",
         )
@@ -55,7 +56,7 @@ async def _fan_out(
                     id=new_id(),
                     message_id=message.id,
                     mailbox_id=mailbox.id,
-                    recipient_member_id=member_id,
+                    recipient_user_id=member_id,
                     recipient_type=RecipientType.to,
                 )
             ]

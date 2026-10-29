@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from rdm.application.services.artifact_service import ArtifactService
-from rdm.domain.entities import Member
+from rdm.domain.actor import Actor
 from rdm.interfaces.http.container import Container, get_actor, get_container
 from rdm.interfaces.http.serializers import artifact_out
 
@@ -32,7 +32,7 @@ async def list_artifacts(
     owner_type: OwnerType,
     owner_ref: str,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
         _project, artifacts = await ArtifactService(uow).list_for(actor, key, owner_type, owner_ref)
@@ -44,7 +44,7 @@ async def add_artifact(
     key: str,
     body: ArtifactIn,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
         _project, artifact = await ArtifactService(uow).add(actor, key, body.model_dump())
@@ -57,7 +57,7 @@ async def add_artifact(
 async def delete_artifact(
     artifact_id: str,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> None:
     async with container.uow() as uow:
         await ArtifactService(uow).delete(actor, artifact_id)

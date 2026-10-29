@@ -17,13 +17,14 @@ from decimal import Decimal
 from typing import Any
 
 from rdm.application import security
+from rdm.domain.actor import Actor
 from rdm.domain.entities import (
     IssueFields,
     KindFields,
-    Member,
     Project,
     StoryFields,
     TaskFields,
+    User,
     WorkItem,
 )
 from rdm.domain.errors import (
@@ -79,33 +80,64 @@ class WorkItemService:
 
     # --- resolution -------------------------------------------------------
 
-    async def resolve_project(self, actor: Member, key: str | None = None) -> Project:
+    async def resolve_project(self, actor: Actor, key: str | None = None) -> Project:
+        """Resolve an explicit project key, or the actor's only project (§17)."""
         assert self.uow.projects is not None
-        if key is None:
-            project = await self.uow.projects.get(actor.project_id)
-        else:
-            project = await self.uow.projects.get_by_key(key)
-        if project is None:
-            raise NotFound(f"项目 {key or actor.project_id} 不存在", details={"key": key})
-        security.assert_same_project(actor, project.id)
-        return project
+        if key is not None:
+            project = await self.uow.projects.get_by_key(key, org_id=actor.org_id)
+            if project is None:
+                raise NotFound(f"项目 {key} 不存在", details={"key": key})
+            security.assert_project_access(actor, project.id)
+            return project
 
-    async def resolve_member(self, project_id: str, ref: str) -> Member:
-        assert self.uow.members is not None
-        member = await self.uow.members.get_by_name(project_id, ref)
-        if member is None:
-            member = await self.uow.members.get(ref)
-            if member is not None and member.project_id != project_id:
-                member = None
-        if member is None:
+        ids = actor.project_ids()
+        if len(ids) == 1:
+            project = await self.uow.projects.get(ids[0])
+            if project is not None:
+                return project
+        if not ids:
+            raise ValidationError(
+                "你还不属于任何项目；请联系项目 Owner 把你加入，"
+                "或让 Org Owner/project-director 创建项目。",
+                details={"code": "NO_PROJECT"},
+            )
+        names = []
+        for pid in ids:
+            project = await self.uow.projects.get(pid)
+            if project is not None:
+                names.append(project.key)
+        raise ValidationError(
+            f"你属于多个项目 {names}，请指定项目（project 参数或 RDM_PROJECT）。",
+            details={"code": "PROJECT_REQUIRED", "projects": names},
+        )
+
+    async def resolve_member(self, project_id: str, ref: str) -> User:
+        """Resolve a project member by id or name; agents included."""
+        assert self.uow.users is not None and self.uow.memberships is not None
+        user = await self.uow.users.get(ref)
+        if user is None:
+            user = next(
+                (u for u in await self.users_index(project_id) if u.name == ref),
+                None,
+            )
+        if user is None or await self.uow.memberships.get(project_id, user.id) is None:
             raise NotFound(
-                f"成员 {ref!r} 不存在或不在本项目；可用 member_list 查询，不要猜名字。",
+                f"用户 {ref!r} 不存在或不在本项目；可用 member_list 查询，不要猜名字。",
                 details={"ref": ref},
             )
-        return member
+        return user
+
+    async def users_index(self, project_id: str) -> list[User]:
+        assert self.uow.users is not None and self.uow.memberships is not None
+        users: list[User] = []
+        for membership in await self.uow.memberships.list_by_project(project_id):
+            user = await self.uow.users.get(membership.user_id)
+            if user is not None:
+                users.append(user)
+        return users
 
     async def resolve_item(
-        self, actor: Member, ref: str, *, include_deleted: bool = False
+        self, actor: Actor, ref: str, *, include_deleted: bool = False
     ) -> WorkItem:
         assert self.uow.work_items is not None
         item: WorkItem | None = None
@@ -118,7 +150,7 @@ class WorkItemService:
         elif len(ref) <= 32 and re.fullmatch(r"[0-9A-HJKMNP-TV-Z]{26}", ref, re.IGNORECASE):
             raw = await self.uow.work_items.get(ref, include_deleted=include_deleted)
             if raw is not None:
-                security.assert_same_project(actor, raw.project_id)
+                security.assert_project_access(actor, raw.project_id)
                 item = raw
         if item is None:
             raise NotFound(
@@ -126,7 +158,7 @@ class WorkItemService:
                 "先用 work_item_list 查询。",
                 details={"ref": ref},
             )
-        security.assert_same_project(actor, item.project_id)
+        security.assert_project_access(actor, item.project_id)
         return item
 
     @staticmethod
@@ -137,7 +169,7 @@ class WorkItemService:
 
     async def list_items_paginated(
         self,
-        actor: Member,
+        actor: Actor,
         *,
         project_key: str | None = None,
         kind: str | None = None,
@@ -167,7 +199,7 @@ class WorkItemService:
             parent_id = (
                 await self.resolve_item(actor, parent_ref, include_deleted=include_deleted)
             ).id
-        if include_deleted and not security.is_owner(actor):
+        if include_deleted and not security.is_project_owner(actor, project.id):
             include_deleted = False
 
         if sprint_ref is not None:
@@ -190,7 +222,7 @@ class WorkItemService:
             project.id,
             kind=kind,
             status=status,
-            assignee_member_id=assignee_id,
+            assignee_user_id=assignee_id,
             parent_id=parent_id,
             q=q,
             include_deleted=include_deleted,
@@ -199,7 +231,7 @@ class WorkItemService:
             project.id,
             kind=kind,
             status=status,
-            assignee_member_id=assignee_id,
+            assignee_user_id=assignee_id,
             parent_id=parent_id,
             q=q,
             include_deleted=include_deleted,
@@ -210,7 +242,7 @@ class WorkItemService:
 
     async def list_items(
         self,
-        actor: Member,
+        actor: Actor,
         **kwargs: object,
     ) -> tuple[Project, list[WorkItem]]:
         project, items, _total = await self.list_items_paginated(actor, **kwargs)  # type: ignore[arg-type]
@@ -218,7 +250,7 @@ class WorkItemService:
 
     async def _list_in_sprint(
         self,
-        actor: Member,
+        actor: Actor,
         project: Project,
         sprint_ref: str,
         *,
@@ -238,7 +270,7 @@ class WorkItemService:
         sprint = await self.uow.sprints.get(sprint_ref)
         if sprint is None or sprint.project_id != project.id:
             raise NotFound(f"Sprint {sprint_ref} 不存在", details={"sprint_id": sprint_ref})
-        security.assert_same_project(actor, project.id)
+        security.assert_project_access(actor, project.id)
         links = await self.uow.sprint_items.list_for_sprint(sprint.id)
         items = (
             await self.uow.work_items.list_by_ids(project.id, [link.work_item_id for link in links])
@@ -251,7 +283,7 @@ class WorkItemService:
                 return False
             if status is not None and item.status != status:
                 return False
-            if assignee_id is not None and item.assignee_member_id != assignee_id:
+            if assignee_id is not None and item.assignee_user_id != assignee_id:
                 return False
             if parent_id is not None and item.parent_id != parent_id:
                 return False
@@ -265,7 +297,7 @@ class WorkItemService:
 
     async def backlog_items(
         self,
-        actor: Member,
+        actor: Actor,
         *,
         project_key: str | None = None,
         kind: str | None = None,
@@ -284,30 +316,36 @@ class WorkItemService:
         items.sort(key=lambda i: (-i.priority, i.display_no))
         return project, items
 
-    async def my_items(self, actor: Member, *, status: str | None = None) -> list[WorkItem]:
-        """Items assigned to me; without a status filter only non-terminal."""
+    async def my_items(self, actor: Actor, *, status: str | None = None) -> list[WorkItem]:
+        """Items assigned to me across every project I belong to (§17)."""
         assert self.uow.work_items is not None
-        items = await self.uow.work_items.list(
-            actor.project_id,
-            assignee_member_id=actor.id,
-            status=status,
-            limit=100,
-        )
+        items: list[WorkItem] = []
+        for project_id in actor.project_ids():
+            items.extend(
+                await self.uow.work_items.list(
+                    project_id,
+                    assignee_user_id=actor.id,
+                    status=status,
+                    limit=100,
+                )
+            )
         if status is not None:
             return items
         engine = load_engine()
         return [i for i in items if not engine.is_terminal(i.kind, i.status)]
 
-    async def my_open_items(self, actor: Member) -> list[WorkItem]:
+    async def my_open_items(self, actor: Actor) -> list[WorkItem]:
         assert self.uow.work_items is not None
-        items = await self.uow.work_items.list(
-            actor.project_id, assignee_member_id=actor.id, limit=100
-        )
+        items: list[WorkItem] = []
+        for project_id in actor.project_ids():
+            items.extend(
+                await self.uow.work_items.list(project_id, assignee_user_id=actor.id, limit=100)
+            )
         engine = load_engine()
         return [i for i in items if not engine.is_terminal(i.kind, i.status)]
 
     async def get_item(
-        self, actor: Member, ref: str, *, include_deleted: bool = False
+        self, actor: Actor, ref: str, *, include_deleted: bool = False
     ) -> tuple[Project, WorkItem]:
         item = await self.resolve_item(actor, ref, include_deleted=include_deleted)
         assert self.uow.projects is not None
@@ -318,7 +356,7 @@ class WorkItemService:
     # --- writes -----------------------------------------------------------
 
     async def create_item(
-        self, actor: Member, project_key: str | None, data: dict[str, Any]
+        self, actor: Actor, project_key: str | None, data: dict[str, Any]
     ) -> tuple[Project, WorkItem]:
         project = await self.resolve_project(actor, project_key)
         kind = data.get("kind")
@@ -363,7 +401,7 @@ class WorkItemService:
             parent_id=parent.id if parent else None,
             description_md=data.get("description_md"),
             priority=int(data.get("priority", 0) or 0),
-            assignee_member_id=assignee_id,
+            assignee_user_id=assignee_id,
             fields=fields,
             created_by=actor.id,
         )
@@ -380,7 +418,7 @@ class WorkItemService:
         return project, item
 
     async def update_item(
-        self, actor: Member, ref: str, payload: dict[str, Any]
+        self, actor: Actor, ref: str, payload: dict[str, Any]
     ) -> tuple[Project, WorkItem]:
         row_version = payload.get("row_version")
         if not isinstance(row_version, int):
@@ -430,42 +468,40 @@ class WorkItemService:
         )
         return project, item
 
-    async def assign_item(
-        self, actor: Member, ref: str, member_ref: str
-    ) -> tuple[Project, WorkItem]:
+    async def assign_item(self, actor: Actor, ref: str, user_ref: str) -> tuple[Project, WorkItem]:
         project, item = await self.get_item(actor, ref)
-        if member_ref == "me":
-            target = actor
+        if user_ref == "me":
+            target = actor.identity
         else:
-            target = await self.resolve_member(project.id, member_ref)
+            target = await self.resolve_member(project.id, user_ref)
         assert self.uow.work_items is not None
 
-        if item.assignee_member_id is None and target.id == actor.id:
+        if item.assignee_user_id is None and target.id == actor.id:
             # Atomic self-claim against concurrent agents.
             won = await self.uow.work_items.claim(item.id, target.id, actor.id)
             if not won:
                 fresh = await self.uow.work_items.get(item.id)
-                holder = fresh.assignee_member_id if fresh else None
+                holder = fresh.assignee_user_id if fresh else None
                 raise AlreadyAssigned(
                     f"{self.display_id(project, item)} 已被他人认领；"
                     "如需协作请用 mailbox_send 联系其 accountable_human。",
-                    details={"id": item.id, "assignee_member_id": holder},
+                    details={"id": item.id, "assignee_user_id": holder},
                 )
             claimed = await self.uow.work_items.get(item.id)
             assert claimed is not None
             item = claimed
-            changes = {"assignee_member_id": [None, item.assignee_member_id]}
+            changes = {"assignee_user_id": [None, item.assignee_user_id]}
         else:
-            old = item.assignee_member_id
+            old = item.assignee_user_id
             if old == target.id:
                 return project, item
-            item.assignee_member_id = target.id
+            item.assignee_user_id = target.id
             await self.uow.work_items.save(item)
-            changes = {"assignee_member_id": [old, target.id]}
+            changes = {"assignee_user_id": [old, target.id]}
 
-        accountable = target.id if target.type == "human" else target.manager_member_id
+        accountable = target.id if target.type == "human" else target.manager_user_id
         payload = updated_payload(changes)
-        payload["accountable_human_member_id"] = accountable
+        payload["accountable_human_id"] = accountable
         event_id = await self._append_event(
             project.id, item, EventType.WORK_ITEM_ASSIGNED, payload, actor=actor
         )
@@ -474,7 +510,7 @@ class WorkItemService:
 
     async def transition(
         self,
-        actor: Member,
+        actor: Actor,
         ref: str,
         *,
         to: str,
@@ -541,9 +577,9 @@ class WorkItemService:
             project.id, item, EventType.WORK_ITEM_STATUS_CHANGED, payload, actor=actor
         )
         assignee = None
-        if item.assignee_member_id:
-            assert self.uow.members is not None
-            assignee = await self.uow.members.get(item.assignee_member_id)
+        if item.assignee_user_id:
+            assert self.uow.users is not None
+            assignee = await self.uow.users.get(item.assignee_user_id)
         await self._notify(
             project,
             item,
@@ -567,7 +603,7 @@ class WorkItemService:
         next_states = engine.allowed(kind, status)
         return f"当前可流转状态：{list(next_states)}。"
 
-    async def delete_item(self, actor: Member, ref: str) -> tuple[Project, list[str]]:
+    async def delete_item(self, actor: Actor, ref: str) -> tuple[Project, list[str]]:
         project, item = await self.get_item(actor, ref)
         descendants = await self._active_subtree(item.id)
         cascade = [n for n in descendants if n.id != item.id]
@@ -586,7 +622,7 @@ class WorkItemService:
         )
         return project, deleted
 
-    async def restore_item(self, actor: Member, ref: str) -> tuple[Project, WorkItem, list[str]]:
+    async def restore_item(self, actor: Actor, ref: str) -> tuple[Project, WorkItem, list[str]]:
         item = await self.resolve_item(actor, ref, include_deleted=True)
         assert self.uow.projects is not None
         project = await self.uow.projects.get(item.project_id)
@@ -677,7 +713,7 @@ class WorkItemService:
             )
 
     async def _build_fields(
-        self, kind: str, data: dict[str, Any], actor: Member
+        self, kind: str, data: dict[str, Any], actor: Actor
     ) -> StoryFields | IssueFields | TaskFields | None:
         if kind == "story":
             return StoryFields(acceptance_criteria_md=data.get("acceptance_criteria_md"))
@@ -776,7 +812,7 @@ class WorkItemService:
             "title": item.title,
             "status": item.status,
             "priority": item.priority,
-            "assignee_member_id": item.assignee_member_id,
+            "assignee_user_id": item.assignee_user_id,
             "parent_id": item.parent_id,
         }
         if item.fields is not None:
@@ -790,19 +826,23 @@ class WorkItemService:
         event_type: EventType,
         payload: dict[str, Any],
         *,
-        actor: Member,
+        actor: Actor,
         version: int | None = None,
     ) -> int:
-        seq = await self.uow.allocate_event_seq(project_id)
+        assert self.uow.projects is not None
+        project = await self.uow.projects.get(project_id)
+        org_id = project.org_id if project is not None else actor.org_id
+        seq = await self.uow.allocate_event_seq(org_id)
         assert self.uow.events is not None
         return await self.uow.events.append(
+            org_id=org_id,
             project_id=project_id,
             seq=seq,
             aggregate_type="work_item",
             aggregate_id=item.id,
             aggregate_version=item.row_version if version is None else version,
             event_type=event_type,
-            actor_member_id=actor.id,
+            actor_user_id=actor.id,
             payload=payload,
         )
 
@@ -812,8 +852,8 @@ class WorkItemService:
         item: WorkItem,
         event_id: int,
         event_name: str,
-        actor: Member,
-        assignee: Member | None,
+        actor: Actor,
+        assignee: User | None,
         *,
         extra: dict[str, Any] | None = None,
     ) -> None:

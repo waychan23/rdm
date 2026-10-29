@@ -13,13 +13,14 @@ import datetime as dt
 from collections.abc import Sequence
 from typing import Any
 
+from rdm.domain.actor import Actor
 from rdm.domain.entities import (
     Comment,
-    Member,
     Message,
     OutboxRow,
     Project,
     Sprint,
+    User,
     WorkItem,
 )
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
@@ -41,7 +42,7 @@ def build_view(
     logical_event: str,
     project: Project,
     event_id: int,
-    actor: Member | None,
+    actor: Actor | None,
     data: dict[str, Any],
 ) -> dict[str, Any]:
     return {
@@ -114,7 +115,7 @@ async def enqueue(
     project: Project,
     event_id: int,
     logical_event: str,
-    actor: Member | None,
+    actor: Actor | None,
     targets: Sequence[str] | None,
     data: dict[str, Any],
 ) -> int:
@@ -123,8 +124,18 @@ async def enqueue(
     targets=None means "every active project member with a webhook"
     (sprint broadcasts). The actor never receives their own event.
     """
-    assert uow.members is not None and uow.outboxes is not None
-    members = await uow.members.list_by_project(project.id)
+    assert uow.users is not None and uow.outboxes is not None and uow.memberships is not None
+    members = []
+    for membership in await uow.memberships.list_by_project(project.id):
+        member = await uow.users.get(membership.user_id)
+        if member is None or not member.is_active:
+            continue
+        if member.is_agent:
+            # A disabled manager silences their agents (§17).
+            manager = await uow.users.get(member.manager_user_id or "")
+            if manager is None or not manager.is_active:
+                continue
+        members.append(member)
     actor_id = actor.id if actor is not None else None
     target_set = None if targets is None else set(targets)
 
@@ -165,8 +176,8 @@ async def notify_work_item(
     item: WorkItem,
     event_id: int,
     event_name: str,
-    actor: Member,
-    assignee: Member | None,
+    actor: Actor,
+    assignee: User | None,
     extra: dict[str, Any] | None = None,
 ) -> None:
     if assignee is None:
@@ -199,9 +210,9 @@ async def notify_comment(
     item: WorkItem,
     comment: Comment,
     event_id: int,
-    actor: Member,
+    actor: Actor,
 ) -> None:
-    assignee_id = item.assignee_member_id
+    assignee_id = item.assignee_user_id
     if not assignee_id:
         return
     data = {
@@ -227,8 +238,8 @@ async def notify_message(
     project: Project,
     message: Message,
     event_id: int,
-    sender: Member,
-    recipients: Sequence[Member],
+    sender: Actor,
+    recipients: Sequence[User],
     ref_items: Sequence[WorkItem],
 ) -> None:
     """message.sent fans out one mailbox.delivered row per recipient (§16.40)."""
@@ -258,7 +269,7 @@ async def notify_sprint(
     sprint: Sprint,
     event_id: int,
     event_name: str,
-    actor: Member,
+    actor: Actor,
 ) -> None:
     await enqueue(
         uow,

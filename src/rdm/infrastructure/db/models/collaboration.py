@@ -20,7 +20,7 @@ class CommentModel(AuditMixin, SoftDeleteMixin, Base):
         ForeignKey("work_item.id", deferrable=True, initially="DEFERRED"),
         nullable=False,
     )
-    author_member_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    author_user_id: Mapped[str] = mapped_column(String(32), nullable=False)
     body_md: Mapped[str] = mapped_column(Text, nullable=False)
     reply_to_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
@@ -49,7 +49,7 @@ class AttachmentModel(AuditMixin, SoftDeleteMixin, Base):
     )
     owner_type: Mapped[str] = mapped_column(String(20), nullable=False)
     owner_id: Mapped[str] = mapped_column(String(32), nullable=False)
-    uploader_member_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    uploader_user_id: Mapped[str] = mapped_column(String(32), nullable=False)
     filename: Mapped[str] = mapped_column(String(300), nullable=False)
     mime: Mapped[str | None] = mapped_column(String(200), nullable=True)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)

@@ -22,8 +22,6 @@ def run(h: Harness) -> None:
     )
     types = {
         r[0]
-        for r in h.db.query(
-            "select type from project_member where name in ('frontend-dev','backend-dev')"
-        )
+        for r in h.db.query("select type from users where name in ('frontend-dev','backend-dev')")
     }
     assert types == {"agent"}

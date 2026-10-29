@@ -6,7 +6,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-from rdm.application.services.member_service import MemberService
+from rdm.application.services.membership_service import MembershipService
 from rdm.application.services.sprint_service import SprintService
 from rdm.interfaces.http.container import Container
 from rdm.interfaces.http.serializers import (
@@ -34,7 +34,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         async def run(uow, actor):
             service = SprintService(uow)
             proj, sprint, items, counts = await service.overview(actor, id)
-            members = await MemberService(uow).members_index(proj.id)
+            members = await MembershipService(uow).users_index(proj.id)
             data = sprint_out(sprint)
             data["items"] = [work_item_summary_out(i, proj, members) for i in items]
             data["status_counts"] = counts
@@ -94,7 +94,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                         "goal_md": goal_md,
                         "start_date": start_date,
                         "end_date": end_date,
-                        "manager_member_id": manager,
+                        "manager_user_id": manager,
                     }.items()
                     if v is not None
                 }
@@ -130,7 +130,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                 "goal_md": goal_md,
                 "start_date": start_date,
                 "end_date": end_date,
-                "manager_member_id": manager,
+                "manager_user_id": manager,
             }
             data = {k: v for k, v in data.items() if v is not None}
             _proj, sprint = await SprintService(uow).create(actor, project, data)

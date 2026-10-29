@@ -8,7 +8,7 @@ from fastmcp import FastMCP
 
 from rdm.application.services.artifact_service import ArtifactService
 from rdm.application.services.attachment_service import AttachmentService
-from rdm.application.services.member_service import MemberService
+from rdm.application.services.membership_service import MembershipService
 from rdm.interfaces.http.container import Container
 from rdm.interfaces.http.serializers import artifact_out, attachment_out
 from rdm.interfaces.mcp.tools._base import ok, run_tool
@@ -65,7 +65,7 @@ def register(mcp: FastMCP, container: Container) -> None:
             proj, attachments = await service.list_for(
                 actor, project_key=project, owner_type=owner_type, owner_ref=owner
             )
-            members = {m.id: m for m in await MemberService(uow).list_members(proj.id)}
+            members = await MembershipService(uow).users_index(proj.id)
             return ok([attachment_out(a, members) for a in attachments])
 
         return await run_tool(container, run)

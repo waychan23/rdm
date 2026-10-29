@@ -1,7 +1,7 @@
 """Regression: repeated HTTP requests with one OAuth access token.
 
 The Authenticator caches credentials. The cache-hit path used to rebuild a
-MemberToken without client_id/expires_at, so the *second* authenticated
+UserToken without client_id/expires_at, so the *second* authenticated
 request made the token look like a PAT (client_id "pat", no expiry). The MCP
 streamable manager binds a session to the principal seen at initialize; a
 later request with a different client_id was rejected with 404 "Session not
@@ -31,11 +31,15 @@ def _verifier_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
-async def _login_owner(client: httpx.AsyncClient, settings) -> None:
-    password = settings.bootstrap_password_path.read_text(encoding="utf-8").strip()
+async def _ensure_owner_password(client: httpx.AsyncClient) -> None:
+    from tests.conftest import OWNER_PASSWORD
+
+    r = await client.post("/api/v1/local/owner-recovery")
+    assert r.status_code == 200, r.text
+    ticket = parse_qs(urlparse(r.json()["data"]["set_password_url"]).query)["ticket"][0]
     r = await client.post(
-        "/api/v1/auth/login",
-        json={"project_key": "RDM", "name": "owner", "password": password},
+        "/api/v1/auth/set-password",
+        json={"ticket": ticket, "new_password": OWNER_PASSWORD},
     )
     assert r.status_code == 200, r.text
 
@@ -54,8 +58,10 @@ async def _register(client, redirect_uri: str = "http://127.0.0.1:54321/callback
 
 
 async def _oauth_access(client, settings) -> tuple[str, str, str]:
-    """Run DCR -> authorize -> consent -> token; return (AT, client_id, secret)."""
-    await _login_owner(client, settings)
+    """Run bootstrap -> DCR -> authorize -> login -> consent -> token."""
+    from tests.conftest import OWNER_PASSWORD
+
+    await _ensure_owner_password(client)
     redirect = "http://127.0.0.1:54321/cb"
     registered = (await _register(client, redirect)).json()
     cid, secret = registered["client_id"], registered.get("client_secret")
@@ -72,13 +78,29 @@ async def _oauth_access(client, settings) -> tuple[str, str, str]:
         },
         follow_redirects=False,
     )
-    consent_id = r.headers["location"].rsplit("/", 1)[1]
-    info = (await client.get(f"/api/v1/oauth/consent/{consent_id}")).json()["data"]
-    owner_id = next(m["id"] for m in info["selectable_members"] if m["name"] == "owner")
+    auth_key = parse_qs(urlparse(r.headers["location"]).query)["auth_key"][0]
+    r = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "auth_key": auth_key,
+            "name": "owner",
+            "password": OWNER_PASSWORD,
+            "remember": False,
+        },
+    )
+    assert r.status_code == 200, r.text
+    consent_url = r.json()["data"]["redirect_to"]
+    parsed = urlparse(consent_url)
+    consent_id = parsed.path.rsplit("/", 1)[1]
+    consent_key = parse_qs(parsed.query)["key"][0]
+    info = (await client.get(f"/api/v1/oauth/consent/{consent_id}?key={consent_key}")).json()[
+        "data"
+    ]
+    owner_id = next(u["id"] for u in info["selectable_users"] if u["name"] == "owner")
     decided = (
         await client.post(
-            f"/api/v1/oauth/consent/{consent_id}/decision",
-            json={"decision": "allow", "member_id": owner_id},
+            f"/api/v1/oauth/consent/{consent_id}/decision?key={consent_key}",
+            json={"decision": "allow", "act_as_user_id": owner_id},
         )
     ).json()["data"]["redirect_to"]
     code = parse_qs(urlparse(decided).query)["code"][0]
@@ -154,16 +176,17 @@ async def test_repeated_requests_keep_session(server, kind_label, header_factory
 
 
 async def test_cached_oauth_token_keeps_client_id_and_expiry(server):
-    """Directly assert the cache-hit MemberToken preserves OAuth fields."""
+    """Directly assert the cache-hit UserToken preserves OAuth fields."""
     client, settings, _app = server
     access, cid, _secret = await _oauth_access(client, settings)
-    from rdm.application.services.member_service import hash_token
+    from rdm.application.services.tokens import hash_token
     from rdm.domain.enums import BEARER_KINDS
 
     authenticator = _app.state.container.authenticator
     first = await authenticator.authenticate_with_token(access, allow_kinds=BEARER_KINDS)
     second = await authenticator.authenticate_with_token(access, allow_kinds=BEARER_KINDS)
-    assert first[1].client_id == cid
-    assert second[1].client_id == cid  # used to be None -> "pat"
-    assert second[1].expires_at is not None  # used to be None (no TTL)
+    assert first.client_id == cid
+    assert second.client_id == cid  # cache hits must keep OAuth fields
+    assert second.expires_at is not None
+    assert second.kind == "oauth_access"
     assert hash_token(access) in authenticator._cache

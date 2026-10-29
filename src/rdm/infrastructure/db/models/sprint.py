@@ -23,7 +23,7 @@ class SprintModel(AuditMixin, SoftDeleteMixin, Base):
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="PLANNED")
     start_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
-    manager_member_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    manager_user_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     __table_args__ = (
         Index(

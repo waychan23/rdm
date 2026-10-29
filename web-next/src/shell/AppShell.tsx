@@ -151,7 +151,13 @@ export default function AppShell() {
               </Box>
             ) : null}
           </Box>
-          <Text color="color.text.subtle">{who?.member.name ?? "—"}</Text>
+          <Text color="color.text.subtle">
+            {who
+              ? who.identity.act_as
+                ? `${who.identity.name}（以 ${who.user.name} 身份）`
+                : who.user.name
+              : "—"}
+          </Text>
           <IconButton
             icon={(iconProps) => <ArrowOutIcon {...iconProps} />}
             label="登出"
@@ -164,6 +170,11 @@ export default function AppShell() {
       <Box xcss={bodyStyles}>
         <Box as="nav" xcss={railStyles} aria-label="主导航">
           <RailItem to="/projects" label="项目" icon={GridIcon} end />
+          {(who?.org_roles.includes("org_owner") ||
+            who?.org_roles.includes("user_manager")) && (
+            <RailItem to="/org/users" label="用户" icon={PeopleIcon} />
+          )}
+          <RailItem to="/settings" label="我的" icon={SettingsIcon} end />
           {projectKey &&
             PROJECT_NAV.map((entry) => (
               <RailItem

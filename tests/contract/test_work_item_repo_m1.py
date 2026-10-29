@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from rdm.domain.constants import DEFAULT_ORG_ID
 from rdm.domain.entities import IssueFields, Project, StoryFields, TaskFields, WorkItem
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
 
 def _project() -> Project:
-    return Project(id=new_id(), key="RDM", name="RDM")
+    return Project(id=new_id(), org_id=DEFAULT_ORG_ID, key="RDM", name="RDM")
 
 
 def _item(no: int, title: str, kind: str = "task", parent_id: str | None = None) -> WorkItem:

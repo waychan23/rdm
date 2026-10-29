@@ -7,7 +7,7 @@ database directly (see docs/architecture.md §7).
 """
 
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated
 
 import typer
 
@@ -19,7 +19,6 @@ DEFAULT_URL = "http://127.0.0.1:8765"
 DataDirOpt = Annotated[Path, typer.Option("--data-dir", envvar="RDM_DATA_DIR")]
 UrlOpt = Annotated[str, typer.Option("--url", envvar="RDM_SERVER_URL")]
 TokenOpt = Annotated[str | None, typer.Option("--token", envvar="RDM_TOKEN")]
-TokenDataDirOpt = Annotated[Path | None, typer.Option("--data-dir", envvar="RDM_DATA_DIR")]
 ProjectOpt = Annotated[str | None, typer.Option("--project", envvar="RDM_PROJECT")]
 
 app = typer.Typer(
@@ -29,10 +28,12 @@ app = typer.Typer(
     add_completion=False,
 )
 db_app = typer.Typer(help="Database migration commands (direct DB connection).")
-account_app = typer.Typer(help="Offline account recovery (direct DB connection).")
-project_app = typer.Typer(help="List or create projects (API client).")
-member_app = typer.Typer(help="Manage project members and tokens (API client).")
-token_app = typer.Typer(help="Issue or revoke member tokens.")
+account_app = typer.Typer(help="Org-owner recovery through the loopback endpoint.")
+project_app = typer.Typer(help="Projects and project membership (API client).")
+user_app = typer.Typer(help="Organization user administration (API client).")
+me_app = typer.Typer(help="Personal agents and access tokens (API client).")
+org_app = typer.Typer(help="Organization-level operations.")
+project_members = typer.Typer(help="Project membership.")
 skills_app = typer.Typer(help="Install bundled skills into agent CLIs.")
 integrate_app = typer.Typer(help="Generate agent integration configs.")
 uninstall_app = typer.Typer(
@@ -42,8 +43,10 @@ uninstall_app = typer.Typer(
 app.add_typer(db_app, name="db")
 app.add_typer(account_app, name="account")
 app.add_typer(project_app, name="project")
-app.add_typer(member_app, name="member")
-member_app.add_typer(token_app, name="token")
+project_app.add_typer(project_members, name="members")
+app.add_typer(user_app, name="user")
+app.add_typer(me_app, name="me")
+app.add_typer(org_app, name="org")
 app.add_typer(skills_app, name="skills")
 app.add_typer(integrate_app, name="integrate")
 app.add_typer(uninstall_app, name="uninstall")
@@ -80,62 +83,23 @@ def serve(
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
     host: Annotated[str, typer.Option("--host", envvar="RDM_HOST")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", envvar="RDM_PORT")] = 8765,
-    web_ui: Annotated[
-        Literal["next", "legacy"],
-        typer.Option(
-            "--web-ui",
-            envvar="RDM_WEB_UI",
-            help="SPA bundle to serve: next (React+ADS, default) | legacy (frozen Vue app).",
-        ),
-    ] = "next",
 ) -> None:
     """Start the HTTP + MCP server (loopback binds only)."""
     from rdm.interfaces.cli import server as server_commands
 
-    server_commands.run_serve(data_dir, host, port, web_ui)
+    server_commands.run_serve(data_dir, host, port)
 
 
-@app.command("bootstrap-token")
-def bootstrap_token(
-    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
-    keep_old: Annotated[
-        bool, typer.Option("--keep-old", help="Do not revoke previous bootstrap PATs.")
-    ] = False,
+@account_app.command("recover-owner")
+def account_recover_owner(
+    url: UrlOpt = DEFAULT_URL,
 ) -> None:
-    """Rotate the bootstrap owner PAT and rewrite data-dir/bootstrap-token."""
+    """重新生成 Org Owner 的一次性设置密码链接（需服务在本机运行）。"""
     from rdm.interfaces.cli import account as account_commands
 
-    raw = account_commands.rotate_bootstrap_token(data_dir, keep_old=keep_old)
-    token_path = data_dir / "bootstrap-token"
-    typer.secho(f"new bootstrap token written to {token_path} (0600)", fg=typer.colors.GREEN)
-    typer.echo(raw)
-
-
-@account_app.command("reset-password")
-def account_reset_password(
-    name: Annotated[str, typer.Option("--name", help="Member name.")] = "owner",
-    project: Annotated[str, typer.Option("--project", help="Project key.")] = "RDM",
-    password: Annotated[
-        str | None, typer.Option("--password", help="New password; random when omitted.")
-    ] = None,
-    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
-) -> None:
-    """Reset a human member's password offline (stop the server first)."""
-    from rdm.interfaces.cli import account as account_commands
-
-    raw = account_commands.reset_password(
-        data_dir,
-        project_key=project,
-        name=name,
-        new_password=password,
-        password_file=data_dir / "bootstrap-password",
-    )
-    typer.secho(
-        f"password reset for {name!r} in {project}"
-        + (" (bootstrap-password updated)" if name == "owner" and project == "RDM" else ""),
-        fg=typer.colors.GREEN,
-    )
-    typer.echo(raw)
+    link = account_commands.recover_owner(url)
+    typer.secho("把下面的链接交给 Org Owner（7 天内有效）：", fg=typer.colors.GREEN)
+    typer.echo(link)
 
 
 @db_app.command("upgrade")
@@ -172,12 +136,11 @@ def db_status(data_dir: DataDirOpt = DEFAULT_DATA_DIR) -> None:
 def project_list(
     url: UrlOpt = DEFAULT_URL,
     token: TokenOpt = None,
-    data_dir: TokenDataDirOpt = None,
 ) -> None:
     """List all projects via the HTTP API."""
     from rdm.interfaces.cli import client
 
-    client.run_project_list(url, client.resolve_token(token, data_dir))
+    client.run_project_list(url, client.resolve_token(token))
 
 
 @project_app.command("get")
@@ -185,12 +148,11 @@ def project_get(
     key: Annotated[str, typer.Argument(help="Project key, e.g. DEMO.")],
     url: UrlOpt = DEFAULT_URL,
     token: TokenOpt = None,
-    data_dir: TokenDataDirOpt = None,
 ) -> None:
     """Show one project by key."""
     from rdm.interfaces.cli import client
 
-    client.run_project_get(url, client.resolve_token(token, data_dir), key)
+    client.run_project_get(url, client.resolve_token(token), key)
 
 
 @project_app.command("create")
@@ -202,85 +164,288 @@ def project_create(
     ] = None,
     url: UrlOpt = DEFAULT_URL,
     token: TokenOpt = None,
-    data_dir: TokenDataDirOpt = None,
 ) -> None:
     """Create a project (Owner only)."""
     from rdm.interfaces.cli import client
 
-    client.run_project_create(url, client.resolve_token(token, data_dir), key, name, description)
+    client.run_project_create(url, client.resolve_token(token), key, name, description)
 
 
-@member_app.command("list")
-def member_list(
+@project_app.command("transfer")
+def project_transfer(
+    key: Annotated[str, typer.Argument(help="Project key.")],
+    user: Annotated[str, typer.Option("--user", help="New project owner (name or id).")],
     url: UrlOpt = DEFAULT_URL,
     token: TokenOpt = None,
-    data_dir: TokenDataDirOpt = None,
-    project: ProjectOpt = None,
 ) -> None:
-    """List project members via the HTTP API."""
+    """改派项目经理（project-director/Org Owner 或现任 Owner）。"""
     from rdm.interfaces.cli import client
 
-    client.run_member_list(url, client.resolve_token(token, data_dir), project)
+    client.run_project_transfer_owner(url, client.resolve_token(token), key, user)
 
 
-@member_app.command("create")
-def member_create(
-    name: Annotated[str, typer.Argument(help="Member name, unique within the project.")],
-    type: Annotated[str, typer.Option("--type", help="human | agent")] = "human",
-    manager: Annotated[
-        str | None, typer.Option("--manager", help="Manager member id (required for agents).")
-    ] = None,
-    roles: Annotated[str, typer.Option("--roles", help="Comma-separated roles.")] = "worker",
-    accept_kinds: Annotated[
-        str | None, typer.Option("--accept-kinds", help="Comma-separated kinds.")
-    ] = None,
+# --- project members ------------------------------------------------------
+
+
+@project_members.command("list")
+def project_members_list(
+    project: ProjectOpt = None,
     url: UrlOpt = DEFAULT_URL,
     token: TokenOpt = None,
-    data_dir: TokenDataDirOpt = None,
-    project: ProjectOpt = None,
 ) -> None:
-    """Create a project member via the HTTP API."""
+    """List project members (humans with their agents)."""
     from rdm.interfaces.cli import client
 
-    client.run_member_create(
-        url,
-        client.resolve_token(token, data_dir),
-        project,
-        {
-            "name": name,
-            "type": type,
-            "manager_member_id": manager,
-            "roles": [r for r in roles.split(",") if r],
-            "accept_kinds": accept_kinds.split(",") if accept_kinds else None,
-        },
+    client.run_member_list(url, client.resolve_token(token), project)
+
+
+@project_members.command("add")
+def project_members_add(
+    user: Annotated[str, typer.Option("--user", help="Org user name or id.")],
+    roles: Annotated[
+        str, typer.Option("--roles", help="Comma-separated project roles.")
+    ] = "worker",
+    project: ProjectOpt = None,
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """Add an org human to the project; their agents join automatically."""
+    from rdm.interfaces.cli import client
+
+    client.run_member_add(
+        url, client.resolve_token(token), project, user, [r for r in roles.split(",") if r]
     )
 
 
-@token_app.command("issue")
-def token_issue(
-    member_id: Annotated[str, typer.Argument(help="Member id (ULID).")],
+@project_members.command("roles")
+def project_members_roles(
+    user: Annotated[str, typer.Option("--user", help="Org user name or id.")],
+    roles: Annotated[str, typer.Option("--roles", help="Comma-separated project roles.")],
+    project: ProjectOpt = None,
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """Replace a human's project roles."""
+    from rdm.interfaces.cli import client
+
+    client.run_member_roles(
+        url, client.resolve_token(token), project, user, [r for r in roles.split(",") if r]
+    )
+
+
+@project_members.command("remove")
+def project_members_remove(
+    user: Annotated[str, typer.Option("--user", help="Org user name or id.")],
+    project: ProjectOpt = None,
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """Remove a human from the project; their agents leave too."""
+    from rdm.interfaces.cli import client
+
+    client.run_member_remove(url, client.resolve_token(token), project, user)
+
+
+# --- organization users ---------------------------------------------------
+
+
+@user_app.command("list")
+def user_list(
+    type: Annotated[str | None, typer.Option("--type", help="human | agent")] = None,
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """List organization users (requires user-manager/Org Owner)."""
+    from rdm.interfaces.cli import client
+
+    client.run_user_list(url, client.resolve_token(token), type)
+
+
+@user_app.command("create")
+def user_create(
+    name: Annotated[str, typer.Argument(help="Login name (unique in the organization).")],
+    email: Annotated[str | None, typer.Option("--email")] = None,
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """Create a human user and print the one-shot password-reset link."""
+    from rdm.interfaces.cli import client
+
+    client.run_user_create(url, client.resolve_token(token), name, email)
+
+
+@user_app.command("reset-password")
+def user_reset_password(
+    user: Annotated[str, typer.Argument(help="User name or id.")],
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """Generate a password-reset link (copy it to the account holder)."""
+    from rdm.interfaces.cli import client
+
+    client.run_user_reset_link(url, client.resolve_token(token), user)
+
+
+@user_app.command("disable")
+def user_disable(
+    user: Annotated[str, typer.Argument(help="User name or id.")],
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """Disable a human (their agents stop receiving work; tokens are revoked)."""
+    from rdm.interfaces.cli import client
+
+    client.run_user_set_active(url, client.resolve_token(token), user, active=False)
+
+
+@user_app.command("enable")
+def user_enable(
+    user: Annotated[str, typer.Argument(help="User name or id.")],
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """Re-enable a human."""
+    from rdm.interfaces.cli import client
+
+    client.run_user_set_active(url, client.resolve_token(token), user, active=True)
+
+
+@user_app.command("revoke-tokens")
+def user_revoke_tokens(
+    user: Annotated[str, typer.Argument(help="User name or id.")],
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """Revoke every PAT/family of a user (and agents acting as them)."""
+    from rdm.interfaces.cli import client
+
+    client.run_user_revoke_tokens(url, client.resolve_token(token), user)
+
+
+@user_app.command("roles")
+def user_roles(
+    user: Annotated[str, typer.Argument(help="User name or id.")],
+    roles: Annotated[
+        str, typer.Option("--roles", help="Comma-separated: user-manager,project-director")
+    ] = "",
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """Set organization roles (Org Owner only)."""
+    from rdm.interfaces.cli import client
+
+    client.run_user_set_roles(
+        url, client.resolve_token(token), user, [r for r in roles.split(",") if r]
+    )
+
+
+@org_app.command("transfer-owner")
+def org_transfer_owner(
+    user: Annotated[str, typer.Argument(help="New Org Owner (name or id).")],
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """Transfer the single Org Owner role to another active human."""
+    from rdm.interfaces.cli import client
+
+    client.run_org_transfer_owner(url, client.resolve_token(token), user)
+
+
+# --- self-service ---------------------------------------------------------
+
+
+@me_app.command("tokens")
+def me_tokens(
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """List my personal access tokens."""
+    from rdm.interfaces.cli import client
+
+    client.run_me_token_list(url, client.resolve_token(token))
+
+
+@me_app.command("token-create")
+def me_token_create(
     label: Annotated[str, typer.Option("--label")] = "cli",
+    expires_in_days: Annotated[int | None, typer.Option("--expires-in-days")] = None,
+    as_agent: Annotated[
+        str | None, typer.Option("--as-agent", help="Act as one of my agents (name or id).")
+    ] = None,
     url: UrlOpt = DEFAULT_URL,
     token: TokenOpt = None,
-    data_dir: TokenDataDirOpt = None,
 ) -> None:
-    """Issue a new token for a member; the plaintext is shown exactly once."""
+    """Create a PAT for myself (optionally acting as one of my agents)."""
     from rdm.interfaces.cli import client
 
-    client.run_token_issue(url, client.resolve_token(token, data_dir), member_id, label)
+    client.run_me_token_create(url, client.resolve_token(token), label, expires_in_days, as_agent)
 
 
-@token_app.command("revoke")
-def token_revoke(
-    token_id: Annotated[str, typer.Argument(help="Token id (ULID).")],
+@me_app.command("token-revoke")
+def me_token_revoke(
+    token_id: Annotated[str, typer.Argument(help="Token id.")],
     url: UrlOpt = DEFAULT_URL,
     token: TokenOpt = None,
-    data_dir: TokenDataDirOpt = None,
 ) -> None:
-    """Revoke a token."""
+    """Revoke one of my PATs."""
     from rdm.interfaces.cli import client
 
-    client.run_token_revoke(url, client.resolve_token(token, data_dir), token_id)
+    client.run_me_token_revoke(url, client.resolve_token(token), token_id)
+
+
+@me_app.command("agents")
+def me_agents(
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """List the agents I manage."""
+    from rdm.interfaces.cli import client
+
+    client.run_me_agent_list(url, client.resolve_token(token))
+
+
+@me_app.command("agent-create")
+def me_agent_create(
+    name: Annotated[str, typer.Argument(help="Agent name (unique in the organization).")],
+    accept_kinds: Annotated[
+        str | None, typer.Option("--accept-kinds", help="Comma-separated story,issue,task")
+    ] = None,
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """Create an agent under my account; it joins all my projects."""
+    from rdm.interfaces.cli import client
+
+    client.run_me_agent_create(
+        url,
+        client.resolve_token(token),
+        name,
+        [k for k in (accept_kinds or "").split(",") if k],
+    )
+
+
+@me_app.command("agent-disable")
+def me_agent_disable(
+    agent: Annotated[str, typer.Argument(help="Agent name or id.")],
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """Disable one of my agents (revokes credentials acting as it)."""
+    from rdm.interfaces.cli import client
+
+    client.run_me_agent_update(url, client.resolve_token(token), agent, {"is_active": False})
+
+
+@me_app.command("agent-enable")
+def me_agent_enable(
+    agent: Annotated[str, typer.Argument(help="Agent name or id.")],
+    url: UrlOpt = DEFAULT_URL,
+    token: TokenOpt = None,
+) -> None:
+    """Re-enable one of my agents."""
+    from rdm.interfaces.cli import client
+
+    client.run_me_agent_update(url, client.resolve_token(token), agent, {"is_active": True})
 
 
 @skills_app.command("install")
@@ -378,7 +543,6 @@ def integrate_mcp(
             help="oauth (native browser authorization, default) or token (static PAT).",
         ),
     ] = "oauth",
-    owner_token: TokenOpt = None,
     cwd: Annotated[
         Path | None, typer.Option("--cwd", help="Project scope: directory to bind.")
     ] = None,
@@ -404,7 +568,6 @@ def integrate_mcp(
             project_key=project,
             member_token=member_token,
             method=method,
-            owner_token=owner_token,
             data_dir=data_dir,
         )
         return
@@ -457,10 +620,8 @@ def _integrate_project_scope(
     project_key: str | None,
     member_token: str | None,
     method: str,
-    owner_token: str | None,
     data_dir: Path,
 ) -> None:
-    from rdm.interfaces.cli import client as http_client
     from rdm.interfaces.cli import integrate as integrate_commands
 
     names = [target] if target else ["claude", "opencode"]
@@ -471,27 +632,17 @@ def _integrate_project_scope(
         )
         raise typer.Exit(2)
 
-    # Resolve the member token to bind for the static-token method: explicit
-    # --member-token, or issue one with the owner credential. The oauth method
-    # writes no secret; identity is chosen in the browser consent page.
+    # Static-token method: the identity owner must create the PAT themselves
+    # (Web "个人设置 → 访问令牌", or `rdm me token-create --as-agent`); no
+    # administrator can mint tokens for someone else any more (§17).
     raw_token = member_token or ""
     if method == "token" and not raw_token:
-        if not member_ref:
-            typer.secho(
-                "project scope --method token needs --member <name|id> (or --member-token)",
-                fg=typer.colors.RED,
-            )
-            raise typer.Exit(2)
-        owner = http_client.resolve_token(owner_token, data_dir)
-        base = url.rstrip("/").removesuffix("/mcp")
-        key = project_key or "RDM"
-        raw_token = http_client.issue_member_token_by_ref(
-            base, owner, key, member_ref, f"project:{cwd.name}"
-        )
         typer.secho(
-            f"issued token for {member_ref} in project {key}",
-            fg=typer.colors.GREEN,
+            "project scope --method token needs --member-token: create one in the Web "
+            "personal settings (or `rdm me token-create [--as-agent]`) and pass it here.",
+            fg=typer.colors.RED,
         )
+        raise typer.Exit(2)
 
     cwd.mkdir(parents=True, exist_ok=True)
     had_conflict = False

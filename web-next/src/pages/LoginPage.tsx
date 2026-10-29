@@ -1,32 +1,20 @@
-import { useState, type FormEvent } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import Button from "@atlaskit/button/default/button";
-import Textfield from "@atlaskit/textfield";
+import Checkbox from "@atlaskit/checkbox";
 import Heading from "@atlaskit/heading";
-import { Box, Inline, Stack, Text, xcss } from "@atlaskit/primitives";
+import Spinner from "@atlaskit/spinner";
+import Textfield from "@atlaskit/textfield";
+import { Box, Stack, Text, xcss } from "@atlaskit/primitives";
 
 import { errorCause } from "../lib/api";
-import { login, rememberedProjectKey, rememberProjectKey } from "../lib/auth";
+import { submitLogin } from "../lib/auth";
 import { useNotify } from "../lib/flags";
+import { beginLogin } from "../lib/oauth";
 
-// Server-side (non-SPA) paths the OAuth flow may ask us to return to after
-// login: /authorize must be re-requested as a full page (with the new session
-// cookie) so the authorization server can continue and redirect to consent.
-const SERVER_PATHS = new Set(["/authorize", "/token", "/register", "/revoke"]);
-
-function isSafeInternalPath(target: unknown): target is string {
-  return (
-    typeof target === "string" &&
-    target.startsWith("/") &&
-    !target.startsWith("//") &&
-    !target.startsWith("/\\")
-  );
-}
-
-function isServerPath(target: string): boolean {
-  const path = target.split("?")[0].split("#")[0];
-  return SERVER_PATHS.has(path) || path.startsWith("/.well-known/");
+function safeInternalPath(target: string | null): string | null {
+  return target && target.startsWith("/") && !target.startsWith("//") ? target : null;
 }
 
 const wrapStyles = xcss({
@@ -52,35 +40,37 @@ const labelStyles = xcss({
 });
 
 export default function LoginPage() {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const [params] = useSearchParams();
   const notify = useNotify();
-  const [projectKey, setProjectKey] = useState(rememberedProjectKey());
+  const authKey = params.get("auth_key");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
+
+  // Direct visits (bookmarks, a 401 bounce) start a fresh authorization
+  // request instead of pretending to be a login form without context.
+  useEffect(() => {
+    if (!authKey) {
+      void beginLogin(safeInternalPath(params.get("redirect")) ?? undefined);
+    }
+  }, [authKey, params]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (loading) return;
+    if (loading || !authKey) return;
     setLoading(true);
     try {
-      const key = projectKey.trim() || "RDM";
-      rememberProjectKey(key);
-      await login(key, name.trim(), password);
-      // OAuth provider redirects to /login?next=/authorize?...; the router
-      // guard uses ?redirect= for SPA pages. Honor both.
-      const params = new URLSearchParams(location.search);
-      const target = params.get("next") ?? params.get("redirect");
-      if (isSafeInternalPath(target)) {
-        if (isServerPath(target)) {
-          window.location.assign(target);
-          return;
-        }
-        navigate(target);
-      } else {
-        navigate("/projects");
+      const result = await submitLogin(authKey, name.trim(), password, remember);
+      if (result.must_reset && result.set_password_url) {
+        window.location.assign(result.set_password_url);
+        return;
       }
+      if (result.redirect_to) {
+        window.location.assign(result.redirect_to);
+        return;
+      }
+      await beginLogin("/projects");
     } catch (e) {
       notify.error("登录失败", errorCause(e)?.message);
     } finally {
@@ -88,53 +78,59 @@ export default function LoginPage() {
     }
   };
 
+  if (!authKey) {
+    return (
+      <Box xcss={wrapStyles}>
+        <Stack space="space.200" alignInline="center">
+          <Spinner size="large" />
+          <Text color="color.text.subtlest">正在跳转到登录…</Text>
+        </Stack>
+      </Box>
+    );
+  }
+
   return (
     <Box xcss={wrapStyles}>
       <Box xcss={cardStyles}>
         <Box as="form" onSubmit={submit}>
           <Stack space="space.200">
             <Heading size="large">rd-manager 登录</Heading>
-          <Stack space="space.050">
-            <Box as="label" xcss={labelStyles} htmlFor="login-project">
-              项目 Key
-            </Box>
-            <Textfield
-              id="login-project"
-              value={projectKey}
-              placeholder="RDM"
-              autoComplete="organization"
-              onChange={(e) => setProjectKey(e.currentTarget.value)}
+            <Stack space="space.050">
+              <Box as="label" xcss={labelStyles} htmlFor="login-name">
+                用户名
+              </Box>
+              <Textfield
+                id="login-name"
+                value={name}
+                placeholder="owner"
+                autoComplete="username"
+                autoFocus
+                onChange={(e) => setName(e.currentTarget.value)}
+              />
+            </Stack>
+            <Stack space="space.050">
+              <Box as="label" xcss={labelStyles} htmlFor="login-password">
+                密码
+              </Box>
+              <Textfield
+                id="login-password"
+                type="password"
+                value={password}
+                autoComplete="current-password"
+                onChange={(e) => setPassword(e.currentTarget.value)}
+              />
+            </Stack>
+            <Checkbox
+              label="记住我（7 天内免登录）"
+              isChecked={remember}
+              onChange={(e) => setRemember(e.currentTarget.checked)}
             />
-          </Stack>
-          <Stack space="space.050">
-            <Box as="label" xcss={labelStyles} htmlFor="login-name">
-              用户名
-            </Box>
-            <Textfield
-              id="login-name"
-              value={name}
-              placeholder="owner"
-              autoComplete="username"
-              onChange={(e) => setName(e.currentTarget.value)}
-            />
-          </Stack>
-          <Stack space="space.050">
-            <Box as="label" xcss={labelStyles} htmlFor="login-password">
-              密码
-            </Box>
-            <Textfield
-              id="login-password"
-              type="password"
-              value={password}
-              autoComplete="current-password"
-              onChange={(e) => setPassword(e.currentTarget.value)}
-            />
-          </Stack>
-          <Button type="submit" appearance="primary" isLoading={loading}>
-            登录
-          </Button>
+            <Button type="submit" appearance="primary" isLoading={loading}>
+              登录
+            </Button>
             <Text size="small" color="color.text.subtlest">
-              初始 owner 密码见 data-dir 下的 bootstrap-password（首次启动生成，0600）。
+              首次部署请使用服务启动日志中的 bootstrap-url 设置 Org Owner 密码；
+              忘记密码可由部署主机执行 rdm account recover-owner 重新生成。
             </Text>
           </Stack>
         </Box>

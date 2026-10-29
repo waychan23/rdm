@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dir: [web, web-next]
+        dir: [web-next]
     defaults:
       run:
         working-directory: ${{ matrix.dir }}
@@ -51,7 +51,7 @@ jobs:
       - name: Type-check and build
         run: pnpm build
       - name: Verify SPA bundle landed in package resources
-        run: test -f ../src/rdm/resources/${{ matrix.dir == 'web' && 'web-dist' || 'web-next-dist' }}/index.html
+        run: test -f ../src/rdm/resources/web-next-dist/index.html
 
   package:
     runs-on: ubuntu-latest
@@ -68,15 +68,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # Both bundles must exist before uv build: hatch force-include fails on
-      # a missing source directory, so this guards "shipped only one SPA".
-      - name: Build both SPA bundles
+      - name: Build the SPA bundle
         run: |
           pnpm -C web-next install --frozen-lockfile --ignore-scripts
           pnpm -C web-next build
-          pnpm -C web install --frozen-lockfile --ignore-scripts
-          pnpm -C web build
-      - name: Build wheel and assert both bundles ship
+      - name: Build wheel and assert the bundle ships
         run: |
           uv build --wheel
-          python3 -c "import zipfile,sys,glob; w=zipfile.ZipFile(glob.glob('dist/*.whl')[0]); names=w.namelist(); assert any('resources/web-next-dist/index.html' in n for n in names); assert any('resources/web-dist/index.html' in n for n in names); print('both SPA bundles present in wheel')"
+          python3 -c "import zipfile,glob; w=zipfile.ZipFile(glob.glob('dist/*.whl')[0]); names=w.namelist(); assert any('resources/web-next-dist/index.html' in n for n in names); print('web-next bundle present in wheel')"

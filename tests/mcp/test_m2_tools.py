@@ -4,7 +4,8 @@ mailbox_mark_read, artifact_add, attachment_list."""
 from __future__ import annotations
 
 import pytest
-from mcp_helpers import call
+
+from tests.mcp.mcp_helpers import call
 
 
 def _hdr(token: str) -> dict:
@@ -21,20 +22,9 @@ async def _project(rest, owner_token, key="DEMO") -> None:
 
 
 async def _make_member(rest, owner_token, name, project="DEMO") -> str:
-    r = await rest.post(
-        f"/api/v1/projects/{project}/members",
-        json={"name": name, "type": "human", "roles": ["worker"]},
-        headers=_hdr(owner_token),
-    )
-    assert r.status_code == 201, r.text
-    mid = r.json()["data"]["id"]
-    r = await rest.post(
-        f"/api/v1/members/{mid}/tokens",
-        json={"label": "t"},
-        headers=_hdr(owner_token),
-    )
-    assert r.status_code == 201, r.text
-    return r.json()["data"]["token"]
+    from tests.support import make_member
+
+    return (await make_member(rest, owner_token, project, name, ["worker"]))[1]
 
 
 async def test_backlog_and_my_work_semantics(server, mcp_clients) -> None:

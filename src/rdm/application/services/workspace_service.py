@@ -13,7 +13,8 @@ from typing import Any
 from rdm.application import security
 from rdm.application.services.url_policy import ensure_http_url
 from rdm.application.services.workitem_service import WorkItemService
-from rdm.domain.entities import Member, Project, Workspace
+from rdm.domain.actor import Actor
+from rdm.domain.entities import Project, Workspace
 from rdm.domain.enums import WorkspaceKind
 from rdm.domain.errors import NotFound, ValidationError
 from rdm.domain.events import (
@@ -34,7 +35,7 @@ class WorkspaceService:
         self.items = WorkItemService(uow)
 
     async def list_workspaces(
-        self, actor: Member, project_key: str | None = None
+        self, actor: Actor, project_key: str | None = None
     ) -> tuple[Project, list[Workspace]]:
         project = await self.items.resolve_project(actor, project_key)
         assert self.uow.workspaces is not None
@@ -42,10 +43,10 @@ class WorkspaceService:
         return project, workspaces
 
     async def create(
-        self, actor: Member, project_key: str | None, data: dict[str, Any]
+        self, actor: Actor, project_key: str | None, data: dict[str, Any]
     ) -> tuple[Project, Workspace]:
-        security.require_owner_or_manager(actor, "工作区")
         project = await self.items.resolve_project(actor, project_key)
+        security.require_owner_or_manager(actor, project.id, "工作区")
         name = (data.get("name") or "").strip()
         if not 1 <= len(name) <= 200:
             raise ValidationError("name 必填且不超过 200 字符", details={"field": "name"})
@@ -80,16 +81,16 @@ class WorkspaceService:
         return project, workspace
 
     async def update(
-        self, actor: Member, workspace_id: str, data: dict[str, Any]
+        self, actor: Actor, workspace_id: str, data: dict[str, Any]
     ) -> tuple[Project, Workspace]:
-        security.require_owner_or_manager(actor, "工作区")
         assert self.uow.workspaces is not None and self.uow.projects is not None
         workspace = await self.uow.workspaces.get(workspace_id)
         if workspace is None:
             raise NotFound(f"工作区 {workspace_id} 不存在", details={"workspace_id": workspace_id})
-        security.assert_same_project(actor, workspace.project_id)
+        security.assert_project_access(actor, workspace.project_id)
         project = await self.uow.projects.get(workspace.project_id)
         assert project is not None
+        security.require_owner_or_manager(actor, project.id, "工作区")
 
         changes: dict[str, list[Any]] = {}
         if "name" in data:
@@ -134,15 +135,15 @@ class WorkspaceService:
             )
         return project, workspace
 
-    async def delete(self, actor: Member, workspace_id: str) -> tuple[Project, Workspace]:
-        security.require_owner_or_manager(actor, "工作区")
+    async def delete(self, actor: Actor, workspace_id: str) -> tuple[Project, Workspace]:
         assert self.uow.workspaces is not None and self.uow.projects is not None
         workspace = await self.uow.workspaces.get(workspace_id)
         if workspace is None:
             raise NotFound(f"工作区 {workspace_id} 不存在", details={"workspace_id": workspace_id})
-        security.assert_same_project(actor, workspace.project_id)
+        security.assert_project_access(actor, workspace.project_id)
         project = await self.uow.projects.get(workspace.project_id)
         assert project is not None
+        security.require_owner_or_manager(actor, project.id, "工作区")
         now = dt.datetime.now(dt.UTC)
         deleted = await self.uow.workspaces.soft_delete(workspace_id, actor.id, now)
         if not deleted:
@@ -163,18 +164,22 @@ class WorkspaceService:
         project_id: str,
         workspace: Workspace,
         event_type: EventType,
-        actor: Member,
+        actor: Actor,
         payload: dict[str, Any],
     ) -> None:
-        seq = await self.uow.allocate_event_seq(project_id)
+        assert self.uow.projects is not None
+        project = await self.uow.projects.get(project_id)
+        org_id = project.org_id if project is not None else actor.org_id
+        seq = await self.uow.allocate_event_seq(org_id)
         assert self.uow.events is not None
         await self.uow.events.append(
+            org_id=org_id,
             project_id=project_id,
             seq=seq,
             aggregate_type="workspace",
             aggregate_id=workspace.id,
             aggregate_version=0,
             event_type=event_type,
-            actor_member_id=actor.id,
+            actor_user_id=actor.id,
             payload=payload,
         )

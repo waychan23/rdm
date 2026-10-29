@@ -38,16 +38,9 @@ async def _item(client: httpx.AsyncClient, token: str) -> dict:
 async def _member(
     client: httpx.AsyncClient, owner: str, name: str, roles: list[str] | None = None
 ) -> tuple[str, str]:
-    r = await client.post(
-        f"{API}/projects/DEMO/members",
-        json={"name": name, "type": "human", "roles": roles or ["worker"]},
-        headers=auth(owner),
-    )
-    assert r.status_code == 201, r.text
-    mid = r.json()["data"]["id"]
-    r = await client.post(f"{API}/members/{mid}/tokens", json={"label": "t"}, headers=auth(owner))
-    assert r.status_code == 201, r.text
-    return mid, r.json()["data"]["token"]
+    from tests.support import make_member
+
+    return await make_member(client, owner, "DEMO", name, roles or ["worker"])
 
 
 async def test_upload_download_list_delete_flow(server, owner_token, tmp_path) -> None:
@@ -149,7 +142,11 @@ async def test_only_uploader_or_privileged_can_delete(server, owner_token) -> No
 
 
 async def test_size_limit_enforced(tmp_path) -> None:
-    settings = Settings(data_dir=tmp_path / "tiny", attachment_max_bytes=10)
+    settings = Settings(
+        data_dir=tmp_path / "tiny",
+        attachment_max_bytes=10,
+        extra_redirect_uris="http://test/auth/callback",
+    )
     initialize_data_dir(settings.data_dir)
     run_upgrade(settings.data_dir)
     app = create_app(settings)
@@ -157,7 +154,12 @@ async def test_size_limit_enforced(tmp_path) -> None:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
-            token = settings.bootstrap_token_path.read_text(encoding="utf-8").strip()
+            from tests.conftest import auth as _auth
+            from tests.conftest import ensure_owner_access
+
+            access = await ensure_owner_access(client, app)
+            r = await client.post("/api/v1/me/tokens", json={"label": "att"}, headers=_auth(access))
+            token = r.json()["data"]["token"]
             await _project(client, token)
             item = await _item(client, token)
             r = await client.post(

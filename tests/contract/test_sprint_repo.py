@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from rdm.domain.constants import DEFAULT_ORG_ID
 from rdm.domain.entities import Project, Sprint, SprintItem, WorkItem
 from rdm.domain.enums import SprintStatus
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
@@ -12,7 +13,7 @@ from rdm.infrastructure.id import new_id
 
 
 async def _project(uow: SqlAlchemyUnitOfWork) -> Project:
-    p = Project(id=new_id(), key="RDM", name="RDM")
+    p = Project(id=new_id(), org_id=DEFAULT_ORG_ID, key="RDM", name="RDM")
     assert uow.projects is not None
     await uow.projects.add(p)
     return p

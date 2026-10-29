@@ -25,20 +25,9 @@ async def _create_project(client: httpx.AsyncClient, token: str, key: str = "DEM
 async def _make_member(
     client: httpx.AsyncClient, owner: str, project: str, name: str, roles: list[str]
 ) -> tuple[str, str]:
-    r = await client.post(
-        f"{API}/projects/{project}/members",
-        json={"name": name, "type": "human", "roles": roles},
-        headers=auth(owner),
-    )
-    assert r.status_code == 201, r.text
-    member_id = r.json()["data"]["id"]
-    r = await client.post(
-        f"{API}/members/{member_id}/tokens",
-        json={"label": "test"},
-        headers=auth(owner),
-    )
-    assert r.status_code == 201, r.text
-    return member_id, r.json()["data"]["token"]
+    from tests.support import make_member
+
+    return await make_member(client, owner, project, name, roles)
 
 
 async def test_create_kinds_fields_and_cross_kind_rejection(server, owner_token: str) -> None:

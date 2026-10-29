@@ -78,6 +78,7 @@ async def web(tmp_path) -> AsyncIterator[Web]:
         data_dir=tmp_path / "data",
         webhook_backoff="0,0,0",
         webhook_poll_seconds=60,
+        extra_redirect_uris="http://test/auth/callback",
     )
     initialize_data_dir(settings.data_dir)
     run_upgrade(settings.data_dir)
@@ -85,7 +86,14 @@ async def web(tmp_path) -> AsyncIterator[Web]:
     async with LifespanManager(app):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            token = settings.bootstrap_token_path.read_text(encoding="utf-8").strip()
+            from tests.conftest import auth as _auth
+            from tests.conftest import ensure_owner_access
+
+            access = await ensure_owner_access(client, app)
+            r = await client.post(
+                "/api/v1/me/tokens", json={"label": "webhook"}, headers=_auth(access)
+            )
+            token = r.json()["data"]["token"]
             worker = WebhookWorker(app.state.container, settings)
             yield Web(client, token, settings, worker)
             await worker.stop()
@@ -101,18 +109,17 @@ async def _project(client: httpx.AsyncClient, token: str) -> None:
 async def _member_with_hook(
     client: httpx.AsyncClient, owner: str, name: str, url: str, fmt: str = "generic"
 ) -> None:
-    r = await client.post(
-        f"{API}/projects/DEMO/members",
-        json={
-            "name": name,
-            "type": "human",
-            "roles": ["worker"],
-            "notify_webhook": url,
-            "notify_webhook_format": fmt,
-        },
-        headers=auth(owner),
+    from tests.support import add_to_project, create_human, login_pat
+
+    user_id = await create_human(client, owner, name)
+    await add_to_project(client, owner, "DEMO", user_id, ["worker"])
+    token = await login_pat(client, name)
+    r = await client.patch(
+        f"{API}/me",
+        json={"notify_webhook": url, "notify_webhook_format": fmt},
+        headers=auth(token),
     )
-    assert r.status_code == 201, r.text
+    assert r.status_code == 200, r.text
 
 
 async def _task(client: httpx.AsyncClient, token: str) -> dict:

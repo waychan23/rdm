@@ -35,7 +35,7 @@ class WorkItemModel(AuditMixin, SoftDeleteMixin, Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rank: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    assignee_member_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    assignee_user_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     row_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     __table_args__ = (
@@ -44,7 +44,7 @@ class WorkItemModel(AuditMixin, SoftDeleteMixin, Base):
         Index(
             "ix_work_item_project_assignee_status",
             "project_id",
-            "assignee_member_id",
+            "assignee_user_id",
             "status",
         ),
         Index(

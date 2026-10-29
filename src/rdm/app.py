@@ -17,8 +17,10 @@ from rdm.interfaces.http.auth import router as auth_router
 from rdm.interfaces.http.comments import router as comments_router
 from rdm.interfaces.http.container import Container
 from rdm.interfaces.http.errors import install_exception_handlers
+from rdm.interfaces.http.local import router as local_router
 from rdm.interfaces.http.logging import RequestContextMiddleware, configure_logging
 from rdm.interfaces.http.mailbox import router as mailbox_router
+from rdm.interfaces.http.me import router as me_router
 from rdm.interfaces.http.overview import router as overview_router
 from rdm.interfaces.http.routers import (
     members_router,
@@ -27,6 +29,7 @@ from rdm.interfaces.http.routers import (
 )
 from rdm.interfaces.http.spa import RootDispatch
 from rdm.interfaces.http.sprint import router as sprints_router
+from rdm.interfaces.http.users import router as users_router
 from rdm.interfaces.http.workflow import router as workflow_router
 from rdm.interfaces.http.workitem import router as work_items_router
 from rdm.interfaces.http.workspaces import router as workspaces_router
@@ -37,13 +40,9 @@ from rdm.interfaces.mcp.server import build_mcp
 logger = logging.getLogger("rdm.app")
 
 _RESOURCES = Path(__file__).resolve().parent / "resources"
-# Selectable SPA bundles (architecture §16.62). The React + Atlaskit rewrite
-# (web-next/) is the default; the frozen Vue + Element Plus app (web/) stays
-# available via Settings.web_ui="legacy".
-WEB_DISTS = {
-    "next": _RESOURCES / "web-next-dist",
-    "legacy": _RESOURCES / "web-dist",
-}
+# Single SPA bundle (§17): the legacy Vue app was removed together with the
+# --web-ui switch when web-next became the only frontend.
+WEB_DIST = _RESOURCES / "web-next-dist"
 
 
 def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
@@ -66,15 +65,17 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
         async with mcp_http.lifespan(mcp_http):
             if bootstrap:
                 async with container.uow() as uow:
-                    token = await bootstrap_if_empty(
-                        uow, settings.bootstrap_token_path, settings.bootstrap_password_path
+                    ticket = await bootstrap_if_empty(
+                        uow,
+                        base_url=base_url,
+                        extra_redirect_uris=settings.extra_redirect_uri_list,
                     )
-                if token:
+                if ticket:
                     logger.warning(
-                        "first start: owner member created; bootstrap token at %s and "
-                        "initial password at %s (mode 0600)",
-                        settings.bootstrap_token_path,
-                        settings.bootstrap_password_path,
+                        "首次启动：请在本机打开设置 Org Owner 密码：%s/set-password?ticket=%s "
+                        "（7 天内有效；丢失可执行 `rdm account recover-owner` 重新生成）",
+                        base_url,
+                        ticket,
                     )
             worker.start()
             try:
@@ -91,7 +92,10 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
 
     app.include_router(system_router)
     app.include_router(auth_router)
+    app.include_router(local_router)
     app.include_router(projects_router)
+    app.include_router(users_router)
+    app.include_router(me_router)
     app.include_router(members_router)
     app.include_router(work_items_router)
     app.include_router(sprints_router)
@@ -107,5 +111,5 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     # RootDispatch splits those from the static SPA, while API routers above
     # win route matching first. Authentication is FastMCP's bearer middleware
     # (RdmOAuthProvider accepts both PAT and OAuth access tokens).
-    app.mount("/", RootDispatch(mcp_guarded, WEB_DISTS[settings.web_ui]))
+    app.mount("/", RootDispatch(mcp_guarded, WEB_DIST))
     return app

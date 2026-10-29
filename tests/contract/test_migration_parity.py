@@ -32,7 +32,7 @@ def test_migrated_schema_matches_metadata(tmp_path: Path) -> None:
 
     assert "alembic_version" in migrated
     assert migrated - {"alembic_version"} == orm_tables
-    assert len(orm_tables) == 23
+    assert len(orm_tables) == 27
 
     def index_names(path: Path) -> set[str]:
         with create_engine(f"sqlite:///{path}").connect() as conn:

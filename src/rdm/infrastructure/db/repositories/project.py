@@ -20,8 +20,12 @@ class ProjectRepository:
             return None
         return project_to_domain(row)
 
-    async def get_by_key(self, key: str, *, include_deleted: bool = False) -> Project | None:
+    async def get_by_key(
+        self, key: str, *, org_id: str | None = None, include_deleted: bool = False
+    ) -> Project | None:
         stmt = select(ProjectModel).where(func.lower(ProjectModel.key) == key.lower())
+        if org_id is not None:
+            stmt = stmt.where(ProjectModel.org_id == org_id)
         row = (await self._s.execute(stmt)).scalar_one_or_none()
         if row is None or (not include_deleted and row.deleted_at is not None):
             return None
@@ -31,13 +35,13 @@ class ProjectRepository:
         self._s.add(
             ProjectModel(
                 id=project.id,
+                org_id=project.org_id,
                 key=project.key,
                 name=project.name,
                 description_md=project.description_md,
-                owner_member_id=project.owner_member_id,
+                owner_user_id=project.owner_user_id,
                 status=str(project.status),
                 item_seq=project.item_seq,
-                event_seq=project.event_seq,
                 created_at=project.created_at,
                 created_by=project.created_by,
                 updated_at=project.updated_at,
@@ -52,7 +56,7 @@ class ProjectRepository:
                 name=project.name,
                 description_md=project.description_md,
                 status=str(project.status),
-                owner_member_id=project.owner_member_id,
+                owner_user_id=project.owner_user_id,
                 updated_at=dt.datetime.now(dt.UTC),
             )
         )

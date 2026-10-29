@@ -16,6 +16,7 @@ import ModalDialog, {
 import { Box, Inline, Stack, Text, xcss } from "@atlaskit/primitives";
 
 import { api, errorCause } from "../lib/api";
+import { useCurrentUser } from "../lib/auth";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
 import type { Project } from "../types";
@@ -47,6 +48,9 @@ const cardStyles = xcss({
 export default function ProjectsPage() {
   const navigate = useNavigate();
   const notify = useNotify();
+  const me = useCurrentUser();
+  const canCreate =
+    !!me && (me.org_roles.includes("org_owner") || me.org_roles.includes("project_director"));
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ key: "", name: "", description_md: "" });
@@ -76,10 +80,25 @@ export default function ProjectsPage() {
     <Box xcss={pageStyles}>
       <Inline spread="space-between" alignBlock="center" space="space.200">
         <Heading size="large">项目</Heading>
-        <Button appearance="primary" onClick={() => setDialogOpen(true)}>
-          新建项目
-        </Button>
+        {canCreate && (
+          <Button appearance="primary" onClick={() => setDialogOpen(true)}>
+            新建项目
+          </Button>
+        )}
       </Inline>
+
+      {(projects ?? []).length === 0 && (
+        <Box padding="space.400" xcss={cardStyles} style={{ cursor: "default" }}>
+          <Stack space="space.100">
+            <Text weight="semibold">还没有可访问的项目</Text>
+            <Text size="small" color="color.text.subtlest">
+              {canCreate
+                ? "点击右上角「新建项目」创建第一个项目；你会自动成为项目经理。"
+                : "请联系 Org Owner 或 project-director 创建项目，并把你加入成员。"}
+            </Text>
+          </Stack>
+        </Box>
+      )}
 
       <Box xcss={gridWrapStyles}>
         {(projects ?? []).map((p) => (
@@ -98,6 +117,9 @@ export default function ProjectsPage() {
                 <Lozenge appearance={p.status === "archived" ? "default" : "success"}>
                   {p.status === "archived" ? "已归档" : "进行中"}
                 </Lozenge>
+                {(p.roles ?? []).includes("project_owner") && (
+                  <Lozenge appearance="inprogress">Owner</Lozenge>
+                )}
               </Inline>
             </Stack>
           </Box>

@@ -1,6 +1,6 @@
 """S10: workflow_get MCP output == GET /api/v1/workflow (one producer)."""
 
-from mcp_helpers import call
+from tests.mcp.mcp_helpers import call
 
 
 async def test_workflow_dto_parity(mcp_clients) -> None:

@@ -1,7 +1,8 @@
 """Plain domain entities (dataclasses; no SQLAlchemy/FastAPI imports).
 
-M0 covers Project / Member / MemberToken / WorkItem(+kind fields). M1 adds
-SprintItem / Comment / Mailbox / Message and friends.
+M5 (§17) decouples identity from projects: an ``Organization`` owns ``User``
+rows (human/agent), ``Project`` belongs to the organization, and
+``ProjectMember`` is the join carrying per-project roles.
 """
 
 import datetime as dt
@@ -23,15 +24,25 @@ def _utcnow() -> dt.datetime:
 
 
 @dataclass(kw_only=True)
+class Organization:
+    id: str
+    name: str
+    # Org-wide event stream ordinal (§17): org-level events have no project.
+    event_seq: int = 0
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    updated_at: dt.datetime | None = None
+
+
+@dataclass(kw_only=True)
 class Project:
     id: str
+    org_id: str
     key: str
     name: str
     description_md: str | None = None
-    owner_member_id: str | None = None
+    owner_user_id: str | None = None
     status: ProjectStatus = ProjectStatus.active
     item_seq: int = 0
-    event_seq: int = 0
     created_at: dt.datetime = field(default_factory=_utcnow)
     created_by: str | None = None
     updated_at: dt.datetime | None = None
@@ -44,20 +55,29 @@ class Project:
 
 
 @dataclass(kw_only=True)
-class Member:
+class User:
+    """An organization member identity: human or agent (§17).
+
+    Agents always have ``manager_user_id`` pointing at the human that owns
+    them. Organization roles are human-only; project roles live on
+    ``ProjectMember`` rows.
+    """
+
     id: str
-    project_id: str
-    type: str  # MemberType value
+    org_id: str
+    type: str  # UserType value
     name: str
     description_md: str | None = None
-    manager_member_id: str | None = None
-    roles: list[str] = field(default_factory=list)
+    manager_user_id: str | None = None
+    org_roles: list[str] = field(default_factory=list)
     accept_kinds: list[str] = field(default_factory=list)
     email: str | None = None
     notify_webhook: str | None = None
     notify_webhook_format: str = "generic"
-    # argon2id hash for console login; always None for agents (§16.55).
+    # argon2id hash for console login; always None for agents (§16.55/§17).
     password_hash: str | None = None
+    # Set on creation and after an admin reset; cleared by set-password.
+    must_reset_password: bool = False
     is_active: bool = True
     created_at: dt.datetime = field(default_factory=_utcnow)
     created_by: str | None = None
@@ -70,24 +90,54 @@ class Member:
         return self.type == "agent"
 
     @property
-    def is_owner(self) -> bool:
-        return "project_owner" in self.roles
+    def is_human(self) -> bool:
+        return self.type == "human"
+
+    @property
+    def is_org_owner(self) -> bool:
+        return "org_owner" in self.org_roles
 
     @property
     def can_login(self) -> bool:
-        """Only human members with a password may open a console session."""
-        return self.type == "human" and self.password_hash is not None
+        """Only humans with a password may open a console/OAuth session."""
+        return self.is_human and self.password_hash is not None
 
 
 @dataclass(kw_only=True)
-class MemberToken:
+class ProjectMember:
+    """Project ↔ user relationship carrying per-project roles (§17)."""
+
     id: str
-    member_id: str
+    org_id: str
+    project_id: str
+    user_id: str
+    roles: list[str] = field(default_factory=list)
+    # True for agents added implicitly through their manager's membership.
+    auto_added: bool = False
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None
+
+
+@dataclass(kw_only=True)
+class UserToken:
+    id: str
+    # Credential owner; always a human user (§17).
+    user_id: str
     token_hash: str
     label: str | None = None
-    # pat | oauth_access | oauth_refresh | session (§16.53); pre-M3 rows are pat.
+    # pat | oauth_access | oauth_refresh (§16.53/§17).
     kind: str = "pat"
+    # The identity this credential acts as: an agent managed by the owner,
+    # or None for the human themself.
+    act_as_user_id: str | None = None
     expires_at: dt.datetime | None = None
+    # Hard family deadline (OAuth remember-me policy, §17); PATs leave it None.
+    absolute_expires_at: dt.datetime | None = None
+    # Remember-me flag for OAuth refresh families (1d vs 7d sliding window).
+    remember: bool = False
     client_id: str | None = None
     scopes: list[str] = field(default_factory=list)
     # Rotation family: one OAuth login shares a family_id across its access
@@ -109,6 +159,41 @@ class MemberToken:
             return False
         expires = self.expires_at
         if expires.tzinfo is None:  # sqlite returns naive datetimes (§16.16)
+            expires = expires.replace(tzinfo=dt.UTC)
+        return expires <= _utcnow()
+
+    @property
+    def is_absolute_expired(self) -> bool:
+        if self.absolute_expires_at is None:
+            return False
+        deadline = self.absolute_expires_at
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=dt.UTC)
+        return deadline <= _utcnow()
+
+
+@dataclass(kw_only=True)
+class PasswordTicket:
+    """One-shot ticket that lets a browser set a user's password (§17)."""
+
+    id: str
+    org_id: str
+    user_id: str
+    kind: str  # PasswordTicketKind value
+    token_hash: str
+    expires_at: dt.datetime
+    consumed_at: dt.datetime | None = None
+    created_by: str | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+
+    @property
+    def is_usable(self) -> bool:
+        return self.consumed_at is None and not self.is_expired
+
+    @property
+    def is_expired(self) -> bool:
+        expires = self.expires_at
+        if expires.tzinfo is None:
             expires = expires.replace(tzinfo=dt.UTC)
         return expires <= _utcnow()
 
@@ -154,7 +239,7 @@ class WorkItem:
     description_md: str | None = None
     priority: int = 0
     rank: int = 0
-    assignee_member_id: str | None = None
+    assignee_user_id: str | None = None
     row_version: int = 0
     fields: KindFields | None = None
     created_at: dt.datetime = field(default_factory=_utcnow)
@@ -177,7 +262,7 @@ class Sprint:
     status: SprintStatus = SprintStatus.PLANNED
     start_date: dt.date | None = None
     end_date: dt.date | None = None
-    manager_member_id: str | None = None
+    manager_user_id: str | None = None
     created_at: dt.datetime = field(default_factory=_utcnow)
     created_by: str | None = None
     updated_at: dt.datetime | None = None
@@ -201,7 +286,7 @@ class Comment:
     id: str
     project_id: str
     work_item_id: str
-    author_member_id: str
+    author_user_id: str
     body_md: str
     reply_to_id: str | None = None
     created_at: dt.datetime = field(default_factory=_utcnow)
@@ -217,7 +302,7 @@ class Mailbox:
     project_id: str
     kind: str  # MailboxKind: indiv | group
     name: str | None = None
-    owner_member_id: str | None = None
+    owner_user_id: str | None = None
     created_at: dt.datetime = field(default_factory=_utcnow)
     created_by: str | None = None
     updated_at: dt.datetime | None = None
@@ -229,7 +314,7 @@ class Mailbox:
 class Message:
     id: str
     project_id: str
-    from_member_id: str
+    from_user_id: str
     subject: str
     body_md: str
     reply_to_id: str | None = None
@@ -242,7 +327,7 @@ class Message:
 class MailboxMember:
     id: str
     mailbox_id: str
-    member_id: str
+    user_id: str
     added_by: str | None = None
     created_at: dt.datetime = field(default_factory=_utcnow)
     deleted_at: dt.datetime | None = None
@@ -254,7 +339,7 @@ class MessageDelivery:
     id: str
     message_id: str
     mailbox_id: str
-    recipient_member_id: str
+    recipient_user_id: str
     recipient_type: str  # RecipientType: to | cc
     read_at: dt.datetime | None = None
     created_at: dt.datetime = field(default_factory=_utcnow)
@@ -274,7 +359,7 @@ class Attachment:
     project_id: str
     owner_type: str  # AttachmentOwnerType: work_item | comment | message
     owner_id: str
-    uploader_member_id: str
+    uploader_user_id: str
     filename: str
     mime: str | None
     size_bytes: int
@@ -322,16 +407,19 @@ class Workspace:
 
 @dataclass(kw_only=True)
 class OAuthClient:
-    """A dynamically registered OAuth 2.1 client (architecture §16.54).
+    """An OAuth 2.1 client (architecture §16.54/§17).
 
     client_info is the full verbatim OAuthClientInformationFull record
     (including the plaintext client_secret, required by the SDK authenticator);
-    redirect_uris is a denormalised list for queries/audits.
+    redirect_uris is a denormalised list for queries/audits. The first-party
+    browser client ``rdm-web`` is a public client with no secret.
     """
 
     client_id: str
     client_info: dict[str, Any]
+    org_id: str
     redirect_uris: list[str] = field(default_factory=list)
+    is_first_party: bool = False
     created_at: dt.datetime = field(default_factory=_utcnow)
     revoked_at: dt.datetime | None = None
 
@@ -343,7 +431,10 @@ class OAuthAuthorizationCode:
     id: str
     code_hash: str
     client_id: str
-    member_id: str
+    # Subject is always the authenticated human; act_as is the selected agent.
+    user_id: str
+    act_as_user_id: str | None = None
+    remember: bool = False
     scopes: list[str] = field(default_factory=list)
     code_challenge: str
     redirect_uri: str
@@ -360,12 +451,18 @@ class OAuthAuthorizationCode:
 
 @dataclass(kw_only=True)
 class OAuthConsent:
-    """Pending browser consent between /authorize and the decision (§16.60)."""
+    """Pending browser consent between /authorize and the decision (§17).
+
+    The SPA reaches it with a one-shot capability key instead of a session
+    cookie; only the hash of that key is stored.
+    """
 
     id: str
     client_id: str
-    session_token_id: str
-    selectable_member_ids: list[str] = field(default_factory=list)
+    consent_key_hash: str
+    authenticating_user_id: str
+    selectable_user_ids: list[str] = field(default_factory=list)
+    remember: bool = False
     state: str | None = None
     scopes: list[str] = field(default_factory=list)
     code_challenge: str
@@ -374,7 +471,38 @@ class OAuthConsent:
     resource: str | None = None
     expires_at: dt.datetime
     decided_at: dt.datetime | None = None
+    consumed_at: dt.datetime | None = None
     created_at: dt.datetime = field(default_factory=_utcnow)
+
+
+@dataclass(kw_only=True)
+class OAuthLoginTicket:
+    """/authorize parks the OAuth request while the browser logs in (§17)."""
+
+    id: str
+    org_id: str
+    key_hash: str
+    client_id: str
+    code_challenge: str
+    redirect_uri: str
+    redirect_uri_explicit: bool
+    scopes: list[str] = field(default_factory=list)
+    state: str | None = None
+    resource: str | None = None
+    expires_at: dt.datetime
+    consumed_at: dt.datetime | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+
+    @property
+    def is_usable(self) -> bool:
+        return self.consumed_at is None and not self.is_expired
+
+    @property
+    def is_expired(self) -> bool:
+        expires = self.expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=dt.UTC)
+        return expires <= _utcnow()
 
 
 @dataclass(kw_only=True)

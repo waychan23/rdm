@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from rdm.application.services.mailbox_service import MailboxService
-from rdm.domain.entities import Member
+from rdm.domain.actor import Actor
 from rdm.interfaces.http.container import Container, get_actor, get_container
 
 router = APIRouter(prefix="/api/v1", tags=["mailbox"])
@@ -37,7 +37,7 @@ async def check_mailbox(
     unread_only: bool = True,
     limit: int = 20,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
         body = await MailboxService(uow).check(
@@ -51,7 +51,7 @@ async def send_message(
     key: str,
     body: MessageSendIn,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
         _project, message, count = await MailboxService(uow).send(
@@ -71,7 +71,7 @@ async def send_message(
 async def mark_read(
     body: MarkReadIn,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
         updated = await MailboxService(uow).mark_read(actor, body.delivery_ids)
@@ -83,7 +83,7 @@ async def create_group_mailbox(
     key: str,
     body: GroupMailboxIn,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
         _project, mailbox = await MailboxService(uow).create_group(

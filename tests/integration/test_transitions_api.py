@@ -22,18 +22,12 @@ async def _create(client: httpx.AsyncClient, token: str, payload: dict, key: str
     return r.json()["data"]
 
 
-async def _member_token(
+async def _user_token(
     client: httpx.AsyncClient, owner: str, name: str, roles: list[str]
 ) -> tuple[str, str]:
-    r = await client.post(
-        f"{API}/projects/DEMO/members",
-        json={"name": name, "type": "human", "roles": roles},
-        headers=auth(owner),
-    )
-    assert r.status_code == 201, r.text
-    mid = r.json()["data"]["id"]
-    r = await client.post(f"{API}/members/{mid}/tokens", json={"label": "t"}, headers=auth(owner))
-    return mid, r.json()["data"]["token"]
+    from tests.support import make_member
+
+    return await make_member(client, owner, "DEMO", name, roles)
 
 
 async def test_task_happy_chain_and_meta(server, owner_token: str) -> None:
@@ -157,7 +151,7 @@ async def test_story_gate_blocks_with_children(server, owner_token: str) -> None
 async def test_worker_can_only_transition_own_item(server, owner_token: str) -> None:
     client, _s, _app = server
     await _bootstrap_project(client, owner_token)
-    _id, worker_token = await _member_token(client, owner_token, "dev", ["worker"])
+    _id, worker_token = await _user_token(client, owner_token, "dev", ["worker"])
     mine = await _create(
         client,
         owner_token,
@@ -186,7 +180,7 @@ async def test_worker_cannot_self_complete_done(server, owner_token: str) -> Non
     """Review gate: even the assignee worker may not push their item to DONE."""
     client, _s, _app = server
     await _bootstrap_project(client, owner_token)
-    _id, worker_token = await _member_token(client, owner_token, "dev", ["worker"])
+    _id, worker_token = await _user_token(client, owner_token, "dev", ["worker"])
     mine = await _create(
         client,
         owner_token,
@@ -209,7 +203,7 @@ async def test_worker_cannot_self_complete_done(server, owner_token: str) -> Non
     assert blocked.json()["error"]["details"]["target_state"] == "DONE"
 
     # Manager closes it after review.
-    _mgr_id, mgr_token = await _member_token(client, owner_token, "tl", ["manager"])
+    _mgr_id, mgr_token = await _user_token(client, owner_token, "tl", ["manager"])
     r = await client.post(
         f"{API}/work-items/{mine['display_id']}/transition",
         json={"to": "DONE", "row_version": 2},

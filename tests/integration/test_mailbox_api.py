@@ -19,16 +19,9 @@ async def _project(client: httpx.AsyncClient, token: str, key: str = "DEMO") -> 
 async def _member(
     client: httpx.AsyncClient, owner: str, name: str, roles: list[str] | None = None
 ) -> tuple[str, str]:
-    r = await client.post(
-        f"{API}/projects/DEMO/members",
-        json={"name": name, "type": "human", "roles": roles or ["worker"]},
-        headers=auth(owner),
-    )
-    assert r.status_code == 201, r.text
-    mid = r.json()["data"]["id"]
-    r = await client.post(f"{API}/members/{mid}/tokens", json={"label": "t"}, headers=auth(owner))
-    assert r.status_code == 201, r.text
-    return mid, r.json()["data"]["token"]
+    from tests.support import make_member
+
+    return await make_member(client, owner, "DEMO", name, roles or ["worker"])
 
 
 async def _item(client: httpx.AsyncClient, token: str, payload: dict) -> dict:
@@ -184,7 +177,8 @@ async def test_comment_mention_notifies_and_whoami(server, owner_token: str) -> 
     data = r.json()["data"]
     assert data["unread_count"] == 1
     assert data["my_open_items"] == 1
-    assert "roles" in data
+    assert "org_roles" in data
+    assert data["identity"]["name"]
 
     # comment listed on the item
     r = await client.get(

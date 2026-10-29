@@ -8,7 +8,7 @@ from fastmcp import FastMCP
 
 from rdm.application.services.attachment_service import AttachmentService
 from rdm.application.services.comment_service import CommentService
-from rdm.application.services.member_service import MemberService
+from rdm.application.services.membership_service import MembershipService
 from rdm.interfaces.http.container import Container
 from rdm.interfaces.http.serializers import attachment_out, comment_out
 from rdm.interfaces.mcp.tools._base import ok, run_tool
@@ -26,12 +26,12 @@ def register(mcp: FastMCP, container: Container) -> None:
             service = CommentService(uow)
             proj, _item, comments = await service.list_for_item(actor, work_item_id)
             comments = comments[offset : offset + min(limit, 100)]
-            members = await MemberService(uow).members_index(proj.id)
+            members = await MembershipService(uow).users_index(proj.id)
             rows = await AttachmentService(uow, container.file_store).list_for_owners(
                 proj.id, "comment", [c.id for c in comments]
             )
             for att in rows:
-                uploader = await uow.members.get(att.uploader_member_id)
+                uploader = await uow.users.get(att.uploader_user_id)
                 if uploader is not None:
                     members[uploader.id] = uploader
             by_comment: dict[str, list] = {}
@@ -63,7 +63,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                 actor, work_item_id, body_md, reply_to, attachment_ids
             )
             project_id = comment.project_id
-            members = await MemberService(uow).members_index(project_id)
+            members = await MembershipService(uow).users_index(project_id)
             return ok(
                 comment_out(comment, members),
                 unresolved_mentions=unresolved,

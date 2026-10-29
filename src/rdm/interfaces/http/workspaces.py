@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from rdm.application.services.workspace_service import WorkspaceService
-from rdm.domain.entities import Member
+from rdm.domain.actor import Actor
 from rdm.interfaces.http.container import Container, get_actor, get_container
 from rdm.interfaces.http.serializers import workspace_out
 
@@ -37,7 +37,7 @@ class WorkspacePatchIn(BaseModel):
 async def list_workspaces(
     key: str,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
         _project, workspaces = await WorkspaceService(uow).list_workspaces(actor, key)
@@ -49,7 +49,7 @@ async def create_workspace(
     key: str,
     body: WorkspaceIn,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
         _project, workspace = await WorkspaceService(uow).create(actor, key, body.model_dump())
@@ -62,7 +62,7 @@ async def update_workspace(
     workspace_id: str,
     body: WorkspacePatchIn,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
         _project, workspace = await WorkspaceService(uow).update(
@@ -76,7 +76,7 @@ async def update_workspace(
 async def delete_workspace(
     workspace_id: str,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> None:
     async with container.uow() as uow:
         await WorkspaceService(uow).delete(actor, workspace_id)

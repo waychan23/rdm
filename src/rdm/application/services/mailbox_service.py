@@ -1,10 +1,11 @@
 """Mailbox application service: groups, send fan-out, incremental check.
 
-Rulings §16.27-29:
-- indiv mailboxes are provisioned implicitly (bootstrap / add_member / lazy
-  ensure on use); only a mailbox row is written, never a mailbox_member row.
-- group mailboxes are created via REST; recipient tokens resolve to members
-  (name/id) first, then group names; to/cc are union-deduped (to wins).
+Rulings §16.27-29 (adjusted by §17):
+- indiv mailboxes are provisioned when a human joins a project (their active
+  agents get one too) and lazily on first use; only a mailbox row is written,
+  never a mailbox_member row.
+- group mailboxes are created via REST; recipient tokens resolve to project
+  members (name/id) first, then group names; to/cc are union-deduped (to wins).
 - one message + N deliveries + refs flush together in the caller's UoW,
   followed by exactly one message.sent snapshot event.
 - since-cursor is a message_delivery ULID (lexicographic = chronological).
@@ -18,15 +19,17 @@ from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 
+from rdm.application.services.membership_service import MembershipService
 from rdm.application.services.workitem_service import WorkItemService
+from rdm.domain.actor import Actor
 from rdm.domain.entities import (
     Mailbox,
     MailboxMember,
-    Member,
     Message,
     MessageDelivery,
     MessageRef,
     Project,
+    User,
     WorkItem,
 )
 from rdm.domain.enums import MailboxKind, RecipientType
@@ -44,25 +47,25 @@ class MailboxService:
 
     # --- provisioning -----------------------------------------------------
 
-    async def ensure_indiv(self, member: Member) -> Mailbox:
-        """Return the member's indiv mailbox, creating it on first use."""
+    async def ensure_indiv(self, project_id: str, user_id: str) -> Mailbox:
+        """Return the user's indiv mailbox in a project, creating it on demand."""
         assert self.uow.mailboxes is not None
-        existing = await self.uow.mailboxes.get_indiv(member.project_id, member.id)
+        existing = await self.uow.mailboxes.get_indiv(project_id, user_id)
         if existing is not None:
             return existing
         mailbox = Mailbox(
             id=new_id(),
-            project_id=member.project_id,
+            project_id=project_id,
             kind=MailboxKind.indiv,
-            owner_member_id=member.id,
-            created_by=member.id,
+            owner_user_id=user_id,
+            created_by=user_id,
         )
         await self.uow.mailboxes.add(mailbox)
         return mailbox
 
     async def create_group(
         self,
-        actor: Member,
+        actor: Actor,
         project_key: str | None,
         name: str,
         member_refs: Sequence[str],
@@ -74,7 +77,8 @@ class MailboxService:
         assert self.uow.mailboxes is not None
         if await self.uow.mailboxes.get_group_by_name(project.id, name) is not None:
             raise ValidationError(f"group 信箱 {name!r} 已存在", details={"field": "name"})
-        members = [await self.items.resolve_member(project.id, ref) for ref in member_refs]
+        memberships = MembershipService(self.uow)
+        users = [await memberships.resolve_user(project.id, ref) for ref in member_refs]
         mailbox = Mailbox(
             id=new_id(),
             project_id=project.id,
@@ -84,14 +88,14 @@ class MailboxService:
         )
         await self.uow.mailboxes.add(mailbox)
         await self.uow.mailboxes.add_members(
-            [self.uow_mailbox_member_link(mailbox.id, m.id, actor.id) for m in members]
+            [self.uow_mailbox_member_link(mailbox.id, u.id, actor.id) for u in users]
         )
         try:
             await self.uow.flush()
         except IntegrityError as exc:
             raise translate_integrity(exc) from exc
         await self._append_mailbox_event(
-            project.id,
+            project,
             mailbox.id,
             EventType.MAILBOX_CREATED,
             actor,
@@ -100,23 +104,21 @@ class MailboxService:
                     "id": mailbox.id,
                     "kind": "group",
                     "name": name,
-                    "members": [m.id for m in members],
+                    "members": [u.id for u in users],
                 }
             },
         )
         return project, mailbox
 
     @staticmethod
-    def uow_mailbox_member_link(mailbox_id: str, member_id: str, actor_id: str) -> MailboxMember:
-        return MailboxMember(
-            id=new_id(), mailbox_id=mailbox_id, member_id=member_id, added_by=actor_id
-        )
+    def uow_mailbox_member_link(mailbox_id: str, user_id: str, actor_id: str) -> MailboxMember:
+        return MailboxMember(id=new_id(), mailbox_id=mailbox_id, user_id=user_id, added_by=actor_id)
 
     # --- send -------------------------------------------------------------
 
     async def send(
         self,
-        actor: Member,
+        actor: Actor,
         project_key: str | None,
         *,
         to: Sequence[str],
@@ -160,7 +162,7 @@ class MailboxService:
     async def _fan_out(
         self,
         project: Project,
-        sender: Member,
+        sender: Actor,
         recipients: Mapping[str, str],
         *,
         subject: str,
@@ -173,7 +175,7 @@ class MailboxService:
         message = Message(
             id=new_id(),
             project_id=project.id,
-            from_member_id=sender.id,
+            from_user_id=sender.id,
             subject=subject,
             body_md=body_md,
             reply_to_id=reply_to,
@@ -182,15 +184,15 @@ class MailboxService:
         await self.uow.messages.add_message(message)
 
         deliveries: list[MessageDelivery] = []
-        for member_id, recipient_type in recipients.items():
-            member = await self._member(project.id, member_id)
-            mailbox = await self.ensure_indiv(member)
+        for user_id, recipient_type in recipients.items():
+            await self._user(project.id, user_id)
+            mailbox = await self.ensure_indiv(project.id, user_id)
             deliveries.append(
                 MessageDelivery(
                     id=new_id(),
                     message_id=message.id,
                     mailbox_id=mailbox.id,
-                    recipient_member_id=member.id,
+                    recipient_user_id=user_id,
                     recipient_type=recipient_type,
                     created_at=now,
                 )
@@ -214,22 +216,19 @@ class MailboxService:
     async def _resolve_recipients(
         self, project_id: str, to: Sequence[str], cc: Sequence[str]
     ) -> dict[str, str]:
-        """member_id -> 'to'/'cc'; to wins over cc; group names expand."""
-        """member_id -> recipient_type; to wins over cc; group names expand."""
+        """user_id -> 'to'/'cc'; to wins over cc; group names expand."""
         result: dict[str, str] = {}
         # to first: a later cc for the same member must not downgrade it.
         tokens = [(t, RecipientType.to) for t in to]
         tokens += [(t, RecipientType.cc) for t in cc]
+        memberships = MembershipService(self.uow)
+        users = await memberships.users_index(project_id)
         for token, kind in tokens:
-            assert self.uow.mailboxes is not None and self.uow.members is not None
-            member = await self.uow.members.get_by_name(project_id, token)
-            if member is None:
-                by_id = await self.uow.members.get(token)
-                if by_id is not None and by_id.project_id == project_id:
-                    member = by_id
-            if member is not None:
-                result.setdefault(member.id, kind)
+            user = users.get(token) or next((u for u in users.values() if u.name == token), None)
+            if user is not None:
+                result.setdefault(user.id, kind)
                 continue
+            assert self.uow.mailboxes is not None
             group = await self.uow.mailboxes.get_group_by_name(project_id, token)
             if group is None:
                 raise NotFound(
@@ -237,27 +236,30 @@ class MailboxService:
                     details={"ref": token},
                 )
             for link in await self.uow.mailboxes.list_members(group.id):
-                result.setdefault(link.member_id, kind)
+                result.setdefault(link.user_id, kind)
         return result
 
-    async def _member(self, project_id: str, member_id: str) -> Member:
-        assert self.uow.members is not None
-        member = await self.uow.members.get(member_id)
-        assert member is not None and member.project_id == project_id
-        return member
+    async def _user(self, project_id: str, user_id: str) -> User:
+        assert self.uow.users is not None and self.uow.memberships is not None
+        user = await self.uow.users.get(user_id)
+        if user is None or await self.uow.memberships.get(project_id, user_id) is None:
+            raise NotFound(f"用户 {user_id} 不在项目内", details={"user_id": user_id})
+        return user
 
     # --- inbox ------------------------------------------------------------
 
     async def check(
         self,
-        actor: Member,
+        actor: Actor,
         *,
+        project_key: str | None = None,
         since: str | None = None,
         unread_only: bool = True,
         limit: int = 20,
     ) -> dict[str, Any]:
         assert self.uow.messages is not None and self.uow.work_items is not None
-        await self.ensure_indiv(actor)
+        project = await self.items.resolve_project(actor, project_key)
+        await self.ensure_indiv(project.id, actor.id)
         page = await self.uow.messages.list_deliveries(
             actor.id, since_id=since, unread_only=unread_only, limit=limit + 1
         )
@@ -268,20 +270,18 @@ class MailboxService:
         msg_by_id = {m.id: m for m in messages}
         refs = await self.uow.messages.list_refs([m.id for m in messages])
         ref_items: list[WorkItem] = await self.uow.work_items.list_by_ids(
-            actor.project_id, [r.work_item_id for r in refs], include_deleted=True
+            project.id, [r.work_item_id for r in refs], include_deleted=True
         )
         item_by_id = {i.id: i for i in ref_items}
-        project = await self.items.resolve_project(actor, None)
 
         rows: list[dict[str, Any]] = []
         for delivery in page:
             message = msg_by_id.get(delivery.message_id)
             if message is None:
                 continue
-            # The sender may be the global bootstrap owner from another
-            # project; fetch by id instead of the project-scoped lookup.
-            assert self.uow.members is not None
-            sender = await self.uow.members.get(message.from_member_id)
+            # The sender may be a member of another project (org-level user).
+            assert self.uow.users is not None
+            sender = await self.uow.users.get(message.from_user_id)
             item_refs = [
                 f"{project.key}-{item_by_id[r.work_item_id].display_no}"
                 for r in refs
@@ -294,7 +294,7 @@ class MailboxService:
                     "from": (
                         {"id": sender.id, "name": sender.name, "type": sender.type}
                         if sender is not None
-                        else {"id": message.from_member_id}
+                        else {"id": message.from_user_id}
                     ),
                     "subject": message.subject,
                     "body_md": message.body_md,
@@ -311,42 +311,44 @@ class MailboxService:
             "unread_count": await self.uow.messages.unread_count(actor.id),
         }
 
-    async def mark_read(self, actor: Member, delivery_ids: Sequence[str]) -> int:
+    async def mark_read(self, actor: Actor, delivery_ids: Sequence[str]) -> int:
         assert self.uow.messages is not None
         count = await self.uow.messages.mark_read(actor.id, delivery_ids, dt.datetime.now(dt.UTC))
         if count:
-            seq = await self.uow.allocate_event_seq(actor.project_id)
+            project = await self.items.resolve_project(actor, None)
+            seq = await self.uow.allocate_event_seq(project.org_id)
             assert self.uow.events is not None
             await self.uow.events.append(
-                project_id=actor.project_id,
+                org_id=project.org_id,
+                project_id=project.id,
                 seq=seq,
                 aggregate_type="mailbox",
                 aggregate_id=actor.id,
                 aggregate_version=0,
                 event_type=EventType.MESSAGE_READ,
-                actor_member_id=actor.id,
+                actor_user_id=actor.id,
                 payload={"delivery_ids": list(delivery_ids), "updated": count},
             )
         return count
 
-    async def unread_count(self, actor: Member) -> int:
+    async def unread_count(self, actor: Actor, *, project_id: str) -> int:
         assert self.uow.messages is not None
-        await self.ensure_indiv(actor)
+        await self.ensure_indiv(project_id, actor.id)
         return await self.uow.messages.unread_count(actor.id)
 
     # --- @mention fan-out (shared with comment service) -------------------
 
     async def notify_mentions(
         self,
-        actor: Member,
+        actor: Actor,
         project: Project,
         item: WorkItem,
-        mentioned: Sequence[Member],
+        mentioned: Sequence[User],
         body_md: str,
     ) -> None:
         if not mentioned:
             return
-        recipients = {m.id: RecipientType.to for m in mentioned}
+        recipients = {u.id: RecipientType.to for u in mentioned}
         display_id = f"{project.key}-{item.display_no}"
         message, _deliveries = await self._fan_out(
             project,
@@ -364,23 +366,24 @@ class MailboxService:
     async def _append_message_event(
         self,
         project: Project,
-        actor: Member,
+        actor: Actor,
         message: Message,
         recipients: Mapping[str, str],
         ref_items: Sequence[WorkItem],
         *,
         mention: bool = False,
     ) -> None:
-        seq = await self.uow.allocate_event_seq(project.id)
+        seq = await self.uow.allocate_event_seq(project.org_id)
         assert self.uow.events is not None
         event_id = await self.uow.events.append(
+            org_id=project.org_id,
             project_id=project.id,
             seq=seq,
             aggregate_type="message",
             aggregate_id=message.id,
             aggregate_version=0,
             event_type=EventType.MESSAGE_SENT,
-            actor_member_id=actor.id,
+            actor_user_id=actor.id,
             payload={
                 "snapshot": {
                     "id": message.id,
@@ -394,7 +397,7 @@ class MailboxService:
             },
         )
         # message.sent maps to one logical mailbox.delivered per recipient (§16.40).
-        recipient_members = [await self._member(project.id, member_id) for member_id in recipients]
+        recipient_users = [await self._user(project.id, uid) for uid in recipients]
         from rdm.application.services import webhook_notify
 
         await webhook_notify.notify_message(
@@ -403,27 +406,28 @@ class MailboxService:
             message=message,
             event_id=event_id,
             sender=actor,
-            recipients=recipient_members,
+            recipients=recipient_users,
             ref_items=ref_items,
         )
 
     async def _append_mailbox_event(
         self,
-        project_id: str,
+        project: Project,
         aggregate_id: str,
         event_type: EventType,
-        actor: Member,
+        actor: Actor,
         payload: dict[str, Any],
     ) -> None:
-        seq = await self.uow.allocate_event_seq(project_id)
+        seq = await self.uow.allocate_event_seq(project.org_id)
         assert self.uow.events is not None
         await self.uow.events.append(
-            project_id=project_id,
+            org_id=project.org_id,
+            project_id=project.id,
             seq=seq,
             aggregate_type="mailbox",
             aggregate_id=aggregate_id,
             aggregate_version=0,
             event_type=event_type,
-            actor_member_id=actor.id,
+            actor_user_id=actor.id,
             payload=payload,
         )

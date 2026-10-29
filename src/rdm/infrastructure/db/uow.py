@@ -14,7 +14,7 @@ from weakref import WeakKeyDictionary
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from rdm.infrastructure.db.models import ProjectModel
+from rdm.infrastructure.db.models import OrganizationModel, ProjectModel
 from rdm.infrastructure.db.repositories.collaboration import (
     ArtifactRepository,
     AttachmentRepository,
@@ -26,17 +26,24 @@ from rdm.infrastructure.db.repositories.mailbox import (
     MailboxRepository,
     MessageRepository,
 )
-from rdm.infrastructure.db.repositories.member import MemberRepository, TokenRepository
+from rdm.infrastructure.db.repositories.membership import MembershipRepository
 from rdm.infrastructure.db.repositories.oauth import (
     AuthorizationCodeRepository,
     ConsentRepository,
+    LoginTicketRepository,
     OAuthClientRepository,
 )
+from rdm.infrastructure.db.repositories.organization import OrganizationRepository
 from rdm.infrastructure.db.repositories.outbox import OutboxRepository
 from rdm.infrastructure.db.repositories.project import ProjectRepository
 from rdm.infrastructure.db.repositories.sprint import (
     SprintItemRepository,
     SprintRepository,
+)
+from rdm.infrastructure.db.repositories.user import (
+    PasswordTicketRepository,
+    TokenRepository,
+    UserRepository,
 )
 from rdm.infrastructure.db.repositories.work_item import WorkItemRepository
 
@@ -63,12 +70,16 @@ class SqlAlchemyUnitOfWork:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._sf = session_factory
         self.session: AsyncSession | None = None
+        self.organizations: OrganizationRepository | None = None
         self.projects: ProjectRepository | None = None
-        self.members: MemberRepository | None = None
+        self.users: UserRepository | None = None
+        self.memberships: MembershipRepository | None = None
         self.tokens: TokenRepository | None = None
+        self.password_tickets: PasswordTicketRepository | None = None
         self.oauth_clients: OAuthClientRepository | None = None
         self.oauth_codes: AuthorizationCodeRepository | None = None
         self.oauth_consents: ConsentRepository | None = None
+        self.oauth_login_tickets: LoginTicketRepository | None = None
         self.work_items: WorkItemRepository | None = None
         self.sprints: SprintRepository | None = None
         self.sprint_items: SprintItemRepository | None = None
@@ -89,12 +100,16 @@ class SqlAlchemyUnitOfWork:
             # enforcement happens at commit.
             self.session = self._sf()
             await self.session.begin()
+            self.organizations = OrganizationRepository(self.session)
             self.projects = ProjectRepository(self.session)
-            self.members = MemberRepository(self.session)
+            self.users = UserRepository(self.session)
+            self.memberships = MembershipRepository(self.session)
             self.tokens = TokenRepository(self.session)
+            self.password_tickets = PasswordTicketRepository(self.session)
             self.oauth_clients = OAuthClientRepository(self.session)
             self.oauth_codes = AuthorizationCodeRepository(self.session)
             self.oauth_consents = ConsentRepository(self.session)
+            self.oauth_login_tickets = LoginTicketRepository(self.session)
             self.work_items = WorkItemRepository(self.session)
             self.sprints = SprintRepository(self.session)
             self.sprint_items = SprintItemRepository(self.session)
@@ -143,13 +158,13 @@ class SqlAlchemyUnitOfWork:
         assert self.session is not None
         await self.session.flush()
 
-    async def allocate_event_seq(self, project_id: str) -> int:
+    async def allocate_event_seq(self, org_id: str) -> int:
         assert self.session is not None
         stmt = (
-            update(ProjectModel)
-            .where(ProjectModel.id == project_id)
-            .values(event_seq=ProjectModel.event_seq + 1)
-            .returning(ProjectModel.event_seq)
+            update(OrganizationModel)
+            .where(OrganizationModel.id == org_id)
+            .values(event_seq=OrganizationModel.event_seq + 1)
+            .returning(OrganizationModel.event_seq)
         )
         seq = (await self.session.execute(stmt)).scalar_one()
         return int(seq)

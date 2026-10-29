@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import Button from "@atlaskit/button/default/button";
 import ModalDialog, {
@@ -8,30 +8,120 @@ import ModalDialog, {
   ModalTitle,
   ModalTransition,
 } from "@atlaskit/modal-dialog";
-import Textfield from "@atlaskit/textfield";
 import Select from "@atlaskit/select";
-import Checkbox from "@atlaskit/checkbox";
-import { RadioGroup } from "@atlaskit/radio";
-import { Stack, Inline } from "@atlaskit/primitives";
+import { Box, Stack, Text } from "@atlaskit/primitives";
 
-import type { Member } from "../types";
+import type { OrgUser, ProjectMemberRow } from "../types";
 
-export const WEBHOOK_FORMATS = ["generic", "dingtalk", "feishu"].map((v) => ({
-  label: v,
-  value: v,
-}));
+export const PROJECT_ROLES = [
+  { label: "project_owner", value: "project_owner" },
+  { label: "manager", value: "manager" },
+  { label: "sprint_manager", value: "sprint_manager" },
+  { label: "worker", value: "worker" },
+];
 
-const labelStyle = {
-  display: "block",
-  fontWeight: "var(--ds-font-weight-medium, 500)",
-  marginBottom: 4,
-} as const;
-
-interface Option {
-  label: string;
-  value: string;
+function rolesToOptions(roles: string[]) {
+  return PROJECT_ROLES.filter((r) => roles.includes(r.value));
 }
 
+/** Add an existing organization human to the project (§17). */
+export function AddMemberDialog({
+  open,
+  candidates,
+  onClose,
+  onAdd,
+}: {
+  open: boolean;
+  candidates: OrgUser[];
+  onClose: () => void;
+  onAdd: (userId: string, roles: string[]) => Promise<void>;
+}) {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [roles, setRoles] = useState<string[]>(["worker"]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setUserId(null);
+      setRoles(["worker"]);
+    }
+  }, [open]);
+
+  const submit = async () => {
+    if (!userId || saving) return;
+    setSaving(true);
+    try {
+      await onAdd(userId, roles);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalTransition>
+      {open && (
+        <ModalDialog onClose={onClose}>
+          <ModalHeader>
+            <ModalTitle>添加项目成员</ModalTitle>
+          </ModalHeader>
+          <ModalBody>
+            <Stack space="space.200">
+              <Stack space="space.050">
+                <Text size="small" weight="medium">
+                  组织用户
+                </Text>
+                <Select
+                  inputId="add-member-user"
+                  placeholder="选择组织内的 human 用户"
+                  options={candidates.map((u) => ({ label: u.name, value: u.id }))}
+                  value={
+                    userId
+                      ? {
+                          label: candidates.find((u) => u.id === userId)?.name ?? "",
+                          value: userId,
+                        }
+                      : null
+                  }
+                  onChange={(opt) =>
+                    setUserId((opt as { value: string } | null)?.value ?? null)
+                  }
+                  isClearable
+                />
+                <Text size="small" color="color.text.subtlest">
+                  该用户名下的 agent 会自动加入项目；agent 不需要也不能单独添加。
+                </Text>
+              </Stack>
+              <Stack space="space.050">
+                <Text size="small" weight="medium">
+                  项目角色
+                </Text>
+                <Select
+                  inputId="add-member-roles"
+                  isMulti
+                  options={PROJECT_ROLES}
+                  value={rolesToOptions(roles)}
+                  onChange={(opts) =>
+                    setRoles((opts as readonly { value: string }[]).map((o) => o.value))
+                  }
+                />
+              </Stack>
+            </Stack>
+          </ModalBody>
+          <ModalFooter>
+            <Button appearance="subtle" onClick={onClose}>
+              取消
+            </Button>
+            <Button appearance="primary" onClick={submit} isLoading={saving} isDisabled={!userId}>
+              添加
+            </Button>
+          </ModalFooter>
+        </ModalDialog>
+      )}
+    </ModalTransition>
+  );
+}
+
+/** Edit a human's project roles. Agent rows are read-only. */
 export function MemberEditDialog({
   open,
   member,
@@ -39,328 +129,57 @@ export function MemberEditDialog({
   onSave,
 }: {
   open: boolean;
-  member: Member | null;
+  member: ProjectMemberRow | null;
   onClose: () => void;
-  onSave: (id: string, payload: Record<string, unknown>) => Promise<void> | void;
+  onSave: (userId: string, roles: string[]) => Promise<void>;
 }) {
-  const [rolesText, setRolesText] = useState("");
-  const [acceptKinds, setAcceptKinds] = useState<string[]>([]);
-  const [email, setEmail] = useState("");
-  const [webhook, setWebhook] = useState("");
-  const [format, setFormat] = useState<Option>(WEBHOOK_FORMATS[0]);
-  const [active, setActive] = useState(true);
+  const [roles, setRoles] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Sync state when the dialog opens for a member.
-  const [syncedId, setSyncedId] = useState<string | null>(null);
-  if (open && member && syncedId !== member.id) {
-    setSyncedId(member.id);
-    setRolesText(member.roles.join(","));
-    setAcceptKinds([...(member.accept_kinds ?? [])]);
-    setEmail(member.email ?? "");
-    setWebhook(member.notify_webhook ?? "");
-    setFormat(
-      WEBHOOK_FORMATS.find((f) => f.value === member.notify_webhook_format) ??
-        WEBHOOK_FORMATS[0],
-    );
-    setActive(member.is_active);
-  }
-  if (!open && syncedId !== null) setSyncedId(null);
+  useEffect(() => {
+    if (open && member) setRoles([...member.roles]);
+  }, [open, member]);
+
+  const submit = async () => {
+    if (!member || saving) return;
+    setSaving(true);
+    try {
+      await onSave(member.id, roles);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <ModalTransition>
       {open && member && (
-        <ModalDialog onClose={onClose} width="480px">
+        <ModalDialog onClose={onClose}>
           <ModalHeader>
-            <ModalTitle>编辑成员 · {member.name}</ModalTitle>
+            <ModalTitle>项目角色 · {member.name}</ModalTitle>
           </ModalHeader>
           <ModalBody>
-            <Stack space="space.150">
-              <Stack space="space.050">
-                <label htmlFor="me-roles" style={labelStyle}>
-                  角色（逗号分隔）
-                </label>
-                <Textfield
-                  id="me-roles"
-                  value={rolesText}
-                  onChange={(e) => setRolesText(e.currentTarget.value)}
-                />
-              </Stack>
-              <Stack space="space.050">
-                <span style={labelStyle}>可接 kinds</span>
-                <Inline space="space.150">
-                  {["story", "issue", "task"].map((k) => (
-                    <Checkbox
-                      key={k}
-                      label={k}
-                      isChecked={acceptKinds.includes(k)}
-                      onChange={(e) =>
-                        setAcceptKinds((prev) =>
-                          e.currentTarget.checked ? [...prev, k] : prev.filter((x) => x !== k),
-                        )
-                      }
-                    />
-                  ))}
-                </Inline>
-              </Stack>
-              <Stack space="space.050">
-                <label htmlFor="me-email" style={labelStyle}>
-                  Email
-                </label>
-                <Textfield id="me-email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
-              </Stack>
-              <Stack space="space.050">
-                <label htmlFor="me-webhook" style={labelStyle}>
-                  Webhook URL
-                </label>
-                <Textfield
-                  id="me-webhook"
-                  value={webhook}
-                  onChange={(e) => setWebhook(e.currentTarget.value)}
-                />
-              </Stack>
-              <Stack space="space.050">
-                <label style={labelStyle}>Webhook 格式</label>
-                <Select
-                  options={WEBHOOK_FORMATS}
-                  value={format}
-                  onChange={(o) => o && setFormat(o as Option)}
-                />
-              </Stack>
-              <Checkbox
-                label="启用"
-                isChecked={active}
-                onChange={(e) => setActive(e.currentTarget.checked)}
+            <Box>
+              <Select
+                inputId="edit-member-roles"
+                isMulti
+                options={PROJECT_ROLES}
+                value={rolesToOptions(roles)}
+                onChange={(opts) =>
+                  setRoles((opts as readonly { value: string }[]).map((o) => o.value))
+                }
               />
-            </Stack>
+              <Text size="small" color="color.text.subtlest">
+                项目必须至少保留一个启用的 project_owner。
+              </Text>
+            </Box>
           </ModalBody>
           <ModalFooter>
             <Button appearance="subtle" onClick={onClose}>
               取消
             </Button>
-            <Button
-              appearance="primary"
-              isLoading={saving}
-              onClick={async () => {
-                setSaving(true);
-                await onSave(member.id, {
-                  roles: rolesText.split(",").map((r) => r.trim()).filter(Boolean),
-                  accept_kinds: acceptKinds,
-                  email: email || null,
-                  notify_webhook: webhook || null,
-                  notify_webhook_format: format.value,
-                  is_active: active,
-                });
-                setSaving(false);
-              }}
-            >
+            <Button appearance="primary" onClick={submit} isLoading={saving}>
               保存
             </Button>
-          </ModalFooter>
-        </ModalDialog>
-      )}
-    </ModalTransition>
-  );
-}
-
-export function CreateMemberDialog({
-  open,
-  humans,
-  onClose,
-  onCreate,
-}: {
-  open: boolean;
-  humans: Member[];
-  onClose: () => void;
-  onCreate: (payload: Record<string, unknown>) => Promise<void> | void;
-}) {
-  const [name, setName] = useState("");
-  const [type, setType] = useState("human");
-  const [rolesText, setRolesText] = useState("worker");
-  const [managerId, setManagerId] = useState<Option | null>(null);
-  const [password, setPassword] = useState("");
-  const [email, setEmail] = useState("");
-  const [webhook, setWebhook] = useState("");
-  const [format, setFormat] = useState<Option>(WEBHOOK_FORMATS[0]);
-  const [saving, setSaving] = useState(false);
-
-  const managerOptions: Option[] = humans.map((m) => ({ label: m.name, value: m.id }));
-
-  return (
-    <ModalTransition>
-      {open && (
-        <ModalDialog onClose={onClose} width="480px">
-          <ModalHeader>
-            <ModalTitle>新增成员</ModalTitle>
-          </ModalHeader>
-          <ModalBody>
-            <Stack space="space.150">
-              <Stack space="space.050">
-                <label htmlFor="mc-name" style={labelStyle}>
-                  名称
-                </label>
-                <Textfield id="mc-name" value={name} onChange={(e) => setName(e.currentTarget.value)} />
-              </Stack>
-              <Stack space="space.050">
-                <span style={labelStyle}>类型</span>
-                <RadioGroup
-                  options={[
-                    { name: "member-type", value: "human", label: "human" },
-                    { name: "member-type", value: "agent", label: "agent" },
-                  ]}
-                  value={type}
-                  onChange={(e) => setType(e.currentTarget.value)}
-                />
-              </Stack>
-              <Stack space="space.050">
-                <label htmlFor="mc-roles" style={labelStyle}>
-                  角色
-                </label>
-                <Textfield
-                  id="mc-roles"
-                  value={rolesText}
-                  placeholder="owner,manager,worker（逗号分隔）"
-                  onChange={(e) => setRolesText(e.currentTarget.value)}
-                />
-              </Stack>
-              {type === "agent" && (
-                <Stack space="space.050">
-                  <label style={labelStyle}>Manager（必选）</label>
-                  <Select
-                    options={managerOptions}
-                    value={managerId}
-                    onChange={(o) => setManagerId((o as Option) ?? null)}
-                    placeholder="选择同项目 human 负责人"
-                  />
-                </Stack>
-              )}
-              {type === "human" && (
-                <Stack space="space.050">
-                  <label htmlFor="mc-password" style={labelStyle}>
-                    初始密码
-                  </label>
-                  <Textfield
-                    id="mc-password"
-                    type="password"
-                    value={password}
-                    placeholder="至少 8 位；留空则不能登录（之后可重置）"
-                    onChange={(e) => setPassword(e.currentTarget.value)}
-                  />
-                </Stack>
-              )}
-              <Stack space="space.050">
-                <label htmlFor="mc-email" style={labelStyle}>
-                  Email
-                </label>
-                <Textfield id="mc-email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
-              </Stack>
-              <Stack space="space.050">
-                <label htmlFor="mc-webhook" style={labelStyle}>
-                  Webhook URL
-                </label>
-                <Textfield
-                  id="mc-webhook"
-                  value={webhook}
-                  placeholder="https://…"
-                  onChange={(e) => setWebhook(e.currentTarget.value)}
-                />
-              </Stack>
-              <Stack space="space.050">
-                <label style={labelStyle}>Webhook 格式</label>
-                <Select
-                  options={WEBHOOK_FORMATS}
-                  value={format}
-                  onChange={(o) => o && setFormat(o as Option)}
-                />
-              </Stack>
-            </Stack>
-          </ModalBody>
-          <ModalFooter>
-            <Button appearance="subtle" onClick={onClose}>
-              取消
-            </Button>
-            <Button
-              appearance="primary"
-              isLoading={saving}
-              onClick={async () => {
-                if (type === "agent" && !managerId) return;
-                setSaving(true);
-                await onCreate({
-                  name,
-                  type,
-                  roles: rolesText.split(",").map((r) => r.trim()).filter(Boolean),
-                  manager_member_id: type === "agent" ? managerId?.value : null,
-                  email: email || null,
-                  notify_webhook: webhook || null,
-                  notify_webhook_format: format.value,
-                  password: type === "human" && password ? password : null,
-                });
-                setSaving(false);
-              }}
-            >
-              创建
-            </Button>
-          </ModalFooter>
-        </ModalDialog>
-      )}
-    </ModalTransition>
-  );
-}
-
-export function ResetPasswordDialog({
-  open,
-  memberName,
-  onClose,
-  onReset,
-}: {
-  open: boolean;
-  memberName: string;
-  onClose: () => void;
-  onReset: (password: string | null) => Promise<string>;
-}) {
-  const [password, setPassword] = useState("");
-  const [plaintext, setPlaintext] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  return (
-    <ModalTransition>
-      {open && (
-        <ModalDialog onClose={onClose} width="440px">
-          <ModalHeader>
-            <ModalTitle>重置登录密码 · {memberName}</ModalTitle>
-          </ModalHeader>
-          <ModalBody>
-            {plaintext ? (
-              <Stack space="space.100">
-                <span>新密码（只显示一次）：</span>
-                <strong data-testid="plain-password">{plaintext}</strong>
-              </Stack>
-            ) : (
-              <Textfield
-                placeholder="新密码（留空随机生成，至少 8 位）"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.currentTarget.value)}
-              />
-            )}
-          </ModalBody>
-          <ModalFooter>
-            <Button appearance="subtle" onClick={onClose}>
-              {plaintext ? "关闭" : "取消"}
-            </Button>
-            {!plaintext && (
-              <Button
-                appearance="primary"
-                isLoading={busy}
-                onClick={async () => {
-                  setBusy(true);
-                  setPlaintext(await onReset(password || null));
-                  setBusy(false);
-                }}
-              >
-                重置
-              </Button>
-            )}
           </ModalFooter>
         </ModalDialog>
       )}

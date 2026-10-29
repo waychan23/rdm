@@ -3,25 +3,38 @@ export interface Project {
   key: string;
   name: string;
   description_md?: string | null;
-  owner_member_id?: string | null;
+  owner_user_id?: string | null;
   status: string;
   created_at: string;
+  roles?: string[];
+  implicit?: boolean;
+  membership_id?: string | null;
 }
 
-export interface Member {
+/** Organization-level identity (human or agent), §17. */
+export interface OrgUser {
   id: string;
-  project_id?: string;
-  name: string;
   type: string;
+  name: string;
   description_md?: string | null;
-  manager_member_id?: string | null;
-  roles: string[];
+  manager_user_id?: string | null;
+  org_roles: string[];
   accept_kinds?: string[];
   email?: string | null;
   notify_webhook?: string | null;
   notify_webhook_format?: string;
+  must_reset_password?: boolean;
   is_active: boolean;
+  effective_active?: boolean;
   created_at: string;
+}
+
+/** A project membership row plus the human's agents (§17). */
+export interface ProjectMemberRow extends OrgUser {
+  membership_id: string;
+  roles: string[];
+  auto_added: boolean;
+  agents?: Array<{ user: OrgUser; membership_id: string; auto_added: boolean }>;
 }
 
 export interface Assignee {
@@ -91,7 +104,7 @@ export interface Sprint {
   status: string;
   start_date?: string | null;
   end_date?: string | null;
-  manager_member_id?: string | null;
+  manager_user_id?: string | null;
   created_at: string;
 }
 
@@ -145,18 +158,26 @@ export interface WorkflowDto {
 
 export interface Token {
   id: string;
-  member_id: string;
+  user_id: string;
+  act_as_user_id?: string | null;
   label?: string | null;
+  kind: string;
+  expires_at?: string | null;
   last_used_at?: string | null;
   revoked_at?: string | null;
   created_at: string;
   is_valid: boolean;
+  /** Present only in the create response. */
+  token?: string;
 }
 
 export interface Whoami {
-  member: Member;
-  project: Project | null;
-  roles: string[];
+  user: OrgUser;
+  identity: { id: string; name: string; type: string; act_as: boolean };
+  org_roles: string[];
+  agents: OrgUser[];
+  projects: Project[];
+  default_project: Project | null;
   unread_count: number;
   my_open_items: number;
 }

@@ -1,27 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 
 import Button from "@atlaskit/button/default/button";
 import Heading from "@atlaskit/heading";
-import ModalDialog, {
-  ModalBody,
-  ModalFooter,
-  ModalHeader,
-  ModalTitle,
-  ModalTransition,
-} from "@atlaskit/modal-dialog";
-import Spinner from "@atlaskit/spinner";
 import Lozenge from "@atlaskit/lozenge";
-import SectionMessage from "@atlaskit/section-message";
+import Select from "@atlaskit/select";
+import Spinner from "@atlaskit/spinner";
+import Textfield from "@atlaskit/textfield";
+import TextArea from "@atlaskit/textarea";
 import { Box, Inline, Stack, Text, xcss } from "@atlaskit/primitives";
-import { token } from "@atlaskit/tokens";
 
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
-import type { Member, Project, Token } from "../types";
-import { MemberEditDialog } from "../members/memberForms";
-import "../styles/table.css";
+import type { OrgUser, Project, ProjectMemberRow } from "../types";
 
 const infoBlock = xcss({
   border: "1px solid",
@@ -33,66 +25,76 @@ const infoBlock = xcss({
   gap: "space.200",
 });
 
-const nameCellStyles = xcss({
-  gridColumn: "1 / -1",
-});
+const nameCellStyles = xcss({ gridColumn: "1 / -1" });
 
 export default function SettingsPage() {
   const { key: projectKey = "" } = useParams();
   const notify = useNotify();
 
   const [nonce, setNonce] = useState(0);
-  const [editMember, setEditMember] = useState<Member | null>(null);
-  const [tokenMember, setTokenMember] = useState<Member | null>(null);
-  const [tokens, setTokens] = useState<Token[]>([]);
-  const [issuedToken, setIssuedToken] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [ownerId, setOwnerId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const { data, loading } = useAsync<{ project: Project; members: Member[] }>(
+  const { data, loading } = useAsync<{ project: Project; members: ProjectMemberRow[] }>(
     async () => {
       const [p, m] = await Promise.all([
         api.get<Project>(`/projects/${projectKey}`),
-        api.get<Member[]>(`/projects/${projectKey}/members`),
+        api.get<ProjectMemberRow[]>(`/projects/${projectKey}/members`),
       ]);
       return { project: p.data, members: m.data };
     },
     [projectKey, nonce],
   );
 
+  useEffect(() => {
+    if (data) {
+      setName(data.project.name);
+      setDescription(data.project.description_md ?? "");
+      setOwnerId(data.project.owner_user_id ?? null);
+    }
+  }, [data]);
+
   const reload = () => setNonce((n) => n + 1);
 
-  const saveMember = async (id: string, payload: Record<string, unknown>) => {
+  const saveProject = async (e: FormEvent) => {
+    e.preventDefault();
+    if (saving) return;
+    setSaving(true);
     try {
-      await api.patch(`/members/${id}`, payload);
-      setEditMember(null);
-      reload();
+      await api.patch(`/projects/${projectKey}`, {
+        name,
+        description_md: description,
+      });
+      await reload();
+      notify.success("项目已保存");
     } catch (e) {
       notify.error("保存失败", errorCause(e)?.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const openTokens = async (m: Member) => {
-    setTokenMember(m);
-    setIssuedToken("");
-    const res = await api.get<Token[]>(`/members/${m.id}/tokens`);
-    setTokens(res.data);
+  const saveOwner = async (userId: string | null) => {
+    if (!userId || userId === data?.project.owner_user_id) return;
+    try {
+      await api.post(`/projects/${projectKey}/transfer-owner`, { user_id: userId });
+      await reload();
+      notify.success("项目经理已改派");
+    } catch (e) {
+      notify.error("改派失败", errorCause(e)?.message);
+    }
   };
 
-  const issueToken = async () => {
-    if (!tokenMember) return;
-    const res = await api.post<{ token: string }>(
-      `/members/${tokenMember.id}/tokens`,
-      { label: "web" },
-    );
-    setIssuedToken(res.data.token);
-    const fresh = await api.get<Token[]>(`/members/${tokenMember.id}/tokens`);
-    setTokens(fresh.data);
-  };
-
-  const revokeToken = async (id: string) => {
-    if (!tokenMember) return;
-    await api.del(`/tokens/${id}`);
-    const fresh = await api.get<Token[]>(`/members/${tokenMember.id}/tokens`);
-    setTokens(fresh.data);
+  const archive = async () => {
+    if (!window.confirm(`归档项目 ${projectKey}？归档后仍可只读访问。`)) return;
+    try {
+      await api.post(`/projects/${projectKey}/archive`);
+      await reload();
+    } catch (e) {
+      notify.error("归档失败", errorCause(e)?.message);
+    }
   };
 
   if (loading || !data) {
@@ -103,9 +105,15 @@ export default function SettingsPage() {
     );
   }
 
+  const humans: Array<{ user: OrgUser; roles: string[] }> = data.members.map((m) => ({
+    user: m,
+    roles: m.roles,
+  }));
+  const owner = humans.find((h) => h.user.id === data.project.owner_user_id);
+
   return (
     <Box padding="space.300">
-      <Heading size="large">设置 · {projectKey}</Heading>
+      <Heading size="large">项目设置 · {projectKey}</Heading>
 
       <Box xcss={infoBlock} style={{ marginTop: 16, marginBottom: 16 }}>
         <Stack space="space.050">
@@ -124,136 +132,73 @@ export default function SettingsPage() {
         </Stack>
         <Stack space="space.050" xcss={nameCellStyles}>
           <Text size="small" color="color.text.subtlest">
-            名称
+            项目经理
           </Text>
-          <Text>{data.project.name}</Text>
+          <Text>{owner?.user.name ?? "—"}</Text>
         </Stack>
       </Box>
 
-      <Text weight="semibold">成员与通知</Text>
-      <table className="rdm-table" style={{ marginTop: 8 }}>
-        <thead>
-          <tr>
-            <th style={{ width: 130 }}>名称</th>
-            <th style={{ width: 80 }}>类型</th>
-            <th style={{ width: 200 }}>角色</th>
-            <th>Webhook</th>
-            <th style={{ width: 70 }}>活跃</th>
-            <th style={{ width: 150 }}>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.members.map((m) => (
-            <tr key={m.id} style={{ cursor: "default" }}>
-              <td>{m.name}</td>
-              <td>
-                <Lozenge appearance={m.type === "agent" ? "warning" : "default"}>{m.type}</Lozenge>
-              </td>
-              <td>
-                <Inline space="space.050">
-                  {m.roles.map((r) => (
-                    <Lozenge key={r} appearance="new">
-                      {r}
-                    </Lozenge>
-                  ))}
-                </Inline>
-              </td>
-              <td>
-                <Text size="small" color="color.text.subtlest">
-                  {m.notify_webhook ?? "—"}
-                </Text>
-              </td>
-              <td>
-                <Lozenge appearance={m.is_active ? "success" : "default"}>
-                  {m.is_active ? "是" : "否"}
-                </Lozenge>
-              </td>
-              <td onClick={(e) => e.stopPropagation()}>
-                <Inline space="space.100">
-                  <Button spacing="compact" onClick={() => setEditMember(m)}>
-                    编辑
-                  </Button>
-                  <Button spacing="compact" onClick={() => void openTokens(m)}>
-                    Token
-                  </Button>
-                </Inline>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Box as="form" onSubmit={saveProject} style={{ maxWidth: 520 }}>
+        <Stack space="space.150">
+          <Text weight="semibold">基本信息</Text>
+          <Stack space="space.050">
+            <label htmlFor="project-name">名称</label>
+            <Textfield
+              id="project-name"
+              value={name}
+              onChange={(e) => setName(e.currentTarget.value)}
+            />
+          </Stack>
+          <Stack space="space.050">
+            <label htmlFor="project-desc">描述</label>
+            <TextArea
+              id="project-desc"
+              value={description}
+              minimumRows={3}
+              onChange={(e) => setDescription(e.currentTarget.value)}
+            />
+          </Stack>
+          <Inline space="space.100">
+            <Button type="submit" appearance="primary" isLoading={saving}>
+              保存
+            </Button>
+            <Button
+              appearance="danger"
+              onClick={archive}
+              isDisabled={data.project.status === "archived"}
+            >
+              归档项目
+            </Button>
+          </Inline>
+        </Stack>
+      </Box>
 
-      <MemberEditDialog
-        open={editMember !== null}
-        member={editMember}
-        onClose={() => setEditMember(null)}
-        onSave={saveMember}
-      />
-
-      <ModalTransition>
-        {tokenMember && (
-          <ModalDialog
-            onClose={() => setTokenMember(null)}
-            width="560px"
-            label={`Token · ${tokenMember.name}`}
-          >
-            <ModalHeader>
-              <ModalTitle>Token · {tokenMember.name}</ModalTitle>
-            </ModalHeader>
-            <ModalBody>
-              <Stack space="space.150">
-                <Button appearance="primary" onClick={() => void issueToken()}>
-                  签发新 Token
-                </Button>
-                {issuedToken && (
-                  <SectionMessage appearance="success">
-                    新 Token（只显示一次）：<code>{issuedToken}</code>
-                  </SectionMessage>
-                )}
-                <table className="rdm-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: 120 }}>标签</th>
-                      <th>创建</th>
-                      <th style={{ width: 90 }}>状态</th>
-                      <th style={{ width: 80 }}>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tokens.map((t) => (
-                      <tr key={t.id} style={{ cursor: "default" }}>
-                        <td className="cell-meta">{t.label ?? "—"}</td>
-                        <td className="cell-meta">{t.created_at.slice(0, 10)}</td>
-                        <td>
-                          <Lozenge appearance={t.is_valid ? "success" : "default"}>
-                            {t.is_valid ? "有效" : "已吊销"}
-                          </Lozenge>
-                        </td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          {t.is_valid && (
-                            <Button
-                              spacing="compact"
-                              appearance="danger"
-                              onClick={() => void revokeToken(t.id)}
-                            >
-                              吊销
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </Stack>
-            </ModalBody>
-            <ModalFooter>
-              <Button appearance="subtle" onClick={() => setTokenMember(null)}>
-                关闭
-              </Button>
-            </ModalFooter>
-          </ModalDialog>
-        )}
-      </ModalTransition>
+      <Box style={{ maxWidth: 520, marginTop: 32 }}>
+        <Stack space="space.150">
+          <Text weight="semibold">项目经理（Project Owner）</Text>
+          <Text size="small" color="color.text.subtlest">
+            project-director / Org Owner 或现任项目经理可以改派；目标必须是项目内启用的 human。
+          </Text>
+          <Select
+            inputId="project-owner"
+            options={humans.map((h) => ({
+              label: `${h.user.name}${h.roles.includes("project_owner") ? "（Owner）" : ""}`,
+              value: h.user.id,
+            }))}
+            value={
+              ownerId
+                ? { label: owner?.user.name ?? "", value: ownerId }
+                : null
+            }
+            onChange={(opt) => {
+              const id = (opt as { value: string } | null)?.value ?? null;
+              setOwnerId(id);
+              void saveOwner(id);
+            }}
+            isClearable={false}
+          />
+        </Stack>
+      </Box>
     </Box>
   );
 }

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from mcp_helpers import call
+from tests.mcp.mcp_helpers import call
 
 
 async def test_m1_single_agent_loop(server, mcp_clients) -> None:
@@ -27,7 +27,7 @@ async def test_m1_single_agent_loop(server, mcp_clients) -> None:
     ):
         # --- context: whoami + workflow ---
         who = await call(frontend, "whoami", {})
-        assert who["data"]["member"]["name"] == "frontend"
+        assert who["data"]["identity"]["name"] == "frontend"
         wf = await call(frontend, "workflow_get", {"kind": "task"})
         assert "TO_REVIEW" in wf["data"]["kinds"]["task"]["transitions"]["IN_PROGRESS"]
 

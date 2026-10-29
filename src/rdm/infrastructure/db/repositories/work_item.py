@@ -52,7 +52,7 @@ class WorkItemRepository:
                 status=item.status,
                 priority=item.priority,
                 rank=item.rank,
-                assignee_member_id=item.assignee_member_id,
+                assignee_user_id=item.assignee_user_id,
                 row_version=item.row_version,
                 created_at=item.created_at,
                 created_by=item.created_by,
@@ -78,7 +78,7 @@ class WorkItemRepository:
         *,
         kind: str | None = None,
         status: str | None = None,
-        assignee_member_id: str | None = None,
+        assignee_user_id: str | None = None,
         parent_id: str | None = None,
         q: str | None = None,
         expand: bool = False,
@@ -93,8 +93,8 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.kind == kind)
         if status is not None:
             stmt = stmt.where(WorkItemModel.status == status)
-        if assignee_member_id is not None:
-            stmt = stmt.where(WorkItemModel.assignee_member_id == assignee_member_id)
+        if assignee_user_id is not None:
+            stmt = stmt.where(WorkItemModel.assignee_user_id == assignee_user_id)
         if parent_id is not None:
             stmt = stmt.where(WorkItemModel.parent_id == parent_id)
         if q:
@@ -110,7 +110,7 @@ class WorkItemRepository:
         *,
         kind: str | None = None,
         status: str | None = None,
-        assignee_member_id: str | None = None,
+        assignee_user_id: str | None = None,
         parent_id: str | None = None,
         q: str | None = None,
         include_deleted: bool = False,
@@ -126,8 +126,8 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.kind == kind)
         if status is not None:
             stmt = stmt.where(WorkItemModel.status == status)
-        if assignee_member_id is not None:
-            stmt = stmt.where(WorkItemModel.assignee_member_id == assignee_member_id)
+        if assignee_user_id is not None:
+            stmt = stmt.where(WorkItemModel.assignee_user_id == assignee_user_id)
         if parent_id is not None:
             stmt = stmt.where(WorkItemModel.parent_id == parent_id)
         if q:
@@ -196,7 +196,7 @@ class WorkItemRepository:
                 status=item.status,
                 priority=item.priority,
                 rank=item.rank,
-                assignee_member_id=item.assignee_member_id,
+                assignee_user_id=item.assignee_user_id,
                 parent_id=item.parent_id,
                 row_version=item.row_version + 1,
                 updated_at=dt.datetime.now(dt.UTC),
@@ -222,17 +222,17 @@ class WorkItemRepository:
                 for k, v in values.items():
                     setattr(existing, k, v)
 
-    async def claim(self, item_id: str, member_id: str, actor_id: str) -> bool:
+    async def claim(self, item_id: str, user_id: str, actor_id: str) -> bool:
         """Atomic claim of an unassigned item (architecture §10)."""
         stmt = (
             update(WorkItemModel)
             .where(
                 WorkItemModel.id == item_id,
-                WorkItemModel.assignee_member_id.is_(None),
+                WorkItemModel.assignee_user_id.is_(None),
                 WorkItemModel.deleted_at.is_(None),
             )
             .values(
-                assignee_member_id=member_id,
+                assignee_user_id=user_id,
                 row_version=WorkItemModel.row_version + 1,
                 updated_at=dt.datetime.now(dt.UTC),
             )

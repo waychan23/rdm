@@ -25,9 +25,11 @@ async def test_whoami_with_bootstrap_owner(server, owner_token) -> None:
     r = await client.get("/api/v1/whoami", headers=auth(owner_token))
     assert r.status_code == 200
     body = r.json()["data"]
-    assert body["member"]["name"] == "owner"
-    assert body["member"]["roles"] == ["project_owner"]
-    assert body["project"]["key"] == "RDM"
+    assert body["user"]["name"] == "owner"
+    assert body["org_roles"] == ["org_owner"]
+    # No default project is auto-created any more (§17).
+    assert body["projects"] == []
+    assert body["default_project"] is None
 
 
 async def test_bad_bearer_rejected(server) -> None:
@@ -59,128 +61,85 @@ async def test_non_loopback_without_token_rejected(server) -> None:
 
 
 async def test_deactivated_member_forbidden_immediately(server, owner_token) -> None:
-    """Deactivation via the API invalidates the auth cache at once (§16.58),
-    and an owner cannot deactivate themselves (self-lock protection)."""
+    """Disabling a user takes effect on the very next request; org owners can
+    only step down by transferring the role (§17)."""
+    from tests.support import add_to_project, create_human, login_pat
+
     client, _settings, _app = server
 
     # Owner self-deactivation is refused.
-    members = (await client.get("/api/v1/projects/RDM/members", headers=auth(owner_token))).json()[
-        "data"
-    ]
-    owner_id = members[0]["id"]
-    r = await client.patch(
-        f"/api/v1/members/{owner_id}",
-        json={"is_active": False},
-        headers=auth(owner_token),
-    )
+    me = (await client.get("/api/v1/whoami", headers=auth(owner_token))).json()["data"]["user"]
+    r = await client.post(f"/api/v1/users/{me['id']}/disable", headers=auth(owner_token))
     assert r.status_code == 403
 
-    # A separate member's token stops working immediately after deactivation.
-    r = await client.post(
-        "/api/v1/projects/RDM/members",
-        headers=auth(owner_token),
-        json={"name": "temp", "type": "human", "roles": ["worker"]},
+    await client.post(
+        "/api/v1/projects", headers=auth(owner_token), json={"key": "DEMO", "name": "演示"}
     )
-    assert r.status_code == 201, r.text
-    temp_id = r.json()["data"]["id"]
-    r = await client.post(
-        f"/api/v1/members/{temp_id}/tokens",
-        headers=auth(owner_token),
-        json={"label": "t"},
-    )
-    temp_token = r.json()["data"]["token"]
+    temp_id = await create_human(client, owner_token, "temp")
+    await add_to_project(client, owner_token, "DEMO", temp_id, ["worker"])
+    temp_token = await login_pat(client, "temp")
     assert (await client.get("/api/v1/whoami", headers=auth(temp_token))).status_code == 200
 
-    r = await client.patch(
-        f"/api/v1/members/{temp_id}",
-        json={"is_active": False},
-        headers=auth(owner_token),
-    )
+    r = await client.post(f"/api/v1/users/{temp_id}/disable", headers=auth(owner_token))
     assert r.status_code == 200, r.text
     r = await client.get("/api/v1/whoami", headers=auth(temp_token))
-    assert r.status_code == 403
-    assert r.json()["error"]["code"] == "FORBIDDEN"
+    # Disabling revokes every credential (401); an already-cached family would
+    # surface as 403. Either way access ends immediately.
+    assert r.status_code in (401, 403)
 
 
 async def test_s1_project_and_agent_member_flow(server, owner_token) -> None:
+    from tests.support import add_to_project, create_agent, create_human, login_pat
+
     client, _settings, _app = server
 
-    # S1: owner creates DEMO project.
+    # S1: org owner creates DEMO project and becomes project owner.
     r = await client.post(
         "/api/v1/projects", headers=auth(owner_token), json={"key": "DEMO", "name": "演示项目"}
     )
     assert r.status_code == 201, r.text
-    demo = r.json()["data"]
-    assert demo["key"] == "DEMO"
+    assert r.json()["data"]["key"] == "DEMO"
+    me = (await client.get("/api/v1/whoami", headers=auth(owner_token))).json()["data"]["user"]
+    assert r.json()["data"]["owner_user_id"] == me["id"]
 
-    # duplicate key (case-insensitive) -> PROJECT_KEY_DUPLICATE
+    # duplicate key (case-insensitive) and invalid key
     r = await client.post(
         "/api/v1/projects", headers=auth(owner_token), json={"key": "DEMO", "name": "dup"}
     )
     assert r.status_code == 409
-    assert r.json()["error"]["code"] == "PROJECT_KEY_DUPLICATE"
-
-    # invalid key -> VALIDATION_ERROR
     r = await client.post(
         "/api/v1/projects", headers=auth(owner_token), json={"key": "x", "name": "bad"}
     )
     assert r.status_code == 422
 
-    # add a human TL first
-    r = await client.post(
-        "/api/v1/projects/DEMO/members",
-        headers=auth(owner_token),
-        json={"name": "tl", "type": "human", "roles": ["manager"]},
-    )
-    assert r.status_code == 201, r.text
-    tl = r.json()["data"]
+    # humans are organization users, then added to the project.
+    tl_id = await create_human(client, owner_token, "tl")
+    await add_to_project(client, owner_token, "DEMO", tl_id, ["manager"])
+    tl_token = await login_pat(client, "tl")
 
-    # agent without manager -> rejected
-    r = await client.post(
-        "/api/v1/projects/DEMO/members",
-        headers=auth(owner_token),
-        json={"name": "frontend-dev", "type": "agent", "roles": ["worker"]},
-    )
-    assert r.status_code == 422
-    assert "manager" in r.json()["error"]["message"]
+    # agents are created by their manager and follow the human into projects.
+    agent_id = await create_agent(client, tl_token, "frontend-dev", accept_kinds=["task"])
 
-    # agent with manager -> ok
-    r = await client.post(
-        "/api/v1/projects/DEMO/members",
-        headers=auth(owner_token),
-        json={
-            "name": "frontend-dev",
-            "type": "agent",
-            "manager_member_id": tl["id"],
-            "roles": ["worker"],
-            "accept_kinds": ["task"],
-        },
-    )
-    assert r.status_code == 201, r.text
-    agent = r.json()["data"]
-    assert agent["manager_member_id"] == tl["id"]
-
-    members = (await client.get("/api/v1/projects/DEMO/members", headers=auth(owner_token))).json()[
+    rows = (await client.get("/api/v1/projects/DEMO/members", headers=auth(owner_token))).json()[
         "data"
     ]
-    assert {m["name"] for m in members} == {"tl", "frontend-dev"}
+    by_name = {row["name"]: row for row in rows}
+    assert set(by_name) == {"owner", "tl"}
+    agents = by_name["tl"]["agents"]
+    assert [a["user"]["id"] for a in agents] == [agent_id]
+    assert agents[0]["auto_added"] is True
 
-    # issue an agent token; it authenticates; revoke then 401.
-    r = await client.post(
-        f"/api/v1/members/{agent['id']}/tokens",
-        headers=auth(owner_token),
-        json={"label": "ci"},
-    )
-    assert r.status_code == 201
-    token_id = r.json()["data"]["id"]
-    agent_token = r.json()["data"]["token"]
-
+    # A PAT may act as the agent; whoami shows the agent identity.
+    agent_token = await login_pat(client, "tl", act_as_user_id=agent_id)
     r = await client.get("/api/v1/whoami", headers=auth(agent_token))
     assert r.status_code == 200
-    assert r.json()["data"]["member"]["name"] == "frontend-dev"
+    assert r.json()["data"]["identity"]["name"] == "frontend-dev"
+    assert r.json()["data"]["identity"]["act_as"] is True
 
-    r = await client.delete(f"/api/v1/tokens/{token_id}", headers=auth(owner_token))
-    assert r.status_code == 204
+    # A user manager may revoke every PAT of a user (including act-as agent
+    # tokens) but can never create one on their behalf (§17).
+    r = await client.post(f"/api/v1/users/{tl_id}/tokens/revoke-all", headers=auth(owner_token))
+    assert r.status_code == 200, r.text
     r = await client.get("/api/v1/whoami", headers=auth(agent_token))
     assert r.status_code == 401
 

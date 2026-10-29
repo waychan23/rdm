@@ -43,11 +43,14 @@ def _bearer_factory(app, token: str) -> Callable[..., httpx.AsyncClient]:
     return _factory
 
 
-async def _login_owner(client: httpx.AsyncClient, settings) -> None:
-    password = settings.bootstrap_password_path.read_text(encoding="utf-8").strip()
+async def _ensure_owner_password(client: httpx.AsyncClient) -> None:
+    from tests.conftest import OWNER_PASSWORD
+
+    r = await client.post("/api/v1/local/owner-recovery")
+    ticket = _query(r.json()["data"]["set_password_url"])["ticket"]
     r = await client.post(
-        "/api/v1/auth/login",
-        json={"project_key": "RDM", "name": "owner", "password": password},
+        "/api/v1/auth/set-password",
+        json={"ticket": ticket, "new_password": OWNER_PASSWORD},
     )
     assert r.status_code == 200, r.text
 
@@ -99,7 +102,10 @@ async def test_dcr_loopback_only(server) -> None:
     assert r.json()["error"] == "invalid_redirect_uri"
 
 
-async def _authorize_to_consent(client, client_id: str) -> tuple[str, str, str, str]:
+async def _authorize_to_consent(client, client_id: str) -> tuple[str, str, str, str, str]:
+    """Return (consent_id, consent_key, redirect_uri, verifier, state)."""
+    from tests.conftest import OWNER_PASSWORD
+
     redirect_uri = "http://127.0.0.1:54321/callback"
     verifier, challenge = _verifier_pair()
     r = await client.get(
@@ -117,8 +123,23 @@ async def _authorize_to_consent(client, client_id: str) -> tuple[str, str, str, 
     )
     assert r.status_code in (302, 303, 307), r.text
     location = r.headers["location"]
+    assert location.startswith("/login?auth_key="), location
+    auth_key = _query(location)["auth_key"]
+    r = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "auth_key": auth_key,
+            "name": "owner",
+            "password": OWNER_PASSWORD,
+            "remember": False,
+        },
+    )
+    assert r.status_code == 200, r.text
+    location = r.json()["data"]["redirect_to"]
     assert location.startswith("/oauth/consent/"), location
-    return location.rsplit("/", 1)[1], redirect_uri, verifier, "state-xyz"
+    consent_id = location.split("?")[0].rsplit("/", 1)[1]
+    consent_key = _query(location)["key"]
+    return consent_id, consent_key, redirect_uri, verifier, "state-xyz"
 
 
 async def test_authorize_requires_login_then_consent_and_token(server) -> None:
@@ -139,22 +160,24 @@ async def test_authorize_requires_login_then_consent_and_token(server) -> None:
         follow_redirects=False,
     )
     assert r.status_code in (302, 303, 307)
-    assert r.headers["location"].startswith("/login?next=")
+    assert r.headers["location"].startswith("/login?auth_key=")
 
-    await _login_owner(client, settings)
+    await _ensure_owner_password(client)
 
-    consent_id, redirect_uri, verifier, state = await _authorize_to_consent(client, client_id)
+    consent_id, consent_key, redirect_uri, verifier, state = await _authorize_to_consent(
+        client, client_id
+    )
 
-    # Consent info: only the creating session can read it; owner can pick self.
-    r = await client.get(f"/api/v1/oauth/consent/{consent_id}")
+    # Consent info is reached with the one-shot capability key (§17).
+    r = await client.get(f"/api/v1/oauth/consent/{consent_id}?key={consent_key}")
     assert r.status_code == 200, r.text
     info = r.json()["data"]
     assert info["client"]["client_name"] == "test-mcp-client"
-    owner = next(m for m in info["selectable_members"] if m["name"] == "owner")
+    owner = next(u for u in info["selectable_users"] if u["name"] == "owner")
 
     r = await client.post(
-        f"/api/v1/oauth/consent/{consent_id}/decision",
-        json={"decision": "allow", "member_id": owner["id"]},
+        f"/api/v1/oauth/consent/{consent_id}/decision?key={consent_key}",
+        json={"decision": "allow", "act_as_user_id": owner["id"]},
     )
     assert r.status_code == 200, r.text
     redirect_to = r.json()["data"]["redirect_to"]
@@ -189,7 +212,7 @@ async def test_authorize_requires_login_then_consent_and_token(server) -> None:
         assert len({t.name for t in tools}) == 27
         result = await mcp_client.call_tool("whoami", {})
         payload = result.structured_content or result.data
-        assert payload["data"]["member"]["name"] == "owner"
+        assert payload["data"]["user"]["name"] == "owner"
 
     return client_id, registered, access, refresh
 

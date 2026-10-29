@@ -14,12 +14,22 @@ class WorkItemKind(StrEnum):
     task = "task"
 
 
-class MemberType(StrEnum):
+class UserType(StrEnum):
     human = "human"
     agent = "agent"
 
 
-class MemberRole(StrEnum):
+class OrgRole(StrEnum):
+    """Organization-level roles; human users only (§17)."""
+
+    org_owner = "org_owner"
+    user_manager = "user_manager"
+    project_director = "project_director"
+
+
+class ProjectRole(StrEnum):
+    """Roles granted by a project-membership row (§17)."""
+
     project_owner = "project_owner"
     manager = "manager"
     sprint_manager = "sprint_manager"
@@ -35,16 +45,22 @@ class AcceptKind(StrEnum):
 class TokenKind(StrEnum):
     # Personal access token (long-lived, CLI/CI/e2e).
     pat = "pat"
-    # OAuth 2.1 short-lived access token (M3.2).
+    # OAuth 2.1 short-lived access token.
     oauth_access = "oauth_access"
-    # OAuth 2.1 rotating refresh token (M3.2).
+    # OAuth 2.1 rotating refresh token.
     oauth_refresh = "oauth_refresh"
-    # Web console session cookie.
-    session = "session"
 
 
-# Credential kinds accepted by each transport (architecture §16.53/55).
+# Credential kinds accepted by each transport (architecture §16.53/§17).
 BEARER_KINDS = frozenset({TokenKind.pat, TokenKind.oauth_access})
+
+
+class PasswordTicketKind(StrEnum):
+    """One-shot password-setting tickets (§17)."""
+
+    bootstrap = "bootstrap"
+    reset = "reset"
+    must_reset = "must_reset"
 
 
 class ProjectStatus(StrEnum):

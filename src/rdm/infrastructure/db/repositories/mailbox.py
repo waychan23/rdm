@@ -40,7 +40,7 @@ class MailboxRepository:
                 project_id=mailbox.project_id,
                 kind=mailbox.kind,
                 name=mailbox.name,
-                owner_member_id=mailbox.owner_member_id,
+                owner_user_id=mailbox.owner_user_id,
                 created_at=mailbox.created_at,
                 created_by=mailbox.created_by,
             )
@@ -52,7 +52,7 @@ class MailboxRepository:
                 MailboxMemberModel(
                     id=link.id,
                     mailbox_id=link.mailbox_id,
-                    member_id=link.member_id,
+                    user_id=link.user_id,
                     added_by=link.added_by,
                     created_at=link.created_at,
                 )
@@ -64,11 +64,11 @@ class MailboxRepository:
             return None
         return mailbox_to_domain(row)
 
-    async def get_indiv(self, project_id: str, owner_member_id: str) -> Mailbox | None:
+    async def get_indiv(self, project_id: str, owner_user_id: str) -> Mailbox | None:
         stmt = select(MailboxModel).where(
             MailboxModel.project_id == project_id,
             MailboxModel.kind == "indiv",
-            MailboxModel.owner_member_id == owner_member_id,
+            MailboxModel.owner_user_id == owner_user_id,
             MailboxModel.deleted_at.is_(None),
         )
         row = (await self._s.execute(stmt)).scalar_one_or_none()
@@ -102,7 +102,7 @@ class MessageRepository:
             MessageModel(
                 id=message.id,
                 project_id=message.project_id,
-                from_member_id=message.from_member_id,
+                from_user_id=message.from_user_id,
                 subject=message.subject,
                 body_md=message.body_md,
                 reply_to_id=message.reply_to_id,
@@ -117,7 +117,7 @@ class MessageRepository:
                     id=d.id,
                     message_id=d.message_id,
                     mailbox_id=d.mailbox_id,
-                    recipient_member_id=d.recipient_member_id,
+                    recipient_user_id=d.recipient_user_id,
                     recipient_type=d.recipient_type,
                     read_at=d.read_at,
                     created_at=d.created_at,
@@ -143,14 +143,14 @@ class MessageRepository:
 
     async def list_deliveries(
         self,
-        recipient_member_id: str,
+        recipient_user_id: str,
         *,
         since_id: str | None = None,
         unread_only: bool = False,
         limit: int = 20,
     ) -> list[MessageDelivery]:
         stmt = select(MessageDeliveryModel).where(
-            MessageDeliveryModel.recipient_member_id == recipient_member_id,
+            MessageDeliveryModel.recipient_user_id == recipient_user_id,
             MessageDeliveryModel.deleted_at.is_(None),
         )
         if since_id:
@@ -177,12 +177,12 @@ class MessageRepository:
         rows = list((await self._s.execute(stmt)).scalars().all())
         return [message_ref_to_domain(r) for r in rows]
 
-    async def unread_count(self, recipient_member_id: str) -> int:
+    async def unread_count(self, recipient_user_id: str) -> int:
         stmt = (
             select(func.count())
             .select_from(MessageDeliveryModel)
             .where(
-                MessageDeliveryModel.recipient_member_id == recipient_member_id,
+                MessageDeliveryModel.recipient_user_id == recipient_user_id,
                 MessageDeliveryModel.read_at.is_(None),
                 MessageDeliveryModel.deleted_at.is_(None),
             )
@@ -190,7 +190,7 @@ class MessageRepository:
         return int((await self._s.execute(stmt)).scalar_one())
 
     async def mark_read(
-        self, recipient_member_id: str, delivery_ids: Sequence[str], when: dt.datetime
+        self, recipient_user_id: str, delivery_ids: Sequence[str], when: dt.datetime
     ) -> int:
         if not delivery_ids:
             return 0
@@ -198,7 +198,7 @@ class MessageRepository:
             update(MessageDeliveryModel)
             .where(
                 MessageDeliveryModel.id.in_(delivery_ids),
-                MessageDeliveryModel.recipient_member_id == recipient_member_id,
+                MessageDeliveryModel.recipient_user_id == recipient_user_id,
                 MessageDeliveryModel.read_at.is_(None),
             )
             .values(read_at=when)

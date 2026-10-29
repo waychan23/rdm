@@ -1,14 +1,14 @@
-"""Credential authentication with a short-lived validation cache.
+"""Credential authentication with a short-lived validation cache (§16.53/§17).
 
-Every credential (personal access token, OAuth access/refresh token, web
-session) is an opaque random string in member_token, distinguished by its
-`kind` (architecture §16.53). Callers state which kinds they accept:
-- REST/MCP Authorization: Bearer -> pat + oauth_access
-- rdm_session cookie -> session
+Every credential is an opaque random string in ``user_token`` distinguished by
+``kind``. This layer only verifies the *credential*; the actor (human + chosen
+agent identity + memberships) is assembled per request by
+``application/services/actor_service.py`` so deactivation and role changes take
+effect immediately.
 
-Invalidation is immediate for privileged changes: revoking a token, rotating
-an OAuth family, or deactivating/changing a member drops the relevant cache
-entries by id/family/member index rather than waiting for the 60s TTL.
+Invalidation is immediate for privileged changes: revoking a token or rotating
+an OAuth family drops the relevant cache entries by id/family rather than
+waiting for the 60s TTL.
 """
 
 from __future__ import annotations
@@ -21,14 +21,11 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from rdm.application.services.member_service import hash_token
-from rdm.domain.entities import Member, MemberToken
+from rdm.application.services.tokens import hash_token
+from rdm.domain.entities import UserToken
 from rdm.domain.enums import TokenKind
-from rdm.domain.errors import AuthInvalidToken, Forbidden
-from rdm.infrastructure.db.repositories.member import (
-    MemberRepository,
-    TokenRepository,
-)
+from rdm.domain.errors import AuthInvalidToken
+from rdm.infrastructure.db.repositories.user import TokenRepository
 
 CACHE_TTL_SECONDS = 60
 TOUCH_THROTTLE_SECONDS = 60
@@ -38,28 +35,16 @@ logger = logging.getLogger("rdm.auth")
 
 @dataclass
 class _CacheEntry:
-    member: Member
-    token_id: str
-    kind: str
+    token: UserToken
     expires_at: float  # monotonic cache deadline (already capped by token TTL)
-    last_touch: float
-    member_id: str
-    family_id: str | None
-    client_id: str | None = None
-    # The credential's own expiry (MemberToken.expires_at), distinct from the
-    # monotonic cache deadline above; needed to reconstruct cached tokens.
-    token_expires_at: dt.datetime | None = None
 
 
 class Authenticator:
-    def __init__(
-        self,
-        session_factory: async_sessionmaker[AsyncSession],
-    ) -> None:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._sf = session_factory
         self._cache: dict[str, _CacheEntry] = {}
         self._id_to_hash: dict[str, str] = {}
-        self._member_index: dict[str, set[str]] = defaultdict(set)
+        self._user_index: dict[str, set[str]] = defaultdict(set)
         self._family_index: dict[str, set[str]] = defaultdict(set)
 
     # --- invalidation -------------------------------------------------
@@ -72,13 +57,12 @@ class Authenticator:
         if token_hash is not None:
             self._pop_hash(token_hash)
 
-    def invalidate_member(self, member_id: str) -> None:
-        """Drop every cached credential of a member (deactivate/role change)."""
-        for token_hash in list(self._member_index.get(member_id, ())):
+    def invalidate_user(self, user_id: str) -> None:
+        """Drop every cached credential owned by a user (disable/password reset)."""
+        for token_hash in list(self._user_index.get(user_id, ())):
             self._pop_hash(token_hash)
 
     def invalidate_family(self, family_id: str) -> None:
-        """Drop every cached credential of an OAuth rotation family."""
         for token_hash in list(self._family_index.get(family_id, ())):
             self._pop_hash(token_hash)
 
@@ -86,68 +70,42 @@ class Authenticator:
         entry = self._cache.pop(token_hash, None)
         if entry is None:
             return
-        self._id_to_hash.pop(entry.token_id, None)
-        bucket = self._member_index.get(entry.member_id)
+        self._id_to_hash.pop(entry.token.id, None)
+        bucket = self._user_index.get(entry.token.user_id)
         if bucket is not None:
             bucket.discard(token_hash)
-        if entry.family_id is not None:
-            family = self._family_index.get(entry.family_id)
+        if entry.token.family_id is not None:
+            family = self._family_index.get(entry.token.family_id)
             if family is not None:
                 family.discard(token_hash)
 
     # --- authentication ----------------------------------------------
-
-    async def authenticate(
-        self,
-        raw_token: str,
-        *,
-        allow_kinds: frozenset[TokenKind] | None = None,
-    ) -> Member:
-        member, _token = await self.authenticate_with_token(raw_token, allow_kinds=allow_kinds)
-        return member
 
     async def authenticate_with_token(
         self,
         raw_token: str,
         *,
         allow_kinds: frozenset[TokenKind] | None = None,
-    ) -> tuple[Member, MemberToken]:
+    ) -> UserToken:
+        """Verify a credential and return it (the owner is resolved later)."""
         allowed = {k.value for k in allow_kinds} if allow_kinds is not None else None
         token_hash = hash_token(raw_token)
         now = time.monotonic()
         cached = self._cache.get(token_hash)
         if cached is not None and cached.expires_at > now:
-            if not cached.member.is_active:
-                raise Forbidden("成员已停用", details={"member_id": cached.member.id})
-            # Reconstruct a token view carrying every field callers need:
-            # dropping client_id/expires_at here previously made cached
-            # OAuth access tokens look like PATs (client_id "pat", no expiry),
-            # which broke MCP session principal checks and hid the TTL.
-            cached_token = MemberToken(
-                id=cached.token_id,
-                member_id=cached.member.id,
-                token_hash=token_hash,
-                kind=cached.kind,
-                family_id=cached.family_id,
-                client_id=cached.client_id,
-                expires_at=cached.token_expires_at,
-            )
-            return cached.member, cached_token
+            if allowed is not None and cached.token.kind not in allowed:
+                raise AuthInvalidToken("凭据类型不适用于此入口")
+            return cached.token
 
         async with self._sf() as session:
             async with session.begin():
                 tokens = TokenRepository(session)
-                members = MemberRepository(session)
                 token = await tokens.get_by_hash(token_hash)
                 if token is None or not token.is_valid:
                     raise AuthInvalidToken("凭据无效或已撤销")
                 if allowed is not None and token.kind not in allowed:
                     # Do not reveal which credential types exist.
                     raise AuthInvalidToken("凭据类型不适用于此入口")
-                member = await members.get(token.member_id)
-                if member is None:
-                    raise AuthInvalidToken("凭据对应的成员不存在")
-                last_touch = now
                 last_used = token.last_used_at
                 if last_used is not None and last_used.tzinfo is None:
                     last_used = last_used.replace(tzinfo=dt.UTC)
@@ -163,9 +121,6 @@ class Authenticator:
                     except Exception:  # noqa: BLE001
                         logger.warning("last_used_at touch failed (ignored)", exc_info=True)
 
-        if not member.is_active:
-            raise Forbidden("成员已停用", details={"member_id": member.id})
-
         ttl: float = CACHE_TTL_SECONDS
         if token.expires_at is not None:
             expires = token.expires_at
@@ -173,20 +128,9 @@ class Authenticator:
                 expires = expires.replace(tzinfo=dt.UTC)
             remaining = (expires - dt.datetime.now(dt.UTC)).total_seconds()
             ttl = max(0.0, min(ttl, remaining))
-        entry = _CacheEntry(
-            member=member,
-            token_id=token.id,
-            kind=token.kind,
-            expires_at=now + ttl,
-            last_touch=last_touch,
-            member_id=member.id,
-            family_id=token.family_id,
-            client_id=token.client_id,
-            token_expires_at=token.expires_at,
-        )
-        self._cache[token_hash] = entry
+        self._cache[token_hash] = _CacheEntry(token=token, expires_at=now + ttl)
         self._id_to_hash[token.id] = token_hash
-        self._member_index[member.id].add(token_hash)
+        self._user_index[token.user_id].add(token_hash)
         if token.family_id is not None:
             self._family_index[token.family_id].add(token_hash)
-        return member, token
+        return token

@@ -23,7 +23,8 @@ import { token } from "@atlaskit/tokens";
 import { api, errorCause } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { useNotify } from "../lib/flags";
-import type { MailMessage, Mailbox, Member } from "../types";
+import type { MailMessage, Mailbox, OrgUser, ProjectMemberRow } from "../types";
+import { flattenMembers } from "../lib/members";
 
 const card = xcss({
   border: "1px solid",
@@ -51,7 +52,7 @@ export default function MailboxPage() {
   const [unreadOnly, setUnreadOnly] = useState(true);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [members, setMembers] = useState<Member[]>([]);
+  const [members, setMembers] = useState<OrgUser[]>([]);
   const [showCompose, setShowCompose] = useState(false);
   const [sending, setSending] = useState(false);
   const [compose, setCompose] = useState<{
@@ -87,8 +88,8 @@ export default function MailboxPage() {
 
   useEffect(() => {
     api
-      .get<Member[]>(`/projects/${projectKey}/members`)
-      .then((r) => setMembers(r.data))
+      .get<ProjectMemberRow[]>(`/projects/${projectKey}/members`)
+      .then((r) => setMembers(flattenMembers(r.data)))
       .catch(() => {});
   }, [projectKey]);
 

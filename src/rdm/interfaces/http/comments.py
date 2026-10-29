@@ -7,8 +7,8 @@ from pydantic import BaseModel, Field
 
 from rdm.application.services.attachment_service import AttachmentService
 from rdm.application.services.comment_service import CommentService
-from rdm.application.services.member_service import MemberService
-from rdm.domain.entities import Member
+from rdm.application.services.membership_service import MembershipService
+from rdm.domain.actor import Actor
 from rdm.interfaces.http.container import Container, get_actor, get_container
 from rdm.interfaces.http.serializers import attachment_out, comment_out
 
@@ -23,13 +23,13 @@ class CommentIn(BaseModel):
 
 
 async def _comments_view(uow, file_store, project_id: str, comments) -> list[dict]:
-    members = {m.id: m for m in await MemberService(uow).list_members(project_id)}
+    members = await MembershipService(uow).users_index(project_id)
     attachment_rows = await AttachmentService(uow, file_store).list_for_owners(
         project_id, "comment", [c.id for c in comments]
     )
     by_comment: dict[str, list[dict]] = {}
     for att in attachment_rows:
-        uploader = await uow.members.get(att.uploader_member_id)
+        uploader = await uow.users.get(att.uploader_user_id)
         if uploader is not None:
             members[uploader.id] = uploader
         by_comment.setdefault(att.owner_id, []).append(attachment_out(att, members))
@@ -40,7 +40,7 @@ async def _comments_view(uow, file_store, project_id: str, comments) -> list[dic
 async def list_comments(
     ref: str,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
         project, _item, comments = await CommentService(uow).list_for_item(actor, ref)
@@ -53,7 +53,7 @@ async def add_comment(
     ref: str,
     body: CommentIn,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
         project, _item, comment, unresolved = await CommentService(uow, container.file_store).add(
@@ -63,7 +63,7 @@ async def add_comment(
             body.reply_to_id,
             body.attachment_ids,
         )
-        members = {m.id: m for m in await MemberService(uow).list_members(project.id)}
+        members = await MembershipService(uow).users_index(project.id)
         rows = await AttachmentService(uow, container.file_store).list_for_owners(
             project.id, "comment", [comment.id]
         )
@@ -75,7 +75,7 @@ async def add_comment(
 async def delete_comment(
     comment_id: str,
     container: Container = Depends(get_container),
-    actor: Member = Depends(get_actor),
+    actor: Actor = Depends(get_actor),
 ) -> None:
     async with container.uow() as uow:
         await CommentService(uow).delete(actor, comment_id)

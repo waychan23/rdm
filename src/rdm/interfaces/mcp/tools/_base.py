@@ -1,7 +1,8 @@
-"""Shared scaffolding for MCP tools (architecture §16.23).
+"""Shared scaffolding for MCP tools (architecture §16.23/§17).
 
-- actor_from_request: member carried in the access token claims by
-  RdmOAuthProvider (FastMCP bearer middleware puts it in scope["user"])
+- resolve_actor(): the access token only carries ids; the Actor (human +
+  optional act-as agent + memberships) is assembled inside the tool's UoW so
+  deactivation and role changes take effect immediately.
 - ok(): success envelope {"data", "meta": {"server_time", ...}}
 - run_tool(): opens a UoW and maps failures to ToolResult(is_error=True)
   carrying the same structured error envelope as REST. FastMCP 4.1.3 has no
@@ -20,19 +21,33 @@ from fastmcp.server.dependencies import get_http_request
 from fastmcp.tools import ToolResult
 from pydantic import ValidationError as PydanticValidationError
 
-from rdm.domain.entities import Member
+from rdm.application.services.actor_service import ActorResolver
+from rdm.domain.actor import Actor
+from rdm.domain.entities import UserToken
 from rdm.domain.errors import RdmError, ValidationError
 from rdm.interfaces.http.container import Container
 
 logger = logging.getLogger("rdm.mcp.tools")
 
 
-def actor_from_request() -> Member:
-    # FastMCP's BearerAuthBackend sets scope["user"] = AuthenticatedUser; the
-    # rdm member snapshot is attached to the access token claims in
-    # RdmOAuthProvider.verify_token (works for both PAT and OAuth tokens).
+def _credential_from_request() -> UserToken:
+    # FastMCP's BearerAuthBackend sets scope["user"]; RdmOAuthProvider attaches
+    # {sub, act_as, jti, fid, kind} to the access token claims for both PAT and
+    # OAuth tokens.
     request = get_http_request()
-    return request.scope["user"].access_token.claims["member"]
+    claims = request.scope["user"].access_token.claims or {}
+    return UserToken(
+        id=str(claims.get("jti", "")),
+        user_id=str(claims.get("sub", "")),
+        act_as_user_id=claims.get("act_as"),
+        token_hash="",
+        kind=str(claims.get("kind", "pat")),
+        family_id=claims.get("fid"),
+    )
+
+
+async def resolve_actor(uow) -> Actor:  # type: ignore[no-untyped-def]
+    return await ActorResolver.from_uow(uow).resolve(_credential_from_request())
 
 
 def ok(data: Any, **meta: Any) -> dict[str, Any]:
@@ -50,10 +65,10 @@ def _pydantic_envelope(exc: PydanticValidationError) -> dict[str, Any]:
     ).to_envelope()
 
 
-async def run_tool(container: Container, fn: Callable[[Any, Member], Awaitable[Any]]) -> Any:
-    actor = actor_from_request()
+async def run_tool(container: Container, fn: Callable[[Any, Actor], Awaitable[Any]]) -> Any:
     try:
         async with container.uow() as uow:
+            actor = await resolve_actor(uow)
             return await fn(uow, actor)
     except RdmError as exc:
         return ToolResult(structured_content=exc.to_envelope(), is_error=True)

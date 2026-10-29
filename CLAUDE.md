@@ -1,25 +1,33 @@
 # rd-manager（rdm）协作约定
 
-human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，三个组成部分：
+human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，两个组成部分：
 
 - `src/rdm/`：后端（domain → application → infrastructure → interfaces 分层）。
-- `web-next/`：**唯一在开发的前端**，React 18 + Vite + TypeScript + Atlassian Design System（Atlaskit）。
-- `web/`：旧 Vue 3 + Element Plus 前端，**冻结的历史快照**（架构 §16.62）。
+- `web-next/`：**唯一前端**，React 18 + Vite + TypeScript + Atlassian Design System（Atlaskit）。
+  旧 Vue 版 `web/` 已在 M5 删除（架构 §17.72）。
 
-## 前端需求归属（重要）
+## 身份模型（M5 起）
 
-- **后续任何新需求、新页面、交互改动、UI/前端缺陷，只在 `web-next/` 实现**，不要再为旧 `web/` 同步功能或适配。
-- 旧 `web/` 只作为可运行快照保留：保证能构建、`--web-ui legacy` 能打开即可；除构建链损坏外不要改它的代码。
-- 默认发 `web-next`；legacy 双产物/开关仍保留，但不为旧版做新功能。整体下线 legacy 是另一次裁决，在此之前不要删除 `web/` 与双构建。
-- 前后端共享 REST/MCP 契约：改后端时不要随意破坏旧版仍在调用的接口（legacy 还能跑），除非连同下线一起做。
+- `organization`（单组织）→ `users`（human/agent）→ `project` ← `project_member`（关系）。
+  项目角色只挂在 human 的关系行；agent 随其 manager 自动入项，不能单独增删。
+- 组织角色：`org_owner`（唯一）、`user_manager`、`project_director`。
+- Web 认证是**无状态 OAuth**（first-party `rdm-web`，Auth Code + PKCE，Bearer token），
+  没有 cookie session；CLI 用 PAT；MCP 同时支持 OAuth 与 PAT。
+- PAT 只能本人创建，可 `act_as` 自己管理的 agent；用户管理角色只能撤销、不能代签。
+
+## 前端需求归属
+
+- 所有新需求、新页面、交互改动、UI/前端缺陷，只在 `web-next/` 实现。
+- 前后端共享 REST/MCP 契约（MCP 27 工具签名锁死）。
 
 ## 常用命令
 
 - 后端：`uv run pytest -q`、`uv run ruff check .`、`uv run ruff format --check .`、`uv run mypy src/rdm/domain src/rdm/application`。
   本机开着系统代理时，loopback 测试会 502，加 `NO_PROXY=127.0.0.1,localhost,::1`。
 - 前端：`pnpm -C web-next dev`（5173，代理 API 到 8765）、`pnpm -C web-next build`（产物进 `src/rdm/resources/web-next-dist`）。
-- 起服务：`uv run rdm serve`；`--web-ui next|legacy`（或 `RDM_WEB_UI`）切换发哪套前端，默认 next。
-- wheel 打包前两套前端都要 build：`pnpm -C web-next build && pnpm -C web build`。
+- 起服务：`uv run rdm serve`；首次启动看日志里的 **bootstrap-url** 设置 Org Owner 密码。
+  Owner 找回：`uv run rdm account recover-owner`（需服务在本机运行）。
+- wheel 打包前 build 前端：`pnpm -C web-next build`。
 - npm 下载挂起时走本地代理：`HTTP_PROXY=http://127.0.0.1:7890 HTTPS_PROXY=http://127.0.0.1:7890`。
 
 ## 写 web-next/ 下的 UI 时
@@ -33,10 +41,11 @@ human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，三个组
   不写裸 hex/rgb、不手造间距值；无法避免的例外（markdown 排版等）在同行注释说明。
 - 优先用 `@atlaskit/*` 组件；自定义布局用 `@atlaskit/primitives` + `@atlaskit/css`（xcss）。
 - 中文排版只允许在 `src/styles/global.css` 的字体栈**追加** CJK fallback（PingFang/YaHei/Noto），不引字体包、不改 token 值。
-- 深色模式不做（固定 light）；a11y 工具（`ads_analyze_a11y`/`ads_analyze_localhost_a11y`）开发时可用，但本期没有 UI 走查/lint/截图门禁，不要自行新建。
-- 1:1 迁移期不趁重写补新功能、缺口记 backlog（见 docs/HANDOFF-M3.md §6）；**迁移完成后所有新需求只在 web-next 做**（见上方「前端需求归属」）。
+- 深色模式不做（固定 light）；a11y 工具开发时可用，但本期没有 UI 走查/lint/截图门禁，不要自行新建。
+- 认证：所有 `/api/v1` 请求由 `lib/api.ts` 注入 Bearer 并在 401 时单飞刷新；不要在页面里手写 token。
+  登录/OAuth 流程见 `lib/oauth.ts`（PKCE、localStorage token、`beginLogin`）。
 
 ## 后端铁律
 
 业务规则只进 domain/application；MCP 27 工具锁死；UoW 唯一提交点；仅回环绑定；
-PAT 是永久自动化路径。细节与历史裁决见 `docs/architecture.md` §16（冲突以编号靠后的裁决为准）。
+PAT 是永久自动化路径。细节与历史裁决见 `docs/architecture.md` §16/§17（冲突以编号靠后的裁决为准）。

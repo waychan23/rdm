@@ -8,24 +8,43 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from rdm.domain.entities import IssueFields, Member, Project, StoryFields, TaskFields, WorkItem
+from rdm.domain.constants import DEFAULT_ORG_ID
+from rdm.domain.entities import (
+    IssueFields,
+    Project,
+    ProjectMember,
+    StoryFields,
+    TaskFields,
+    User,
+    WorkItem,
+)
 from rdm.domain.events import EventType
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
 
 def make_project(key: str = "RDM") -> Project:
-    return Project(id=new_id(), key=key, name=f"项目 {key}")
+    return Project(id=new_id(), org_id=DEFAULT_ORG_ID, key=key, name=f"项目 {key}")
 
 
-def make_member(project_id: str, name: str = "owner", **kw) -> Member:
-    return Member(
+def make_member(name: str = "owner", **kw) -> User:
+    return User(
         id=new_id(),
-        project_id=project_id,
+        org_id=DEFAULT_ORG_ID,
         type=kw.pop("type", "human"),
         name=name,
-        roles=kw.pop("roles", ["project_owner"]),
+        org_roles=kw.pop("roles", []),
         **kw,
+    )
+
+
+def make_membership(project_id: str, user_id: str, roles: list[str]) -> ProjectMember:
+    return ProjectMember(
+        id=new_id(),
+        org_id=DEFAULT_ORG_ID,
+        project_id=project_id,
+        user_id=user_id,
+        roles=roles,
     )
 
 
@@ -73,7 +92,7 @@ async def test_duplicate_project_key_violates_partial_index(
 async def test_agent_member_requires_manager(uow: SqlAlchemyUnitOfWork) -> None:
     p = make_project()
     await uow.projects.add(p)
-    await uow.members.add(make_member(p.id, type="agent", roles=[], name="a1"))
+    await uow.users.add(make_member(type="agent", name="a1"))
     with pytest.raises(IntegrityError):
         await uow.session.flush()
     await uow.rollback()
@@ -82,20 +101,18 @@ async def test_agent_member_requires_manager(uow: SqlAlchemyUnitOfWork) -> None:
 async def test_member_lifecycle(uow: SqlAlchemyUnitOfWork) -> None:
     p = make_project()
     await uow.projects.add(p)
-    human = make_member(p.id, name="pm", roles=["manager"])
-    agent = make_member(
-        p.id,
-        name="dev",
-        type="agent",
-        roles=["worker"],
-        manager_member_id=human.id,
-    )
-    await uow.members.add(human)
-    await uow.members.add(agent)
+    human = make_member(name="pm")
+    agent = make_member(name="dev", type="agent", manager_user_id=human.id)
+    await uow.users.add(human)
+    await uow.users.add(agent)
+    await uow.memberships.add(make_membership(p.id, human.id, ["manager"]))
+    await uow.memberships.add(make_membership(p.id, agent.id, []))
 
-    members = await uow.members.list_by_project(p.id)
-    assert {m.name for m in members} == {"pm", "dev"}
-    assert (await uow.members.get_by_name(p.id, "dev")).manager_member_id == human.id
+    users = await uow.users.list_by_org(DEFAULT_ORG_ID)
+    assert {u.name for u in users} == {"pm", "dev"}
+    assert (await uow.users.get_by_name(DEFAULT_ORG_ID, "dev")).manager_user_id == human.id
+    rows = await uow.memberships.list_by_project(p.id)
+    assert {r.user_id for r in rows} == {human.id, agent.id}
 
 
 async def test_work_item_kind_fields_roundtrip(uow: SqlAlchemyUnitOfWork) -> None:
@@ -188,14 +205,14 @@ async def test_claim_race_returns_false_when_already_assigned(
     await uow.projects.add(p)
     item = make_work_item(p.id, 1)
     await uow.work_items.add(item)
-    m1, m2 = make_member(p.id, "m1"), make_member(p.id, "m2")
-    await uow.members.add(m1)
-    await uow.members.add(m2)
+    m1, m2 = make_member("m1"), make_member("m2")
+    await uow.users.add(m1)
+    await uow.users.add(m2)
 
     assert await uow.work_items.claim(item.id, m1.id, m1.id) is True
     assert await uow.work_items.claim(item.id, m2.id, m2.id) is False
     loaded = await uow.work_items.get(item.id, expand=False)
-    assert loaded.assignee_member_id == m1.id
+    assert loaded.assignee_user_id == m1.id
 
 
 async def test_event_seq_allocation_monotonic(uow: SqlAlchemyUnitOfWork) -> None:
@@ -203,10 +220,10 @@ async def test_event_seq_allocation_monotonic(uow: SqlAlchemyUnitOfWork) -> None
     await uow.projects.add(p)
     await uow.session.flush()
 
-    assert await uow.allocate_event_seq(p.id) == 1
-    assert await uow.allocate_event_seq(p.id) == 2
+    assert await uow.allocate_event_seq(DEFAULT_ORG_ID) == 1
+    assert await uow.allocate_event_seq(DEFAULT_ORG_ID) == 2
     # Visible within the transaction on the ORM state.
-    fresh = await uow.projects.get(p.id)
+    fresh = await uow.organizations.get(DEFAULT_ORG_ID)
     assert fresh.event_seq == 2
 
 
@@ -223,15 +240,16 @@ async def test_projection_and_event_rollback_together(session_factory) -> None:
             project_id = p.id
             item = make_work_item(p.id, 1)
             await uow.work_items.add(item)
-            seq = await uow.allocate_event_seq(p.id)
+            seq = await uow.allocate_event_seq(DEFAULT_ORG_ID)
             await uow.events.append(
+                org_id=DEFAULT_ORG_ID,
                 project_id=p.id,
                 seq=seq,
                 aggregate_type="work_item",
                 aggregate_id=item.id,
                 aggregate_version=0,
                 event_type=EventType.WORK_ITEM_CREATED,
-                actor_member_id=None,
+                actor_user_id=None,
                 payload={"snapshot": {"id": item.id}},
             )
             item_id = item.id

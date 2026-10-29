@@ -24,16 +24,10 @@ async def _item(client: httpx.AsyncClient, token: str, payload: dict, key: str =
     return r.json()["data"]
 
 
-async def _member_token(client: httpx.AsyncClient, owner: str, name: str, roles: list[str]) -> str:
-    r = await client.post(
-        f"{API}/projects/DEMO/members",
-        json={"name": name, "type": "human", "roles": roles},
-        headers=auth(owner),
-    )
-    assert r.status_code == 201, r.text
-    mid = r.json()["data"]["id"]
-    r = await client.post(f"{API}/members/{mid}/tokens", json={"label": "t"}, headers=auth(owner))
-    return r.json()["data"]["token"]
+async def _user_token(client: httpx.AsyncClient, owner: str, name: str, roles: list[str]) -> str:
+    from tests.support import make_member
+
+    return (await make_member(client, owner, "DEMO", name, roles))[1]
 
 
 async def test_sprint_lifecycle_items_start_close_gate(server, owner_token: str) -> None:
@@ -227,7 +221,7 @@ async def test_cannot_add_items_to_closed_sprint(server, owner_token: str) -> No
 async def test_worker_cannot_create_sprint(server, owner_token: str) -> None:
     client, _s, _app = server
     await _project(client, owner_token)
-    worker = await _member_token(client, owner_token, "dev", ["worker"])
+    worker = await _user_token(client, owner_token, "dev", ["worker"])
     r = await client.post(
         f"{API}/projects/DEMO/sprints",
         json={"name": "x"},

@@ -61,6 +61,8 @@ class Harness:
             type_=type_,
             roles=roles,
             manager=manager_id,
+            manager_name=manager,
+            manager_token=self.tokens.get(manager) if manager else None,
             webhook=webhook,
             fmt=fmt,
         )

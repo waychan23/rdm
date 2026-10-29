@@ -20,18 +20,22 @@ from rdm.domain.entities import (
     Comment,
     Mailbox,
     MailboxMember,
-    Member,
-    MemberToken,
     Message,
     MessageDelivery,
     MessageRef,
     OAuthAuthorizationCode,
     OAuthClient,
     OAuthConsent,
+    OAuthLoginTicket,
+    Organization,
     OutboxRow,
+    PasswordTicket,
     Project,
+    ProjectMember,
     Sprint,
     SprintItem,
+    User,
+    UserToken,
     WorkItem,
     Workspace,
 )
@@ -40,8 +44,9 @@ from rdm.domain.events import EventType
 # Type aliases: inside the Protocol bodies below, a method named `list`
 # shadows the builtin, so `list[...]` annotations must use the alias.
 ProjectList = list[Project]
-MemberList = list[Member]
-TokenList = list[MemberToken]
+UserList = list[User]
+MembershipList = list[ProjectMember]
+TokenList = list[UserToken]
 WorkItemList = list[WorkItem]
 SprintList = list[Sprint]
 SprintItemList = list[SprintItem]
@@ -93,34 +98,90 @@ class ProjectRepository(Protocol):
     async def list_all(self, *, include_deleted: bool = False) -> ProjectList: ...
 
 
-class MemberRepository(Protocol):
-    async def get(self, member_id: str, *, include_deleted: bool = False) -> Member | None: ...
+class OrganizationRepository(Protocol):
+    async def get(self, org_id: str) -> Organization | None: ...
+
+    async def add(self, org: Organization) -> None: ...
+
+    async def update(self, org: Organization) -> None: ...
+
+
+class UserRepository(Protocol):
+    async def get(self, user_id: str, *, include_deleted: bool = False) -> User | None: ...
 
     async def get_by_name(
-        self, project_id: str, name: str, *, include_deleted: bool = False
-    ) -> Member | None: ...
+        self, org_id: str, name: str, *, include_deleted: bool = False
+    ) -> User | None: ...
+
+    async def list_by_org(
+        self, org_id: str, *, type: str | None = None, include_deleted: bool = False
+    ) -> UserList: ...
+
+    async def list_agents_of(self, manager_user_id: str) -> UserList: ...
+
+    async def list_org_owners(self, org_id: str) -> UserList: ...
+
+    async def add(self, user: User) -> None: ...
+
+    async def update(self, user: User) -> None: ...
+
+
+class MembershipRepository(Protocol):
+    async def get(
+        self, project_id: str, user_id: str, *, include_deleted: bool = False
+    ) -> ProjectMember | None: ...
 
     async def list_by_project(
         self, project_id: str, *, include_deleted: bool = False
-    ) -> MemberList: ...
+    ) -> MembershipList: ...
 
-    async def add(self, member: Member) -> None: ...
+    async def list_by_user(
+        self, user_id: str, *, include_deleted: bool = False
+    ) -> MembershipList: ...
 
-    async def update(self, member: Member) -> None: ...
+    async def add(self, membership: ProjectMember) -> None: ...
+
+    async def revive(self, membership: ProjectMember) -> None: ...
+
+    async def update(self, membership: ProjectMember) -> None: ...
+
+    async def soft_delete(self, membership_id: str, actor_id: str, when: dt.datetime) -> bool: ...
 
 
 class TokenRepository(Protocol):
-    async def add(self, token: MemberToken) -> None: ...
+    async def add(self, token: UserToken) -> None: ...
 
-    async def get(self, token_id: str) -> MemberToken | None: ...
+    async def get(self, token_id: str) -> UserToken | None: ...
 
-    async def get_by_hash(self, token_hash: str) -> MemberToken | None: ...
+    async def get_by_hash(self, token_hash: str) -> UserToken | None: ...
 
-    async def list_by_member(self, member_id: str) -> TokenList: ...
+    async def list_by_user(self, user_id: str, *, kind: str | None = None) -> TokenList: ...
 
     async def revoke(self, token_id: str) -> bool: ...
 
+    async def revoke_by_user_kind(self, user_id: str, kind: str) -> int: ...
+
+    async def revoke_all_for_user(self, user_id: str, *, kinds: list[str] | None = None) -> int: ...
+
+    async def revoke_all_for_act_as(
+        self, act_as_user_id: str, *, kinds: list[str] | None = None
+    ) -> int: ...
+
+    async def revoke_family(self, family_id: str) -> int: ...
+
+    async def count_valid_pat(self, user_id: str) -> int: ...
+
     async def touch_last_used(self, token_id: str, when: dt.datetime) -> None: ...
+
+
+class PasswordTicketRepository(Protocol):
+    async def add(self, ticket: PasswordTicket) -> None: ...
+
+    async def get_by_hash(self, token_hash: str) -> PasswordTicket | None: ...
+
+    async def consume(self, ticket_id: str, when: dt.datetime) -> None: ...
+
+    async def invalidate_kind(self, user_id: str, kind: str, when: dt.datetime) -> int: ...
 
 
 class OAuthClientRepository(Protocol):
@@ -145,6 +206,14 @@ class ConsentRepository(Protocol):
     async def mark_decided(self, consent_id: str, when: dt.datetime) -> None: ...
 
 
+class LoginTicketRepository(Protocol):
+    async def add(self, ticket: OAuthLoginTicket) -> None: ...
+
+    async def get_by_hash(self, key_hash: str) -> OAuthLoginTicket | None: ...
+
+    async def consume(self, ticket_id: str, when: dt.datetime) -> None: ...
+
+
 class WorkItemRepository(Protocol):
     async def add(self, item: WorkItem) -> None: ...
 
@@ -158,7 +227,7 @@ class WorkItemRepository(Protocol):
         *,
         kind: str | None = None,
         status: str | None = None,
-        assignee_member_id: str | None = None,
+        assignee_user_id: str | None = None,
         parent_id: str | None = None,
         q: str | None = None,
         expand: bool = False,
@@ -173,7 +242,7 @@ class WorkItemRepository(Protocol):
         *,
         kind: str | None = None,
         status: str | None = None,
-        assignee_member_id: str | None = None,
+        assignee_user_id: str | None = None,
         parent_id: str | None = None,
         q: str | None = None,
         include_deleted: bool = False,
@@ -197,7 +266,7 @@ class WorkItemRepository(Protocol):
         """Persist optimistic-lock update; 0 rows -> ConflictVersion."""
         ...
 
-    async def claim(self, item_id: str, member_id: str, actor_id: str) -> bool:
+    async def claim(self, item_id: str, user_id: str, actor_id: str) -> bool:
         """Atomic claim; False when already assigned (caller raises ALREADY_ASSIGNED)."""
         ...
 
@@ -323,7 +392,7 @@ class MailboxRepository(Protocol):
 
     async def get(self, mailbox_id: str) -> Mailbox | None: ...
 
-    async def get_indiv(self, project_id: str, owner_member_id: str) -> Mailbox | None: ...
+    async def get_indiv(self, project_id: str, owner_user_id: str) -> Mailbox | None: ...
 
     async def get_group_by_name(self, project_id: str, name: str) -> Mailbox | None: ...
 
@@ -341,7 +410,7 @@ class MessageRepository(Protocol):
 
     async def list_deliveries(
         self,
-        recipient_member_id: str,
+        recipient_user_id: str,
         *,
         since_id: str | None = None,
         unread_only: bool = False,
@@ -352,10 +421,10 @@ class MessageRepository(Protocol):
 
     async def list_refs(self, message_ids: Sequence[str]) -> MessageRefList: ...
 
-    async def unread_count(self, recipient_member_id: str) -> int: ...
+    async def unread_count(self, recipient_user_id: str) -> int: ...
 
     async def mark_read(
-        self, recipient_member_id: str, delivery_ids: Sequence[str], when: dt.datetime
+        self, recipient_user_id: str, delivery_ids: Sequence[str], when: dt.datetime
     ) -> int: ...
 
 
@@ -387,13 +456,14 @@ class EventStore(Protocol):
     async def append(
         self,
         *,
-        project_id: str,
+        org_id: str,
+        project_id: str | None,
         seq: int,
         aggregate_type: str,
         aggregate_id: str,
         aggregate_version: int,
         event_type: EventType,
-        actor_member_id: str | None,
+        actor_user_id: str | None,
         payload: dict[str, Any],
         occurred_at: dt.datetime | None = None,
     ) -> int:
@@ -402,12 +472,16 @@ class EventStore(Protocol):
 
 
 class UnitOfWork(Protocol):
+    organizations: OrganizationRepository
     projects: ProjectRepository
-    members: MemberRepository
+    users: UserRepository
+    memberships: MembershipRepository
     tokens: TokenRepository
+    password_tickets: PasswordTicketRepository
     oauth_clients: OAuthClientRepository
     oauth_codes: AuthorizationCodeRepository
     oauth_consents: ConsentRepository
+    oauth_login_tickets: LoginTicketRepository
     work_items: WorkItemRepository
     sprints: SprintRepository
     sprint_items: SprintItemRepository
@@ -430,8 +504,8 @@ class UnitOfWork(Protocol):
 
     async def flush(self) -> None: ...
 
-    async def allocate_event_seq(self, project_id: str) -> int:
-        """UPDATE project SET event_seq = event_seq + 1 ... RETURNING event_seq."""
+    async def allocate_event_seq(self, org_id: str) -> int:
+        """UPDATE organization SET event_seq = event_seq + 1 ... RETURNING event_seq."""
         ...
 
     async def allocate_display_no(self, project_id: str) -> int:

@@ -10,6 +10,8 @@ import AppShell from "./shell/AppShell";
 import LoginPage from "./pages/LoginPage";
 
 // Route-level code splitting (the old single chunk was >1MB; Batch 6).
+const AuthCallbackPage = lazy(() => import("./pages/AuthCallbackPage"));
+const SetPasswordPage = lazy(() => import("./pages/SetPasswordPage"));
 const ConsentPage = lazy(() => import("./pages/ConsentPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
 const OverviewPage = lazy(() => import("./pages/OverviewPage"));
@@ -20,12 +22,14 @@ const MailboxPage = lazy(() => import("./pages/MailboxPage"));
 const WorkspacesPage = lazy(() => import("./pages/WorkspacesPage"));
 const MembersPage = lazy(() => import("./pages/MembersPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const OrgUsersPage = lazy(() => import("./pages/OrgUsersPage"));
+const PersonalSettingsPage = lazy(() => import("./pages/PersonalSettingsPage"));
 const ItemPage = lazy(() => import("./pages/ItemPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
 async function requireAuth({ request }: LoaderFunctionArgs) {
-  const member = await ensureSession();
-  if (!member) {
+  const user = await ensureSession();
+  if (!user) {
     const url = new URL(request.url);
     return redirect(`/login?redirect=${encodeURIComponent(url.pathname + url.search)}`);
   }
@@ -48,12 +52,10 @@ function withSuspense(node: ReactNode) {
 
 export const router = createBrowserRouter([
   { path: "/login", Component: LoginPage },
-  // Consent needs a session but renders without the app shell ("bare").
-  {
-    path: "/oauth/consent/:id",
-    Component: () => withSuspense(<ConsentPage />),
-    loader: requireAuth,
-  },
+  { path: "/auth/callback", Component: () => withSuspense(<AuthCallbackPage />) },
+  { path: "/set-password", Component: () => withSuspense(<SetPasswordPage />) },
+  // Consent is key-authenticated (no Bearer/session) and renders bare (§17).
+  { path: "/oauth/consent/:id", Component: () => withSuspense(<ConsentPage />) },
   {
     Component: AppShell,
     loader: requireAuth,
@@ -72,6 +74,8 @@ export const router = createBrowserRouter([
       { path: "projects/:key/members", Component: () => withSuspense(<MembersPage />) },
       { path: "projects/:key/settings", Component: () => withSuspense(<SettingsPage />) },
       { path: "projects/:key/items/:id", Component: () => withSuspense(<ItemPage />) },
+      { path: "org/users", Component: () => withSuspense(<OrgUsersPage />) },
+      { path: "settings", Component: () => withSuspense(<PersonalSettingsPage />) },
       { path: "*", Component: () => withSuspense(<NotFoundPage />) },
     ],
   },

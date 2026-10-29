@@ -1,4 +1,8 @@
-"""Composition root pieces shared by REST and MCP adapters."""
+"""Composition root pieces shared by REST and MCP adapters (§17).
+
+Web authentication is stateless OAuth: every request carries a Bearer access
+token (or a PAT from the CLI/MCP). There is no session cookie any more.
+"""
 
 from __future__ import annotations
 
@@ -6,17 +10,17 @@ from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from rdm.application.ports import FileStore
+from rdm.application.services.actor_service import ActorResolver
 from rdm.application.services.auth_service import Authenticator
 from rdm.application.services.login_throttle import LoginThrottler
 from rdm.config import Settings
-from rdm.domain.entities import Member, MemberToken
-from rdm.domain.enums import BEARER_KINDS, TokenKind
+from rdm.domain.actor import Actor
+from rdm.domain.entities import UserToken
+from rdm.domain.enums import BEARER_KINDS
 from rdm.domain.errors import AuthInvalidToken
 from rdm.infrastructure.db.session import make_engine, make_session_factory
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.files.local_store import LocalFileStore
-
-SESSION_COOKIE_NAME = "rdm_session"
 
 
 class Container:
@@ -32,6 +36,12 @@ class Container:
     def uow(self) -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(self.session_factory)
 
+    async def resolve_actor(self, token: UserToken) -> Actor:
+        """Read users/memberships on a plain (non-writer) session."""
+        async with self.session_factory() as session:
+            async with session.begin():
+                return await ActorResolver.from_session(session).resolve(token)
+
     async def aclose(self) -> None:
         await self.engine.dispose()
 
@@ -40,36 +50,24 @@ async def get_container(request: Request) -> Container:
     return request.app.state.container
 
 
-async def get_actor(request: Request) -> Member:
-    """Resolve the actor from a Bearer credential or the session cookie.
-
-    Every /api request must authenticate (§16.56): the v1 loopback owner
-    shim was removed in M3. Bearer accepts personal access tokens and OAuth
-    access tokens; the rdm_session cookie holds a console session.
-    """
-    member, _token = await _resolve(request)
-    return member
+async def get_actor(request: Request) -> Actor:
+    """Resolve the actor from a Bearer credential (PAT or OAuth access token)."""
+    actor, _token = await resolve_request_actor(request)
+    return actor
 
 
-async def get_actor_session(request: Request) -> tuple[Member, MemberToken]:
-    """Like get_actor but also returns the session token (for logout)."""
-    return await _resolve(request, session_only=True)
+async def get_actor_with_token(request: Request) -> tuple[Actor, UserToken]:
+    """Like get_actor but also returns the credential (for logout)."""
+    return await resolve_request_actor(request)
 
 
-async def _resolve(request: Request, *, session_only: bool = False) -> tuple[Member, MemberToken]:
+async def resolve_request_actor(request: Request) -> tuple[Actor, UserToken]:
     container: Container = request.app.state.container
     auth = request.headers.get("authorization", "")
-    if auth.lower().startswith("bearer "):
-        if session_only:
-            raise AuthInvalidToken("登出需要会话 cookie，而不是 Bearer 凭据")
-        return await container.authenticator.authenticate_with_token(
-            auth[7:].strip(), allow_kinds=BEARER_KINDS
-        )
-
-    session_raw = request.cookies.get(SESSION_COOKIE_NAME)
-    if session_raw:
-        return await container.authenticator.authenticate_with_token(
-            session_raw, allow_kinds=frozenset({TokenKind.session})
-        )
-
-    raise AuthInvalidToken("未认证：请先登录或提供 Authorization: Bearer <token>")
+    if not auth.lower().startswith("bearer "):
+        raise AuthInvalidToken("未认证：请先登录或提供 Authorization: Bearer <token>")
+    token = await container.authenticator.authenticate_with_token(
+        auth[7:].strip(), allow_kinds=BEARER_KINDS
+    )
+    actor = await container.resolve_actor(token)
+    return actor, token

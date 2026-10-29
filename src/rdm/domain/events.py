@@ -9,10 +9,19 @@ class EventType(StrEnum):
     PROJECT_CREATED = "project.created"
     PROJECT_UPDATED = "project.updated"
     PROJECT_ARCHIVED = "project.archived"
-    # member / token
-    MEMBER_ADDED = "member.added"
-    MEMBER_UPDATED = "member.updated"
-    MEMBER_DEACTIVATED = "member.deactivated"
+    PROJECT_OWNER_CHANGED = "project.owner_changed"
+    # organization / user / token (§17)
+    ORG_BOOTSTRAPPED = "org.bootstrapped"
+    ORG_OWNER_TRANSFERRED = "org.owner_transferred"
+    USER_CREATED = "user.created"
+    USER_UPDATED = "user.updated"
+    USER_DISABLED = "user.disabled"
+    USER_ENABLED = "user.enabled"
+    USER_ORG_ROLES_CHANGED = "user.org_roles_changed"
+    USER_PASSWORD_SET = "user.password_set"
+    PROJECT_MEMBER_ADDED = "project_member.added"
+    PROJECT_MEMBER_UPDATED = "project_member.updated"
+    PROJECT_MEMBER_REMOVED = "project_member.removed"
     TOKEN_ISSUED = "token.issued"
     TOKEN_REVOKED = "token.revoked"
     # work item

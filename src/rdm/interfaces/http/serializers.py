@@ -11,10 +11,11 @@ from rdm.domain.entities import (
     Artifact,
     Attachment,
     Comment,
-    Member,
-    MemberToken,
     Project,
+    ProjectMember,
     Sprint,
+    User,
+    UserToken,
     WorkItem,
     Workspace,
 )
@@ -30,34 +31,63 @@ def project_out(p: Project) -> dict:
         "key": p.key,
         "name": p.name,
         "description_md": p.description_md,
-        "owner_member_id": p.owner_member_id,
+        "owner_user_id": p.owner_user_id,
         "status": str(p.status),
         "created_at": _iso(p.created_at),
     }
 
 
-def member_out(m: Member) -> dict:
+def user_out(u: User, *, effective_active: bool | None = None) -> dict:
     return {
-        "id": m.id,
-        "project_id": m.project_id,
-        "type": m.type,
-        "name": m.name,
-        "description_md": m.description_md,
-        "manager_member_id": m.manager_member_id,
-        "roles": m.roles,
-        "accept_kinds": m.accept_kinds,
-        "email": m.email,
-        "notify_webhook": m.notify_webhook,
-        "notify_webhook_format": m.notify_webhook_format,
-        "is_active": m.is_active,
-        "created_at": _iso(m.created_at),
+        "id": u.id,
+        "type": u.type,
+        "name": u.name,
+        "description_md": u.description_md,
+        "manager_user_id": u.manager_user_id,
+        "org_roles": list(u.org_roles),
+        "accept_kinds": u.accept_kinds,
+        "email": u.email,
+        "notify_webhook": u.notify_webhook,
+        "notify_webhook_format": u.notify_webhook_format,
+        "must_reset_password": u.must_reset_password,
+        "is_active": u.is_active,
+        "effective_active": u.is_active if effective_active is None else effective_active,
+        "created_at": _iso(u.created_at),
     }
 
 
-def token_out(t: MemberToken) -> dict:
+def project_member_out(
+    user: User,
+    membership: ProjectMember,
+    *,
+    agents: list[tuple[User, ProjectMember]] | None = None,
+    effective_active: bool | None = None,
+) -> dict:
+    out = user_out(user, effective_active=effective_active)
+    out.update(
+        {
+            "membership_id": membership.id,
+            "roles": list(membership.roles),
+            "auto_added": membership.auto_added,
+        }
+    )
+    if agents is not None:
+        out["agents"] = [
+            {
+                "user": user_out(agent),
+                "membership_id": agent_membership.id,
+                "auto_added": agent_membership.auto_added,
+            }
+            for agent, agent_membership in agents
+        ]
+    return out
+
+
+def token_out(t: UserToken) -> dict:
     return {
         "id": t.id,
-        "member_id": t.member_id,
+        "user_id": t.user_id,
+        "act_as_user_id": t.act_as_user_id,
         "label": t.label,
         "kind": t.kind,
         "expires_at": _iso(t.expires_at),
@@ -80,22 +110,20 @@ def _fields_out(item: WorkItem) -> dict[str, Any] | None:
     return {k: _json_safe(v) for k, v in dataclasses.asdict(item.fields).items()}
 
 
-def _assignee_out(item: WorkItem, members: dict[str, Member]) -> dict | None:
-    member = members.get(item.assignee_member_id) if item.assignee_member_id else None
-    if member is None:
+def _assignee_out(item: WorkItem, users: dict[str, User]) -> dict | None:
+    user = users.get(item.assignee_user_id) if item.assignee_user_id else None
+    if user is None:
         return None
-    return {"id": member.id, "name": member.name, "type": member.type}
+    return {"id": user.id, "name": user.name, "type": user.type}
 
 
-def work_item_out(
-    item: WorkItem, project: Project, members: dict[str, Member] | None = None
-) -> dict:
-    members = members or {}
-    assignee = members.get(item.assignee_member_id) if item.assignee_member_id else None
+def work_item_out(item: WorkItem, project: Project, users: dict[str, User] | None = None) -> dict:
+    users = users or {}
+    assignee = users.get(item.assignee_user_id) if item.assignee_user_id else None
     accountable_id = (
         assignee.id
         if assignee and assignee.type == "human"
-        else (assignee.manager_member_id if assignee else None)
+        else (assignee.manager_user_id if assignee else None)
     )
     return {
         "id": item.id,
@@ -108,8 +136,8 @@ def work_item_out(
         "priority": item.priority,
         "rank": item.rank,
         "parent_id": item.parent_id,
-        "assignee": _assignee_out(item, members),
-        "accountable_human_member_id": accountable_id,
+        "assignee": _assignee_out(item, users),
+        "accountable_human_id": accountable_id,
         "fields": _fields_out(item),
         "row_version": item.row_version,
         "created_at": _iso(item.created_at),
@@ -119,9 +147,9 @@ def work_item_out(
 
 
 def work_item_summary_out(
-    item: WorkItem, project: Project, members: dict[str, Member] | None = None
+    item: WorkItem, project: Project, users: dict[str, User] | None = None
 ) -> dict:
-    full = work_item_out(item, project, members)
+    full = work_item_out(item, project, users)
     return {
         "id": full["id"],
         "display_id": full["display_id"],
@@ -132,7 +160,7 @@ def work_item_summary_out(
         "rank": full["rank"],
         "parent_id": full["parent_id"],
         "assignee": full["assignee"],
-        "accountable_human_member_id": full["accountable_human_member_id"],
+        "accountable_human_id": full["accountable_human_id"],
         "row_version": full["row_version"],
         "created_at": full["created_at"],
         "updated_at": full["updated_at"],
@@ -141,11 +169,11 @@ def work_item_summary_out(
 
 def comment_out(
     c: Comment,
-    members: dict[str, Member] | None = None,
+    users: dict[str, User] | None = None,
     attachments: list[dict] | None = None,
 ) -> dict:
-    members = members or {}
-    author = members.get(c.author_member_id)
+    users = users or {}
+    author = users.get(c.author_user_id)
     return {
         "id": c.id,
         "work_item_id": c.work_item_id,
@@ -153,15 +181,15 @@ def comment_out(
         "reply_to_id": c.reply_to_id,
         "author": {"id": author.id, "name": author.name, "type": author.type}
         if author
-        else {"id": c.author_member_id},
+        else {"id": c.author_user_id},
         "attachments": attachments or [],
         "created_at": _iso(c.created_at),
     }
 
 
-def attachment_out(a: Attachment, members: dict[str, Member] | None = None) -> dict:
-    members = members or {}
-    uploader = members.get(a.uploader_member_id)
+def attachment_out(a: Attachment, users: dict[str, User] | None = None) -> dict:
+    users = users or {}
+    uploader = users.get(a.uploader_user_id)
     return {
         "id": a.id,
         "owner_type": a.owner_type,
@@ -173,7 +201,7 @@ def attachment_out(a: Attachment, members: dict[str, Member] | None = None) -> d
         "download_url": f"/api/v1/attachments/{a.id}/download",
         "uploader": {"id": uploader.id, "name": uploader.name, "type": uploader.type}
         if uploader
-        else {"id": a.uploader_member_id},
+        else {"id": a.uploader_user_id},
         "created_at": _iso(a.created_at),
     }
 
@@ -213,6 +241,6 @@ def sprint_out(s: Sprint) -> dict:
         "status": str(s.status),
         "start_date": _iso(s.start_date),
         "end_date": _iso(s.end_date),
-        "manager_member_id": s.manager_member_id,
+        "manager_user_id": s.manager_user_id,
         "created_at": _iso(s.created_at),
     }

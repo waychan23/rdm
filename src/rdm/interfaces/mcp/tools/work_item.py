@@ -6,7 +6,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-from rdm.application.services.member_service import MemberService
+from rdm.application.services.membership_service import MembershipService
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.interfaces.http.container import Container
 from rdm.interfaces.http.schemas import (
@@ -27,8 +27,8 @@ def _without_none(**values: Any) -> dict[str, Any]:
 
 
 def register(mcp: FastMCP, container: Container) -> None:
-    async def _members(uow, project_id: str) -> dict:
-        return await MemberService(uow).members_index(project_id)
+    async def _users(uow, project_id: str) -> dict:
+        return await MembershipService(uow).users_index(project_id)
 
     @mcp.tool
     async def work_item_list(
@@ -62,7 +62,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                 limit=limit,
                 offset=offset,
             )
-            members = await _members(uow, proj.id)
+            members = await _users(uow, proj.id)
             return ok([work_item_summary_out(i, proj, members) for i in items])
 
         return await run_tool(container, run)
@@ -77,9 +77,16 @@ def register(mcp: FastMCP, container: Container) -> None:
         async def run(uow, actor):
             service = WorkItemService(uow)
             items = await service.my_items(actor, status=status)
-            project = await uow.projects.get(actor.project_id)
-            members = await _members(uow, actor.project_id)
-            return ok([work_item_summary_out(i, project, members) for i in items])
+            users_by_project: dict[str, dict] = {}
+            out: list[dict] = []
+            for item in items:
+                project = await uow.projects.get(item.project_id)
+                if project is None:
+                    continue
+                if item.project_id not in users_by_project:
+                    users_by_project[item.project_id] = await _users(uow, item.project_id)
+                out.append(work_item_summary_out(item, project, users_by_project[item.project_id]))
+            return ok(out)
 
         return await run_tool(container, run)
 
@@ -93,7 +100,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         async def run(uow, actor):
             service = WorkItemService(uow)
             proj, items = await service.backlog_items(actor, project_key=project, kind=kind)
-            members = await _members(uow, proj.id)
+            members = await _users(uow, proj.id)
             return ok([work_item_summary_out(i, proj, members) for i in items])
 
         return await run_tool(container, run)
@@ -109,7 +116,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         async def run(uow, actor):
             service = WorkItemService(uow)
             proj, item = await service.get_item(actor, id)
-            members = await _members(uow, proj.id)
+            members = await _users(uow, proj.id)
             _, children = await service.list_items(actor, project_key=proj.key, parent_ref=id)
             from rdm.domain.workflow.loader import load_engine
 
@@ -176,7 +183,7 @@ def register(mcp: FastMCP, container: Container) -> None:
             proj, item = await WorkItemService(uow).create_item(
                 actor, project_key, payload.model_dump(exclude_unset=True)
             )
-            members = await _members(uow, proj.id)
+            members = await _users(uow, proj.id)
             return ok(work_item_out(item, proj, members))
 
         return await run_tool(container, run)
@@ -226,7 +233,7 @@ def register(mcp: FastMCP, container: Container) -> None:
             proj, item = await WorkItemService(uow).update_item(
                 actor, id, payload.model_dump(exclude_unset=True)
             )
-            members = await _members(uow, proj.id)
+            members = await _users(uow, proj.id)
             return ok(work_item_out(item, proj, members))
 
         return await run_tool(container, run)
@@ -242,7 +249,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         async def run(uow, actor):
             payload = WorkItemAssignIn.model_validate({"member": member})
             proj, item = await WorkItemService(uow).assign_item(actor, id, payload.member)
-            members = await _members(uow, proj.id)
+            members = await _users(uow, proj.id)
             return ok(work_item_out(item, proj, members))
 
         return await run_tool(container, run)
@@ -270,7 +277,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                 row_version=payload.row_version,
                 reason=payload.reason,
             )
-            members = await _members(uow, proj.id)
+            members = await _users(uow, proj.id)
             return ok(work_item_out(item, proj, members), **meta)
 
         return await run_tool(container, run)
@@ -298,7 +305,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         async def run(uow, actor):
             service = WorkItemService(uow)
             proj, item, restored = await service.restore_item(actor, id)
-            members = await _members(uow, proj.id)
+            members = await _users(uow, proj.id)
             return ok(
                 work_item_out(item, proj, members),
                 restored=restored,

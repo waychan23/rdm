@@ -31,7 +31,7 @@ def test_init_upgrade_status_idempotent(tmp_path: Path) -> None:
 
     result = runner.invoke(app, ["db", "status", "--data-dir", str(data_dir)])
     assert result.exit_code == 0, result.output
-    assert "0006" in result.output
+    assert "0007" in result.output
     assert "up to date" in result.output
 
 
@@ -66,7 +66,7 @@ def test_project_create_get_list_via_cli(live_server) -> None:
 
     result = runner.invoke(app, ["project", "list", "--url", url, "--token", token])
     keys = {p["key"] for p in json.loads(result.output)}
-    assert {"RDM", "DEMO"} <= keys
+    assert "DEMO" in keys
 
     # duplicate key surfaces PROJECT_KEY_DUPLICATE
     result = runner.invoke(
@@ -77,20 +77,33 @@ def test_project_create_get_list_via_cli(live_server) -> None:
     assert "PROJECT_KEY_DUPLICATE" in result.output
 
 
-def test_member_list_and_create_via_cli(live_server) -> None:
+def test_user_and_project_member_commands_via_cli(live_server) -> None:
     url, token = live_server
     runner = CliRunner()
 
+    # Organization user (human) creation prints a one-shot reset link.
+    result = runner.invoke(app, ["user", "create", "pm", "--url", url, "--token", token])
+    assert result.exit_code == 0, result.output
+    assert "/set-password?ticket=" in result.output
+
+    result = runner.invoke(app, ["user", "list", "--url", url, "--token", token])
+    assert result.exit_code == 0, result.output
+    names = {u["name"] for u in json.loads(result.output)}
+    assert {"owner", "pm"} <= names
+
+    runner.invoke(app, ["project", "create", "DEMO", "--name", "D", "--url", url, "--token", token])
     result = runner.invoke(
         app,
         [
-            "member",
-            "create",
+            "project",
+            "members",
+            "add",
+            "--user",
             "pm",
-            "--type",
-            "human",
             "--roles",
             "manager",
+            "--project",
+            "DEMO",
             "--url",
             url,
             "--token",
@@ -98,17 +111,35 @@ def test_member_list_and_create_via_cli(live_server) -> None:
         ],
     )
     assert result.exit_code == 0, result.output
-    created = json.loads(result.output)
-    assert created["name"] == "pm"
 
-    result = runner.invoke(app, ["member", "list", "--url", url, "--token", token])
+    result = runner.invoke(
+        app,
+        ["project", "members", "list", "--project", "DEMO", "--url", url, "--token", token],
+    )
     assert result.exit_code == 0, result.output
     names = {m["name"] for m in json.loads(result.output)}
     assert {"owner", "pm"} <= names
 
 
+def test_me_token_commands_via_cli(live_server) -> None:
+    url, token = live_server
+    runner = CliRunner()
+    result = runner.invoke(
+        app, ["me", "token-create", "--label", "extra", "--url", url, "--token", token]
+    )
+    assert result.exit_code == 0, result.output
+    created = json.loads(result.output)
+    assert created["label"] == "extra" and created["token"]
+    result = runner.invoke(app, ["me", "tokens", "--url", url, "--token", token])
+    assert result.exit_code == 0, result.output
+    assert len(json.loads(result.output)) == 2
+
+
 def test_member_commands_fail_without_token(live_server) -> None:
     url, _token = live_server
-    result = CliRunner().invoke(app, ["member", "list", "--url", url, "--token", "bad-token"])
+    result = CliRunner().invoke(
+        app,
+        ["project", "members", "list", "--project", "DEMO", "--url", url, "--token", "bad-token"],
+    )
     assert result.exit_code == 1
     assert "AUTH_INVALID_TOKEN" in result.output

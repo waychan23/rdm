@@ -27,7 +27,7 @@ class SprintRepository:
                 status=str(sprint.status),
                 start_date=sprint.start_date,
                 end_date=sprint.end_date,
-                manager_member_id=sprint.manager_member_id,
+                manager_user_id=sprint.manager_user_id,
                 created_at=sprint.created_at,
                 created_by=sprint.created_by,
                 updated_at=sprint.updated_at,
@@ -74,7 +74,7 @@ class SprintRepository:
                 goal_md=sprint.goal_md,
                 start_date=sprint.start_date,
                 end_date=sprint.end_date,
-                manager_member_id=sprint.manager_member_id,
+                manager_user_id=sprint.manager_user_id,
                 updated_at=dt.datetime.now(dt.UTC),
             )
         )

@@ -15,7 +15,8 @@ from sqlalchemy.exc import IntegrityError
 
 from rdm.application import security
 from rdm.application.services.workitem_service import WorkItemService
-from rdm.domain.entities import Member, Project, Sprint, SprintItem, WorkItem
+from rdm.domain.actor import Actor
+from rdm.domain.entities import Project, Sprint, SprintItem, WorkItem
 from rdm.domain.enums import SprintStatus
 from rdm.domain.errors import NotFound, SprintActiveExists, ValidationError
 from rdm.domain.events import EventType
@@ -33,18 +34,18 @@ class SprintService:
         self.uow = uow
         self.items = WorkItemService(uow)
 
-    async def resolve_sprint(self, actor: Member, sprint_id: str) -> tuple[Project, Sprint]:
+    async def resolve_sprint(self, actor: Actor, sprint_id: str) -> tuple[Project, Sprint]:
         assert self.uow.sprints is not None and self.uow.projects is not None
         sprint = await self.uow.sprints.get(sprint_id)
         if sprint is None:
             raise NotFound(f"Sprint {sprint_id} 不存在", details={"sprint_id": sprint_id})
-        security.assert_same_project(actor, sprint.project_id)
+        security.assert_project_access(actor, sprint.project_id)
         project = await self.uow.projects.get(sprint.project_id)
         assert project is not None
         return project, sprint
 
     async def list_sprints(
-        self, actor: Member, project_key: str | None = None, status: str | None = None
+        self, actor: Actor, project_key: str | None = None, status: str | None = None
     ) -> tuple[Project, list[Sprint]]:
         project = await self.items.resolve_project(actor, project_key)
         assert self.uow.sprints is not None
@@ -59,16 +60,16 @@ class SprintService:
         return project, sprints
 
     async def create(
-        self, actor: Member, project_key: str | None, data: dict[str, Any]
+        self, actor: Actor, project_key: str | None, data: dict[str, Any]
     ) -> tuple[Project, Sprint]:
-        security.require_sprint_manager(actor)
         project = await self.items.resolve_project(actor, project_key)
+        security.require_sprint_manager(actor, project.id)
         name = (data.get("name") or "").strip()
         if not name:
             raise ValidationError("name 必填", details={"field": "name"})
         manager_id = None
-        if data.get("manager_member_id"):
-            manager_id = (await self.items.resolve_member(project.id, data["manager_member_id"])).id
+        if data.get("manager_user_id"):
+            manager_id = (await self.items.resolve_member(project.id, data["manager_user_id"])).id
 
         sprint = Sprint(
             id=new_id(),
@@ -78,7 +79,7 @@ class SprintService:
             status=SprintStatus(load_engine().initial_status("sprint")),  # PLANNED
             start_date=_as_date(data.get("start_date")),
             end_date=_as_date(data.get("end_date")),
-            manager_member_id=manager_id,
+            manager_user_id=manager_id,
             created_by=actor.id,
         )
         assert self.uow.sprints is not None
@@ -94,11 +95,11 @@ class SprintService:
         return project, sprint
 
     async def update(
-        self, actor: Member, sprint_id: str, data: dict[str, Any]
+        self, actor: Actor, sprint_id: str, data: dict[str, Any]
     ) -> tuple[Project, Sprint]:
         """Edit sprint fields (M2 sprint_manage update / PATCH). CLOSED is frozen."""
-        security.require_sprint_manager(actor)
         project, sprint = await self.resolve_sprint(actor, sprint_id)
+        security.require_sprint_manager(actor, project.id)
         if sprint.status == SprintStatus.CLOSED:
             raise ValidationError(
                 f"Sprint {sprint.name} 已关闭，不能修改字段",
@@ -123,12 +124,12 @@ class SprintService:
             track("start_date", _as_date(data["start_date"]))
         if "end_date" in data:
             track("end_date", _as_date(data["end_date"]))
-        if "manager_member_id" in data:
-            manager_id = data["manager_member_id"] or None
+        if "manager_user_id" in data:
+            manager_id = data["manager_user_id"] or None
             if manager_id is not None:
                 manager = await self.items.resolve_member(project.id, manager_id)
                 manager_id = manager.id
-            track("manager_member_id", manager_id)
+            track("manager_user_id", manager_id)
 
         if changes:
             for key in ("start_date", "end_date"):
@@ -148,7 +149,7 @@ class SprintService:
         return project, sprint
 
     async def add_items(
-        self, actor: Member, sprint_id: str, item_refs: Sequence[str]
+        self, actor: Actor, sprint_id: str, item_refs: Sequence[str]
     ) -> tuple[Project, Sprint, list[WorkItem]]:
         project, sprint = await self.resolve_sprint(actor, sprint_id)
         assert (
@@ -218,7 +219,7 @@ class SprintService:
         return project, sprint, added
 
     async def remove_item(
-        self, actor: Member, sprint_id: str, item_ref: str
+        self, actor: Actor, sprint_id: str, item_ref: str
     ) -> tuple[Project, Sprint, WorkItem]:
         project, sprint = await self.resolve_sprint(actor, sprint_id)
         item = await self.items.resolve_item(actor, item_ref)
@@ -238,9 +239,9 @@ class SprintService:
         )
         return project, sprint, item
 
-    async def start(self, actor: Member, sprint_id: str) -> tuple[Project, Sprint]:
-        security.require_sprint_manager(actor)
+    async def start(self, actor: Actor, sprint_id: str) -> tuple[Project, Sprint]:
         project, sprint = await self.resolve_sprint(actor, sprint_id)
+        security.require_sprint_manager(actor, project.id)
         assert self.uow.sprints is not None
         engine = load_engine()
         engine.check("sprint", str(sprint.status), "ACTIVE", item=sprint.name)
@@ -261,9 +262,9 @@ class SprintService:
         await self._notify(project, sprint, event_id, "sprint.started", actor)
         return project, sprint
 
-    async def close(self, actor: Member, sprint_id: str) -> tuple[Project, Sprint]:
-        security.require_sprint_manager(actor)
+    async def close(self, actor: Actor, sprint_id: str) -> tuple[Project, Sprint]:
         project, sprint = await self.resolve_sprint(actor, sprint_id)
+        security.require_sprint_manager(actor, project.id)
         assert self.uow.sprint_items is not None and self.uow.work_items is not None
         links = await self.uow.sprint_items.list_for_sprint(sprint.id)
         members_items = (
@@ -291,7 +292,7 @@ class SprintService:
         return project, sprint
 
     async def overview(
-        self, actor: Member, sprint_id: str
+        self, actor: Actor, sprint_id: str
     ) -> tuple[Project, Sprint, list[WorkItem], dict[str, int]]:
         project, sprint = await self.resolve_sprint(actor, sprint_id)
         assert self.uow.sprint_items is not None and self.uow.work_items is not None
@@ -319,19 +320,23 @@ class SprintService:
         project_id: str,
         sprint: Sprint,
         event_type: EventType,
-        actor: Member,
+        actor: Actor,
         payload: dict[str, Any],
     ) -> int:
-        seq = await self.uow.allocate_event_seq(project_id)
+        assert self.uow.projects is not None
+        project = await self.uow.projects.get(project_id)
+        org_id = project.org_id if project is not None else actor.org_id
+        seq = await self.uow.allocate_event_seq(org_id)
         assert self.uow.events is not None
         return await self.uow.events.append(
+            org_id=org_id,
             project_id=project_id,
             seq=seq,
             aggregate_type="sprint",
             aggregate_id=sprint.id,
             aggregate_version=0,
             event_type=event_type,
-            actor_member_id=actor.id,
+            actor_user_id=actor.id,
             payload=payload,
         )
 
@@ -341,7 +346,7 @@ class SprintService:
         sprint: Sprint,
         event_id: int,
         event_name: str,
-        actor: Member,
+        actor: Actor,
     ) -> None:
         from rdm.application.services import webhook_notify
 

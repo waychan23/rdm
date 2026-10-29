@@ -1,5 +1,8 @@
-// Minimal API client. The SPA is same-origin; the rdm_session cookie (set by
-// POST /auth/login) authenticates every request (architecture §16.55/56).
+// Same-origin API client. Every request carries `Authorization: Bearer`; a
+// 401 triggers one silent refresh through the OAuth refresh token, then a
+// full-page login redirect if that fails (§17).
+
+import { beginLogin, clearTokens, getAccessToken, refreshTokens } from "./oauth";
 
 export interface ApiError {
   code: string;
@@ -13,33 +16,53 @@ async function parse(res: Response): Promise<unknown> {
   return text ? JSON.parse(text) : {};
 }
 
-// A full-page bounce is deliberately simple; auth endpoints manage their own
-// 401s (the login page and ensureSession's /auth/me probe).
-function handleExpiredSession(path: string) {
-  if (path.startsWith("/auth")) return;
-  const here = window.location.pathname + window.location.search;
+const AUTH_PATHS = ["/auth/login", "/auth/set-password", "/oauth/consent"];
+
+function isAuthPath(path: string): boolean {
+  return AUTH_PATHS.some((p) => path.startsWith(p));
+}
+
+async function kickToLogin() {
+  clearTokens();
   if (window.location.pathname !== "/login") {
-    window.location.assign(`/login?redirect=${encodeURIComponent(here)}`);
+    await beginLogin();
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/api/v1${path}`, {
-    method,
-    credentials: "same-origin",
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (res.status === 401) handleExpiredSession(path);
-  const payload = await parse(res);
-  if (!res.ok) {
-    const err = ((payload as { error?: ApiError })?.error ?? {
+function errorFrom(payload: unknown, status: number): ApiError {
+  return (
+    (payload as { error?: ApiError })?.error ?? {
       code: "ERROR",
-      message: `HTTP ${res.status}`,
+      message: `HTTP ${status}`,
       details: {},
-    }) as ApiError;
-    throw new Error(`${err.code}: ${err.message}`, { cause: err });
+    }
+  );
+}
+
+function requestHeaders(body: unknown, token: string | null): HeadersInit {
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const send = (token: string | null) =>
+    fetch(`/api/v1${path}`, {
+      method,
+      headers: requestHeaders(body, token),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+
+  let res = await send(getAccessToken());
+  if (res.status === 401 && !isAuthPath(path)) {
+    if (await refreshTokens()) {
+      res = await send(getAccessToken());
+    }
+    if (res.status === 401) await kickToLogin();
   }
+  const payload = await parse(res);
+  if (!res.ok) throw new Error("API_ERROR", { cause: errorFrom(payload, res.status) });
   return payload as T;
 }
 
@@ -50,28 +73,26 @@ interface Envelope<T> {
 
 export const api = {
   get: <T>(path: string) => request<Envelope<T>>("GET", path),
-  post: <T>(path: string, body?: unknown) =>
-    request<Envelope<T>>("POST", path, body ?? {}),
+  post: <T>(path: string, body?: unknown) => request<Envelope<T>>("POST", path, body ?? {}),
+  put: <T>(path: string, body?: unknown) => request<Envelope<T>>("PUT", path, body ?? {}),
   patch: <T>(path: string, body: unknown) => request<Envelope<T>>("PATCH", path, body),
   del: <T>(path: string) => request<Envelope<T>>("DELETE", path),
 
   // Multipart upload: do not set Content-Type (the browser adds the boundary).
   async upload<T>(path: string, form: FormData): Promise<Envelope<T>> {
-    const res = await fetch(`/api/v1${path}`, {
-      method: "POST",
-      credentials: "same-origin",
-      body: form,
-    });
-    if (res.status === 401) handleExpiredSession(path);
-    const payload = await parse(res);
-    if (!res.ok) {
-      const err = ((payload as { error?: ApiError })?.error ?? {
-        code: "ERROR",
-        message: `HTTP ${res.status}`,
-        details: {},
-      }) as ApiError;
-      throw new Error(`${err.code}: ${err.message}`, { cause: err });
+    const send = (token: string | null) =>
+      fetch(`/api/v1${path}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: form,
+      });
+    let res = await send(getAccessToken());
+    if (res.status === 401) {
+      if (await refreshTokens()) res = await send(getAccessToken());
+      if (res.status === 401) await kickToLogin();
     }
+    const payload = await parse(res);
+    if (!res.ok) throw new Error("API_ERROR", { cause: errorFrom(payload, res.status) });
     return payload as Envelope<T>;
   },
 
@@ -80,9 +101,13 @@ export const api = {
       ? downloadUrl.slice("/api/v1".length)
       : downloadUrl;
     return (async () => {
-      const res = await fetch(`/api/v1${path}`, { credentials: "same-origin" });
+      const res = await fetch(`/api/v1${path}`, {
+        headers: getAccessToken()
+          ? { Authorization: `Bearer ${getAccessToken()}` }
+          : undefined,
+      });
       if (res.status === 401) {
-        handleExpiredSession(path);
+        await kickToLogin();
         throw new Error("HTTP 401");
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -99,7 +124,7 @@ export const api = {
   },
 };
 
-/** Gate/validation hints carried by 409 responses, if present. */
+/** Gate/validation hints carried by error responses, if present. */
 export function errorCause(e: unknown): ApiError | undefined {
   return (e as { cause?: ApiError })?.cause;
 }

@@ -6,6 +6,7 @@ import datetime as dt
 
 import pytest
 
+from rdm.domain.constants import DEFAULT_ORG_ID
 from rdm.domain.entities import OutboxRow
 from rdm.infrastructure.db.models import EventModel, ProjectModel
 from rdm.infrastructure.db.repositories.outbox import OutboxRepository
@@ -17,24 +18,25 @@ async def _seed(uow, n: int = 1) -> tuple[str, int]:
     uow.session.add(
         ProjectModel(
             id=pid,
+            org_id=DEFAULT_ORG_ID,
             key="DEMO",
             name="DEMO",
             status="active",
             item_seq=0,
-            event_seq=0,
             created_at=dt.datetime.now(dt.UTC),
         )
     )
     uow.session.add(
         EventModel(
             id=eid,
+            org_id=DEFAULT_ORG_ID,
             project_id=pid,
             seq=1,
             aggregate_type="work_item",
             aggregate_id="x",
             aggregate_version=0,
             event_type="work_item.assigned",
-            actor_member_id=None,
+            actor_user_id=None,
             payload={},
             occurred_at=dt.datetime.now(dt.UTC),
         )
@@ -126,24 +128,25 @@ async def test_logical_event_mapping(uow, event_type) -> None:
     uow.session.add(
         ProjectModel(
             id=pid,
+            org_id=DEFAULT_ORG_ID,
             key="DEMO",
             name="D",
             status="active",
             item_seq=0,
-            event_seq=0,
             created_at=dt.datetime.now(dt.UTC),
         )
     )
     uow.session.add(
         EventModel(
             id=99,
+            org_id=DEFAULT_ORG_ID,
             project_id=pid,
             seq=1,
             aggregate_type="message",
             aggregate_id="m",
             aggregate_version=0,
             event_type=event_type,
-            actor_member_id=None,
+            actor_user_id=None,
             payload={},
             occurred_at=dt.datetime.now(dt.UTC),
         )

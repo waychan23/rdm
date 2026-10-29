@@ -28,23 +28,25 @@ class EventModel(Base):
     __tablename__ = "event"
 
     id: Mapped[int] = mapped_column(_EVENT_ID_TYPE, primary_key=True, autoincrement=True)
-    project_id: Mapped[str] = mapped_column(
-        String(32), ForeignKey("project.id", deferrable=True, initially="DEFERRED"), nullable=False
+    org_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    # NULL for organization-level events (user, token, org-role changes).
+    project_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("project.id", deferrable=True, initially="DEFERRED"), nullable=True
     )
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
     aggregate_type: Mapped[str] = mapped_column(String(30), nullable=False)
     aggregate_id: Mapped[str] = mapped_column(String(32), nullable=False)
     aggregate_version: Mapped[int] = mapped_column(Integer, nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    actor_member_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    actor_user_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     occurred_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("project_id", "seq", name="ux_event_project_seq"),
+        UniqueConstraint("org_id", "seq", name="ux_event_org_seq"),
         Index(
-            "ix_event_project_aggregate",
-            "project_id",
+            "ix_event_org_aggregate",
+            "org_id",
             "aggregate_type",
             "aggregate_id",
             "id",

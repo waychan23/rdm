@@ -26,8 +26,13 @@ runner = CliRunner()
 def _seed_project(db_path: Path) -> None:
     with sqlite3.connect(db_path) as conn:
         conn.execute(
-            "insert into project(id,key,name,status,item_seq,event_seq,created_at) "
-            "values ('p1','DEMO','DEMO','active',0,0,'2026-10-25 00:00:00')"
+            "insert into organization(id,name,event_seq,created_at) "
+            "values ('01J00000000000000000000000','默认组织',0,'2026-10-25 00:00:00')"
+        )
+        conn.execute(
+            "insert into project(id,org_id,key,name,status,item_seq,created_at) "
+            "values ('p1','01J00000000000000000000000','DEMO','DEMO','active',0,"
+            "'2026-10-25 00:00:00')"
         )
 
 
@@ -76,14 +81,15 @@ def test_attachment_checks_missing_and_dangling(tmp_path) -> None:
 
     with sqlite3.connect(settings.db_path) as conn:
         conn.execute(
-            "insert into event(id,project_id,seq,aggregate_type,aggregate_id,"
-            "aggregate_version,event_type,actor_member_id,payload,occurred_at) "
-            "values (1,'p1',1,'work_item','i1',0,'work_item.created',null,'{}',"
+            "insert into event(id,org_id,project_id,seq,aggregate_type,aggregate_id,"
+            "aggregate_version,event_type,actor_user_id,payload,occurred_at) "
+            "values (1,'01J00000000000000000000000','p1',1,'work_item','i1',0,"
+            "'work_item.created',null,'{}',"
             "'2026-10-25 00:00:00')"
         )
         conn.execute(
             "insert into attachment(id,project_id,owner_type,owner_id,"
-            "uploader_member_id,filename,mime,size_bytes,sha256,rel_path,created_at) "
+            "uploader_user_id,filename,mime,size_bytes,sha256,rel_path,created_at) "
             "values ('a1','p1','work_item','i1','m','x.txt','text/plain',1,'h',"
             "'p1/attachments/2026/missing.txt','2026-10-25 00:00:00')"
         )
@@ -114,14 +120,19 @@ def test_outbox_thresholds(tmp_path) -> None:
     # Project row is required by the deferred FK; init leaves no project.
     with sqlite3.connect(settings.db_path) as conn:
         conn.execute(
-            "insert into project(id,key,name,status,item_seq,event_seq,created_at) "
-            "values ('p1','DEMO','D','active',0,0,'2026-10-25 00:00:00')"
+            "insert into organization(id,name,event_seq,created_at) "
+            "values ('01J00000000000000000000000','默认组织',0,'2026-10-25 00:00:00')"
         )
         conn.execute(
-            "insert into event(id,project_id,seq,aggregate_type,aggregate_id,"
-            "aggregate_version,event_type,actor_member_id,payload,occurred_at) "
-            "values (2,'p1',1,'x','z',0,'work_item.assigned',null,'{}',"
-            "'2020-01-01 00:00:00')"
+            "insert into project(id,org_id,key,name,status,item_seq,created_at) "
+            "values ('p1','01J00000000000000000000000','DEMO','D','active',0,"
+            "'2026-10-25 00:00:00')"
+        )
+        conn.execute(
+            "insert into event(id,org_id,project_id,seq,aggregate_type,aggregate_id,"
+            "aggregate_version,event_type,actor_user_id,payload,occurred_at) "
+            "values (2,'01J00000000000000000000000','p1',1,'x','z',0,"
+            "'work_item.assigned',null,'{}','2020-01-01 00:00:00')"
         )
         for i in range(3, 53):
             conn.execute(

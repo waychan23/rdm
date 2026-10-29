@@ -18,7 +18,8 @@ import PriorityMark from "../../components/PriorityMark";
 import TypeKindIcon from "../../components/TypeKindIcon";
 import EditWorkItemDialog from "../../workitems/EditWorkItemDialog";
 import StatusLozenge from "../../workitems/status";
-import type { Artifact, Attachment, Comment, Member, WorkItem } from "../../types";
+import type { Artifact, Attachment, Comment, OrgUser, ProjectMemberRow, WorkItem } from "../../types";
+import { flattenMembers } from "../../lib/members";
 import TransitionDialog from "./TransitionDialog";
 import ArtifactDialog from "./ArtifactDialog";
 
@@ -34,7 +35,7 @@ interface DetailBundle {
   children: WorkItem[];
   allowed: string[];
   comments: Comment[];
-  members: Member[];
+  members: OrgUser[];
   attachments: Attachment[];
   artifacts: Artifact[];
 }
@@ -64,7 +65,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       );
       const [cm, mm, am, artm] = await Promise.all([
         api.get<Comment[]>(`/work-items/${itemId}/comments`),
-        api.get<Member[]>(`/projects/${projectKey}/members`),
+        api.get<ProjectMemberRow[]>(`/projects/${projectKey}/members`),
         api.get<Attachment[]>(
           `/projects/${projectKey}/attachments?owner_type=work_item&owner_ref=${encodeURIComponent(itemId)}`,
         ),
@@ -77,7 +78,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         children: ((detail.meta?.children as WorkItem[]) ?? []) as WorkItem[],
         allowed: (detail.meta?.allowed_transitions as string[]) ?? [],
         comments: cm.data,
-        members: mm.data,
+        members: flattenMembers(mm.data),
         attachments: am.data,
         artifacts: artm.data,
       });

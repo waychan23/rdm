@@ -23,16 +23,9 @@ async def _project(client: httpx.AsyncClient, token: str) -> None:
 async def _member(
     client: httpx.AsyncClient, owner: str, name: str, roles: list[str] | None = None
 ) -> tuple[str, str]:
-    r = await client.post(
-        f"{API}/projects/DEMO/members",
-        json={"name": name, "type": "human", "roles": roles or ["worker"]},
-        headers=auth(owner),
-    )
-    assert r.status_code == 201, r.text
-    mid = r.json()["data"]["id"]
-    r = await client.post(f"{API}/members/{mid}/tokens", json={"label": "t"}, headers=auth(owner))
-    assert r.status_code == 201, r.text
-    return mid, r.json()["data"]["token"]
+    from tests.support import make_member
+
+    return await make_member(client, owner, "DEMO", name, roles or ["worker"])
 
 
 async def _item(client: httpx.AsyncClient, token: str) -> dict:
@@ -162,43 +155,37 @@ async def test_workspace_owner_manager_only_crud(server, owner_token) -> None:
         assert types == {"workspace.added", "workspace.updated", "workspace.deleted"}
 
 
-async def test_member_patch_and_tokens_list(server, owner_token) -> None:
+async def test_member_profile_disable_and_token_listing(server, owner_token) -> None:
     client, _settings, _app = server
     await _project(client, owner_token)
-    mid, _token = await _member(client, owner_token, "agent1")
+    mid, token = await _member(client, owner_token, "agent1", ["worker"])
 
+    # The user edits their own contact settings.
     r = await client.patch(
-        f"{API}/members/{mid}",
+        f"{API}/me",
         json={"notify_webhook": "https://hook.example", "notify_webhook_format": "feishu"},
-        headers=auth(owner_token),
+        headers=auth(token),
     )
     assert r.status_code == 200, r.text
-    data = r.json()["data"]
-    assert data["notify_webhook"] == "https://hook.example"
-    assert data["notify_webhook_format"] == "feishu"
-
+    assert r.json()["data"]["notify_webhook"] == "https://hook.example"
     r = await client.patch(
-        f"{API}/members/{mid}",
-        json={"notify_webhook_format": "bogus"},
-        headers=auth(owner_token),
+        f"{API}/me", json={"notify_webhook_format": "bogus"}, headers=auth(token)
     )
     assert r.status_code == 422
 
-    r = await client.patch(
-        f"{API}/members/{mid}", json={"is_active": False}, headers=auth(owner_token)
-    )
-    assert r.status_code == 200
-    assert r.json()["data"]["is_active"] is False
-
-    r = await client.get(f"{API}/members/{mid}/tokens", headers=auth(owner_token))
+    # A user lists their own PATs; raw values are never exposed.
+    r = await client.get(f"{API}/me/tokens", headers=auth(token))
     assert r.status_code == 200
     assert len(r.json()["data"]) == 1
-    assert "token" not in r.json()["data"][0]  # list never exposes raw tokens
+    assert "token" not in r.json()["data"][0]
 
-    # Non-owner cannot patch members.
-    _wid, worker = await _member(client, owner_token, "plainworker", ["worker"])
-    r = await client.patch(f"{API}/members/{mid}", json={"email": "a@b.c"}, headers=auth(worker))
+    # Administrators disable the user; a worker cannot do it to someone else.
+    _wid, worker_token = await _member(client, owner_token, "plainworker", ["worker"])
+    r = await client.post(f"{API}/users/{mid}/disable", headers=auth(worker_token))
     assert r.status_code == 403
+    r = await client.post(f"{API}/users/{mid}/disable", headers=auth(owner_token))
+    assert r.status_code == 200
+    assert r.json()["data"]["is_active"] is False
 
 
 async def test_sprint_patch_and_closed_freeze(server, owner_token) -> None:

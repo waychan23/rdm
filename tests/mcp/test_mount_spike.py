@@ -60,8 +60,9 @@ async def test_whoami_tool_over_streamable_http(server, owner_token) -> None:
         result = await mcp_client.call_tool("whoami", {})
         assert result.structured_content is None or isinstance(result.structured_content, dict)
         payload = result.structured_content or result.data
-        assert payload["data"]["member"]["name"] == "owner"
-        assert payload["data"]["project"]["key"] == "RDM"
+        assert payload["data"]["identity"]["name"] == "owner"
+        # No default project exists in the org model (§17).
+        assert payload["data"]["projects"] == []
         assert payload["data"]["unread_count"] == 0
 
 
