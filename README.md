@@ -1,8 +1,8 @@
 # rd-manager（rdm）
 
 human/agent 协作的研发工作管理：受工作流引擎约束的 WorkItem/Sprint、站内信箱、
-附件/产出物/工作区、Webhook 通知、27 个 MCP 工具与完整 Web。纯单人部署，SQLite，
-服务只监听 127.0.0.1。
+附件/产出物/工作区、Webhook 通知、27 个 MCP 工具与完整 Web。单组织部署（初始化
+创建默认组织，预留多租户隔离），SQLite，服务只监听 127.0.0.1。
 
 ## 5 分钟跑起来
 
@@ -14,78 +14,89 @@ uv run rdm init               # 初始化 ~/rdm-data 并迁移数据库
 uv run rdm serve              # http://127.0.0.1:8765 （Ctrl-C 停止）
 ```
 
-首次启动会创建默认项目 `RDM`、owner 成员、一次性 PAT 与初始登录密码，明文写到
-`~/rdm-data/bootstrap-token` 和 `~/rdm-data/bootstrap-password`（文件权限均 0600）。
+首次启动会创建默认组织与无密码的 Org Owner，在日志里打印**一次性 bootstrap-url**：
 
-- Web：浏览器打开 <http://127.0.0.1:8765/>，用 owner + `bootstrap-password`
-  登录（会话 cookie，7 天）：概览、看板拖拽、Backlog、Sprint、信箱、工作区、
-  成员/Token 管理、工作项流转/附件/评论
-- API 文档（FastAPI Swagger）：<http://127.0.0.1:8765/docs>
-  （Bearer token 或登录会话）
+```
+首次启动：请在本机打开设置 Org Owner 密码：http://127.0.0.1:8765/set-password?ticket=...
+（7 天内有效；丢失可执行 `rdm account recover-owner` 重新生成）
+```
+
+- Web：打开该 URL 设置密码，然后用浏览器访问 <http://127.0.0.1:8765/> 登录。
+  登录是无状态 OAuth（Auth Code + PKCE），不再有会话 cookie；支持「记住我」
+  （7 天滑动续期，绝对上限 30 天）。
+- 首次登录没有默认项目；组织 Owner 或 `project-director` 在 Web 里创建项目。
+- API 文档（FastAPI Swagger）：<http://127.0.0.1:8765/docs>（Bearer PAT/OAuth token）
 - MCP endpoint：`http://127.0.0.1:8765/mcp`（原生 OAuth 2.1 或 Bearer PAT，见下）
-- 自检：`uv run rdm doctor`（数据目录/迁移/bootstrap 凭据/workflow/端点/OAuth
+- 自检：`uv run rdm doctor`（数据目录/迁移/Org Owner/workflow/端点/OAuth
   metadata/outbox 积压/附件孤儿，`--json`）
-- 离线逃生（停服执行）：`rdm account reset-password`、`rdm bootstrap-token`
+- Org Owner 忘记密码：在部署主机执行 `rdm account recover-owner`（需服务运行；
+  通过仅回环的 HTTP 端点重新生成 bootstrap-url）
+
+## 身份模型（组织/用户/项目）
+
+- **组织**：单组织，初始化自动创建；不可新建组织（代码按 `org_id` 隔离，便于扩展）。
+- **用户**：`human` 或 `agent`，归属组织，由组织管理。`agent` 必须有一个 human manager。
+- **项目**：归属组织；创建者自动成为 Project Owner；项目成员是「项目↔用户」关系。
+- **组织角色**：`org_owner`（唯一、可转让）、`user_manager`（用户管理）、
+  `project_director`（建项目、改派项目经理）。
+- **项目角色**：`project_owner / manager / sprint_manager / worker`。
+- **Agent 管理**：由 manager 本人在「我的设置 → Agent 账号」创建/停用；human 加入
+  项目时其启用 agent 自动成为项目成员。停用 human 会级联撤销其 agent 的访问权。
 
 ## 接入 agent CLI
 
 ```bash
 uv run rdm integrate mcp           # 默认 OAuth：客户端首次连接时浏览器登录并选身份
-uv run rdm integrate mcp --method token   # 旧方式：写死 Bearer PAT（CI/无浏览器环境）
+uv run rdm integrate mcp --method token   # 静态 Bearer PAT（CI/无浏览器环境）
 uv run rdm skills install --target claude      # 安装 rdm-workflow skill
 uv run rdm skills install --target opencode
 ```
 
-### 目录级绑定：一个代码库目录 = 一个 member
+PAT 只能由本人在 Web「我的设置 → 访问令牌」或 `rdm me token-create` 创建；管理员
+不能代签，只能批量撤销。令牌可指定「使用身份」为本人或自己管理的某个 agent。
+
+### 目录级绑定：一个代码库目录 = 一个身份
 
 典型场景：同一个 rdm 项目下，前端库由 frontend agent 负责、后端库由 backend agent
-负责。在各自代码库目录里绑定对应 member，agent 在该目录启动时自动以该身份、
-该项目工作（`whoami` 同时给出 member 与 project），skill/MCP 调用都不用显式指定：
+负责。先用**对应身份的 PAT** 绑定目录（无浏览器环境），agent 在该目录启动时自动以
+该身份工作（`whoami` 同时给出身份与项目）：
 
 ```bash
 cd ~/repo/demo-frontend
-rdm integrate mcp --scope project --member frontend --project DEMO
+rdm integrate mcp --scope project --method token --member-token "$FRONTEND_PAT"
 
 cd ~/repo/demo-backend
-rdm integrate mcp --scope project --member backend --project DEMO
+rdm integrate mcp --scope project --method token --member-token "$BACKEND_PAT"
 ```
 
-- **身份与 CLI 解耦**：member 不属于任何特定 agent CLI。默认同时给 claude
+- **身份与 CLI 解耦**：identity 不属于任何特定 agent CLI。默认同时给 claude
   （`~/.claude.json` 按绝对路径键控，**token 不进代码库**）与 opencode
   （`<目录>/.opencode/opencode.json`，自动追加进该库 `.gitignore`）写入**同一个
-  member token**——同一代码库目录下在 claude / opencode 间切换，身份与默认项目不变，
-  `whoami` 始终一致；一个 member 也可签发多个 token。codex 无项目级配置，用
-  `--scope user`。仅当需要「同目录不同 CLI 扮演不同成员」时才分别用
-  `--target claude --member A` / `--target opencode --member B`。
-- 需要 owner 凭据：环境变量 `RDM_TOKEN`（或 `--data-dir` 指向 bootstrap token）；
-  命令会为该 member 签发一个专用 token（label 为 `project:<目录名>`）。
-- 不想签发可直接 `--member-token <token>`；已有绑定变化需 `--force` 轮换。
-
-输出会给出：
-
-```bash
-export RDM_TOKEN=$(cat ~/rdm-data/bootstrap-token)
-export NO_PROXY=127.0.0.1,localhost   # 系统代理开启时必需
-```
-
-改完 agent 配置后重启对应 CLI。codex 的配置路径为推断值（未实测），输出会标注。
+  token**——同一目录下在 claude / opencode 间切换，身份与默认项目不变。
+  codex 无项目级配置，用 `--scope user`。
+- `--method oauth` 的项目级绑定不写 secret，首次使用在浏览器同意页选择本人或自己的 agent。
+- 已有绑定变化需 `--force` 轮换。
 
 ## 常用命令
 
 ```bash
 uv run rdm project create DEMO --name "演示项目"
-uv run rdm member create frontend --project DEMO --roles worker
-uv run rdm member create backend  --project DEMO --roles worker
-uv run rdm token issue <member-id>          # 给某成员签发 token
+uv run rdm user create alice                 # 打印一次性设置密码链接（24h）
+uv run rdm project members add --user alice --roles worker --project DEMO
+uv run rdm me token-create --label cli --as-agent my-agent   # 自助 PAT（可选 act-as）
+uv run rdm user disable alice
+uv run rdm user roles alice --roles project-director          # 仅 Org Owner
+uv run rdm org transfer-owner bob                             # 转让 Org Owner
 uv run rdm db status                        # 迁移版本
 uv run rdm doctor                           # 环境自检（FAIL 退出码 1）
 ```
 
 ## Webhook 通知
 
-在成员上配置 `notify_webhook`（Web 设置页或创建成员时）与格式
+在「我的设置」（human）或 agent 资料里配置 `notify_webhook` 与格式
 （generic/dingtalk/feishu）：工作项指派/状态变更投 assignee、新评论投该工作项负责人、
-信件逐收件人映射为 `mailbox.delivered`、Sprint 启停广播给全部配置成员。
+信件逐收件人映射为 `mailbox.delivered`、Sprint 启停广播给全部配置成员（停用的 human
+及其 agent 不投递）。
 HMAC-SHA256 签名头 `X-RDM-Signature`，进程密钥在 `~/rdm-data/webhook-secret`；
 失败按 1m/5m/15m 退避，首发 + 3 重试后标记 failed，`rdm doctor` 可查积压。
 
@@ -106,25 +117,19 @@ uv run pytest -q                             # 全部测试
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src/rdm/domain src/rdm/application
 
-# 当前前端：React 18 + Atlaskit/ADS（architecture §16.62）
+# 前端：React 18 + Atlaskit/ADS（唯一前端，architecture §17.72）
 pnpm -C web-next install --ignore-scripts
 pnpm -C web-next dev        # Vite dev server（代理 /api、OAuth、/mcp 到 8765）
 pnpm -C web-next build      # 产物到 src/rdm/resources/web-next-dist
-
-# 旧前端（Vue 3 + Element Plus），已冻结，仅维护性构建
-pnpm -C web install --ignore-scripts && pnpm -C web build
 ```
 
-服务默认发新版，`rdm serve --web-ui legacy`（或 `RDM_WEB_UI=legacy`）切旧版。
-
-打 wheel 前两套前端都要构建（`uv build` 的 force-include 要求两个 dist 都存在）：
+打 wheel 前先构建前端：
 
 ```bash
 pnpm -C web-next install --frozen-lockfile --ignore-scripts && pnpm -C web-next build
-pnpm -C web install --frozen-lockfile --ignore-scripts && pnpm -C web build
 uv build
 ```
 
 前端写码规则见仓库根 `CLAUDE.md`，UI 设计与组件/token 规范见 [docs/web-next-ui.md](docs/web-next-ui.md)；
-测试与关键裁决见 `docs/`（architecture.md §16）。
+测试与关键裁决见 `docs/`（architecture.md §16/§17）。
 M1 手工验收脚本见 `docs/acceptance/m1-loop.md`。

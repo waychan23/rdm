@@ -125,6 +125,10 @@ class UserService:
         user = await self.uow.users.get(user_id)
         if user is None:
             raise NotFound(f"用户 {user_id} 不存在", details={"user_id": user_id})
+        if user.is_agent:
+            raise ValidationError(
+                "agent 账号由管理它的 human 在个人设置中维护", details={"user_id": user_id}
+            )
         changes: dict[str, list[Any]] = {}
         if "name" in data:
             name = (data["name"] or "").strip()
@@ -153,6 +157,10 @@ class UserService:
         user = await self.uow.users.get(user_id)
         if user is None:
             raise NotFound(f"用户 {user_id} 不存在", details={"user_id": user_id})
+        if user.is_agent:
+            raise ValidationError(
+                "agent 账号由管理它的 human 停用/启用", details={"user_id": user_id}
+            )
         if user.is_org_owner:
             # Org owners can only step down by transferring the role (§17).
             raise Forbidden("不能停用 Org Owner，请先转让 Org Owner 角色")
@@ -295,7 +303,11 @@ class UserService:
 
         memberships = await self.uow.memberships.list_by_user(actor.human_id)
         mailbox_service = MailboxService(self.uow)
+        assert self.uow.projects is not None
         for membership in memberships:
+            project = await self.uow.projects.get(membership.project_id)
+            if project is None or project.status.value != "active":
+                continue
             await self.uow.memberships.add(
                 ProjectMember(
                     id=new_id(),

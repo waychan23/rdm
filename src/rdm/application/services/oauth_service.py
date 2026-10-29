@@ -168,11 +168,8 @@ class OAuthService:
     # --- consent ------------------------------------------------------
 
     async def selectable_users(self, authenticating_user: User) -> list[User]:
-        """Identities this login may act as: self + own agents (+ all for owner)."""
+        """Identities this login may act as: self + own active agents (§17)."""
         assert self.uow.users is not None
-        if authenticating_user.is_org_owner:
-            users = await self.uow.users.list_by_org(DEFAULT_ORG_ID)
-            return [u for u in users if u.is_active]
         agents = await self.uow.users.list_agents_of(authenticating_user.id)
         return [authenticating_user, *[a for a in agents if a.is_active]]
 

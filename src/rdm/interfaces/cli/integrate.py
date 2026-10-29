@@ -50,7 +50,7 @@ def opencode_config_path(home: Path) -> Path:
     return home / ".config" / "opencode" / "opencode.json"
 
 
-# --- project (directory) scope: one working directory = one member --------
+# --- project (directory) scope: one working directory = one identity --------
 
 
 def _bearer_entry(entry_template: dict, token: str) -> dict:
@@ -512,15 +512,14 @@ MERGERS = {
 
 
 def post_install_notes(data_dir: Path, *, method: str = "token") -> list[str]:
-    token_path = data_dir / "bootstrap-token"
     if method == "oauth":
         return [
             "restart your agent CLI; it will open a browser to authorize rdm.",
-            "Log in with a human account and choose the member identity to bind.",
+            "Log in with a human account and choose yourself or one of your agents.",
             "If the client cannot complete the handshake, rerun with --method token.",
         ]
     return [
-        f"export RDM_TOKEN=$(cat {token_path})",
+        "export RDM_TOKEN=<PAT from Web 我的设置 → 访问令牌, or `rdm me token-create`>",
         "export NO_PROXY=127.0.0.1,localhost",
         "restart your agent CLI after editing its MCP config",
     ]

@@ -43,7 +43,7 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 
 1. task 完成后先回填实际工时（`work_item_update` 改 `actual_work_hours` 等特型字段）。
 2. `work_item_transition` 转到 `TO_REVIEW`。
-3. **停住。agent 不得自行把 TO_REVIEW/TO_TEST 推成 DONE**——这是**服务端硬约束**：worker 角色转 DONE 会返回 `FORBIDDEN`（不是软引导）。DONE 由人类 reviewer（或 owner/manager）完成；story 在 TO_TEST、task 在 TO_REVIEW 后用 `mailbox_send` 通知 accountable_human 验收。issue 的 CLOSED_DONE 是 QA 关单，QA 可自行完成。
+3. **停住。agent 不得自行把 TO_REVIEW/TO_TEST 推成 DONE**——这是**服务端硬约束**：`agent` 身份一律不能转 DONE（即使其 human manager 是 owner/manager），worker 角色转 DONE 也返回 `FORBIDDEN`（不是软引导）。DONE 必须由 human 身份的 reviewer 完成；story 在 TO_TEST、task 在 TO_REVIEW 后用 `mailbox_send` 通知 accountable_human 验收。issue 的 CLOSED_DONE 是 QA 关单，QA 可自行完成。
 4. Story/Issue/Epic 进入终态有 gate：所有直接子项必须先处于各自 kind 的终态；issue 关闭还要求至少有 1 个子任务（见 §3 的 blocking_children）。
 
 ## 6. 异常处理

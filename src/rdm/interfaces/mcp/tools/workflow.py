@@ -6,7 +6,6 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-from rdm.application.services.mailbox_service import MailboxService
 from rdm.application.services.project_service import ProjectService
 from rdm.application.services.workflow_service import build_workflow_dto
 from rdm.application.services.workitem_service import WorkItemService
@@ -27,11 +26,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         async def run(uow, actor):
             projects = await ProjectService(uow).list_projects(actor)
             default = projects[0] if len(projects) == 1 else None
-            unread = (
-                await MailboxService(uow).unread_count(actor, project_id=default.id)
-                if default is not None
-                else 0
-            )
+            unread = await uow.messages.unread_count(actor.id)
             my_open = await WorkItemService(uow).my_open_items(actor)
             assert uow.users is not None
             agents = await uow.users.list_agents_of(actor.human_id)
