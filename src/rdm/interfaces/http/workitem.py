@@ -21,6 +21,7 @@ from rdm.interfaces.http.schemas import (
     StepCancelIn,
     StepExecuteIn,
     StepReassignIn,
+    StepRejectIn,
     StepRetryIn,
     StepStartIn,
     TransitionIn,
@@ -276,6 +277,22 @@ async def execute_work_item_step(
             step_id,
             note_md=body.note_md,
             attachment_ids=body.attachment_ids,
+        )
+        members = await _users_map(uow, project.id)
+        out = work_item_out(item, project, members)
+    return {"data": out, "meta": meta}
+
+
+@router.post("/work-item-steps/{step_id}/reject")
+async def reject_work_item_step(
+    step_id: str,
+    body: StepRejectIn,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project, item, meta = await StepService(uow, container.file_store).reject(
+            actor, step_id, row_version=body.row_version, reason=body.reason
         )
         members = await _users_map(uow, project.id)
         out = work_item_out(item, project, members)

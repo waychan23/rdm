@@ -490,3 +490,69 @@ async def test_blocked_gate_and_retry(server, owner_token: str) -> None:
     done = r.json()
     assert done["data"]["status"] == "DONE"
     assert done["meta"]["active_step"] is None
+
+
+async def test_approval_reject_stops_step_and_notifies_assignee(server, owner_token: str) -> None:
+    client, _s, _app = server
+    await _project(client, owner_token)
+    _dev_id, dev_token = await make_member(client, owner_token, "DEMO", "dev", ["worker"])
+    _rev1_id, rev1_token = await make_member(client, owner_token, "DEMO", "rev1", ["worker"])
+    rev2_id, rev2_token = await make_member(client, owner_token, "DEMO", "rev2", ["worker"])
+
+    task = await _item(client, owner_token, {"kind": "task", "title": "reject", "assignee": "dev"})
+    task = await _to_review(client, dev_token, task)
+    r = await client.patch(
+        f"{API}/work-items/{task['display_id']}",
+        json={"row_version": task["row_version"], "reviewer": ["rev1", "rev2"]},
+        headers=auth(dev_token),
+    )
+    assert r.status_code == 200, r.text
+    task = r.json()["data"]
+    r = await _start_step(client, dev_token, task, "CODE_REVIEW", executors=["rev1", "rev2"])
+    assert r.status_code == 200, r.text
+    detail = await _detail(client, rev1_token, task["display_id"])
+    active = detail["meta"]["active_step"]
+    step_id = active["id"]
+    assert active["can_reject"] is True
+
+    # Reason is mandatory.
+    r = await client.post(
+        f"{API}/work-item-steps/{step_id}/reject",
+        json={"row_version": active["row_version"], "reason": "  "},
+        headers=auth(rev1_token),
+    )
+    assert r.status_code == 422
+
+    # A non-executor (even assignee) cannot reject.
+    r = await client.post(
+        f"{API}/work-item-steps/{step_id}/reject",
+        json={"row_version": active["row_version"], "reason": "no"},
+        headers=auth(dev_token),
+    )
+    assert r.status_code == 403
+
+    r = await client.post(
+        f"{API}/work-item-steps/{step_id}/reject",
+        json={"row_version": active["row_version"], "reason": "验收标准不满足"},
+        headers=auth(rev1_token),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["data"]["status"] == "TO_REVIEW"
+    assert body["meta"]["active_step"] is None
+
+    detail = await _detail(client, dev_token, task["display_id"])
+    assert detail["data"]["status"] == "TO_REVIEW"
+    # The rejected step is terminal and no longer active.
+    assert detail["meta"]["active_step"] is None
+
+    # Assignee learns about it; the rejecting executor gets no extra notice.
+    r = await client.get(f"{API}/notifications", headers=auth(dev_token))
+    titles = [n["title"] for n in r.json()["data"] if n["type"] == "step"]
+    assert any("被拒绝" in title for title in titles)
+    r = await client.get(f"{API}/notifications", headers=auth(rev1_token))
+    assert [n for n in r.json()["data"] if "被拒绝" in n["title"]] == []
+
+    # The second executor was cancelled with the step.
+    r = await client.get(f"{API}/work-items/{task['display_id']}", headers=auth(rev2_token))
+    assert r.status_code == 200

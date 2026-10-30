@@ -564,9 +564,7 @@ class NotificationRepository(Protocol):
         self, recipient_user_id: str, *, project_id: str | None = None
     ) -> int: ...
 
-    async def mark_read(
-        self, recipient_user_id: str, ids: list[str], when: dt.datetime
-    ) -> int: ...
+    async def mark_read(self, recipient_user_id: str, ids: list[str], when: dt.datetime) -> int: ...
 
     async def mark_all_read(
         self,

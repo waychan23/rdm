@@ -11,6 +11,7 @@ import type { ActiveStep } from "../../types";
 interface Props {
   step: ActiveStep;
   onExecute: () => void;
+  onReject: () => void;
   onCancel: () => void;
   onRetry: () => void;
   onReassign: () => void;
@@ -20,6 +21,7 @@ interface Props {
 export default function ActiveStepCard({
   step,
   onExecute,
+  onReject,
   onCancel,
   onRetry,
   onReassign,
@@ -69,6 +71,11 @@ export default function ActiveStepCard({
         {step.can_execute && (
           <Button appearance="primary" spacing="compact" onClick={onExecute} testId="step-active-execute">
             执行步骤
+          </Button>
+        )}
+        {step.can_reject && (
+          <Button appearance="danger" spacing="compact" onClick={onReject} testId="step-active-reject">
+            拒绝
           </Button>
         )}
         {step.can_retry && (

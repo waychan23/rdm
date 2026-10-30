@@ -105,7 +105,7 @@ export interface ActiveStep {
   from: string;
   to: string;
   mode: "direct" | "approval" | "task";
-  status: "PENDING" | "BLOCKED" | "COMPLETED" | "CANCELLED";
+  status: "PENDING" | "BLOCKED" | "COMPLETED" | "CANCELLED" | "REJECTED";
   row_version: number;
   required_count: number;
   config: Record<string, unknown>;
@@ -113,6 +113,7 @@ export interface ActiveStep {
   created_at: string;
   executors: StepExecutor[];
   can_execute: boolean;
+  can_reject: boolean;
   can_cancel: boolean;
   can_retry: boolean;
   can_reassign: boolean;

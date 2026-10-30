@@ -109,6 +109,7 @@ class StepStatus(StrEnum):
     BLOCKED = "BLOCKED"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
+    REJECTED = "REJECTED"
 
 
 class StepExecutorStatus(StrEnum):

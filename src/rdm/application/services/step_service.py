@@ -492,6 +492,11 @@ class StepService:
                     and my_executor.status == StepExecutorStatus.PENDING
                     and active.mode != "task"
                 ),
+                "can_reject": (
+                    active.mode == "approval"
+                    and my_executor is not None
+                    and my_executor.status == StepExecutorStatus.PENDING
+                ),
                 "can_cancel": is_assignee,
                 "can_retry": is_assignee and active.status == StepStatus.BLOCKED,
                 "can_reassign": (
@@ -957,6 +962,64 @@ class StepService:
         return comment.id
 
     # --- cancel / reassign / retry ---------------------------------------
+
+    async def reject(
+        self,
+        actor: Actor,
+        step_id: str,
+        *,
+        row_version: int,
+        reason: str,
+    ) -> tuple[Project, WorkItem, dict[str, Any]]:
+        """Reject an approval step; the item stays at ``from_status`` (§17 M7)."""
+        step = await self._step(step_id)
+        item = await self._item(step.work_item_id)
+        project = await self._project(item)
+        if step.row_version != row_version:
+            raise ConflictVersion("步骤已被修改，请重读后再试。", details={"step_id": step.id})
+        if step.mode != "approval":
+            raise WorkflowStepInvalid(
+                "只有审批（approval）步骤可以拒绝。",
+                details={"step_id": step.id, "mode": step.mode},
+            )
+        if step.status not in (StepStatus.PENDING, StepStatus.BLOCKED):
+            raise WorkflowStepInvalid(
+                f"步骤「{step.step_name}」当前状态为 {step.status}，不能拒绝。",
+                details={"step_id": step.id, "status": step.status},
+            )
+        reason = (reason or "").strip()
+        if not reason:
+            raise ValidationError(
+                "拒绝步骤必须填写理由。", details={"field": "reason", "step_id": step.id}
+            )
+        executor = await self._actor_executor(step.id, actor)
+        if executor is None or executor.status != StepExecutorStatus.PENDING:
+            raise WorkflowStepForbidden(
+                f"{actor.name} 不是步骤「{step.step_name}」的待执行执行人。",
+                details={"step_id": step.id, "user_id": actor.id},
+            )
+        assert self.uow.work_item_steps is not None
+        executors = await self._executors(step.id)
+        for row in executors:
+            if row.status == StepExecutorStatus.PENDING:
+                row.status = StepExecutorStatus.CANCELLED
+                await self.uow.work_item_steps.save_executor(row)
+        step.status = StepStatus.REJECTED
+        step.gate_details = None
+        step.completed_at = dt.datetime.now(dt.UTC)
+        await self.uow.work_item_steps.save_step(step)
+        await self._append_event(
+            project,
+            item,
+            EventType.WORK_ITEM_STEP_REJECTED,
+            {
+                "step": self._step_payload(step),
+                "user_id": executor.user_id,
+                "reason": reason,
+            },
+            actor,
+        )
+        return await self._result(project, item, actor)
 
     async def cancel(
         self,

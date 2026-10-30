@@ -440,13 +440,15 @@ def register(mcp: FastMCP, container: Container) -> None:
         executors: list[str] | None = None,
         note_md: str | None = None,
         attachment_ids: list[str] | None = None,
+        reason: str | None = None,
     ) -> Any:
-        """执行命名工作流步骤（start/execute/cancel/retry/reassign）。
+        """执行命名工作流步骤（start/execute/reject/cancel/retry/reassign）。
 
         - start：负责人按 step_key 发起 approval/task 步骤，可指定 executors；
           direct 步骤由唯一候选执行人直接执行（可带 note_md/附件）。
         - execute：被指派的执行人用自己的 step_id 提交备注并完成；任务式步骤
           通过完成子任务推进，不能直接 execute。
+        - reject：审批步骤的执行人拒绝，必须填 reason；步骤终止、工作项保持原状态。
         - cancel/retry/reassign：仅负责人，带 step_id 与最新 row_version。
         先 work_item_get，读 meta.available_steps / meta.active_step。
         """
@@ -478,6 +480,17 @@ def register(mcp: FastMCP, container: Container) -> None:
                 proj, item, meta = await service.cancel(
                     actor, step_id, row_version=row_version, reason=note_md
                 )
+            elif action == "reject":
+                if not step_id or row_version is None:
+                    raise ValidationError("reject 需要 step_id 和 row_version")
+                if not (reason or note_md or "").strip():
+                    raise ValidationError("reject 需要 reason（拒绝理由）")
+                proj, item, meta = await service.reject(
+                    actor,
+                    step_id,
+                    row_version=row_version,
+                    reason=(reason or note_md or "").strip(),
+                )
             elif action == "retry":
                 if not step_id or row_version is None:
                     raise ValidationError("retry 需要 step_id 和 row_version")
@@ -496,7 +509,14 @@ def register(mcp: FastMCP, container: Container) -> None:
                     f"未知 action {action!r}",
                     details={
                         "action": action,
-                        "allowed": ["start", "execute", "cancel", "retry", "reassign"],
+                        "allowed": [
+                            "start",
+                            "execute",
+                            "reject",
+                            "cancel",
+                            "retry",
+                            "reassign",
+                        ],
                     },
                 )
             members = await _users(uow, proj.id)

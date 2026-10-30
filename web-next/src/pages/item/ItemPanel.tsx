@@ -53,6 +53,7 @@ import ArtifactDialog from "./ArtifactDialog";
 import ChildrenSection from "./ChildrenSection";
 import HistorySection from "./HistorySection";
 import StepExecuteDialog from "./StepExecuteDialog";
+import StepRejectDialog from "./StepRejectDialog";
 import StepStartDialog from "./StepStartDialog";
 import {
   InlineMarkdownField,
@@ -131,6 +132,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   const [stepExecute, setStepExecute] = useState<StepExecuteTarget | null>(null);
   const [stepReassign, setStepReassign] = useState<StepReassignTarget | null>(null);
   const [stepCancel, setStepCancel] = useState<ActiveStep | null>(null);
+  const [stepReject, setStepReject] = useState<ActiveStep | null>(null);
   const [showArtifact, setShowArtifact] = useState(false);
   const [gateMessage, setGateMessage] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewImage | null>(null);
@@ -263,6 +265,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         stepExecute ||
         stepReassign ||
         stepCancel ||
+        stepReject ||
         preview ||
         commentToDelete ||
         parentEditing
@@ -284,6 +287,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     stepCancel,
     stepExecute,
     stepReassign,
+    stepReject,
     stepStart,
   ]);
 
@@ -393,8 +397,23 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     }
   };
 
-  const retryStep = async (active: ActiveStep) => {
+  const rejectStep = async (reason: string) => {
+    if (!stepReject) return;
     try {
+      await api.post(`/work-item-steps/${stepReject.id}/reject`, {
+        row_version: stepReject.row_version,
+        reason,
+      });
+      notify.success("步骤已拒绝");
+      setGateMessage(null);
+      setStepReject(null);
+      await refresh();
+    } catch (e) {
+      reportGate(e);
+    }
+  };
+
+  const retryStep = async (active: ActiveStep) => {    try {
       await api.post(`/work-item-steps/${active.id}/retry`, {
         row_version: active.row_version,
       });
@@ -1144,6 +1163,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                     })
                   }
                   onCancel={() => setStepCancel(activeStep)}
+                  onReject={() => setStepReject(activeStep)}
                   onRetry={() => void retryStep(activeStep)}
                   onReassign={() => {
                     const definition = steps.find((step) => step.key === activeStep.key);
@@ -1389,6 +1409,12 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         onClose={() => setStepExecute(null)}
         onConfirm={executeStep}
         onImageClick={setPreview}
+      />
+      <StepRejectDialog
+        open={stepReject !== null}
+        stepName={stepReject?.name ?? ""}
+        onClose={() => setStepReject(null)}
+        onConfirm={rejectStep}
       />
       <ConfirmDialog
         open={stepCancel !== null}

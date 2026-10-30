@@ -112,6 +112,11 @@ class StepCancelIn(_Strict):
     reason: str | None = None
 
 
+class StepRejectIn(_Strict):
+    row_version: int
+    reason: str = Field(min_length=1, max_length=2000)
+
+
 class StepReassignIn(_Strict):
     row_version: int
     executors: list[str]

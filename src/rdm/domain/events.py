@@ -50,6 +50,7 @@ class EventType(StrEnum):
     WORK_ITEM_STEP_EXECUTED = "work_item.step_executed"
     WORK_ITEM_STEP_COMPLETED = "work_item.step_completed"
     WORK_ITEM_STEP_BLOCKED = "work_item.step_blocked"
+    WORK_ITEM_STEP_REJECTED = "work_item.step_rejected"
     WORK_ITEM_STEP_CANCELLED = "work_item.step_cancelled"
     WORK_ITEM_STEP_REASSIGNED = "work_item.step_reassigned"
     WORK_ITEM_DELETED = "work_item.deleted"
