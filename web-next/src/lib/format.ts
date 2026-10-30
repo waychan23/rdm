@@ -1,11 +1,19 @@
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** UTC ISO string → local "YYYY-MM-DD HH:mm"; "—" for missing/invalid input. */
-export function formatDate(iso?: string | null): string {
-  if (!iso) return "—";
+function parse(iso?: string | null): Date | null {
+  if (!iso) return null;
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * RFC 3339 timestamp (API always sends UTC with an offset) → local
+ * "YYYY-MM-DD HH:mm:ss"; "—" for missing/invalid input.
+ */
+export function formatDate(iso?: string | null): string {
+  const d = parse(iso);
+  if (!d) return "—";
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 export function formatSize(bytes: number): string {

@@ -18,6 +18,7 @@ from rdm.domain.entities import OAuthLoginTicket
 from rdm.domain.enums import PasswordTicketKind, TokenKind
 from rdm.domain.errors import AuthInvalidCredentials, Forbidden, NotFound, ValidationError
 from rdm.domain.events import EventType
+from rdm.domain.timefmt import iso_utc
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 
 _CREDENTIALS_ERROR = "用户名或密码错误"
@@ -111,7 +112,7 @@ class AuthFlowService:
             "valid": reason is None,
             "reason": reason,
             "kind": None if row is None else row.kind,
-            "expires_at": None if row is None else row.expires_at.isoformat(),
+            "expires_at": None if row is None else iso_utc(row.expires_at),
         }
 
     async def set_password(self, *, ticket: str, new_password: str) -> dict[str, Any]:

@@ -36,6 +36,7 @@ from rdm.domain.entities import (
 from rdm.domain.enums import MailboxKind, RecipientType
 from rdm.domain.errors import NotFound, ValidationError
 from rdm.domain.events import EventType
+from rdm.domain.timefmt import iso_utc
 from rdm.infrastructure.db.errors import translate_integrity
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
@@ -338,8 +339,8 @@ class MailboxService:
                     "recipient_type": delivery.recipient_type,
                     "refs": item_refs,
                     "reply_to_id": message.reply_to_id,
-                    "read_at": delivery.read_at.isoformat() if delivery.read_at else None,
-                    "created_at": message.created_at.isoformat(),
+                    "read_at": iso_utc(delivery.read_at) if delivery.read_at else None,
+                    "created_at": iso_utc(message.created_at),
                 }
             )
         return {

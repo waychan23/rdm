@@ -23,6 +23,7 @@ from rdm.domain.entities import (
     User,
     WorkItem,
 )
+from rdm.domain.timefmt import iso_utc
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
@@ -67,7 +68,7 @@ def build_view(
         "event": logical_event,
         "event_id": event_id,
         "project": {"id": project.id, "key": project.key},
-        "occurred_at": dt.datetime.now(dt.UTC).isoformat(),
+        "occurred_at": iso_utc(dt.datetime.now(dt.UTC)),
         "actor": (
             None if actor is None else {"id": actor.id, "name": actor.name, "type": actor.type}
         ),

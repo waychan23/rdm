@@ -30,6 +30,7 @@ from rdm.domain.errors import (
     WorkflowStepNoteRequired,
 )
 from rdm.domain.events import EventType
+from rdm.domain.timefmt import iso_utc
 from rdm.domain.workflow.engine import WorkflowEngine
 from rdm.domain.workflow.loader import load_engine
 from rdm.domain.workflow.schema import GateSpec, ResolvedKindWorkflow, StepSpec
@@ -391,7 +392,7 @@ class StepService:
                         "task_id": executor.task_id,
                         "task": task,
                         "completed_at": (
-                            executor.completed_at.isoformat() if executor.completed_at else None
+                            iso_utc(executor.completed_at) if executor.completed_at else None
                         ),
                     }
                 )
@@ -408,7 +409,7 @@ class StepService:
                 "required_count": active.required_count,
                 "config": active.config,
                 "gate_details": active.gate_details,
-                "created_at": active.created_at.isoformat(),
+                "created_at": iso_utc(active.created_at),
                 "executors": executor_dtos,
                 "can_execute": (
                     my_executor is not None

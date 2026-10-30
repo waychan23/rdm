@@ -20,10 +20,16 @@ from rdm.domain.entities import (
     WorkItem,
     Workspace,
 )
+from rdm.domain.timefmt import iso_utc
 
 
 def _iso(value: dt.datetime | dt.date | None) -> str | None:
-    return value.isoformat() if value is not None else None
+    """Timestamps as RFC 3339 UTC (``...Z``); plain dates stay ``YYYY-MM-DD``."""
+    if value is None:
+        return None
+    if isinstance(value, dt.datetime):
+        return iso_utc(value)
+    return value.isoformat()
 
 
 def project_out(p: Project) -> dict:

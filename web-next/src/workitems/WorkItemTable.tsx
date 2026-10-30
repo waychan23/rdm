@@ -7,6 +7,7 @@ import { Text } from "@atlaskit/primitives/compiled";
 import PersonCell from "../components/PersonCell";
 import PriorityMark from "../components/PriorityMark";
 import TypeKindIcon from "../components/TypeKindIcon";
+import { formatDate } from "../lib/format";
 import type { WorkItem } from "../types";
 import StatusLozenge from "./status";
 import "../styles/table.css";
@@ -128,7 +129,7 @@ export default function WorkItemTable({
                 <PersonCell name={row.assignee?.name} />
               </td>
               <td>
-                <span className="cell-meta">{row.created_at.slice(0, 10)}</span>
+                <span className="cell-meta">{formatDate(row.created_at)}</span>
               </td>
             </tr>
           ))}

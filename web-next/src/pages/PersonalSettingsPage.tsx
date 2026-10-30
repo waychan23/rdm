@@ -22,6 +22,7 @@ import FormField from "../components/FormField";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
+import { formatDate } from "../lib/format";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
 import { beginLogin } from "../lib/oauth";
@@ -315,9 +316,9 @@ export default function PersonalSettingsPage() {
                          ? `agent ${agents?.find((a) => a.id === t.act_as_user_id)?.name ?? ""}`
                          : "本人"}
                      </td>
-                     <td className="cell-meta">{t.created_at.slice(0, 10)}</td>
+                     <td className="cell-meta">{formatDate(t.created_at)}</td>
                      <td className="cell-meta">
-                       {t.expires_at ? t.expires_at.slice(0, 10) : "永久"}
+                       {t.expires_at ? formatDate(t.expires_at) : "永久"}
                      </td>
                      <td>
                        <Lozenge appearance={t.is_valid ? "success" : "default"}>
