@@ -20,7 +20,10 @@ import MarkdownText from "../../components/MarkdownText";
 import PersonCell from "../../components/PersonCell";
 import TextButton from "../../components/TextButton";
 import TypeKindIcon from "../../components/TypeKindIcon";
-import WorkItemPicker, { type WorkItemOption } from "../../components/WorkItemPicker";
+import WorkItemPicker, {
+  toWorkItemOption,
+  type WorkItemOption,
+} from "../../components/WorkItemPicker";
 import EditWorkItemDialog from "../../workitems/EditWorkItemDialog";
 import { TASK_TYPE_OPTIONS } from "../../workitems/constants";
 import { PRIORITY_OPTIONS, priorityColor, priorityOption } from "../../workitems/priority";
@@ -115,19 +118,6 @@ function effectiveFields(workflow: WorkflowDto, item: WorkItem): WorkflowFields 
       ? kind.subtypes?.[item.task_type] ?? kind
       : kind;
   return effective.fields ?? EMPTY_FIELDS;
-}
-
-function toWorkItemOption(item: WorkItem): WorkItemOption {
-  return {
-    label: `${item.display_id} · ${item.title}`,
-    value: item.display_id,
-    id: item.id,
-    display_id: item.display_id,
-    title: item.title,
-    kind: item.kind,
-    status: item.status,
-    row_version: item.row_version,
-  };
 }
 
 export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: Props) {

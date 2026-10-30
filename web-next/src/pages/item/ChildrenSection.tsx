@@ -12,25 +12,15 @@ import { Inline, Stack } from "@atlaskit/primitives/compiled";
 
 import FormField from "../../components/FormField";
 import PersonCell from "../../components/PersonCell";
-import WorkItemPicker, { type WorkItemOption } from "../../components/WorkItemPicker";
+import WorkItemPicker, {
+  toWorkItemOption,
+  type WorkItemOption,
+} from "../../components/WorkItemPicker";
 import { api, errorCause } from "../../lib/api";
 import { useNotify } from "../../lib/flags";
 import type { WorkItem } from "../../types";
 import CreateWorkItemDialog from "../../workitems/CreateWorkItemDialog";
 import StatusLozenge from "../../workitems/status";
-
-function toWorkItemOption(item: WorkItem): WorkItemOption {
-  return {
-    label: `${item.display_id} · ${item.title}`,
-    value: item.display_id,
-    id: item.id,
-    display_id: item.display_id,
-    title: item.title,
-    kind: item.kind,
-    status: item.status,
-    row_version: item.row_version,
-  };
-}
 
 interface LinkChildDialogProps {
   open: boolean;

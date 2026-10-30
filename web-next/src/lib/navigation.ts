@@ -9,10 +9,6 @@ export function itemPath(projectKey: string, itemId: string): string {
   return `/projects/${projectKey}/items/${itemId}`;
 }
 
-export function withOrigin(from: string): ItemLocationState {
-  return { from };
-}
-
 export function originFor(state: unknown, fallback: string): string {
   if (state && typeof state === "object" && "from" in state) {
     const from = (state as ItemLocationState).from;

@@ -43,7 +43,7 @@ interface MultiProps extends BaseProps {
 
 type Props = SingleProps | MultiProps;
 
-function toOption(item: WorkItem): WorkItemOption {
+export function toWorkItemOption(item: WorkItem): WorkItemOption {
   return {
     label: `${item.display_id} · ${item.title}`,
     value: item.display_id,
@@ -107,7 +107,7 @@ export default function WorkItemPicker(props: Props) {
             if (excludeIds.includes(item.id)) continue;
             if (excludeStatuses.includes(item.status)) continue;
             seen.add(item.id);
-            next.push(toOption(item));
+            next.push(toWorkItemOption(item));
           }
         }
         setOptions(next.sort((a, b) => a.value.localeCompare(b.value)));
