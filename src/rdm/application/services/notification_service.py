@@ -14,6 +14,7 @@ from rdm.domain.actor import Actor
 from rdm.domain.entities import Notification, Project, User, WorkItem
 from rdm.domain.errors import NotFound, ValidationError
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
+from rdm.infrastructure.events.bus import StreamEvent, get_bus
 from rdm.infrastructure.id import new_id
 
 NOTIFICATION_TYPES: tuple[str, ...] = (
@@ -72,6 +73,21 @@ class NotificationService:
             created_by=actor_id,
         )
         await self.uow.notifications.add(notification)
+        event = StreamEvent(
+            event="notification.created",
+            id=notification.id,
+            data={
+                "id": notification.id,
+                "type": notification.type,
+                "title": notification.title,
+                "body": notification.body,
+                "project_id": notification.project_id,
+                "entity_ref": notification.entity_ref,
+                "url": notification.url,
+                "created_at": notification.created_at.isoformat(),
+            },
+        )
+        self.uow.defer_after_commit(lambda: get_bus().publish_user(recipient_user_id, event))
         return notification
 
     async def notify_assignment(

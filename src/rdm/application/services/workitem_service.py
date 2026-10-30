@@ -50,6 +50,7 @@ from rdm.domain.events import (
 from rdm.domain.workflow.loader import load_engine
 from rdm.domain.workflow.schema import ResolvedKindWorkflow
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
+from rdm.infrastructure.events.bus import StreamEvent, get_bus
 from rdm.infrastructure.id import new_id
 
 DISPLAY_ID_RE = re.compile(r"^(?P<key>[A-Z0-9]{2,12})-(?P<no>\d+)$")
@@ -1497,7 +1498,7 @@ class WorkItemService:
         org_id = project.org_id if project is not None else actor.org_id
         seq = await self.uow.allocate_event_seq(org_id)
         assert self.uow.events is not None
-        return await self.uow.events.append(
+        event_id = await self.uow.events.append(
             org_id=org_id,
             project_id=project_id,
             seq=seq,
@@ -1508,6 +1509,20 @@ class WorkItemService:
             actor_user_id=actor.id,
             payload=payload,
         )
+        display_id = f"{project.key}-{item.display_no}" if project is not None else item.id
+        change = StreamEvent(
+            event="work_item.changed",
+            id=str(seq),
+            data={
+                "project_id": project_id,
+                "project_key": project.key if project is not None else None,
+                "item_id": item.id,
+                "display_id": display_id,
+                "event_type": event_type.value,
+            },
+        )
+        self.uow.defer_after_commit(lambda: get_bus().publish_project(project_id, change))
+        return event_id
 
     async def _notify(
         self,

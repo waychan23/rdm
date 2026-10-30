@@ -31,6 +31,7 @@ from rdm.interfaces.http.routers import (
 from rdm.interfaces.http.search import router as search_router
 from rdm.interfaces.http.spa import RootDispatch
 from rdm.interfaces.http.sprint import router as sprints_router
+from rdm.interfaces.http.stream import router as stream_router
 from rdm.interfaces.http.todos import router as todos_router
 from rdm.interfaces.http.users import router as users_router
 from rdm.interfaces.http.workflow import router as workflow_router
@@ -112,6 +113,7 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     app.include_router(notifications_router)
     app.include_router(todos_router)
     app.include_router(search_router)
+    app.include_router(stream_router)
 
     # FastMCP's http_app serves /mcp and the OAuth 2.1 endpoints (§16.54);
     # RootDispatch splits those from the static SPA, while API routers above

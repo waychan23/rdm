@@ -21,6 +21,7 @@ import { token } from "@atlaskit/tokens";
 
 import { logout, refreshSession, useCurrentUser } from "../lib/auth";
 import { safePostLoginPath } from "../lib/oauth";
+import { startEventStream } from "../lib/stream";
 import "../styles/shell.css";
 
 const styles = cssMap({
@@ -116,6 +117,18 @@ export default function AppShell() {
     const timer = window.setInterval(() => void refreshSession(), 60_000);
     return () => window.clearInterval(timer);
   }, [projectKey]);
+
+  useEffect(() => {
+    const stop = startEventStream((event) => {
+      if (event.event === "notification.created") {
+        void refreshSession();
+        window.dispatchEvent(new CustomEvent("rdm:notification", { detail: event.data }));
+      } else if (event.event === "work_item.changed" || event.event === "comment.changed") {
+        window.dispatchEvent(new CustomEvent("rdm:data-changed", { detail: event.data }));
+      }
+    });
+    return stop;
+  }, []);
 
   const unreadCount = projectKey
     ? (who?.projects.find((p) => p.key === projectKey)?.unread_count ?? 0)

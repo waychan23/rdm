@@ -8,6 +8,8 @@ use a plain session and need no lock.
 from __future__ import annotations
 
 import asyncio
+import logging
+from collections.abc import Callable
 from types import TracebackType
 from weakref import WeakKeyDictionary
 
@@ -50,6 +52,8 @@ from rdm.infrastructure.db.repositories.user import (
 from rdm.infrastructure.db.repositories.work_item import WorkItemRepository
 from rdm.infrastructure.db.repositories.work_item_people import WorkItemPeopleRepository
 from rdm.infrastructure.db.repositories.work_item_step import WorkItemStepRepository
+
+logger = logging.getLogger("rdm.uow")
 
 
 class SqlAlchemyUnitOfWork:
@@ -99,6 +103,7 @@ class SqlAlchemyUnitOfWork:
         self.notifications: NotificationRepository | None = None
         self.search: SearchRepository | None = None
         self.events: EventStore | None = None
+        self._after_commit: list[Callable[[], None]] = []
 
     async def __aenter__(self) -> SqlAlchemyUnitOfWork:
         await self._write_lock().acquire()
@@ -149,15 +154,30 @@ class SqlAlchemyUnitOfWork:
             if exc_type is None:
                 if self.session.in_transaction():
                     await self.session.commit()
+                self._run_after_commit()
             elif self.session.in_transaction():
                 await self.session.rollback()
+            self._after_commit.clear()
         finally:
             await self.session.close()
             self._write_lock().release()
 
+    def defer_after_commit(self, callback: Callable[[], None]) -> None:
+        """Run a CPU-only callback after the transaction commits (SSE fan-out)."""
+        self._after_commit.append(callback)
+
+    def _run_after_commit(self) -> None:
+        for callback in self._after_commit:
+            try:
+                callback()
+            except Exception:  # noqa: BLE001 - never fail a committed request
+                logger.exception("after-commit callback failed")
+
     async def commit(self) -> None:
         assert self.session is not None
         await self.session.commit()
+        self._run_after_commit()
+        self._after_commit.clear()
         # Keep the unit of work usable after an explicit commit.
         await self.session.begin()
 

@@ -119,6 +119,21 @@ class CommentService:
             event_id=event_id,
             actor=actor,
         )
+        from rdm.infrastructure.events.bus import StreamEvent, get_bus
+
+        change = StreamEvent(
+            event="comment.changed",
+            id=str(seq),
+            data={
+                "project_id": project.id,
+                "project_key": project.key,
+                "item_id": item.id,
+                "display_id": display_id,
+                "comment_id": comment.id,
+                "action": "created",
+            },
+        )
+        self.uow.defer_after_commit(lambda: get_bus().publish_project(project.id, change))
         return project, item, comment, unresolved
 
     async def delete(self, actor: Actor, comment_id: str) -> tuple[Project, Comment, list[str]]:
@@ -179,6 +194,23 @@ class CommentService:
                 "cascade": cascade,
             },
         )
+        from rdm.infrastructure.events.bus import StreamEvent, get_bus
+
+        assert self.uow.work_items is not None
+        item = await self.uow.work_items.get(comment.work_item_id)
+        change = StreamEvent(
+            event="comment.changed",
+            id=str(seq),
+            data={
+                "project_id": project.id,
+                "project_key": project.key,
+                "item_id": comment.work_item_id,
+                "display_id": (f"{project.key}-{item.display_no}" if item is not None else None),
+                "comment_id": comment.id,
+                "action": "deleted",
+            },
+        )
+        self.uow.defer_after_commit(lambda: get_bus().publish_project(project.id, change))
         return project, comment, cascade
 
     async def list_for_item(

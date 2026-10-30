@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
@@ -87,6 +87,19 @@ export default function InboxPage() {
     }
     return (await api.get<TodoBundle>("/todos")).data;
   }, [tab]);
+
+  useEffect(() => {
+    const onChange = () => {
+      notifications.reload();
+      todos.reload();
+    };
+    window.addEventListener("rdm:notification", onChange);
+    window.addEventListener("rdm:data-changed", onChange);
+    return () => {
+      window.removeEventListener("rdm:notification", onChange);
+      window.removeEventListener("rdm:data-changed", onChange);
+    };
+  }, [notifications.reload, todos.reload]);
 
   const openNotification = async (n: Notification) => {
     if (!n.read_at) {
