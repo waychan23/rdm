@@ -60,6 +60,7 @@ const styles = cssMap({
     minHeight: "0",
   },
   content: {
+    position: "relative",
     flex: "1",
     minWidth: "0",
     minHeight: "0",

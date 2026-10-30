@@ -1,9 +1,14 @@
 /*
- * Work-item detail overlay (P2): fixed right-side aside over an interactive
- * list backdrop — no scrim, no focus trap. ADS tokens (runtime short names).
+ * Work-item detail overlay (P2): right-side aside over an interactive list
+ * backdrop — no scrim, no focus trap. ADS tokens (runtime short names).
+ *
+ * Positioned against the shell's <main> (AppShell sets `position: relative`),
+ * not the viewport: ItemPage renders inside main, so anchoring to main keeps
+ * the backdrop's copy of the list aligned with the rail/topbar instead of
+ * covering them.
  */
 .rdm-item-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 100;
 }
