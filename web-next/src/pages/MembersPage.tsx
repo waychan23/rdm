@@ -12,6 +12,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
+import { roleLabel } from "../lib/labels";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
 import type { OrgUser, Project, ProjectMemberRow } from "../types";
@@ -252,7 +253,7 @@ function MemberGroup({
             ) : (
               member.roles.map((r) => (
                 <Lozenge key={r} appearance={r === "project_owner" ? "inprogress" : "new"}>
-                  {r}
+                  {roleLabel(r)}
                 </Lozenge>
               ))
             )}

@@ -5,6 +5,7 @@ import SectionMessage from "@atlaskit/section-message";
 import MarkdownText from "../../components/MarkdownText";
 import PersonCell from "../../components/PersonCell";
 import TextButton from "../../components/TextButton";
+import { statusLabel } from "../../lib/labels";
 import StatusLozenge from "../../workitems/status";
 import type { ActiveStep } from "../../types";
 
@@ -37,7 +38,7 @@ export default function ActiveStepCard({
         <Text weight="medium">{step.name}</Text>
         <StatusLozenge status={step.status} />
         <Text size="small" color="color.text.subtlest">
-          → {step.to}
+          → {statusLabel(step.to)}
         </Text>
       </Inline>
       <Text size="small" color="color.text.subtle">
@@ -51,7 +52,7 @@ export default function ActiveStepCard({
             <StatusLozenge status={executor.status} />
             {executor.task && executor.task_id && (
               <TextButton onClick={() => onOpenItem(executor.task_id as string)}>
-                子任务：{executor.task.title}（{executor.task.status}）
+                子任务：{executor.task.title}（{statusLabel(executor.task.status)}）
               </TextButton>
             )}
           </Inline>

@@ -11,6 +11,7 @@ import ModalDialog, {
 import { Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import Select from "@atlaskit/select";
 
+import { statusLabel } from "../../lib/labels";
 import { portalMenuProps } from "../../lib/portalMenu";
 import type { WorkflowStepDef } from "../../types";
 
@@ -69,7 +70,7 @@ export default function StepStartDialog({
           <ModalBody>
             <Stack space="space.150">
               <Text size="small" color="color.text.subtlest">
-                目标状态：{step.to} ·{" "}
+                目标状态：{statusLabel(step.to)} ·{" "}
                 {step.mode === "task"
                   ? "任务式步骤：将为每名执行人创建一个子任务"
                   : "多人步骤：所有执行人都提交后才自动流转"}

@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import Lozenge from "@atlaskit/lozenge";
 import type { NewLozengeProps } from "@atlaskit/lozenge";
 
+import { statusLabel } from "../lib/labels";
+
 // Mirrors the Vue StatusPill classification: blocked beats all, then known
 // terminal states, then known to-do states; everything else is "in progress".
 const DONE = ["DONE", "PUBLISHED", "CLOSED", "CANCELLED", "REJECTED", "COMPLETED"];
@@ -37,7 +39,7 @@ export default function StatusLozenge({
       appearance={APPEARANCE[statusTone(status)]}
       testId={`status-lozenge-${status}`}
     >
-      {children ?? status}
+      {children ?? statusLabel(status)}
     </Lozenge>
   );
 }

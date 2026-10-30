@@ -26,6 +26,7 @@ import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { refreshSession, useCurrentUser } from "../lib/auth";
+import { roleLabel } from "../lib/labels";
 import { useNotify } from "../lib/flags";
 import type { OrgUser } from "../types";
 import "../styles/table.css";
@@ -336,7 +337,7 @@ export default function OrgUsersPage() {
             <ModalBody>
               <Stack space="space.100">
                 <Checkbox
-                  label="user-manager（管理用户）"
+                  label={`${roleLabel("user_manager")}（管理用户）`}
                   isChecked={roles.includes("user_manager")}
                   testId="org-user-role-user-manager"
                   onChange={(e) =>
@@ -348,7 +349,7 @@ export default function OrgUsersPage() {
                   }
                 />
                 <Checkbox
-                  label="project-director（创建项目、改派项目经理）"
+                  label={`${roleLabel("project_director")}（创建项目、改派项目经理）`}
                   isChecked={roles.includes("project_director")}
                   testId="org-user-role-project-director"
                   onChange={(e) =>
@@ -493,7 +494,7 @@ function HumanGroup({
             ) : (
               human.org_roles.map((r) => (
                 <Lozenge key={r} appearance={r === "org_owner" ? "inprogress" : "new"}>
-                  {r}
+                  {roleLabel(r)}
                 </Lozenge>
               ))
             )}

@@ -13,13 +13,14 @@ import { Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import Select from "@atlaskit/select";
 
 import FormField from "../components/FormField";
+import { roleLabel } from "../lib/labels";
 import { portalMenuProps } from "../lib/portalMenu";
 import type { OrgUser, ProjectMemberRow } from "../types";
 
 export const PROJECT_ROLES = [
-  { label: "manager", value: "manager" },
-  { label: "sprint_manager", value: "sprint_manager" },
-  { label: "worker", value: "worker" },
+  { label: roleLabel("manager"), value: "manager" },
+  { label: roleLabel("sprint_manager"), value: "sprint_manager" },
+  { label: roleLabel("worker"), value: "worker" },
 ];
 
 function rolesToOptions(roles: string[]) {
@@ -179,7 +180,7 @@ export function MemberEditDialog({
                   <Text size="small" color="color.text.subtlest">
                     固定角色
                   </Text>
-                  <Lozenge appearance="inprogress">project_owner</Lozenge>
+                  <Lozenge appearance="inprogress">{roleLabel("project_owner")}</Lozenge>
                 </Inline>
               )}
               <Select
@@ -195,7 +196,7 @@ export function MemberEditDialog({
               />
               <Text size="small" color="color.text.subtlest">
                 {isOwner
-                  ? "project_owner 不可在此编辑；只能通过「转让项目经理」变更。"
+                  ? "项目经理角色不可在此编辑；只能通过「转让项目经理」变更。"
                   : "项目经理角色不在此处设置；请在项目设置页转让。"}
               </Text>
             </Stack>

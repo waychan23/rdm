@@ -12,6 +12,7 @@ import { Box, Inline } from "@atlaskit/primitives/compiled";
 import { Page, PageHeader } from "../components/Page";
 import ErrorState from "../components/ErrorState";
 import { api, errorCause } from "../lib/api";
+import { statusLabel } from "../lib/labels";
 import { useNotify } from "../lib/flags";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";
 import { recall, remember } from "../lib/pageCache";
@@ -126,7 +127,7 @@ export default function BoardPage() {
       if (!direct) {
         notify.error(
           "请在工作项详情中执行步骤",
-          `${item.display_id} 从 ${item.status} 到 ${target} 需要选择命名步骤或填写备注。`,
+          `${item.display_id} 从 ${statusLabel(item.status)} 到 ${statusLabel(target)} 需要选择命名步骤或填写备注。`,
         );
         return;
       }

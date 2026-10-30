@@ -29,6 +29,7 @@ import { TASK_TYPE_OPTIONS } from "../../workitems/constants";
 import { PRIORITY_OPTIONS, priorityColor, priorityOption } from "../../workitems/priority";
 import StatusLozenge from "../../workitems/status";
 import { api, errorCause } from "../../lib/api";
+import { artifactKindLabel, kindLabel } from "../../lib/labels";
 import { useCurrentUser } from "../../lib/auth";
 import { formatDate, formatSize } from "../../lib/format";
 import { useNotify } from "../../lib/flags";
@@ -883,7 +884,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                       {art.label}
                     </Link>
                     <Text size="small" color="color.text.subtlest">
-                      {art.kind}
+                      {artifactKindLabel(art.kind)}
                     </Text>
                     <TextButton danger onClick={() => removeArtifact(art.id)}>
                       删除
@@ -1371,7 +1372,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             <div className="rdm-item-field">
               <div className="rdm-item-section-label">类型 / 版本</div>
               <Text size="small" color="color.text.subtlest">
-                {item.kind} · v{item.row_version}
+                {kindLabel(item.kind)} · v{item.row_version}
               </Text>
             </div>
             <div className="rdm-item-field">

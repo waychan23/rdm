@@ -17,6 +17,7 @@ import FormField from "../components/FormField";
 import MarkdownEditor from "../components/MarkdownEditor";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
+import { statusLabel } from "../lib/labels";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
 import type { OrgUser, Project, ProjectMemberRow } from "../types";
@@ -167,7 +168,7 @@ export default function SettingsPage() {
              状态
            </Text>
            <Lozenge appearance={data.project.status === "archived" ? "default" : "success"}>
-             {data.project.status}
+             {statusLabel(data.project.status)}
            </Lozenge>
          </Stack>
          <Stack space="space.050" xcss={styles.nameCell}>

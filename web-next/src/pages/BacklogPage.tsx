@@ -13,6 +13,7 @@ import { Box, Inline } from "@atlaskit/primitives/compiled";
 
 import { Page, PageHeader } from "../components/Page";
 import { api } from "../lib/api";
+import { statusLabel } from "../lib/labels";
 import { useAsync } from "../hooks/useAsync";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";
 import { recall, remember } from "../lib/pageCache";
@@ -151,7 +152,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
         subtype.states.forEach((s) => states.add(s)),
       );
     });
-    return [...states].map((s) => ({ label: s, value: s }));
+    return [...states].map((s) => ({ label: statusLabel(s), value: s }));
   }, [workflowState.data]);
 
   const assigneeOptions = useMemo<Option[]>(() => {

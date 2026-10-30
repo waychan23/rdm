@@ -1,3 +1,5 @@
+import { severityLabel } from "../lib/labels";
+
 export interface KindOption {
   value: string;
   label: string;
@@ -11,7 +13,7 @@ export const KIND_OPTIONS: KindOption[] = [
 ];
 
 export const SEVERITY_OPTIONS = ["blocker", "critical", "major", "minor", "trivial"].map(
-  (value) => ({ label: value, value }),
+  (value) => ({ label: severityLabel(value), value }),
 );
 
 export const TASK_TYPE_OPTIONS = [

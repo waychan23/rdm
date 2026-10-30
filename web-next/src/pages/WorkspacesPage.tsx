@@ -25,13 +25,14 @@ import FormField from "../components/FormField";
 import MarkdownEditor from "../components/MarkdownEditor";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
+import { workspaceKindLabel } from "../lib/labels";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
 import type { Workspace } from "../types";
 import "../styles/table.css";
 
 const KINDS = ["git_repo", "doc_repo", "design", "other"];
-const KIND_OPTIONS = KINDS.map((v) => ({ label: v, value: v }));
+const KIND_OPTIONS = KINDS.map((v) => ({ label: workspaceKindLabel(v), value: v }));
 
 const styles = cssMap({
   centered: {
@@ -180,7 +181,7 @@ export default function WorkspacesPage() {
             {(workspaces ?? []).map((w) => (
               <tr key={w.id} data-testid={`workspace-row-${w.id}`}>
                 <td>{w.name}</td>
-                <td className="cell-meta">{w.kind}</td>
+                <td className="cell-meta">{workspaceKindLabel(w.kind)}</td>
                 <td>
                   {isHttpLocation(w.url) ? (
                     <Link href={w.url} target="_blank" testId={`workspace-link-${w.id}`}>
