@@ -103,14 +103,15 @@ def register(mcp: FastMCP, container: Container) -> None:
         return await run_tool(container, run)
 
     @mcp.tool
-    async def workflow_get(kind: str | None = None) -> Any:
-        """拉取流程定义（状态、合法转换、终态、gate）。
+    async def workflow_get(kind: str | None = None, task_type: str | None = None) -> Any:
+        """拉取流程定义（命名步骤、合法目标、终态、fields、gate）。
 
-        任何状态流转前先看它，只转 allowed 中的状态。不要凭记忆猜状态名。
-        kind 可选（epic/story/issue/task/sprint），缺省返回全部。
+        任何状态流转前先看它；kind 可选（epic/story/issue/task/sprint），
+        task_type 可选（task 子类型），缺省返回全部。只转 allowed 中的状态，
+        不要凭记忆猜状态名。
         """
 
         async def run(uow, actor):
-            return ok(build_workflow_dto(kind=kind))
+            return ok(build_workflow_dto(kind=kind, task_type=task_type))
 
         return await run_tool(container, run)

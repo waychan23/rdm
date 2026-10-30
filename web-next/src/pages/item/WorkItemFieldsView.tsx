@@ -8,13 +8,17 @@ import type { MarkdownImageClick } from "../../components/MarkdownText";
 
 const TASK_TYPES: Record<string, string> = {
   product_design: "产品设计",
-  ux_design: "UX 设计",
-  frontend: "前端",
-  backend: "后端",
-  fullstack: "全栈",
+  ui_design: "UI设计",
+  ux_design: "UI设计",
+  frontend: "前端开发",
+  backend: "后端开发",
+  fullstack: "全栈开发",
+  code_review: "代码评审",
+  testing: "测试",
   qa: "测试",
-  release: "发布",
-  docs: "文档",
+  test_case_design: "测试用例设计",
+  release: "系统发布",
+  docs: "文档编写",
   other: "其他",
 };
 

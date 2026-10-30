@@ -72,13 +72,13 @@ async def test_m1_single_agent_loop(server, mcp_clients) -> None:
         assert not res["_is_error"], res
         version = res["data"]["row_version"]
 
-        # another worker cannot move it; illegal transition also rejected
+        # another worker cannot move it; raw approval transition needs a step
         res = await call(
             backend,
             "work_item_transition",
             {"id": task_ref, "to": "DONE", "row_version": version},
         )
-        assert res["_is_error"] and res["error"]["code"] == "FORBIDDEN"
+        assert res["_is_error"] and res["error"]["code"] == "WORKFLOW_STEP_REQUIRED"
 
         # S8: owner cannot skip states even with privilege
         res = await call(
@@ -88,13 +88,42 @@ async def test_m1_single_agent_loop(server, mcp_clients) -> None:
         )
         assert res["error"]["code"] == "WORKFLOW_ILLEGAL_TRANSITION"
 
-        # human/owner performs the review -> DONE
+        # The assignee self-reviews through the named step (human identity).
         res = await call(
-            owner_client,
-            "work_item_transition",
-            {"id": task_ref, "to": "DONE", "row_version": version},
+            frontend,
+            "work_item_update",
+            {
+                "id": task_ref,
+                "row_version": version,
+                "review_content_md": "self review",
+            },
         )
         assert not res["_is_error"], res
+        version = res["data"]["row_version"]
+        res = await call(
+            frontend,
+            "work_item_step",
+            {
+                "id": task_ref,
+                "action": "start",
+                "step_key": "CODE_REVIEW",
+                "row_version": version,
+            },
+        )
+        assert not res["_is_error"], res
+        step_id = res["meta"]["active_step"]["id"]
+        res = await call(
+            frontend,
+            "work_item_step",
+            {
+                "id": task_ref,
+                "action": "execute",
+                "step_id": step_id,
+                "note_md": "LGTM",
+            },
+        )
+        assert not res["_is_error"], res
+        assert res["data"]["status"] == "DONE"
         assert res["meta"]["allowed_transitions"] == ["PUBLISHED"]
 
         # S5: backend asks frontend to verify the story, referencing the task

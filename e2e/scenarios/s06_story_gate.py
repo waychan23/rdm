@@ -8,12 +8,53 @@ from e2e.scenarios._helpers import agent_expect
 
 def _transition(h: Harness, display_id: str, to: str, token_name: str) -> None:
     token = h.tokens[token_name]
-    r = h.rest.get(f"/work-items/{display_id}", token=token)
-    version = r.json()["data"]["row_version"]
+    version = _version(h, display_id, token)
     r = h.rest.post(
         f"/work-items/{display_id}/transition",
         {"to": to, "row_version": version},
         token=token,
+    )
+    assert r.status_code == 200, r.text
+
+
+def _finish_task(h: Harness, task: dict) -> None:
+    tl = h.tokens["tl"]
+    display = task["display_id"]
+    r = h.rest.post(f"/work-items/{display}/assign", {"member": "tl"}, token=tl)
+    assert r.status_code == 200, r.text
+    version = _version(h, display, tl)
+    status = h.rest.get(f"/work-items/{display}", token=tl).json()["data"]["status"]
+    moves = {
+        "TODO": ["IN_PROGRESS", "TO_REVIEW"],
+        "IN_PROGRESS": ["TO_REVIEW"],
+        "TO_REVIEW": [],
+    }.get(status, [])
+    for to in moves:
+        r = h.rest.post(
+            f"/work-items/{display}/transition",
+            {"to": to, "row_version": version},
+            token=tl,
+        )
+        assert r.status_code == 200, r.text
+        version = r.json()["data"]["row_version"]
+    r = h.rest.patch(
+        f"/work-items/{display}",
+        {"row_version": version, "review_content_md": "LGTM"},
+        token=tl,
+    )
+    assert r.status_code == 200, r.text
+    version = r.json()["data"]["row_version"]
+    r = h.rest.post(
+        f"/work-items/{display}/steps/CODE_REVIEW",
+        {"row_version": version},
+        token=tl,
+    )
+    assert r.status_code == 200, r.text
+    active = r.json()["meta"]["active_step"]
+    r = h.rest.post(
+        f"/work-item-steps/{active['id']}/execute",
+        {"note_md": "reviewed"},
+        token=tl,
     )
     assert r.status_code == 200, r.text
 
@@ -24,7 +65,7 @@ def run(h: Harness) -> None:
     h.member("S6", "qa", roles=["worker"])
     h.member("S6", "frontend-dev", type_="agent", manager="tl")
 
-    story = h.item("S6", {"kind": "story", "title": "S6 故事"})
+    story = h.item("S6", {"kind": "story", "title": "S6 故事", "assignee": "tl"})
     t1 = h.item(
         "S6",
         {
@@ -51,13 +92,13 @@ def run(h: Harness) -> None:
     _transition(h, story["display_id"], "TO_TEST", "tl")
     blocked = h.rest.post(
         f"/work-items/{story['display_id']}/transition",
-        {"to": "DONE", "row_version": _version(h, story["display_id"])},
+        {"to": "DONE", "row_version": _version(h, story["display_id"], h.tokens["tl"])},
+        token=h.tokens["tl"],
     )
     assert blocked.status_code == 409, blocked.text
     assert blocked.json()["error"]["code"] == "WORKFLOW_GATE_BLOCKED"
 
-    # Agents advance their tasks to the review state; DONE is a human-review
-    # gate enforced server-side (worker self-completion -> 403).
+    # Agents advance their tasks to the review state; DONE is a human step.
     agent_expect(
         h,
         "frontend-dev",
@@ -68,12 +109,14 @@ def run(h: Harness) -> None:
     for to in ("IN_PROGRESS", "TO_REVIEW"):
         _transition(h, t2["display_id"], to, "qa")
 
-    # Manager performs the review close-out on both tasks, then the story.
-    _transition(h, t1["display_id"], "DONE", "tl")
-    _transition(h, t2["display_id"], "DONE", "tl")
+    # Manager takes over and performs the review close-out on both tasks.
+    _finish_task(h, t1)
+    _finish_task(h, t2)
     _transition(h, story["display_id"], "DONE", "tl")
     assert h.db.item(story["display_id"])["status"] == "DONE"
 
 
-def _version(h: Harness, display_id: str) -> int:
-    return h.rest.get(f"/work-items/{display_id}").json()["data"]["row_version"]
+def _version(h: Harness, display_id: str, token: str | None = None) -> int:
+    return h.rest.get(f"/work-items/{display_id}", token=token).json()["data"][
+        "row_version"
+    ]

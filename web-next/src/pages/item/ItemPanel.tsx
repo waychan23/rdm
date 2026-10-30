@@ -29,6 +29,7 @@ import { useNotify } from "../../lib/flags";
 import { flattenMembers } from "../../lib/members";
 import { portalMenuProps } from "../../lib/portalMenu";
 import type {
+  ActiveStep,
   Artifact,
   Attachment,
   Comment,
@@ -36,11 +37,17 @@ import type {
   ProjectMemberRow,
   WorkItem,
   WorkItemDetailMeta,
+  WorkItemPermissions,
+  WorkflowDto,
+  WorkflowFields,
+  WorkflowStepDef,
 } from "../../types";
+import ActiveStepCard from "./ActiveStepCard";
 import ArtifactDialog from "./ArtifactDialog";
 import ChildrenSection from "./ChildrenSection";
 import HistorySection from "./HistorySection";
-import TransitionDialog from "./TransitionDialog";
+import StepExecuteDialog from "./StepExecuteDialog";
+import StepStartDialog from "./StepStartDialog";
 import WorkItemFieldsView from "./WorkItemFieldsView";
 
 interface Props {
@@ -57,6 +64,10 @@ interface DetailBundle {
   allowed: string[];
   allowedParentKinds: string[];
   allowedChildKinds: string[];
+  steps: WorkflowStepDef[];
+  activeStep: ActiveStep | null;
+  permissions: WorkItemPermissions;
+  workflowFields: WorkflowFields;
   comments: Comment[];
   members: OrgUser[];
   attachments: Attachment[];
@@ -68,8 +79,35 @@ interface PreviewImage {
   alt: string;
 }
 
+interface StepExecuteTarget {
+  active?: ActiveStep;
+  step?: WorkflowStepDef;
+  name: string;
+  noteRequired: boolean;
+}
+
+interface StepReassignTarget {
+  active: ActiveStep;
+  step: WorkflowStepDef;
+}
+
 const PRIORITY_VALUES = [0, 1, 2, 3, 4];
 const COMMENTS_PAGE = 50;
+const EMPTY_FIELDS: WorkflowFields = {
+  reviewer: false,
+  review_content: false,
+  custom: [],
+};
+
+function effectiveFields(workflow: WorkflowDto, item: WorkItem): WorkflowFields {
+  const kind = workflow.kinds[item.kind];
+  if (!kind) return EMPTY_FIELDS;
+  const effective =
+    item.kind === "task" && item.task_type
+      ? kind.subtypes?.[item.task_type] ?? kind
+      : kind;
+  return effective.fields ?? EMPTY_FIELDS;
+}
 
 function toWorkItemOption(item: WorkItem): WorkItemOption {
   return {
@@ -91,7 +129,10 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   const [loadError, setLoadError] = useState(false);
 
   const [showEdit, setShowEdit] = useState(false);
-  const [transitionTarget, setTransitionTarget] = useState<string | null>(null);
+  const [stepStart, setStepStart] = useState<WorkflowStepDef | null>(null);
+  const [stepExecute, setStepExecute] = useState<StepExecuteTarget | null>(null);
+  const [stepReassign, setStepReassign] = useState<StepReassignTarget | null>(null);
+  const [stepCancel, setStepCancel] = useState<ActiveStep | null>(null);
   const [showArtifact, setShowArtifact] = useState(false);
   const [gateMessage, setGateMessage] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewImage | null>(null);
@@ -117,7 +158,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         `/work-items/${encodeURIComponent(itemId)}`,
       );
       const meta = (detail.meta ?? {}) as WorkItemDetailMeta;
-      const [cm, mm, am, artm] = await Promise.all([
+      const [cm, mm, am, artm, wf] = await Promise.all([
         api.get<Comment[]>(
           `/work-items/${itemId}/comments?limit=${COMMENTS_PAGE}&offset=0`,
         ),
@@ -128,6 +169,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         api.get<Artifact[]>(
           `/projects/${projectKey}/artifacts?owner_type=work_item&owner_ref=${encodeURIComponent(itemId)}`,
         ),
+        api.get<WorkflowDto>("/workflow"),
       ]);
       setBundle({
         item: detail.data,
@@ -136,6 +178,10 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         allowed: meta.allowed_transitions ?? [],
         allowedParentKinds: meta.allowed_parent_kinds ?? [],
         allowedChildKinds: meta.allowed_child_kinds ?? [],
+        steps: meta.available_steps ?? [],
+        activeStep: meta.active_step ?? null,
+        permissions: meta.permissions ?? {},
+        workflowFields: effectiveFields(wf.data, detail.data),
         comments: cm.data,
         members: flattenMembers(mm.data),
         attachments: am.data,
@@ -149,7 +195,19 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   }, [itemId, projectKey]);
 
   useEffect(() => {
+    // Switching items reuses this panel; clear all per-item transient state so
+    // a previous item's gate/step error or open dialog cannot leak across.
     setBundle(null);
+    setGateMessage(null);
+    setStepStart(null);
+    setStepExecute(null);
+    setStepReassign(null);
+    setStepCancel(null);
+    setParentEditing(false);
+    setShowEdit(false);
+    setShowArtifact(false);
+    setCommentToDelete(null);
+    setPreview(null);
     void load();
   }, [load]);
 
@@ -164,7 +222,10 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       if (
         showEdit ||
         showArtifact ||
-        transitionTarget ||
+        stepStart ||
+        stepExecute ||
+        stepReassign ||
+        stepCancel ||
         preview ||
         commentToDelete ||
         parentEditing
@@ -183,32 +244,126 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     preview,
     showArtifact,
     showEdit,
-    transitionTarget,
+    stepCancel,
+    stepExecute,
+    stepReassign,
+    stepStart,
   ]);
 
   const reportGate = (e: unknown) => {
     const cause = errorCause(e);
-    if (cause?.code === "WORKFLOW_GATE_BLOCKED" && cause.details?.blocking_children) {
-      const ids = ((cause.details.blocking_children as unknown) as string[]).join(", ");
-      setGateMessage(`${cause.message}（阻塞: ${ids}）`);
+    if (cause?.code === "WORKFLOW_GATE_BLOCKED") {
+      const ids = ((cause.details?.blocking_children as unknown) as string[] | undefined)
+        ?.filter(Boolean)
+        .join(", ");
+      const missing = (
+        (cause.details?.missing_fields as unknown) as
+          | { label?: string }[]
+          | undefined
+      )
+        ?.map((field) => field.label)
+        .filter(Boolean)
+        .join("、");
+      const extra = [ids && `阻塞: ${ids}`, missing && `缺少字段: ${missing}`]
+        .filter(Boolean)
+        .join("；");
+      setGateMessage(extra ? `${cause.message}（${extra}）` : cause.message);
     } else {
-      notify.error("流转失败", cause?.message);
+      notify.error("操作失败", cause?.message);
     }
   };
 
-  const doTransition = async (reason: string | null) => {
-    if (!bundle || !transitionTarget) return;
+  const openStep = (step: WorkflowStepDef) => {
+    if (step.mode === "direct") {
+      setStepExecute({ step, name: step.name, noteRequired: step.note === "required" });
+    } else {
+      setStepStart(step);
+    }
+  };
+
+  const executeStep = async (noteMd: string, attachmentIds: string[]) => {
+    if (!bundle || !stepExecute) return;
     try {
-      await api.post(`/work-items/${itemId}/transition`, {
-        to: transitionTarget,
-        row_version: bundle.item.row_version,
-        reason,
-      });
-      notify.success(`已流转到 ${transitionTarget}`);
-      setTransitionTarget(null);
+      if (stepExecute.active) {
+        await api.post(`/work-item-steps/${stepExecute.active.id}/execute`, {
+          note_md: noteMd,
+          attachment_ids: attachmentIds,
+        });
+      } else if (stepExecute.step) {
+        await api.post(`/work-items/${itemId}/steps/${stepExecute.step.key}`, {
+          row_version: bundle.item.row_version,
+          note_md: noteMd,
+          attachment_ids: attachmentIds,
+        });
+      }
+      notify.success("步骤已执行");
+      setGateMessage(null);
+      setStepExecute(null);
       await refresh();
     } catch (e) {
-      setTransitionTarget(null);
+      setStepExecute(null);
+      reportGate(e);
+    }
+  };
+
+  const startStep = async (executors: string[]) => {
+    if (!bundle || !stepStart) return;
+    try {
+      await api.post(`/work-items/${itemId}/steps/${stepStart.key}`, {
+        row_version: bundle.item.row_version,
+        executors,
+      });
+      notify.success(`已发起步骤「${stepStart.name}」`);
+      setGateMessage(null);
+      setStepStart(null);
+      await refresh();
+    } catch (e) {
+      setStepStart(null);
+      reportGate(e);
+    }
+  };
+
+  const reassignStep = async (executors: string[]) => {
+    if (!stepReassign) return;
+    try {
+      await api.post(`/work-item-steps/${stepReassign.active.id}/reassign`, {
+        row_version: stepReassign.active.row_version,
+        executors,
+      });
+      notify.success("执行人已更新");
+      setGateMessage(null);
+      setStepReassign(null);
+      await refresh();
+    } catch (e) {
+      setStepReassign(null);
+      reportGate(e);
+    }
+  };
+
+  const cancelStep = async () => {
+    if (!stepCancel) return;
+    const target = stepCancel;
+    setStepCancel(null);
+    try {
+      await api.post(`/work-item-steps/${target.id}/cancel`, {
+        row_version: target.row_version,
+      });
+      notify.success("步骤已取消");
+      setGateMessage(null);
+      await refresh();
+    } catch (e) {
+      reportGate(e);
+    }
+  };
+
+  const retryStep = async (active: ActiveStep) => {
+    try {
+      await api.post(`/work-item-steps/${active.id}/retry`, {
+        row_version: active.row_version,
+      });
+      setGateMessage(null);
+      await refresh();
+    } catch (e) {
       reportGate(e);
     }
   };
@@ -421,12 +576,18 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     allowed,
     allowedParentKinds,
     allowedChildKinds,
+    steps,
+    activeStep,
+    permissions,
+    workflowFields,
     comments,
     members,
     attachments,
     artifacts,
   } = bundle;
   const memberOptions = members.map((m) => ({ label: m.name, value: m.id }));
+  const peopleById = new Map(members.map((member) => [member.id, member]));
+  const personName = (id: string) => peopleById.get(id)?.name ?? id;
   const priorityValues = PRIORITY_VALUES.includes(item.priority)
     ? PRIORITY_VALUES
     : [...PRIORITY_VALUES, item.priority].sort((a, b) => a - b);
@@ -456,9 +617,11 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         <Text weight="medium" color="color.link" testId="item-panel-display-id">
           {item.display_id}
         </Text>
-        <TextButton data-testid="item-panel-edit" onClick={() => setShowEdit(true)}>
-          编辑
-        </TextButton>
+        {permissions.can_edit && (
+          <TextButton data-testid="item-panel-edit" onClick={() => setShowEdit(true)}>
+            编辑
+          </TextButton>
+        )}
         <TextButton data-testid="item-panel-copy-link" onClick={() => void copyLink()}>
           复制链接
         </TextButton>
@@ -592,16 +755,71 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             <StatusLozenge status={item.status} />
           </div>
 
-          <div className="rdm-item-field" data-testid="item-field-transition">
-            <div className="rdm-item-section-label">流转到</div>
-            <Select
-              {...portalMenuProps}
-              options={allowed.map((s) => ({ label: s, value: s }))}
-              placeholder="选择目标状态"
-              value={null}
-              onChange={(opt) => opt && setTransitionTarget((opt as { value: string }).value)}
-              isDisabled={allowed.length === 0}
-            />
+          <div className="rdm-item-field" data-testid="item-field-steps">
+            <div className="rdm-item-section-label">可执行步骤</div>
+            {activeStep && (
+              <Box paddingBlockEnd="space.100">
+                <ActiveStepCard
+                  step={activeStep}
+                  onExecute={() =>
+                    setStepExecute({
+                      active: activeStep,
+                      name: activeStep.name,
+                      noteRequired: activeStep.config.note === "required",
+                    })
+                  }
+                  onCancel={() => setStepCancel(activeStep)}
+                  onRetry={() => void retryStep(activeStep)}
+                  onReassign={() => {
+                    const definition = steps.find((step) => step.key === activeStep.key);
+                    if (definition) {
+                      setStepReassign({ active: activeStep, step: definition });
+                    }
+                  }}
+                  onOpenItem={onOpenItem}
+                />
+              </Box>
+            )}
+            {steps.length === 0 && !activeStep && (
+              <Text size="small" color="color.text.subtlest">
+                当前状态没有可执行步骤
+              </Text>
+            )}
+            <Stack space="space.100">
+              {steps
+                .filter((step) => step.key !== activeStep?.key)
+                .map((step) => {
+                  const enabled = step.can_start || step.can_execute;
+                  return (
+                    <Button
+                      key={step.key}
+                      spacing="compact"
+                      isDisabled={!enabled}
+                      testId={`item-step-${step.key}`}
+                      onClick={() => openStep(step)}
+                    >
+                      {step.name}
+                      {step.mode === "task"
+                        ? "（子任务）"
+                        : step.mode === "approval"
+                          ? "（多人）"
+                          : ""}
+                    </Button>
+                  );
+                })}
+            </Stack>
+            {steps.some(
+              (step) => !step.can_start && !step.can_execute && step.blocked_reasons.length > 0,
+            ) && (
+              <Box paddingBlockStart="space.050">
+                <Text size="small" color="color.text.subtlest">
+                  {steps
+                    .filter((step) => !step.can_start && !step.can_execute)
+                    .flatMap((step) => step.blocked_reasons)
+                    .join("；")}
+                </Text>
+              </Box>
+            )}
           </div>
 
           <div className="rdm-item-field" data-testid="item-field-priority">
@@ -610,6 +828,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
               {...portalMenuProps}
               options={priorityOptions}
               value={priorityOptions.find((o) => o.value === item.priority) ?? null}
+              isDisabled={!permissions.can_edit}
               onChange={(opt) =>
                 opt && void changePriority((opt as { value: number }).value)
               }
@@ -628,9 +847,82 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
               value={memberOptions.find((o) => o.value === item.assignee?.id) ?? null}
               placeholder="未指派"
               isClearable
+              isDisabled={!permissions.can_assign}
               onChange={(opt) => assign((opt as { value: string } | null)?.value ?? null)}
             />
           </div>
+
+          <div className="rdm-item-field" data-testid="item-field-participants">
+            <div className="rdm-item-section-label">参与人</div>
+            {(item.participants ?? []).length === 0 ? (
+              <Text size="small" color="color.text.subtlest">
+                未设置
+              </Text>
+            ) : (
+              <Inline space="space.100" shouldWrap>
+                {(item.participants ?? []).map((participant) => (
+                  <PersonCell key={participant.id} name={participant.name ?? participant.id} />
+                ))}
+              </Inline>
+            )}
+          </div>
+
+          {workflowFields.reviewer && (
+            <div className="rdm-item-field" data-testid="item-field-reviewer">
+              <div className="rdm-item-section-label">评审人</div>
+              {(item.reviewer ?? []).length === 0 ? (
+                <Text size="small" color="color.text.subtlest">
+                  未设置
+                </Text>
+              ) : (
+                <Inline space="space.100" shouldWrap>
+                  {(item.reviewer ?? []).map((reviewer) => (
+                    <PersonCell key={reviewer.id} name={reviewer.name ?? reviewer.id} />
+                  ))}
+                </Inline>
+              )}
+            </div>
+          )}
+
+          {workflowFields.review_content && (
+            <div className="rdm-item-field" data-testid="item-field-review-content">
+              <div className="rdm-item-section-label">评审意见</div>
+              {item.review_content_md ? (
+                <MarkdownText
+                  source={item.review_content_md}
+                  onImageClick={setPreview}
+                />
+              ) : (
+                <Text size="small" color="color.text.subtlest">
+                  未填写
+                </Text>
+              )}
+            </div>
+          )}
+
+          {workflowFields.custom.length > 0 && (
+            <div className="rdm-item-field" data-testid="item-field-custom">
+              <div className="rdm-item-section-label">自定义字段</div>
+              <Stack space="space.050">
+                {workflowFields.custom.map((field) => {
+                  const value = item.custom_fields?.[field.key];
+                  let display = "未填写";
+                  if (field.type === "user") {
+                    display = Array.isArray(value)
+                      ? value.map((id) => personName(String(id))).join("、") || "未填写"
+                      : "未填写";
+                  } else if (value !== null && value !== undefined && value !== "") {
+                    display = String(value);
+                  }
+                  return (
+                    <Text key={field.key} size="small">
+                      {field.label}：{display}
+                    </Text>
+                  );
+                })}
+              </Stack>
+            </div>
+          )}
 
           <div className="rdm-item-field" data-testid="item-field-parent">
             <div className="rdm-item-section-label">父项</div>
@@ -663,7 +955,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                     />
                     <TextButton onClick={() => setParentEditing(false)}>取消</TextButton>
                   </Stack>
-                ) : (
+                ) : permissions.can_edit ? (
                   <Inline space="space.100">
                     <TextButton
                       data-testid="item-parent-change"
@@ -677,7 +969,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                       </TextButton>
                     )}
                   </Inline>
-                )}
+                ) : null}
               </Box>
             )}
           </div>
@@ -803,11 +1095,40 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         </div>
       </footer>
 
-      <TransitionDialog
-        to={transitionTarget}
-        onCancel={() => setTransitionTarget(null)}
-        onConfirm={doTransition}
+      <StepStartDialog
+        open={stepStart !== null}
+        step={stepStart}
+        mode="start"
+        onClose={() => setStepStart(null)}
+        onConfirm={startStep}
       />
+      <StepStartDialog
+        open={stepReassign !== null}
+        step={stepReassign?.step ?? null}
+        mode="reassign"
+        onClose={() => setStepReassign(null)}
+        onConfirm={reassignStep}
+      />
+      <StepExecuteDialog
+        open={stepExecute !== null}
+        projectKey={projectKey}
+        itemId={itemId}
+        stepName={stepExecute?.name ?? ""}
+        noteRequired={stepExecute?.noteRequired ?? false}
+        onClose={() => setStepExecute(null)}
+        onConfirm={executeStep}
+        onImageClick={setPreview}
+      />
+      <ConfirmDialog
+        open={stepCancel !== null}
+        title="取消步骤"
+        confirmLabel="取消步骤"
+        testId="step-cancel-dialog"
+        onClose={() => setStepCancel(null)}
+        onConfirm={() => void cancelStep()}
+      >
+        取消后已完成的执行记录会保留，未执行的执行人不再需要提交。确认取消？
+      </ConfirmDialog>
       <ArtifactDialog
         open={showArtifact}
         onClose={() => setShowArtifact(false)}

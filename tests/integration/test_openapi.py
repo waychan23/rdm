@@ -36,5 +36,5 @@ async def test_workflow_endpoint_shape(server, owner_token: str) -> None:
     r = await client.get(f"{API}/workflow", headers=auth(owner_token))
     assert r.status_code == 200
     data = r.json()["data"]
-    assert data["version"] == 2
+    assert data["version"] == 3
     assert data["kinds"]["issue"]["gates"]["CLOSED_DONE"]["min_children"] == 1

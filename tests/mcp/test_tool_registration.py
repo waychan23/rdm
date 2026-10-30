@@ -1,4 +1,4 @@
-"""MCP tool catalogue and key input schemas (M5: 28 tools, §17.80)."""
+"""MCP tool catalogue and key input schemas (M6: 29 tools, §17.80/M6)."""
 
 EXPECTED_TOOLS = {
     # 3.1 identity / context (4)
@@ -15,11 +15,12 @@ EXPECTED_TOOLS = {
     "sprint_get",
     "member_list",
     "comment_list",
-    # 3.3 work-item writes (7)
+    # 3.3 work-item writes (8)
     "work_item_create",
     "work_item_update",
     "work_item_assign",
     "work_item_transition",
+    "work_item_step",
     "work_item_delete",
     "work_item_restore",
     "comment_add",
@@ -38,12 +39,12 @@ EXPECTED_TOOLS = {
 }
 
 
-async def test_exactly_28_tools_registered(mcp_clients) -> None:
+async def test_exactly_29_tools_registered(mcp_clients) -> None:
     owner = mcp_clients["owner_token"]
     async with mcp_clients["client_for"](owner) as client:
         tools = await client.list_tools()
     assert {t.name for t in tools} == EXPECTED_TOOLS
-    assert len(tools) == 28
+    assert len(tools) == 29
 
 
 async def test_transition_schema_requires_to_and_version(mcp_clients) -> None:
@@ -54,6 +55,11 @@ async def test_transition_schema_requires_to_and_version(mcp_clients) -> None:
     required = set(tools["work_item_transition"].input_schema.get("required", []))
     assert {"id", "to", "row_version"} <= required
     assert "reason" in props
+
+    step_props = tools["work_item_step"].input_schema["properties"]
+    step_required = set(tools["work_item_step"].input_schema.get("required", []))
+    assert {"id", "action"} <= step_required
+    assert {"step_key", "step_id", "executors", "note_md"} <= set(step_props)
 
     create_props = tools["work_item_create"].input_schema["properties"]
     # FastMCP types a plain str parameter as string; kind enum enforcement

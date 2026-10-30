@@ -10,7 +10,10 @@ def run(h: Harness) -> None:
     h.member("S8", "tl", roles=["manager"])
     h.project("OTHER")
 
-    task = h.item("S8", {"kind": "task", "title": "矩阵任务", "task_type": "backend"})
+    task = h.item(
+        "S8",
+        {"kind": "task", "title": "矩阵任务", "task_type": "backend", "assignee": "me"},
+    )
     display = task["display_id"]
     version = _version(h, display)
 

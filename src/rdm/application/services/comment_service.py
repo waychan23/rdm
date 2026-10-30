@@ -137,6 +137,12 @@ class CommentService:
             )
         project = await self.uow.projects.get(comment.project_id)
         assert project is not None
+        assert self.uow.work_item_steps is not None
+        if await self.uow.work_item_steps.is_note_comment(comment.id):
+            raise Forbidden(
+                "该评论是工作流步骤的执行备注，不能删除；如需更正请追加评论。",
+                details={"comment_id": comment_id},
+            )
         now = dt.datetime.now(dt.UTC)
 
         assert self.uow.attachments is not None and self.uow.artifacts is not None

@@ -38,8 +38,21 @@ async def test_reparent_rules_and_meta(server, owner_token) -> None:
         await client.get(f"{API}/work-items/{task['display_id']}", headers=auth(owner_token))
     ).json()
     assert detail["meta"]["parent"]["display_id"] == story["display_id"]
-    assert detail["meta"]["allowed_parent_kinds"] == ["issue", "story"]
-    assert detail["meta"]["allowed_child_kinds"] == []
+    assert detail["meta"]["allowed_parent_kinds"] == ["epic", "issue", "story", "task"]
+    assert detail["meta"]["allowed_child_kinds"] == ["task"]
+
+    epic_detail = (
+        await client.get(f"{API}/work-items/{epic['display_id']}", headers=auth(owner_token))
+    ).json()
+    assert epic_detail["meta"]["allowed_child_kinds"] == ["story", "task"]
+
+    # A task can be created directly under an epic.
+    epic_task = await _item(
+        client,
+        owner_token,
+        {"kind": "task", "title": "E-task", "parent": epic["display_id"]},
+    )
+    assert epic_task["parent_id"] == epic["id"]
 
     # move task from story -> under another story
     story2 = await _item(

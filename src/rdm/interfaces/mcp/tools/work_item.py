@@ -8,11 +8,14 @@ from fastmcp import FastMCP
 
 from rdm.application.services.attachment_service import AttachmentService
 from rdm.application.services.membership_service import MembershipService
+from rdm.application.services.step_service import StepService
 from rdm.application.services.workitem_service import (
     WorkItemService,
     allowed_child_kinds,
     allowed_parent_kinds,
+    item_task_type,
 )
+from rdm.domain.errors import ValidationError
 from rdm.interfaces.http.container import Container
 from rdm.interfaces.http.schemas import (
     TransitionIn,
@@ -41,6 +44,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         kind: str | None = None,
         status: str | None = None,
         assignee: str | None = None,
+        reviewer: str | None = None,
         parent: str | None = None,
         sprint: str | None = None,
         q: str | None = None,
@@ -61,6 +65,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                 kind=kind,
                 status=status,
                 assignee_ref=assignee_ref,
+                reviewer_ref=reviewer,
                 parent_ref=parent,
                 sprint_ref=sprint,
                 q=q,
@@ -116,9 +121,10 @@ def register(mcp: FastMCP, container: Container) -> None:
 
     @mcp.tool
     async def work_item_get(id: str) -> Any:
-        """读工作项详情：全字段、assignee、allowed_transitions、直接子项。
+        """读工作项详情：全字段、assignee、available_steps/active_step、allowed_transitions、直接子项。
 
-        流转/修改前必读（拿最新 row_version）。不要用 ULID 之外的猜测 id；
+        流转/修改前必读（拿最新 row_version）。可用步骤在 meta.available_steps；
+        已发起步骤用 meta.active_step 查看执行进度。不要用 ULID 之外的猜测 id；
         id 接受 KEY-42 显示 ID 或 ULID。
         """
 
@@ -131,7 +137,7 @@ def register(mcp: FastMCP, container: Container) -> None:
             from rdm.domain.workflow.loader import load_engine
             from rdm.interfaces.mcp.tools._attachments import attachment_mcp_out
 
-            allowed = load_engine().allowed(item.kind, item.status)
+            allowed = load_engine().allowed(item.kind, item.status, task_type=item_task_type(item))
             parent_item = (
                 await uow.work_items.get(item.parent_id, include_deleted=True)
                 if item.parent_id
@@ -156,6 +162,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                 seen.add(attachment.id)
                 attachments.append(attachment_mcp_out(container, attachment, members))
             data = work_item_out(item, proj, members)
+            step_meta = await StepService(uow, container.file_store).describe(item, actor)
             return ok(
                 data,
                 allowed_transitions=list(allowed),
@@ -166,6 +173,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                 allowed_parent_kinds=allowed_parent_kinds(item.kind),
                 allowed_child_kinds=allowed_child_kinds(item.kind),
                 attachments=attachments,
+                **step_meta,
             )
 
         return await run_tool(container, run)
@@ -179,6 +187,10 @@ def register(mcp: FastMCP, container: Container) -> None:
         description_md: str | None = None,
         priority: int | None = None,
         assignee: str | None = None,
+        participants: list[str] | None = None,
+        reviewer: list[str] | None = None,
+        review_content_md: str | None = None,
+        custom_fields: dict[str, Any] | None = None,
         acceptance_criteria_md: str | None = None,
         severity: str | None = None,
         environment: str | None = None,
@@ -206,6 +218,10 @@ def register(mcp: FastMCP, container: Container) -> None:
                 description_md=description_md,
                 priority=priority,
                 assignee=assignee,
+                participants=participants,
+                reviewer=reviewer,
+                review_content_md=review_content_md,
+                custom_fields=custom_fields,
                 acceptance_criteria_md=acceptance_criteria_md,
                 severity=severity,
                 environment=environment,
@@ -235,6 +251,10 @@ def register(mcp: FastMCP, container: Container) -> None:
         title: str | None = None,
         description_md: str | None = None,
         priority: int | None = None,
+        participants: list[str] | None = None,
+        reviewer: list[str] | None = None,
+        review_content_md: str | None = None,
+        custom_fields: dict[str, Any] | None = None,
         acceptance_criteria_md: str | None = None,
         severity: str | None = None,
         environment: str | None = None,
@@ -259,6 +279,10 @@ def register(mcp: FastMCP, container: Container) -> None:
                 title=title,
                 description_md=description_md,
                 priority=priority,
+                participants=participants,
+                reviewer=reviewer,
+                review_content_md=review_content_md,
+                custom_fields=custom_fields,
                 acceptance_criteria_md=acceptance_criteria_md,
                 severity=severity,
                 environment=environment,
@@ -352,5 +376,79 @@ def register(mcp: FastMCP, container: Container) -> None:
                 work_item_out(item, proj, members),
                 restored=restored,
             )
+
+        return await run_tool(container, run)
+
+    @mcp.tool
+    async def work_item_step(
+        id: str,
+        action: str,
+        step_key: str | None = None,
+        step_id: str | None = None,
+        row_version: int | None = None,
+        executors: list[str] | None = None,
+        note_md: str | None = None,
+        attachment_ids: list[str] | None = None,
+    ) -> Any:
+        """执行命名工作流步骤（start/execute/cancel/retry/reassign）。
+
+        - start：负责人按 step_key 发起 approval/task 步骤，可指定 executors；
+          direct 步骤由唯一候选执行人直接执行（可带 note_md/附件）。
+        - execute：被指派的执行人用自己的 step_id 提交备注并完成；任务式步骤
+          通过完成子任务推进，不能直接 execute。
+        - cancel/retry/reassign：仅负责人，带 step_id 与最新 row_version。
+        先 work_item_get，读 meta.available_steps / meta.active_step。
+        """
+        from rdm.application.services.step_service import StepService
+
+        async def run(uow, actor):
+            service = StepService(uow, container.file_store)
+            if action == "start":
+                if not step_key or row_version is None:
+                    raise ValidationError("start 需要 step_key 和 row_version")
+                proj, item, meta = await service.start(
+                    actor,
+                    id,
+                    step_key,
+                    row_version=row_version,
+                    executors=executors,
+                    note_md=note_md,
+                    attachment_ids=attachment_ids,
+                )
+            elif action == "execute":
+                if not step_id:
+                    raise ValidationError("execute 需要 step_id")
+                proj, item, meta = await service.execute(
+                    actor, step_id, note_md=note_md, attachment_ids=attachment_ids
+                )
+            elif action == "cancel":
+                if not step_id or row_version is None:
+                    raise ValidationError("cancel 需要 step_id 和 row_version")
+                proj, item, meta = await service.cancel(
+                    actor, step_id, row_version=row_version, reason=note_md
+                )
+            elif action == "retry":
+                if not step_id or row_version is None:
+                    raise ValidationError("retry 需要 step_id 和 row_version")
+                proj, item, meta = await service.retry(actor, step_id, row_version=row_version)
+            elif action == "reassign":
+                if not step_id or row_version is None or executors is None:
+                    raise ValidationError("reassign 需要 step_id、row_version 和 executors")
+                proj, item, meta = await service.reassign(
+                    actor,
+                    step_id,
+                    row_version=row_version,
+                    executors=executors,
+                )
+            else:
+                raise ValidationError(
+                    f"未知 action {action!r}",
+                    details={
+                        "action": action,
+                        "allowed": ["start", "execute", "cancel", "retry", "reassign"],
+                    },
+                )
+            members = await _users(uow, proj.id)
+            return ok(work_item_out(item, proj, members), **meta)
 
         return await run_tool(container, run)

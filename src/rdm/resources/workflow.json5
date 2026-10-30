@@ -1,0 +1,523 @@
+// rdm 工作流定义（v3）
+// 完整字段/defaults/配方/排错见 docs/workflow-config.md
+// JSON5: 支持 // 与 /* */ 注释；结构与 JSON 相同。
+{
+  version: 3,
+  // 任务类型目录：code -> 中文标签；子类型 key 必须出现在这里。
+  task_types: {
+    other: "其他",
+    frontend: "前端开发",
+    backend: "后端开发",
+    fullstack: "全栈开发",
+    code_review: "代码评审",
+    testing: "测试",
+    test_case_design: "测试用例设计",
+    docs: "文档编写",
+    ui_design: "UI设计",
+    product_design: "产品设计",
+    release: "系统发布",
+  },
+  // 各 kind 的状态机、步骤、字段与子类型。
+  kinds: {
+    epic: {
+      label: "Epic",
+      states: ["TODO", "IN_PROGRESS", "DONE", "CANCELLED"],
+      initial: "TODO",
+      terminal: ["DONE", "CANCELLED"],
+      fields: {
+        reviewer: true,
+        review_content: true,
+      },
+      steps: {
+        TODO: [
+          {
+            key: "START",
+            name: "开始",
+            to: "IN_PROGRESS",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        IN_PROGRESS: [
+          {
+            key: "COMPLETE",
+            name: "完成",
+            to: "DONE",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        DONE: [],
+        CANCELLED: [],
+      },
+      gates: {
+        DONE: {
+          children_all_terminal: true,
+        },
+      },
+    },
+    story: {
+      label: "需求",
+      states: ["TODO", "IN_PROGRESS", "BLOCKED", "TO_TEST", "DONE", "PUBLISHED", "CANCELLED"],
+      initial: "TODO",
+      terminal: ["DONE", "PUBLISHED", "CANCELLED"],
+      fields: {
+        reviewer: true,
+        review_content: true,
+      },
+      steps: {
+        TODO: [
+          {
+            key: "START",
+            name: "开始",
+            to: "IN_PROGRESS",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        IN_PROGRESS: [
+          {
+            key: "SUBMIT_TEST",
+            name: "提交测试",
+            to: "TO_TEST",
+          },
+          {
+            key: "BLOCK",
+            name: "标记阻塞",
+            to: "BLOCKED",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        BLOCKED: [
+          {
+            key: "RESUME",
+            name: "恢复",
+            to: "IN_PROGRESS",
+          },
+          {
+            key: "REQUEUE",
+            name: "重新排队",
+            to: "TODO",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        TO_TEST: [
+          {
+            key: "PASS",
+            name: "验收通过",
+            to: "DONE",
+          },
+          {
+            key: "SEND_BACK",
+            name: "打回",
+            to: "IN_PROGRESS",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        DONE: [
+          {
+            key: "PUBLISH",
+            name: "发布",
+            to: "PUBLISHED",
+          },
+        ],
+        PUBLISHED: [],
+        CANCELLED: [],
+      },
+      gates: {
+        DONE: {
+          children_all_terminal: true,
+        },
+        PUBLISHED: {
+          children_all_terminal: true,
+        },
+      },
+    },
+    issue: {
+      label: "缺陷",
+      states: ["OPEN", "TO_CONFIRM", "TO_FIX", "FIXING", "BLOCKED", "CLOSED_DONE", "CLOSED_REJECTED", "REOPEN", "CANCELLED"],
+      initial: "OPEN",
+      terminal: ["CLOSED_DONE", "CLOSED_REJECTED", "CANCELLED"],
+      fields: {
+        reviewer: true,
+        review_content: true,
+      },
+      steps: {
+        OPEN: [
+          {
+            key: "CONFIRM",
+            name: "提交确认",
+            to: "TO_CONFIRM",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        TO_CONFIRM: [
+          {
+            key: "ACCEPT",
+            name: "确认修复",
+            to: "TO_FIX",
+          },
+          {
+            key: "REJECT",
+            name: "驳回",
+            to: "CLOSED_REJECTED",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        TO_FIX: [
+          {
+            key: "START_FIX",
+            name: "开始修复",
+            to: "FIXING",
+          },
+          {
+            key: "BLOCK",
+            name: "标记阻塞",
+            to: "BLOCKED",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        FIXING: [
+          {
+            key: "RETURN_FIX",
+            name: "退回待修",
+            to: "TO_FIX",
+          },
+          {
+            key: "BLOCK",
+            name: "标记阻塞",
+            to: "BLOCKED",
+          },
+          {
+            key: "CLOSE",
+            name: "关闭（已修复）",
+            to: "CLOSED_DONE",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        BLOCKED: [
+          {
+            key: "RESUME_FIX",
+            name: "恢复待修",
+            to: "TO_FIX",
+          },
+          {
+            key: "RESUME_FIXING",
+            name: "恢复修复",
+            to: "FIXING",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        REOPEN: [
+          {
+            key: "REOPEN_FIX",
+            name: "重新修复",
+            to: "TO_FIX",
+          },
+          {
+            key: "REOPEN_FIXING",
+            name: "重新开始修复",
+            to: "FIXING",
+          },
+          {
+            key: "REOPEN_CLOSE",
+            name: "关闭（已修复）",
+            to: "CLOSED_DONE",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        CLOSED_DONE: [
+          {
+            key: "REOPEN",
+            name: "重新打开",
+            to: "REOPEN",
+          },
+        ],
+        CLOSED_REJECTED: [
+          {
+            key: "REOPEN",
+            name: "重新打开",
+            to: "REOPEN",
+          },
+        ],
+        CANCELLED: [],
+      },
+      gates: {
+        CLOSED_DONE: {
+          children_all_terminal: true,
+          min_children: 1,
+        },
+      },
+    },
+    // 普通任务：默认工作流；任务类型可通过 subtypes 覆盖。
+    task: {
+      label: "任务",
+      states: ["TODO", "IN_PROGRESS", "BLOCKED", "TO_REVIEW", "DONE", "PUBLISHED", "CANCELLED"],
+      initial: "TODO",
+      terminal: ["DONE", "PUBLISHED", "CANCELLED"],
+      // 可选字段：reviewer/review_content 可检索；custom 不检索。
+      fields: {
+        reviewer: true,
+        review_content: true,
+        custom: [],
+      },
+      // 命名步骤：mode=direct|approval|task；actors 是执行人类型，具体执行人由负责人指派。
+      steps: {
+        TODO: [
+          {
+            key: "START",
+            name: "开始",
+            to: "IN_PROGRESS",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        IN_PROGRESS: [
+          {
+            key: "SUBMIT_REVIEW",
+            name: "提交评审",
+            to: "TO_REVIEW",
+          },
+          {
+            key: "BLOCK",
+            name: "标记阻塞",
+            to: "BLOCKED",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        BLOCKED: [
+          {
+            key: "RESUME",
+            name: "恢复",
+            to: "IN_PROGRESS",
+          },
+          {
+            key: "REQUEUE",
+            name: "重新排队",
+            to: "TODO",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        TO_REVIEW: [
+          {
+            key: "CODE_REVIEW",
+            name: "Code Review",
+            to: "DONE",
+            mode: "approval", // direct | approval | task
+            actors: ["assignee", "reviewers"],
+            executors: {
+              min: 1,
+              max: 3,
+            },
+            note: "required", // optional | required
+            // 按目标状态的默认 gate；step.gates 按字段覆盖。
+            gates: {
+              required_fields: ["review_content"],
+            },
+          },
+          {
+            key: "CODE_REVIEW_TASKS",
+            name: "Code Review（子任务）",
+            to: "DONE",
+            mode: "task", // direct | approval | task
+            actors: ["assignee", "reviewers"],
+            executors: {
+              min: 1,
+              max: 3,
+            },
+            tasks: {
+              type: "code_review",
+              title: "Code Review: {display_id} {title}",
+              complete_on: "DONE", // 必须是该 task type 工作流的终态
+            },
+          },
+          {
+            key: "SEND_BACK",
+            name: "打回修改",
+            to: "IN_PROGRESS",
+            note: "required",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            to: "CANCELLED",
+          },
+        ],
+        DONE: [
+          {
+            key: "PUBLISH",
+            name: "发布",
+            to: "PUBLISHED",
+          },
+        ],
+        PUBLISHED: [],
+        CANCELLED: [],
+      },
+      // 任务子类型：可定义自己的 states/steps/fields；未声明 states 时继承 task。
+      subtypes: {
+        code_review: {
+          label: "Code Review",
+          states: ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"],
+          initial: "TODO",
+          terminal: ["DONE", "CANCELLED"],
+          fields: {
+            reviewer: true,
+            review_content: true,
+            custom: [
+              {
+                key: "review_scope",
+                label: "评审范围",
+                type: "text",
+              },
+              {
+                key: "risk_score",
+                label: "风险分",
+                type: "number",
+              },
+              {
+                key: "observers",
+                label: "旁听人",
+                type: "user",
+                multiple: true,
+              },
+            ],
+          },
+          steps: {
+            TODO: [
+              {
+                key: "START",
+                name: "开始评审",
+                to: "IN_PROGRESS",
+              },
+              {
+                key: "CANCEL",
+                name: "取消",
+                to: "CANCELLED",
+              },
+            ],
+            IN_PROGRESS: [
+              {
+                key: "SUBMIT",
+                name: "提交评审结果",
+                to: "IN_REVIEW",
+              },
+              {
+                key: "CANCEL",
+                name: "取消",
+                to: "CANCELLED",
+              },
+            ],
+            IN_REVIEW: [
+              {
+                key: "APPROVE",
+                name: "评审通过",
+                to: "DONE",
+                note: "required",
+              },
+              {
+                key: "SEND_BACK",
+                name: "打回修改",
+                to: "IN_PROGRESS",
+              },
+              {
+                key: "CANCEL",
+                name: "取消",
+                to: "CANCELLED",
+              },
+            ],
+            DONE: [],
+            CANCELLED: [],
+          },
+        },
+      },
+    },
+    sprint: {
+      label: "Sprint",
+      states: ["PLANNED", "ACTIVE", "CLOSED"],
+      initial: "PLANNED",
+      terminal: ["CLOSED"],
+      fields: {
+        reviewer: false,
+        review_content: false,
+      },
+      steps: {
+        PLANNED: [
+          {
+            key: "START_SPRINT",
+            name: "启动 Sprint",
+            to: "ACTIVE",
+          },
+        ],
+        ACTIVE: [
+          {
+            key: "CLOSE_SPRINT",
+            name: "关闭 Sprint",
+            to: "CLOSED",
+          },
+        ],
+        CLOSED: [],
+      },
+      gates: {
+        CLOSED: {
+          no_nonterminal_sprint_items: true,
+        },
+      },
+    },
+  },
+}

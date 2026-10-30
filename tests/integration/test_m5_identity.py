@@ -263,17 +263,48 @@ async def test_agent_identity_cannot_complete_done(server, owner_token) -> None:
     assert (await move("IN_PROGRESS", 1)).status_code == 200
     assert (await move("TO_REVIEW", 2)).status_code == 200
     blocked = await move("DONE", 3)
-    assert blocked.status_code == 403
-    assert blocked.json()["error"]["code"] == "FORBIDDEN"
+    assert blocked.status_code == 409
+    assert blocked.json()["error"]["code"] == "WORKFLOW_STEP_REQUIRED"
 
-    # The human manager (privileged) can close it.
-    human_pat = await login_pat(client, "tl")
-    r = await client.post(
-        f"/api/v1/work-items/{task['display_id']}/transition",
-        headers=auth(human_pat),
-        json={"to": "DONE", "row_version": 3, "reason": "验收通过"},
+    # The agent can start the review step but cannot be its DONE executor.
+    r = await client.patch(
+        f"/api/v1/work-items/{task['display_id']}",
+        headers=auth(agent_pat),
+        json={
+            "row_version": 3,
+            "reviewer": ["tl"],
+            "review_content_md": "agent finished implementation",
+        },
     )
     assert r.status_code == 200, r.text
+    version = r.json()["data"]["row_version"]
+
+    r = await client.post(
+        f"/api/v1/work-items/{task['display_id']}/steps/CODE_REVIEW",
+        headers=auth(agent_pat),
+        json={"row_version": version, "executors": ["tl"]},
+    )
+    assert r.status_code == 200, r.text
+    active = r.json()["meta"]["active_step"]
+    assert active is not None
+
+    # The agent is not the executor.
+    r = await client.post(
+        f"/api/v1/work-item-steps/{active['id']}/execute",
+        headers=auth(agent_pat),
+        json={"note_md": "self close"},
+    )
+    assert r.status_code == 403
+
+    # The human manager (privileged) executes the review and closes DONE.
+    human_pat = await login_pat(client, "tl")
+    r = await client.post(
+        f"/api/v1/work-item-steps/{active['id']}/execute",
+        headers=auth(human_pat),
+        json={"note_md": "验收通过"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["status"] == "DONE"
 
 
 @pytest.mark.parametrize("remember,days", [(False, 1), (True, 7)])

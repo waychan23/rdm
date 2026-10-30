@@ -40,7 +40,13 @@ async def test_backlog_and_my_work_semantics(server, mcp_clients) -> None:
         task = await call(
             owner_client,
             "work_item_create",
-            {"kind": "task", "title": "任务", "project": "DEMO", "task_type": "qa"},
+            {
+                "kind": "task",
+                "title": "任务",
+                "project": "DEMO",
+                "task_type": "qa",
+                "assignee": "me",
+            },
         )
         story_id = story["data"]["id"]
         story_display = story["data"]["display_id"]

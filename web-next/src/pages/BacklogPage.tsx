@@ -56,6 +56,7 @@ export default function BacklogPage() {
   const [kinds, setKinds] = useState<string[]>(["epic", "story", "issue", "task"]);
   const [status, setStatus] = useState<Option | null>(null);
   const [assignee, setAssignee] = useState<Option | null>(null);
+  const [reviewer, setReviewer] = useState<Option | null>(null);
   const [qInput, setQInput] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -73,9 +74,12 @@ export default function BacklogPage() {
 
   const statusOptions = useMemo<Option[]>(() => {
     const states = new Set<string>();
-    Object.values(workflowState.data?.kinds ?? {}).forEach((k) =>
-      k.states.forEach((s) => states.add(s)),
-    );
+    Object.values(workflowState.data?.kinds ?? {}).forEach((k) => {
+      k.states.forEach((s) => states.add(s));
+      Object.values(k.subtypes ?? {}).forEach((subtype) =>
+        subtype.states.forEach((s) => states.add(s)),
+      );
+    });
     return [...states].map((s) => ({ label: s, value: s }));
   }, [workflowState.data]);
 
@@ -94,9 +98,10 @@ export default function BacklogPage() {
     if (kinds.length === 1) params.set("kind", kinds[0]);
     if (status) params.set("status", status.value);
     if (assignee) params.set("assignee", assignee.value === "me" ? "me" : assignee.value);
+    if (reviewer) params.set("reviewer", reviewer.value === "me" ? "me" : reviewer.value);
     if (q) params.set("q", q);
     return params.toString();
-  }, [kinds, status, assignee, q, page]);
+  }, [kinds, status, assignee, reviewer, q, page]);
 
   const itemsState = useAsync<{ items: WorkItem[]; total: number }>(
     async () => {
@@ -177,9 +182,22 @@ export default function BacklogPage() {
             placeholder="负责人"
           />
         </Box>
+        <Box xcss={pageStyles.filterWidth} testId="work-item-filter-reviewer">
+          <Select<Option>
+            options={assigneeOptions}
+            value={reviewer}
+            onChange={(opt) => {
+              setReviewer(opt as Option | null);
+              setPage(1);
+            }}
+            isClearable
+            spacing="compact"
+            placeholder="评审人"
+          />
+        </Box>
         <Box xcss={pageStyles.searchWidth}>
           <Textfield
-            placeholder="搜索标题"
+            placeholder="搜索标题/评审意见"
             value={qInput}
             testId="work-item-search"
             onChange={(e) => setQInput(e.currentTarget.value)}

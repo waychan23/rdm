@@ -20,8 +20,8 @@ dependencies = [
     "httpx",
     "python-ulid",
     "python-multipart",
-    "pyyaml",
     "argon2-cffi>=25.1.0",
+    "pyjson5>=2.0.1",
 ]
 
 [project.scripts]

@@ -1,18 +1,21 @@
-"""Unit tests: workflow YAML loading, freezing and schema validation."""
+"""Unit tests: workflow JSON5 loading, freezing and schema validation."""
 
+import pyjson5
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
-from rdm.domain.workflow.loader import load_engine, load_spec, load_yaml_text
+from rdm.domain.workflow.loader import load_engine, load_spec, load_spec_text
 from rdm.domain.workflow.schema import WorkflowSpec
 
 
-def test_yaml_loads_and_engine_is_singleton() -> None:
+def test_json5_loads_and_engine_is_singleton() -> None:
     spec1 = load_spec()
     spec2 = load_spec()
     assert spec1 is spec2
     assert load_engine() is load_engine()
-    assert "kinds:" in load_yaml_text()
+    raw = pyjson5.loads(load_spec_text())
+    assert raw["version"] == 3
+    assert "kinds" in raw and "task_types" in raw
 
 
 def test_spec_is_frozen() -> None:
@@ -21,7 +24,7 @@ def test_spec_is_frozen() -> None:
         spec.version = 2  # type: ignore[misc]
 
 
-def test_bad_yaml_rejected_unknown_transition_target() -> None:
+def test_bad_spec_rejected_unknown_transition_target() -> None:
     bad = {
         "version": 1,
         "kinds": {
@@ -38,7 +41,7 @@ def test_bad_yaml_rejected_unknown_transition_target() -> None:
         WorkflowSpec.model_validate(bad)
 
 
-def test_bad_yaml_rejected_missing_transition_entry() -> None:
+def test_bad_spec_rejected_missing_transition_entry() -> None:
     bad = {
         "version": 1,
         "kinds": {

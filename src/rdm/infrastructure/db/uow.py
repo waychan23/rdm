@@ -46,6 +46,8 @@ from rdm.infrastructure.db.repositories.user import (
     UserRepository,
 )
 from rdm.infrastructure.db.repositories.work_item import WorkItemRepository
+from rdm.infrastructure.db.repositories.work_item_people import WorkItemPeopleRepository
+from rdm.infrastructure.db.repositories.work_item_step import WorkItemStepRepository
 
 
 class SqlAlchemyUnitOfWork:
@@ -81,6 +83,8 @@ class SqlAlchemyUnitOfWork:
         self.oauth_consents: ConsentRepository | None = None
         self.oauth_login_tickets: LoginTicketRepository | None = None
         self.work_items: WorkItemRepository | None = None
+        self.work_item_people: WorkItemPeopleRepository | None = None
+        self.work_item_steps: WorkItemStepRepository | None = None
         self.sprints: SprintRepository | None = None
         self.sprint_items: SprintItemRepository | None = None
         self.mailboxes: MailboxRepository | None = None
@@ -111,6 +115,8 @@ class SqlAlchemyUnitOfWork:
             self.oauth_consents = ConsentRepository(self.session)
             self.oauth_login_tickets = LoginTicketRepository(self.session)
             self.work_items = WorkItemRepository(self.session)
+            self.work_item_people = WorkItemPeopleRepository(self.session)
+            self.work_item_steps = WorkItemStepRepository(self.session)
             self.sprints = SprintRepository(self.session)
             self.sprint_items = SprintItemRepository(self.session)
             self.mailboxes = MailboxRepository(self.session)

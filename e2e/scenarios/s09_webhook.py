@@ -48,9 +48,9 @@ def run(h: Harness) -> None:
         hook.set_fail(99)
         agent_expect(
             h,
-            "tl",
-            f"把 {task['display_id']} 用 work_item_transition 转到 IN_PROGRESS，"
-            "row_version 先 work_item_get 读取。",
+            "frontend-dev",
+            f"你是 {task['display_id']} 的负责人；用 work_item_transition 转到 IN_PROGRESS，"
+            "row_version 先用 work_item_get 读取。",
             lambda out: "IN_PROGRESS" in out,
         )
         deadline = time.time() + 20

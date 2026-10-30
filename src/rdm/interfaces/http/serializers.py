@@ -14,6 +14,7 @@ from rdm.domain.entities import (
     Project,
     ProjectMember,
     Sprint,
+    TaskFields,
     User,
     UserToken,
     WorkItem,
@@ -117,6 +118,18 @@ def _assignee_out(item: WorkItem, users: dict[str, User]) -> dict | None:
     return {"id": user.id, "name": user.name, "type": user.type}
 
 
+def _people_out(user_ids: list[str], users: dict[str, User]) -> list[dict]:
+    out: list[dict] = []
+    for user_id in user_ids:
+        user = users.get(user_id)
+        out.append(
+            {"id": user.id, "name": user.name, "type": user.type}
+            if user is not None
+            else {"id": user_id}
+        )
+    return out
+
+
 def work_item_out(item: WorkItem, project: Project, users: dict[str, User] | None = None) -> dict:
     users = users or {}
     assignee = users.get(item.assignee_user_id) if item.assignee_user_id else None
@@ -125,11 +138,13 @@ def work_item_out(item: WorkItem, project: Project, users: dict[str, User] | Non
         if assignee and assignee.type == "human"
         else (assignee.manager_user_id if assignee else None)
     )
+    task_type = item.fields.task_type if isinstance(item.fields, TaskFields) else None
     return {
         "id": item.id,
         "display_id": f"{project.key}-{item.display_no}",
         "project_key": project.key,
         "kind": item.kind,
+        "task_type": task_type,
         "title": item.title,
         "description_md": item.description_md,
         "status": item.status,
@@ -137,6 +152,10 @@ def work_item_out(item: WorkItem, project: Project, users: dict[str, User] | Non
         "rank": item.rank,
         "parent_id": item.parent_id,
         "assignee": _assignee_out(item, users),
+        "participants": _people_out(item.participant_user_ids, users),
+        "reviewer": _people_out(item.reviewer_user_ids, users),
+        "review_content_md": item.review_content_md,
+        "custom_fields": dict(item.custom_fields or {}),
         "accountable_human_id": accountable_id,
         "fields": _fields_out(item),
         "row_version": item.row_version,
@@ -154,6 +173,7 @@ def work_item_summary_out(
         "id": full["id"],
         "display_id": full["display_id"],
         "kind": full["kind"],
+        "task_type": full["task_type"],
         "title": full["title"],
         "status": full["status"],
         "priority": full["priority"],

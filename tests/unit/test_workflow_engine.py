@@ -14,7 +14,7 @@ def engine() -> WorkflowEngine:
 
 def test_spec_has_all_kinds_and_version() -> None:
     spec = load_spec()
-    assert spec.version == 2
+    assert spec.version == 3
     assert set(spec.kinds) == {"epic", "story", "issue", "task", "sprint"}
 
 
@@ -60,7 +60,7 @@ def test_terminal_states_have_no_or_only_named_exits(engine: WorkflowEngine) -> 
 
 
 def test_issue_first_fix_can_close_v2(engine: WorkflowEngine) -> None:
-    # workflow.yml v2 (architecture §16.35): FIXING may enter CLOSED_DONE
+    # workflow v2 (architecture §16.35): FIXING may enter CLOSED_DONE
     # directly, but the min_children gate still applies.
     with pytest.raises(WorkflowGateBlocked) as exc:
         engine.check("issue", "FIXING", "CLOSED_DONE", item="RDM-9", context=GateContext())
@@ -111,7 +111,7 @@ def test_epic_gate_publish(engine: WorkflowEngine) -> None:
 
 
 def test_issue_gate_requires_min_children(engine: WorkflowEngine) -> None:
-    # Per shipped workflow.yml, CLOSED_DONE is entered from the REOPEN state.
+    # Per shipped workflow, CLOSED_DONE is entered from the REOPEN state.
     with pytest.raises(WorkflowGateBlocked) as exc:
         engine.check(
             "issue", "REOPEN", "CLOSED_DONE", item="RDM-9", context=GateContext(children=[])
@@ -142,8 +142,24 @@ def test_sprint_gate_passes_when_items_terminal(engine: WorkflowEngine) -> None:
     engine.check("sprint", "ACTIVE", "CLOSED", item="Sprint-1", context=ctx)
 
 
-def test_task_has_no_gates(engine: WorkflowEngine) -> None:
-    engine.check("task", "TO_REVIEW", "DONE", context=GateContext(children=[]))
+def test_task_code_review_requires_review_content(engine: WorkflowEngine) -> None:
+    with pytest.raises(WorkflowGateBlocked) as exc:
+        engine.check(
+            "task",
+            "TO_REVIEW",
+            "DONE",
+            context=GateContext(children=[]),
+            step_key="CODE_REVIEW",
+        )
+    assert [m["key"] for m in exc.value.details["missing_fields"]] == ["review_content"]
+
+    engine.check(
+        "task",
+        "TO_REVIEW",
+        "DONE",
+        context=GateContext(children=[], field_values={"review_content": "ok"}),
+        step_key="CODE_REVIEW",
+    )
 
 
 def test_unknown_kind_and_state(engine: WorkflowEngine) -> None:

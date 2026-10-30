@@ -45,5 +45,5 @@ def run(h: Harness) -> None:
     )
     row = h.db.item(task["display_id"])
     assert row["status"] == "IN_PROGRESS"
-    assert row["assignee_member_id"] is not None
+    assert row["assignee_user_id"] is not None
     assert "sprint.item_added" in h.db.event_types("S3")

@@ -17,9 +17,13 @@ async def test_workflow_dto_parity(mcp_clients) -> None:
 
     assert full["_is_error"] is False
     assert full["data"] == rest_dto
-    assert full["data"]["version"] == 2
+    assert full["data"]["version"] == 3
     assert set(full["data"]["kinds"]) == {"epic", "story", "issue", "task", "sprint"}
 
-    assert issue_only["data"] == {"version": 2, "kinds": {"issue": rest_dto["kinds"]["issue"]}}
+    assert issue_only["data"] == {
+        "version": 3,
+        "task_types": rest_dto["task_types"],
+        "kinds": {"issue": rest_dto["kinds"]["issue"]},
+    }
     # v2 fix is present: FIXING may close directly.
     assert "CLOSED_DONE" in rest_dto["kinds"]["issue"]["transitions"]["FIXING"]

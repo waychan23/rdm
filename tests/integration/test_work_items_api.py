@@ -117,13 +117,14 @@ async def test_parent_rules(server, owner_token: str) -> None:
     assert r.status_code == 422
     assert r.json()["error"]["details"]["field"] == "parent"
 
-    # task cannot hang directly under epic
+    # task can hang directly under epic
     r = await client.post(
         f"{API}/projects/DEMO/work-items",
         json={"kind": "task", "title": "t", "parent": "DEMO-1", "task_type": "qa"},
         headers=auth(owner_token),
     )
-    assert r.status_code == 422
+    assert r.status_code == 201, r.text
+    assert r.json()["data"]["parent_id"] == epic["id"]
 
     # missing parent reference -> NOT_FOUND
     r = await client.post(

@@ -245,6 +245,11 @@ class WorkItem:
     assignee_user_id: str | None = None
     row_version: int = 0
     fields: KindFields | None = None
+    # M6: explicit participant/reviewer rows and configurable fields.
+    participant_user_ids: list[str] = field(default_factory=list)
+    reviewer_user_ids: list[str] = field(default_factory=list)
+    review_content_md: str | None = None
+    custom_fields: dict[str, Any] = field(default_factory=dict)
     created_at: dt.datetime = field(default_factory=_utcnow)
     created_by: str | None = None
     updated_at: dt.datetime | None = None
@@ -254,6 +259,50 @@ class WorkItem:
     @property
     def kind_enum(self) -> WorkItemKind:
         return WorkItemKind(self.kind)
+
+
+@dataclass(kw_only=True)
+class WorkItemStep:
+    """A named workflow step run (§17 M6).
+
+    Direct transitions also write a COMPLETED row so every status change has a
+    structured step record. The config snapshot freezes the edge definition at
+    start time.
+    """
+
+    id: str
+    project_id: str
+    work_item_id: str
+    step_key: str
+    step_name: str
+    from_status: str
+    to_status: str
+    mode: str  # StepMode
+    status: str  # StepStatus
+    required_count: int = 1
+    row_version: int = 0
+    config: dict[str, Any] = field(default_factory=dict)
+    gate_details: dict[str, Any] | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    completed_at: dt.datetime | None = None
+
+
+@dataclass(kw_only=True)
+class WorkItemStepExecutor:
+    id: str
+    step_id: str
+    project_id: str
+    user_id: str
+    status: str = "PENDING"  # StepExecutorStatus
+    note_comment_id: str | None = None
+    task_id: str | None = None
+    row_version: int = 0
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    completed_at: dt.datetime | None = None
 
 
 @dataclass(kw_only=True)

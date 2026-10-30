@@ -30,7 +30,19 @@ const FIELD_LABELS: Record<string, string> = {
   est_work_hours: "预估工时",
   actual_work_hours: "实际工时",
   code_branch: "代码分支",
+  participants: "参与人",
+  reviewer: "评审人",
+  review_content_md: "评审意见",
+  custom_fields: "自定义字段",
 };
+
+function stepName(entry: HistoryEntry): string {
+  const step = entry.meta?.step;
+  if (step && typeof step === "object") {
+    return String((step as { name?: string }).name ?? "步骤");
+  }
+  return "步骤";
+}
 
 function nameOf(ref: unknown): string {
   if (ref && typeof ref === "object" && "name" in ref) {
@@ -62,6 +74,18 @@ function describe(entry: HistoryEntry) {
       return "评论了工作项";
     case "comment_deleted":
       return "删除了评论";
+    case "step_started":
+      return `发起了步骤「${stepName(entry)}」`;
+    case "step_executed":
+      return `执行了步骤「${stepName(entry)}」`;
+    case "step_completed":
+      return `步骤「${stepName(entry)}」完成并流转`;
+    case "step_blocked":
+      return `步骤「${stepName(entry)}」被 gate 阻塞`;
+    case "step_cancelled":
+      return `取消了步骤「${stepName(entry)}」`;
+    case "step_reassigned":
+      return `改派了步骤「${stepName(entry)}」的执行人`;
     default:
       return entry.event_type;
   }

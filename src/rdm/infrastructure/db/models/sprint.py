@@ -19,7 +19,7 @@ class SprintModel(AuditMixin, SoftDeleteMixin, Base):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     goal_md: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Stored verbatim from workflow.yml (uppercase); architecture §16.2.
+    # Stored verbatim from workflow.json5 (uppercase); architecture §16.2.
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="PLANNED")
     start_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)

@@ -27,7 +27,9 @@ async def test_history_actions_order_and_pagination(server, owner_token) -> None
     await _project(client, owner_token)
     epic = await _item(client, owner_token, {"kind": "epic", "title": "E"})
     story = await _item(
-        client, owner_token, {"kind": "story", "title": "S", "parent": epic["display_id"]}
+        client,
+        owner_token,
+        {"kind": "story", "title": "S", "parent": epic["display_id"], "assignee": "owner"},
     )
     other = await _item(client, owner_token, {"kind": "story", "title": "S2"})
 
@@ -53,10 +55,13 @@ async def test_history_actions_order_and_pagination(server, owner_token) -> None
     assert r.status_code == 200, r.text
     story = r.json()["data"]
 
-    # assign
+    # assign (owner is the creator; hand it to another member so this emits an event)
+    from tests.support import make_member
+
+    _dev_id, _dev_token = await make_member(client, owner_token, "DEMO", "dev", ["worker"])
     r = await client.post(
         f"{API}/work-items/{story['display_id']}/assign",
-        json={"member": "owner"},
+        json={"member": "dev"},
         headers=auth(owner_token),
     )
     assert r.status_code == 200, r.text

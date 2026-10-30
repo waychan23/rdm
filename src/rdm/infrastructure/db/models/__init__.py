@@ -33,6 +33,10 @@ from rdm.infrastructure.db.models.sprint import SprintItemModel, SprintModel
 from rdm.infrastructure.db.models.workitem import (
     WorkItemIssueModel,
     WorkItemModel,
+    WorkItemParticipantModel,
+    WorkItemReviewerModel,
+    WorkItemStepExecutorModel,
+    WorkItemStepModel,
     WorkItemStoryModel,
     WorkItemTaskModel,
 )
@@ -49,6 +53,10 @@ __all__ = [
     "WorkItemStoryModel",
     "WorkItemIssueModel",
     "WorkItemTaskModel",
+    "WorkItemParticipantModel",
+    "WorkItemReviewerModel",
+    "WorkItemStepModel",
+    "WorkItemStepExecutorModel",
     "SprintModel",
     "SprintItemModel",
     "CommentModel",

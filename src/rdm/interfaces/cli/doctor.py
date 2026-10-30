@@ -144,7 +144,7 @@ def check_workflow(_settings: Settings) -> CheckResult:
     try:
         spec = load_spec()
     except Exception as exc:  # noqa: BLE001 - any parse failure is a hard FAIL
-        return CheckResult("workflow", FAIL, f"workflow.yml 校验失败：{exc}")
+        return CheckResult("workflow", FAIL, f"workflow.json5 校验失败：{exc}")
     kinds = ", ".join(sorted(spec.kinds))
     return CheckResult("workflow", OK, f"version {spec.version}（{kinds}）")
 

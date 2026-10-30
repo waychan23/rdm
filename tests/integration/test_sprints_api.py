@@ -24,6 +24,48 @@ async def _item(client: httpx.AsyncClient, token: str, payload: dict, key: str =
     return r.json()["data"]
 
 
+async def _finish_task(client: httpx.AsyncClient, token: str, ref: str) -> str:
+    r = await client.get(f"{API}/work-items/{ref}", headers=auth(token))
+    version = r.json()["data"]["row_version"]
+    status = r.json()["data"]["status"]
+    if status == "DONE":
+        return version
+    moves = {
+        "TODO": ["IN_PROGRESS", "TO_REVIEW"],
+        "IN_PROGRESS": ["TO_REVIEW"],
+        "TO_REVIEW": [],
+    }.get(status, [])
+    for to in moves:
+        r = await client.post(
+            f"{API}/work-items/{ref}/transition",
+            json={"to": to, "row_version": version},
+            headers=auth(token),
+        )
+        assert r.status_code == 200, r.text
+        version = r.json()["data"]["row_version"]
+    r = await client.patch(
+        f"{API}/work-items/{ref}",
+        json={"row_version": version, "review_content_md": "LGTM"},
+        headers=auth(token),
+    )
+    assert r.status_code == 200, r.text
+    version = r.json()["data"]["row_version"]
+    r = await client.post(
+        f"{API}/work-items/{ref}/steps/CODE_REVIEW",
+        json={"row_version": version},
+        headers=auth(token),
+    )
+    assert r.status_code == 200, r.text
+    active = r.json()["meta"]["active_step"]
+    r = await client.post(
+        f"{API}/work-item-steps/{active['id']}/execute",
+        json={"note_md": "reviewed"},
+        headers=auth(token),
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["data"]["row_version"]
+
+
 async def _user_token(client: httpx.AsyncClient, owner: str, name: str, roles: list[str]) -> str:
     from tests.support import make_member
 
@@ -33,7 +75,11 @@ async def _user_token(client: httpx.AsyncClient, owner: str, name: str, roles: l
 async def test_sprint_lifecycle_items_start_close_gate(server, owner_token: str) -> None:
     client, settings, _app = server
     await _project(client, owner_token)
-    task = await _item(client, owner_token, {"kind": "task", "title": "t", "task_type": "qa"})
+    task = await _item(
+        client,
+        owner_token,
+        {"kind": "task", "title": "t", "task_type": "qa", "assignee": "me"},
+    )
 
     # create
     r = await client.post(
@@ -82,15 +128,7 @@ async def test_sprint_lifecycle_items_start_close_gate(server, owner_token: str)
     assert details["target"] == "CLOSED"
 
     # drive task to DONE -> close passes
-    version = 0
-    for state in ["IN_PROGRESS", "TO_REVIEW", "DONE"]:
-        r = await client.post(
-            f"{API}/work-items/{task['display_id']}/transition",
-            json={"to": state, "row_version": version},
-            headers=auth(owner_token),
-        )
-        assert r.status_code == 200, r.text
-        version = r.json()["data"]["row_version"]
+    await _finish_task(client, owner_token, task["display_id"])
     r = await client.post(f"{API}/sprints/{sid}/close", headers=auth(owner_token))
     assert r.status_code == 200 and r.json()["data"]["status"] == "CLOSED"
 
@@ -178,7 +216,11 @@ async def test_item_can_belong_to_only_one_sprint(server, owner_token: str) -> N
 async def test_cannot_add_items_to_closed_sprint(server, owner_token: str) -> None:
     client, _s, _app = server
     await _project(client, owner_token)
-    done = await _item(client, owner_token, {"kind": "task", "title": "done", "task_type": "qa"})
+    done = await _item(
+        client,
+        owner_token,
+        {"kind": "task", "title": "done", "task_type": "qa", "assignee": "me"},
+    )
     fresh = await _item(client, owner_token, {"kind": "task", "title": "fresh", "task_type": "qa"})
     r = await client.post(
         f"{API}/projects/DEMO/sprints",
@@ -193,15 +235,7 @@ async def test_cannot_add_items_to_closed_sprint(server, owner_token: str) -> No
     )
     assert r.status_code == 201, r.text
 
-    version = 0
-    for state in ["IN_PROGRESS", "TO_REVIEW", "DONE"]:
-        r = await client.post(
-            f"{API}/work-items/{done['display_id']}/transition",
-            json={"to": state, "row_version": version},
-            headers=auth(owner_token),
-        )
-        assert r.status_code == 200, r.text
-        version = r.json()["data"]["row_version"]
+    await _finish_task(client, owner_token, done["display_id"])
     r = await client.post(f"{API}/sprints/{sid}/start", headers=auth(owner_token))
     assert r.status_code == 200, r.text
     r = await client.post(f"{API}/sprints/{sid}/close", headers=auth(owner_token))
@@ -254,7 +288,11 @@ async def test_backlog_filter_excludes_sprint_items_and_terminal(server, owner_t
     await _project(client, owner_token)
     picked = await _item(client, owner_token, {"kind": "story", "title": "in sprint"})
     free = await _item(client, owner_token, {"kind": "story", "title": "free"})
-    done = await _item(client, owner_token, {"kind": "task", "title": "done", "task_type": "qa"})
+    done = await _item(
+        client,
+        owner_token,
+        {"kind": "task", "title": "done", "task_type": "qa", "assignee": "me"},
+    )
 
     detail = (
         await client.get(f"{API}/work-items/{done['display_id']}", headers=auth(owner_token))

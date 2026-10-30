@@ -46,6 +46,12 @@ class EventType(StrEnum):
     WORK_ITEM_UPDATED = "work_item.updated"
     WORK_ITEM_ASSIGNED = "work_item.assigned"
     WORK_ITEM_STATUS_CHANGED = "work_item.status_changed"
+    WORK_ITEM_STEP_STARTED = "work_item.step_started"
+    WORK_ITEM_STEP_EXECUTED = "work_item.step_executed"
+    WORK_ITEM_STEP_COMPLETED = "work_item.step_completed"
+    WORK_ITEM_STEP_BLOCKED = "work_item.step_blocked"
+    WORK_ITEM_STEP_CANCELLED = "work_item.step_cancelled"
+    WORK_ITEM_STEP_REASSIGNED = "work_item.step_reassigned"
     WORK_ITEM_DELETED = "work_item.deleted"
     WORK_ITEM_RESTORED = "work_item.restored"
     # sprint

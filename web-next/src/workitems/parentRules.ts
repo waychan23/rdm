@@ -6,14 +6,14 @@ export const ALLOWED_PARENT_KINDS: Record<string, string[]> = {
   epic: [],
   story: ["epic"],
   issue: [],
-  task: ["story", "issue"],
+  task: ["epic", "story", "issue", "task"],
 };
 
 export const ALLOWED_CHILD_KINDS: Record<string, string[]> = {
-  epic: ["story"],
+  epic: ["story", "task"],
   story: ["task"],
   issue: ["task"],
-  task: [],
+  task: ["task"],
 };
 
 export function allowedParentKinds(kind: string): string[] {

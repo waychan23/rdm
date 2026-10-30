@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import Button from "@atlaskit/button/default/button";
 import ModalDialog, {
@@ -18,9 +18,13 @@ import WorkItemPicker, { type WorkItemOption } from "../components/WorkItemPicke
 import { api, errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 import { portalMenuProps } from "../lib/portalMenu";
-import type { WorkItem } from "../types";
+import type { WorkflowDto, WorkflowFields, WorkItem } from "../types";
 import { allowedParentKinds } from "./parentRules";
 import KindSpecificFields, { type IssueFields, type TaskFields } from "./KindSpecificFields";
+import WorkItemPeopleFields, {
+  emptyOptionalValues,
+  type OptionalFieldValues,
+} from "./WorkItemPeopleFields";
 
 interface Props {
   open: boolean;
@@ -29,6 +33,26 @@ interface Props {
   parentOption?: WorkItemOption | null;
   onClose: () => void;
   onSaved: (item: WorkItem) => void;
+}
+
+const EMPTY_FIELDS: WorkflowFields = {
+  reviewer: false,
+  review_content: false,
+  custom: [],
+};
+
+function resolveFields(
+  workflow: WorkflowDto | null,
+  kind: string,
+  taskType: string,
+): WorkflowFields {
+  const kindSpec = workflow?.kinds[kind];
+  if (!kindSpec) return EMPTY_FIELDS;
+  const effective =
+    kind === "task" && kindSpec.subtypes?.[taskType]
+      ? kindSpec.subtypes[taskType]
+      : kindSpec;
+  return effective.fields ?? EMPTY_FIELDS;
 }
 
 export default function EditWorkItemDialog({
@@ -54,7 +78,34 @@ export default function EditWorkItemDialog({
     sourceStory: null,
   });
   const [task, setTask] = useState<TaskFields>({ task_type: "other", est_work_hours: 0 });
+  const [workflow, setWorkflow] = useState<WorkflowDto | null>(null);
+  const [people, setPeople] = useState<OptionalFieldValues>(emptyOptionalValues(null));
   const [saving, setSaving] = useState(false);
+  const fields = useMemo(
+    () =>
+      resolveFields(
+        workflow,
+        item?.kind ?? "",
+        item?.task_type ?? task.task_type,
+      ),
+    [workflow, item?.kind, item?.task_type, task.task_type],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    api
+      .get<WorkflowDto>("/workflow")
+      .then((res) => {
+        if (!cancelled) setWorkflow(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setWorkflow(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open || !item) return;
@@ -62,6 +113,13 @@ export default function EditWorkItemDialog({
     setDescription(item.description_md ?? "");
     setPriority(item.priority ?? 0);
     setParent(parentOption);
+    setPeople({
+      assignee: item.assignee?.id ?? null,
+      participants: (item.participants ?? []).map((member) => member.id),
+      reviewer: (item.reviewer ?? []).map((member) => member.id),
+      reviewContent: item.review_content_md ?? "",
+      custom: { ...(item.custom_fields ?? {}) },
+    });
     const f = (item.fields ?? {}) as Record<string, unknown>;
     setAcceptance((f.acceptance_criteria_md as string) || "");
     const sourceId = (f.source_story_id as string) || null;
@@ -115,6 +173,18 @@ export default function EditWorkItemDialog({
       } else if (item.kind === "task") {
         payload.task_type = task.task_type;
         payload.est_work_hours = task.est_work_hours;
+      }
+      payload.participants = people.participants;
+      if (fields.reviewer) payload.reviewer = people.reviewer;
+      if (fields.review_content) {
+        payload.review_content_md = people.reviewContent.trim()
+          ? people.reviewContent
+          : null;
+      }
+      if (fields.custom.length > 0) {
+        payload.custom_fields = Object.fromEntries(
+          fields.custom.map((field) => [field.key, people.custom[field.key] ?? null]),
+        );
       }
       let updated = (
         await api.patch<WorkItem>(`/work-items/${item.display_id}`, payload)
@@ -202,6 +272,13 @@ export default function EditWorkItemDialog({
                 onIssue={setIssue}
                 task={task}
                 onTask={setTask}
+                taskTypeLocked={item.kind === "task"}
+              />
+              <WorkItemPeopleFields
+                projectKey={projectKey}
+                fields={fields}
+                value={people}
+                onChange={setPeople}
               />
             </Stack>
           </ModalBody>

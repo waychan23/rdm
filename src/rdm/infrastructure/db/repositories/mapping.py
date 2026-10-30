@@ -31,6 +31,8 @@ from rdm.domain.entities import (
     User,
     UserToken,
     WorkItem,
+    WorkItemStep,
+    WorkItemStepExecutor,
     Workspace,
 )
 from rdm.infrastructure.db.models import (
@@ -56,6 +58,8 @@ from rdm.infrastructure.db.models import (
     UserTokenModel,
     WorkItemIssueModel,
     WorkItemModel,
+    WorkItemStepExecutorModel,
+    WorkItemStepModel,
     WorkItemStoryModel,
     WorkItemTaskModel,
     WorkspaceModel,
@@ -168,6 +172,9 @@ def password_ticket_to_domain(row: PasswordTicketModel) -> PasswordTicket:
 def work_item_to_domain(
     row: WorkItemModel,
     fields: StoryFields | IssueFields | TaskFields | None = None,
+    *,
+    participant_user_ids: list[str] | None = None,
+    reviewer_user_ids: list[str] | None = None,
 ) -> WorkItem:
     return WorkItem(
         id=row.id,
@@ -183,6 +190,10 @@ def work_item_to_domain(
         assignee_user_id=row.assignee_user_id,
         row_version=row.row_version,
         fields=fields,
+        participant_user_ids=list(participant_user_ids or []),
+        reviewer_user_ids=list(reviewer_user_ids or []),
+        review_content_md=row.review_content_md,
+        custom_fields=dict(row.custom_fields or {}),
         created_at=row.created_at,
         created_by=row.created_by,
         updated_at=row.updated_at,
@@ -449,4 +460,43 @@ def task_fields(row: WorkItemTaskModel) -> TaskFields:
             row.actual_work_hours if isinstance(row.actual_work_hours, Decimal) else None
         ),
         code_branch=row.code_branch,
+    )
+
+
+def work_item_step_to_domain(row: WorkItemStepModel) -> WorkItemStep:
+    return WorkItemStep(
+        id=row.id,
+        project_id=row.project_id,
+        work_item_id=row.work_item_id,
+        step_key=row.step_key,
+        step_name=row.step_name,
+        from_status=row.from_status,
+        to_status=row.to_status,
+        mode=row.mode,
+        status=row.status,
+        required_count=row.required_count,
+        row_version=row.row_version,
+        config=dict(row.config or {}),
+        gate_details=dict(row.gate_details) if row.gate_details else None,
+        created_at=row.created_at,
+        created_by=row.created_by,
+        updated_at=row.updated_at,
+        completed_at=row.completed_at,
+    )
+
+
+def step_executor_to_domain(row: WorkItemStepExecutorModel) -> WorkItemStepExecutor:
+    return WorkItemStepExecutor(
+        id=row.id,
+        step_id=row.step_id,
+        project_id=row.project_id,
+        user_id=row.user_id,
+        status=row.status,
+        note_comment_id=row.note_comment_id,
+        task_id=row.task_id,
+        row_version=row.row_version,
+        created_at=row.created_at,
+        created_by=row.created_by,
+        updated_at=row.updated_at,
+        completed_at=row.completed_at,
     )

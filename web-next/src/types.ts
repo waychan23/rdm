@@ -49,6 +49,7 @@ export interface WorkItem {
   display_id: string;
   project_key: string;
   kind: string;
+  task_type?: string | null;
   title: string;
   description_md?: string | null;
   status: string;
@@ -56,11 +57,70 @@ export interface WorkItem {
   rank?: number;
   parent_id?: string | null;
   assignee?: Assignee | null;
+  participants?: Assignee[];
+  reviewer?: Assignee[];
+  review_content_md?: string | null;
+  custom_fields?: Record<string, unknown> | null;
   fields?: Record<string, unknown> | null;
   row_version: number;
   created_at: string;
   updated_at?: string | null;
   deleted_at?: string | null;
+}
+
+export interface WorkflowStepDef {
+  key: string;
+  name: string;
+  to: string;
+  mode: "direct" | "approval" | "task";
+  actor_sources?: string[];
+  executors: { min: number; max: number | null };
+  note: "optional" | "required";
+  gates: Record<string, unknown>;
+  tasks: { type: string; title: string; complete_on: string } | null;
+  candidates: Assignee[];
+  auto_executors: Assignee[];
+  can_start: boolean;
+  can_execute: boolean;
+  blocked_reasons: string[];
+}
+
+export interface StepExecutor {
+  id: string;
+  user: Assignee;
+  status: "PENDING" | "DONE" | "CANCELLED";
+  note_comment_id?: string | null;
+  note_md?: string | null;
+  task_id?: string | null;
+  task?: { id: string; title: string; status: string } | null;
+  completed_at?: string | null;
+}
+
+export interface ActiveStep {
+  id: string;
+  key: string;
+  name: string;
+  from: string;
+  to: string;
+  mode: "direct" | "approval" | "task";
+  status: "PENDING" | "BLOCKED" | "COMPLETED" | "CANCELLED";
+  row_version: number;
+  required_count: number;
+  config: Record<string, unknown>;
+  gate_details?: Record<string, unknown> | null;
+  created_at: string;
+  executors: StepExecutor[];
+  can_execute: boolean;
+  can_cancel: boolean;
+  can_retry: boolean;
+  can_reassign: boolean;
+}
+
+export interface WorkItemPermissions {
+  can_edit?: boolean;
+  can_assign?: boolean;
+  can_start_steps?: boolean;
+  can_execute?: boolean;
 }
 
 export interface WorkItemDetailMeta {
@@ -69,6 +129,9 @@ export interface WorkItemDetailMeta {
   parent?: WorkItem | null;
   allowed_parent_kinds?: string[];
   allowed_child_kinds?: string[];
+  available_steps?: WorkflowStepDef[];
+  active_step?: ActiveStep | null;
+  permissions?: WorkItemPermissions;
 }
 
 export interface HistoryChange {
@@ -173,16 +236,46 @@ export interface Mailbox {
   unread_count: number;
 }
 
+export interface CustomFieldDef {
+  key: string;
+  label: string;
+  type: "text" | "number" | "user";
+  multiple: boolean;
+}
+
+export interface WorkflowFields {
+  reviewer: boolean;
+  review_content: boolean;
+  custom: CustomFieldDef[];
+}
+
+export interface WorkflowStep {
+  key: string;
+  name: string;
+  to: string;
+  mode: "direct" | "approval" | "task";
+  actors: string[];
+  executors: { min: number; max: number | null };
+  note: "optional" | "required";
+  gates: Record<string, unknown>;
+  tasks: { type: string; title: string; complete_on: string } | null;
+}
+
 export interface WorkflowKind {
+  label?: string;
   states: string[];
   initial: string;
   terminal: string[];
   transitions: Record<string, string[]>;
+  steps?: Record<string, WorkflowStep[]>;
   gates: Record<string, unknown>;
+  fields?: WorkflowFields;
+  subtypes?: Record<string, WorkflowKind>;
 }
 
 export interface WorkflowDto {
   version: number;
+  task_types: { value: string; label: string }[];
   kinds: Record<string, WorkflowKind>;
 }
 

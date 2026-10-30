@@ -16,6 +16,13 @@ class ErrorCode(StrEnum):
     FORBIDDEN = "FORBIDDEN"
     WORKFLOW_ILLEGAL_TRANSITION = "WORKFLOW_ILLEGAL_TRANSITION"
     WORKFLOW_GATE_BLOCKED = "WORKFLOW_GATE_BLOCKED"
+    WORKFLOW_STEP_REQUIRED = "WORKFLOW_STEP_REQUIRED"
+    WORKFLOW_STEP_IN_PROGRESS = "WORKFLOW_STEP_IN_PROGRESS"
+    WORKFLOW_STEP_FORBIDDEN = "WORKFLOW_STEP_FORBIDDEN"
+    WORKFLOW_STEP_NO_CANDIDATES = "WORKFLOW_STEP_NO_CANDIDATES"
+    WORKFLOW_STEP_NOTE_REQUIRED = "WORKFLOW_STEP_NOTE_REQUIRED"
+    WORKFLOW_STEP_ALREADY_EXECUTED = "WORKFLOW_STEP_ALREADY_EXECUTED"
+    WORKFLOW_STEP_INVALID = "WORKFLOW_STEP_INVALID"
     CONFLICT_VERSION = "CONFLICT_VERSION"
     ALREADY_ASSIGNED = "ALREADY_ASSIGNED"
     PROJECT_KEY_DUPLICATE = "PROJECT_KEY_DUPLICATE"
@@ -97,6 +104,41 @@ class WorkflowIllegalTransition(RdmError):
 class WorkflowGateBlocked(RdmError):
     code = ErrorCode.WORKFLOW_GATE_BLOCKED
     http_status = 409
+
+
+class WorkflowStepRequired(RdmError):
+    code = ErrorCode.WORKFLOW_STEP_REQUIRED
+    http_status = 409
+
+
+class WorkflowStepInProgress(RdmError):
+    code = ErrorCode.WORKFLOW_STEP_IN_PROGRESS
+    http_status = 409
+
+
+class WorkflowStepForbidden(RdmError):
+    code = ErrorCode.WORKFLOW_STEP_FORBIDDEN
+    http_status = 403
+
+
+class WorkflowStepNoCandidates(RdmError):
+    code = ErrorCode.WORKFLOW_STEP_NO_CANDIDATES
+    http_status = 422
+
+
+class WorkflowStepNoteRequired(RdmError):
+    code = ErrorCode.WORKFLOW_STEP_NOTE_REQUIRED
+    http_status = 422
+
+
+class WorkflowStepAlreadyExecuted(RdmError):
+    code = ErrorCode.WORKFLOW_STEP_ALREADY_EXECUTED
+    http_status = 409
+
+
+class WorkflowStepInvalid(RdmError):
+    code = ErrorCode.WORKFLOW_STEP_INVALID
+    http_status = 422
 
 
 class ConflictVersion(RdmError):

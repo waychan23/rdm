@@ -20,8 +20,6 @@ from rdm.domain.actor import Actor
 from rdm.domain.entities import User, WorkItem
 from rdm.domain.errors import Forbidden, NotFound
 
-_PRIVILEGED_ROLES = {"project_owner", "manager", "sprint_manager"}
-
 # Human-review gate (architecture §16.52, tightened in §17.70): completion of
 # epic/story/task is a human privilege, enforced purely on identity type. An
 # agent acting on behalf of a human manager still cannot close an item; any
@@ -121,33 +119,61 @@ def assert_project_access(actor: Actor, project_id: str) -> None:
     raise NotFound("项目不存在（或你无权访问）", details={"project_id": project_id})
 
 
-def can_transition(actor: Actor, item: WorkItem) -> bool:
-    if set(actor.project_roles(item.project_id)) & _PRIVILEGED_ROLES:
+def can_edit(
+    actor: Actor,
+    item: WorkItem,
+    participant_user_ids: list[str] | None = None,
+) -> bool:
+    """Content editors: assignee, participants, manager/project_owner (§17)."""
+    if item.assignee_user_id == actor.id:
         return True
-    return item.assignee_user_id == actor.id
+    if actor.id in (participant_user_ids or []):
+        return True
+    return bool({"project_owner", "manager"} & set(actor.project_roles(item.project_id)))
 
 
-def require_can_transition(actor: Actor, item: WorkItem, to_state: str, display_id: str) -> None:
-    if not can_transition(actor, item):
-        raise Forbidden(
-            f"用户 {actor.name} 不能流转 {display_id}：worker 只能流转分配给自己的工作项；"
-            "请用 mailbox_send 联系其负责人。",
-            details={
-                "user_id": actor.id,
-                "work_item_id": item.id,
-                "assignee_user_id": item.assignee_user_id,
-            },
-        )
-    if to_state in COMPLETION_STATES and actor.is_agent:
-        raise Forbidden(
-            f"{actor.name} 不能把 {display_id} 推到 {to_state}：完成态（DONE）"
-            "必须由 human 身份评审收口；请完成后停在 TO_REVIEW/TO_TEST 并通知负责人。",
-            details={
-                "user_id": actor.id,
-                "work_item_id": item.id,
-                "target_state": to_state,
-            },
-        )
+def require_can_edit(
+    actor: Actor,
+    item: WorkItem,
+    display_id: str,
+    participant_user_ids: list[str] | None = None,
+) -> None:
+    if can_edit(actor, item, participant_user_ids):
+        return
+    raise Forbidden(
+        f"用户 {actor.name} 不能编辑 {display_id}：仅负责人、参与人、"
+        "manager 或 project_owner 可编辑；如需接管请先让负责人把工作项指派给你。",
+        details={
+            "user_id": actor.id,
+            "work_item_id": item.id,
+            "assignee_user_id": item.assignee_user_id,
+            "participant_user_ids": participant_user_ids or [],
+        },
+    )
+
+
+def require_can_assign(
+    actor: Actor,
+    item: WorkItem,
+    target_user_id: str,
+    display_id: str,
+    participant_user_ids: list[str] | None = None,
+) -> None:
+    """Self-claim an unassigned item; otherwise editors may reassign."""
+    if item.assignee_user_id is None and target_user_id == actor.id:
+        return
+    if can_edit(actor, item, participant_user_ids):
+        return
+    raise Forbidden(
+        f"用户 {actor.name} 不能指派 {display_id}：未指派时只能自领，"
+        "其余情况仅负责人、参与人、manager 或 project_owner 可改派。",
+        details={
+            "user_id": actor.id,
+            "work_item_id": item.id,
+            "assignee_user_id": item.assignee_user_id,
+            "target_user_id": target_user_id,
+        },
+    )
 
 
 # --- user-level rules -----------------------------------------------------

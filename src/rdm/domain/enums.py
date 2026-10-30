@@ -68,7 +68,7 @@ class ProjectStatus(StrEnum):
     archived = "archived"
 
 
-# Sprint workflow states are stored verbatim from resources/workflow.yml
+# Sprint workflow states are stored verbatim from resources/workflow.json5
 # (uppercase); see docs/architecture.md §16.2.
 class SprintStatus(StrEnum):
     PLANNED = "PLANNED"
@@ -86,14 +86,35 @@ class Severity(StrEnum):
 
 class TaskType(StrEnum):
     product_design = "product_design"
-    ux_design = "ux_design"
+    ui_design = "ui_design"
     frontend = "frontend"
     backend = "backend"
     fullstack = "fullstack"
-    qa = "qa"
+    testing = "testing"
+    test_case_design = "test_case_design"
+    code_review = "code_review"
     release = "release"
     docs = "docs"
     other = "other"
+
+
+class StepMode(StrEnum):
+    direct = "direct"
+    approval = "approval"
+    task = "task"
+
+
+class StepStatus(StrEnum):
+    PENDING = "PENDING"
+    BLOCKED = "BLOCKED"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+
+class StepExecutorStatus(StrEnum):
+    PENDING = "PENDING"
+    DONE = "DONE"
+    CANCELLED = "CANCELLED"
 
 
 class ArtifactOwnerType(StrEnum):

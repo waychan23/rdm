@@ -31,6 +31,9 @@ interface Props {
   onIssue: (v: IssueFields) => void;
   task: TaskFields;
   onTask: (v: TaskFields) => void;
+  taskTypeLocked?: boolean;
+  /** The create form renders the task type above the title itself. */
+  hideTaskType?: boolean;
 }
 
 // Kind-specific inputs shared by the create and edit dialogs.
@@ -43,6 +46,8 @@ export default function KindSpecificFields({
   onIssue,
   task,
   onTask,
+  taskTypeLocked = false,
+  hideTaskType = false,
 }: Props) {
   if (kind === "story") {
     return (
@@ -122,17 +127,20 @@ export default function KindSpecificFields({
   if (kind === "task") {
     return (
       <Stack space="space.150">
-        <FormField label="任务类型" htmlFor="wi-task-type">
-          <Select
-            {...portalMenuProps}
-            inputId="wi-task-type"
-            options={TASK_TYPE_OPTIONS}
-            value={TASK_TYPE_OPTIONS.find((o) => o.value === task.task_type)}
-            onChange={(opt) =>
-              opt && onTask({ ...task, task_type: (opt as { value: string }).value })
-            }
-          />
-        </FormField>
+        {!hideTaskType && (
+          <FormField label="任务类型" htmlFor="wi-task-type">
+            <Select
+              {...portalMenuProps}
+              inputId="wi-task-type"
+              options={TASK_TYPE_OPTIONS}
+              value={TASK_TYPE_OPTIONS.find((o) => o.value === task.task_type)}
+              isDisabled={taskTypeLocked}
+              onChange={(opt) =>
+                opt && onTask({ ...task, task_type: (opt as { value: string }).value })
+              }
+            />
+          </FormField>
+        )}
         <FormField label="预估工时（h）" htmlFor="wi-est-hours">
           <Textfield
             id="wi-est-hours"

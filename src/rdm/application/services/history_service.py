@@ -28,6 +28,8 @@ _CONTENT_FIELDS = {
     "repro_steps_md",
     "expected_behavior_md",
     "actual_behavior_md",
+    "review_content_md",
+    "custom_fields",
 }
 _MD_NOISE_RE = re.compile(r"[#*`>_~\[\]()!]")
 
@@ -168,6 +170,28 @@ class HistoryService:
                 "excerpt": _truncate(_plain_text(body), 140),
                 "reply_to_id": snapshot.get("reply_to_id"),
             }
+        elif event_type.startswith("work_item.step_"):
+            action = event_type.removeprefix("work_item.")
+            step = payload.get("step") or {}
+            meta = {
+                "step": {
+                    "id": step.get("id"),
+                    "key": step.get("key"),
+                    "name": step.get("name"),
+                }
+            }
+            if payload.get("executors"):
+                meta["executors"] = [
+                    self._user_ref(user_id, users) for user_id in payload["executors"]
+                ]
+            if payload.get("user_id"):
+                meta["user"] = self._user_ref(payload["user_id"], users)
+            if payload.get("task_id"):
+                meta["task_id"] = payload["task_id"]
+            if payload.get("gate"):
+                meta["gate"] = payload["gate"]
+            if payload.get("reason"):
+                meta["reason"] = payload["reason"]
         else:
             action = "event"
             meta = {"event_type": event_type}

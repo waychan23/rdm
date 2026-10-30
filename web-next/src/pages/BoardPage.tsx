@@ -80,14 +80,27 @@ export default function BoardPage() {
 
   const handleDrop = useCallback(
     async (itemId: string, target: string) => {
-      const { items: current, workflow: wf, projectKey: pk } = stateRef.current;
+      const { items: current, workflow: wf } = stateRef.current;
       const item = current.find((i) => i.id === itemId);
       if (!item || item.status === target) return;
-      const allowed = wf?.kinds[item.kind]?.transitions[item.status] ?? [];
-      if (!allowed.includes(target)) {
+      const base = wf?.kinds[item.kind];
+      const spec =
+        item.kind === "task" && item.task_type
+          ? base?.subtypes?.[item.task_type] ?? base
+          : base;
+      const matching = (spec?.steps?.[item.status] ?? []).filter(
+        (step) => step.to === target,
+      );
+      const step = matching.length === 1 ? matching[0] : undefined;
+      const direct =
+        step !== undefined &&
+        step.mode === "direct" &&
+        step.note === "optional" &&
+        Object.keys(step.gates ?? {}).length === 0;
+      if (!direct) {
         notify.error(
-          "非法流转",
-          `${item.display_id} 不能从 ${item.status} 流转到 ${target}`,
+          "请在工作项详情中执行步骤",
+          `${item.display_id} 从 ${item.status} 到 ${target} 需要选择命名步骤或填写备注。`,
         );
         return;
       }
@@ -96,10 +109,9 @@ export default function BoardPage() {
         prev.map((i) => (i.id === item.id ? { ...i, status: target } : i)),
       );
       try {
-        await api.post(`/work-items/${item.display_id}/transition`, {
-          to: target,
+        await api.post(`/work-items/${item.display_id}/steps/${step.key}`, {
           row_version: item.row_version,
-          reason: null,
+          note_md: null,
         });
         notify.success(`${item.display_id} → ${target}`);
         await load(stateRef.current.kind);
@@ -138,8 +150,21 @@ export default function BoardPage() {
   const columns = useMemo(() => {
     const spec = workflow?.kinds[kind];
     if (!spec) return [];
-    const terminal = new Set(spec.terminal);
-    const states = spec.states.filter((s) => showTerminal || !terminal.has(s));
+    const subtypes = kind === "task" ? Object.values(spec.subtypes ?? {}) : [];
+    const terminal = new Set([
+      ...spec.terminal,
+      ...subtypes.flatMap((subtype) => subtype.terminal),
+    ]);
+    const states =
+      subtypes.length > 0
+        ? [
+            ...new Set([
+              ...spec.states,
+              ...subtypes.flatMap((subtype) => subtype.states),
+            ]),
+          ]
+        : spec.states;
+    const visible = states.filter((s) => showTerminal || !terminal.has(s));
     return states.map((status) => ({
       status,
       items: items.filter((i) => i.status === status),

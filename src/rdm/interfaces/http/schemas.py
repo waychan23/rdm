@@ -7,23 +7,12 @@ VALIDATION_ERROR with an actionable message).
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 Kind = Literal["epic", "story", "issue", "task"]
 Severity = Literal["blocker", "critical", "major", "minor", "trivial"]
-TaskType = Literal[
-    "product_design",
-    "ux_design",
-    "frontend",
-    "backend",
-    "fullstack",
-    "qa",
-    "release",
-    "docs",
-    "other",
-]
 
 
 class _Strict(BaseModel):
@@ -37,6 +26,11 @@ class WorkItemCreateIn(_Strict):
     description_md: str | None = None
     priority: int = Field(default=0, ge=0, le=999)
     assignee: str | None = None
+    # M6 people/optional fields (enabled per workflow; validated in the service)
+    participants: list[str] | None = None
+    reviewer: list[str] | None = None
+    review_content_md: str | None = None
+    custom_fields: dict[str, Any] | None = None
     # story
     acceptance_criteria_md: str | None = None
     # issue
@@ -47,7 +41,7 @@ class WorkItemCreateIn(_Strict):
     actual_behavior_md: str | None = None
     source_story: str | None = None
     # task
-    task_type: TaskType | None = None
+    task_type: str | None = None
     est_work_hours: float | None = Field(default=None, ge=0, le=9999.9)
     actual_work_hours: float | None = Field(default=None, ge=0, le=9999.9)
     code_branch: str | None = None
@@ -58,6 +52,10 @@ class WorkItemUpdateIn(_Strict):
     title: str | None = Field(default=None, min_length=1, max_length=300)
     description_md: str | None = None
     priority: int | None = Field(default=None, ge=0, le=999)
+    participants: list[str] | None = None
+    reviewer: list[str] | None = None
+    review_content_md: str | None = None
+    custom_fields: dict[str, Any] | None = None
     # story
     acceptance_criteria_md: str | None = None
     # issue
@@ -68,7 +66,7 @@ class WorkItemUpdateIn(_Strict):
     actual_behavior_md: str | None = None
     source_story: str | None = None
     # task
-    task_type: TaskType | None = None
+    task_type: str | None = None
     est_work_hours: float | None = Field(default=None, ge=0, le=9999.9)
     actual_work_hours: float | None = Field(default=None, ge=0, le=9999.9)
     code_branch: str | None = None
@@ -88,3 +86,29 @@ class TransitionIn(_Strict):
     to: str = Field(min_length=1)
     row_version: int
     reason: str | None = None
+
+
+class StepStartIn(_Strict):
+    row_version: int
+    executors: list[str] | None = None
+    note_md: str | None = None
+    attachment_ids: list[str] | None = None
+
+
+class StepExecuteIn(_Strict):
+    note_md: str | None = None
+    attachment_ids: list[str] | None = None
+
+
+class StepCancelIn(_Strict):
+    row_version: int
+    reason: str | None = None
+
+
+class StepReassignIn(_Strict):
+    row_version: int
+    executors: list[str]
+
+
+class StepRetryIn(_Strict):
+    row_version: int

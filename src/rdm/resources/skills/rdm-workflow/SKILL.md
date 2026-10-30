@@ -29,19 +29,23 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 
 ## 2. 认领工作项
 
-1. 先 `work_item_get`（id 接受 `KEY-42` 显示 ID 或 ULID）确认 `assignee` 与当前状态。
-2. 未指派且该由你做：`work_item_assign` 把 assignee 设为自己（M1 只支持 assignee，传 reviewer/watcher 会报 VALIDATION_ERROR）。
-3. 认领后立即 `work_item_transition` 转到 `IN_PROGRESS`（task）或对应 kind 的"进行中"状态。
+1. 先 `work_item_get`（id 接受 `KEY-42` 显示 ID 或 ULID）确认 `assignee`、`status`、`meta.available_steps` 与 `meta.active_step`。
+2. 未指派且该由你做：`work_item_assign` 把负责人设为自己（`member="me"`）。已有负责人时，只有负责人/参与人/manager/project_owner 能改派；不要争抢。
+3. 认领后按当前状态的 direct 步骤推进（通常是 `TODO -> IN_PROGRESS`）。direct 步骤必须由该步骤的指定执行人执行；Owner/Manager 不能越权，需先变更负责人再操作。
 4. 若认领时返回 `ALREADY_ASSIGNED`，说明被别人抢走/指派了——不要争，用 `mailbox_send` 联系其 accountable_human。
+5. 需要评审/多人步骤时，负责人先维护 `reviewer`/参与人，再 `work_item_step(action="start", step_key=..., executors=[...])`。
+## 3. 推进状态：direct 用 work_item_transition，命名步骤用 work_item_step
 
-## 3. 推进状态：只走 work_item_transition
-
-- **唯一的状态入口是 `work_item_transition`**，永远不要用 work_item_update 改 status（也改不了）。
-- **每次转状态前先看返回里的 `allowed_transitions`**，只转其中列出的状态；别靠记忆猜状态名。
-- 调用必须带 `work_item_get` 返回的最新 `row_version`；返回 `CONFLICT_VERSION` 表示有人先改过，重新 get 后再试。
-- 成功返回的 meta 含 `allowed_transitions`、`children_summary`、`hint`，是下一步的操作指引。
-- **gate 被拒（`WORKFLOW_GATE_BLOCKED`）时不要去试别的转换**：读 `details.blocking_children`（仍未终态的子项 display_id 列表），先完成/取消这些子项，或用 `comment_add`/`mailbox_send` 通知负责人，然后重试同一转换。
-
+- 先 `work_item_get`，读 `meta.available_steps`（当前状态可执行的命名步骤、候选人、mode、note、gate）与 `meta.active_step`。
+- **direct 步骤**（mode=direct）可由唯一候选执行人用 `work_item_transition` 或 `work_item_step(action="start")` 直接执行；`reason` 作为备注。
+- **approval/task 步骤**不能直接流转；返回 `WORKFLOW_STEP_REQUIRED` 时改用 `work_item_step`：
+  1. 负责人 `action="start"`，传 `step_key`、`row_version`、`executors`（候选唯一时可省略）。
+  2. 被指派的执行人 `action="execute"`，传 `step_id`、`note_md`（note required 时必填）与可选 `attachment_ids`。
+  3. 全部执行人完成后服务端自动流转；中途可 `cancel`/`reassign`（仅负责人），gate 阻塞时 `retry`。
+  4. task 模式会为每名执行人创建一个子任务；执行人完成自己的子任务即可，不要直接 execute。
+- 每次操作带最新 `row_version`/步骤 `row_version`；`CONFLICT_VERSION` 时重新 get。
+- 活动步骤存在时普通 `work_item_transition` 返回 `WORKFLOW_STEP_IN_PROGRESS`；不要另起步骤。
+- **gate 被拒**：读 `details.blocking_children` 与 `details.missing_fields`；先完成/取消子项、补齐字段，再重试同一操作。
 ## 4. 协作：一切走信箱
 
 - 跨 human/agent 传递任何需要对方知道的信息，一律 `mailbox_send`，并用 `refs` 附上相关工作项 id。**不要靠 commit message、代码注释或口头约定传递工作信息。**
@@ -52,17 +56,19 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 ## 5. 完成工作
 
 1. task 完成后先回填实际工时（`work_item_update` 改 `actual_work_hours` 等特型字段）。
-2. `work_item_transition` 转到 `TO_REVIEW`。
-3. **停住。agent 不得自行把 TO_REVIEW/TO_TEST 推成 DONE**——这是**服务端硬约束**（§17.70，按身份类型判定）：`agent` 身份一律不能转 DONE（即使其 human manager 是 owner/manager）。human 身份则不受角色限制：能流转该工作项的 human（assignee 或 owner/manager/sprint_manager）可直接收口 DONE。story 在 TO_TEST、task 在 TO_REVIEW 后用 `mailbox_send` 通知 accountable_human 验收。issue 的 CLOSED_DONE 是 QA 关单，QA 可自行完成。
-4. Story/Issue/Epic 进入终态有 gate：所有直接子项必须先处于各自 kind 的终态；issue 关闭还要求至少有 1 个子任务（见 §3 的 blocking_children）。
-
+2. 按工作流推进到 `TO_REVIEW`（direct 步骤）。
+3. **停住。agent 不能作为 DONE 步骤的执行人**（服务端按身份类型判定，§17.70/81）：DONE 目标的候选执行人会过滤 agent。需要评审时，负责人维护 reviewer 并启动 `CODE_REVIEW`/任务式步骤，由 human 执行人收口；agent 可以执行非 DONE 步骤或完成自己的评审子任务。
+4. story 在 TO_TEST、task 在 TO_REVIEW 后用 `mailbox_send` 通知 accountable_human 验收。issue 的 CLOSED_DONE 是 QA 关单，不受 DONE 身份限制。
+5. Story/Issue/Epic 进入终态有 gate：所有直接子项必须先终态；issue 关闭还要求至少 1 个子任务。
 ## 6. 异常处理
 
-- 一切错误都是结构化信封 `{"error": {"code", "message", "details"}}`：按 `message` 的中文指引行动，`details`（如 allowed_transitions、blocking_children、current_version）给具体数据。
-- `FORBIDDEN`：你的身份无权做此事（worker 只能流转分配给自己的 item；sprint 创建/启动/关闭仅 owner/manager）——用 mailbox_send 请求有权限的人协助，不要重试。
+- 一切错误都是结构化信封 `{"error": {"code", "message", "details"}}`：按 `message` 的中文指引行动，`details`（如 allowed_transitions、available_steps、blocking_children、missing_fields、current_version）给具体数据。
+- `FORBIDDEN` / `WORKFLOW_STEP_FORBIDDEN`：你的身份无权做此事（步骤只能由负责人发起/改派，只能由被指派执行人执行；sprint 创建/启动/关闭仅 owner/manager）——用 mailbox_send 请求有权限的人协助，不要重试。
+- `WORKFLOW_STEP_REQUIRED`：目标不是唯一 direct 步骤；按 `details.available_steps` 的 `key` 调用 `work_item_step`，不要硬转。
+- `WORKFLOW_STEP_IN_PROGRESS`：已有活动步骤；继续 `execute`/`retry`，或由负责人 `cancel`/`reassign`，不要另起步骤。
+- `WORKFLOW_STEP_NO_CANDIDATES` / `WORKFLOW_STEP_NOTE_REQUIRED`：先补齐 reviewer/参与人/执行人，或填写必填备注。
 - `NOT_FOUND`：id 错或不属于当前项目；重新 `work_item_get` / 查列表确认，**不要猜 id**。
 - **同一个错误连续出现两次**：停止重试，`mailbox_send` 给 accountable_human，附上错误原文与你尝试的操作。
-
 ## 7. 图片与附件
 
 - 工作项描述、评论、Sprint 目标里的图片是 **project 级附件**，正文写成
@@ -80,8 +86,8 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 ## 8. 禁止事项
 
 - 不要猜工作项/成员 id；先查询。
-- 不要尝试绕过 `work_item_transition` 改状态。
-- 不要修改分配给他人的工作项状态（会得 FORBIDDEN）。
+- 不要尝试绕过 `work_item_transition`/`work_item_step` 改状态。
+- 不要执行未指派给自己的步骤；不要修改分配给他人的工作项状态。
+- 不要作为 agent 执行 DONE 目标的步骤（服务端会过滤候选）。
 - 不要重复 `mailbox_send` 同一内容；对同一事项用 reply_to 回信。
-- 不要在 TO_REVIEW 后自行推进到 DONE。
 - 不要忽略 gate 阻塞去尝试其他转换路径——状态机没有"绕路"。

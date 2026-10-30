@@ -21,6 +21,7 @@ async def _make_story_with_open_task(mcp_clients, owner_client) -> tuple[str, st
             "title": "s",
             "project": "DEMO",
             "parent": epic["data"]["display_id"],
+            "assignee": "me",
         },
     )
     story_id = story["data"]["display_id"]
@@ -89,7 +90,7 @@ async def test_error_envelopes_for_not_found_conflict_forbidden_gate(
             "work_item_transition",
             {"id": story, "to": "CANCELLED", "row_version": 2},
         )
-        assert res["_is_error"] and res["error"]["code"] == "FORBIDDEN"
+        assert res["_is_error"] and res["error"]["code"] == "WORKFLOW_STEP_FORBIDDEN"
 
 
 async def test_input_validation_error_is_envelope(mcp_clients) -> None:

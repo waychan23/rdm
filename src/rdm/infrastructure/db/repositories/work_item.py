@@ -10,7 +10,7 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Sequence
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rdm.domain.entities import (
@@ -25,6 +25,8 @@ from rdm.infrastructure.db.models import (
     SprintItemModel,
     WorkItemIssueModel,
     WorkItemModel,
+    WorkItemParticipantModel,
+    WorkItemReviewerModel,
     WorkItemStoryModel,
     WorkItemTaskModel,
 )
@@ -54,6 +56,8 @@ class WorkItemRepository:
                 priority=item.priority,
                 rank=item.rank,
                 assignee_user_id=item.assignee_user_id,
+                review_content_md=item.review_content_md,
+                custom_fields=dict(item.custom_fields or {}),
                 row_version=item.row_version,
                 created_at=item.created_at,
                 created_by=item.created_by,
@@ -71,7 +75,13 @@ class WorkItemRepository:
         if row is None or (not include_deleted and row.deleted_at is not None):
             return None
         fields = (await self._assemble_fields([row])).get(row.id) if expand else None
-        return work_item_to_domain(row, fields)
+        participants, reviewers = await self._assemble_people([row])
+        return work_item_to_domain(
+            row,
+            fields,
+            participant_user_ids=participants.get(row.id),
+            reviewer_user_ids=reviewers.get(row.id),
+        )
 
     async def list(
         self,
@@ -80,6 +90,7 @@ class WorkItemRepository:
         kind: str | None = None,
         status: str | None = None,
         assignee_user_id: str | None = None,
+        reviewer_user_id: str | None = None,
         parent_id: str | None = None,
         q: str | None = None,
         exclude_statuses: Sequence[str] | None = None,
@@ -109,10 +120,26 @@ class WorkItemRepository:
             )
         if assignee_user_id is not None:
             stmt = stmt.where(WorkItemModel.assignee_user_id == assignee_user_id)
+        if reviewer_user_id is not None:
+            stmt = stmt.where(
+                select(WorkItemReviewerModel.id)
+                .where(
+                    WorkItemReviewerModel.work_item_id == WorkItemModel.id,
+                    WorkItemReviewerModel.user_id == reviewer_user_id,
+                    WorkItemReviewerModel.deleted_at.is_(None),
+                )
+                .exists()
+            )
         if parent_id is not None:
             stmt = stmt.where(WorkItemModel.parent_id == parent_id)
         if q:
-            stmt = stmt.where(WorkItemModel.title.ilike(f"%{q}%"))
+            pattern = f"%{q}%"
+            stmt = stmt.where(
+                or_(
+                    WorkItemModel.title.ilike(pattern),
+                    WorkItemModel.review_content_md.ilike(pattern),
+                )
+            )
         stmt = stmt.order_by(WorkItemModel.display_no).limit(limit).offset(offset)
         rows = list((await self._s.execute(stmt)).scalars().all())
         fields_map = await self._assemble_fields(rows) if expand and rows else {}
@@ -125,6 +152,7 @@ class WorkItemRepository:
         kind: str | None = None,
         status: str | None = None,
         assignee_user_id: str | None = None,
+        reviewer_user_id: str | None = None,
         parent_id: str | None = None,
         q: str | None = None,
         exclude_statuses: Sequence[str] | None = None,
@@ -155,10 +183,26 @@ class WorkItemRepository:
             )
         if assignee_user_id is not None:
             stmt = stmt.where(WorkItemModel.assignee_user_id == assignee_user_id)
+        if reviewer_user_id is not None:
+            stmt = stmt.where(
+                select(WorkItemReviewerModel.id)
+                .where(
+                    WorkItemReviewerModel.work_item_id == WorkItemModel.id,
+                    WorkItemReviewerModel.user_id == reviewer_user_id,
+                    WorkItemReviewerModel.deleted_at.is_(None),
+                )
+                .exists()
+            )
         if parent_id is not None:
             stmt = stmt.where(WorkItemModel.parent_id == parent_id)
         if q:
-            stmt = stmt.where(WorkItemModel.title.ilike(f"%{q}%"))
+            pattern = f"%{q}%"
+            stmt = stmt.where(
+                or_(
+                    WorkItemModel.title.ilike(pattern),
+                    WorkItemModel.review_content_md.ilike(pattern),
+                )
+            )
         return int((await self._s.execute(stmt)).scalar_one())
 
     async def count_by_status(self, project_id: str) -> dict[str, int]:
@@ -182,7 +226,13 @@ class WorkItemRepository:
         if row is None or (not include_deleted and row.deleted_at is not None):
             return None
         fields = (await self._assemble_fields([row])).get(row.id)
-        return work_item_to_domain(row, fields)
+        participants, reviewers = await self._assemble_people([row])
+        return work_item_to_domain(
+            row,
+            fields,
+            participant_user_ids=participants.get(row.id),
+            reviewer_user_ids=reviewers.get(row.id),
+        )
 
     async def list_by_ids(
         self, project_id: str, item_ids: Sequence[str], *, include_deleted: bool = False
@@ -196,7 +246,16 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.deleted_at.is_(None))
         rows = list((await self._s.execute(stmt)).scalars().all())
         fields_map = await self._assemble_fields(rows) if rows else {}
-        return [work_item_to_domain(r, fields_map.get(r.id)) for r in rows]
+        participants, reviewers = await self._assemble_people(rows)
+        return [
+            work_item_to_domain(
+                r,
+                fields_map.get(r.id),
+                participant_user_ids=participants.get(r.id),
+                reviewer_user_ids=reviewers.get(r.id),
+            )
+            for r in rows
+        ]
 
     async def list_children(
         self, parent_id: str, *, include_deleted: bool = False
@@ -225,6 +284,8 @@ class WorkItemRepository:
                 rank=item.rank,
                 assignee_user_id=item.assignee_user_id,
                 parent_id=item.parent_id,
+                review_content_md=item.review_content_md,
+                custom_fields=dict(item.custom_fields or {}),
                 row_version=item.row_version + 1,
                 updated_at=dt.datetime.now(dt.UTC),
             )
@@ -321,6 +382,40 @@ class WorkItemRepository:
         for r in task_rows:
             by_id[r.work_item_id] = task_fields(r)
         return by_id
+
+    async def _assemble_people(
+        self, rows: Sequence[WorkItemModel]
+    ) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+        ids = [r.id for r in rows]
+        if not ids:
+            return {}, {}
+        participant_rows = (
+            await self._s.execute(
+                select(WorkItemParticipantModel)
+                .where(
+                    WorkItemParticipantModel.work_item_id.in_(ids),
+                    WorkItemParticipantModel.deleted_at.is_(None),
+                )
+                .order_by(WorkItemParticipantModel.created_at)
+            )
+        ).scalars()
+        reviewer_rows = (
+            await self._s.execute(
+                select(WorkItemReviewerModel)
+                .where(
+                    WorkItemReviewerModel.work_item_id.in_(ids),
+                    WorkItemReviewerModel.deleted_at.is_(None),
+                )
+                .order_by(WorkItemReviewerModel.created_at)
+            )
+        ).scalars()
+        participants: dict[str, list[str]] = {}
+        reviewers: dict[str, list[str]] = {}
+        for row in participant_rows:
+            participants.setdefault(row.work_item_id, []).append(row.user_id)
+        for row in reviewer_rows:
+            reviewers.setdefault(row.work_item_id, []).append(row.user_id)
+        return participants, reviewers
 
     @staticmethod
     def _extension_model(kind: str) -> type | None:

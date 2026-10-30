@@ -6,16 +6,23 @@ from fastapi import APIRouter, Depends
 
 from rdm.application.services.history_service import HistoryService
 from rdm.application.services.membership_service import MembershipService
+from rdm.application.services.step_service import StepService
 from rdm.application.services.workitem_service import (
     WorkItemService,
     allowed_child_kinds,
     allowed_parent_kinds,
+    item_task_type,
 )
 from rdm.domain.actor import Actor
 from rdm.domain.workflow.loader import load_engine
 from rdm.interfaces.http.container import Container, get_actor, get_container
 from rdm.interfaces.http.schemas import (
     ReparentIn,
+    StepCancelIn,
+    StepExecuteIn,
+    StepReassignIn,
+    StepRetryIn,
+    StepStartIn,
     TransitionIn,
     WorkItemAssignIn,
     WorkItemCreateIn,
@@ -40,6 +47,7 @@ async def list_work_items(
     kind: str | None = None,
     status: str | None = None,
     assignee: str | None = None,
+    reviewer: str | None = None,
     parent: str | None = None,
     sprint: str | None = None,
     q: str | None = None,
@@ -57,6 +65,7 @@ async def list_work_items(
             kind=kind,
             status=status,
             assignee_ref=assignee,
+            reviewer_ref=reviewer,
             parent_ref=parent,
             sprint_ref=sprint,
             q=q,
@@ -106,8 +115,9 @@ async def get_work_item(
             if item.parent_id
             else None
         )
-        allowed = load_engine().allowed(item.kind, item.status)
+        allowed = load_engine().allowed(item.kind, item.status, task_type=item_task_type(item))
         data = work_item_out(item, project, members)
+        step_meta = await StepService(uow, container.file_store).describe(item, actor)
         meta = {
             "allowed_transitions": list(allowed),
             "children": [work_item_summary_out(c, project, members) for c in children],
@@ -116,6 +126,7 @@ async def get_work_item(
             else None,
             "allowed_parent_kinds": allowed_parent_kinds(item.kind),
             "allowed_child_kinds": allowed_child_kinds(item.kind),
+            **step_meta,
         }
     return {"data": data, "meta": meta}
 
@@ -219,9 +230,100 @@ async def transition_work_item(
     actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
-        # WorkItemService.transition lands in M1-2.
+        # Direct steps execute immediately; approval/task steps return
+        # WORKFLOW_STEP_REQUIRED and must use the step endpoints.
         project, item, meta = await WorkItemService(uow).transition(
             actor, ref, to=body.to, row_version=body.row_version, reason=body.reason
+        )
+        members = await _users_map(uow, project.id)
+        out = work_item_out(item, project, members)
+    return {"data": out, "meta": meta}
+
+
+@router.post("/work-items/{ref}/steps/{key}")
+async def start_work_item_step(
+    ref: str,
+    key: str,
+    body: StepStartIn,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project, item, meta = await StepService(uow, container.file_store).start(
+            actor,
+            ref,
+            key,
+            row_version=body.row_version,
+            executors=body.executors,
+            note_md=body.note_md,
+            attachment_ids=body.attachment_ids,
+        )
+        members = await _users_map(uow, project.id)
+        out = work_item_out(item, project, members)
+    return {"data": out, "meta": meta}
+
+
+@router.post("/work-item-steps/{step_id}/execute")
+async def execute_work_item_step(
+    step_id: str,
+    body: StepExecuteIn,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project, item, meta = await StepService(uow, container.file_store).execute(
+            actor,
+            step_id,
+            note_md=body.note_md,
+            attachment_ids=body.attachment_ids,
+        )
+        members = await _users_map(uow, project.id)
+        out = work_item_out(item, project, members)
+    return {"data": out, "meta": meta}
+
+
+@router.post("/work-item-steps/{step_id}/cancel")
+async def cancel_work_item_step(
+    step_id: str,
+    body: StepCancelIn,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project, item, meta = await StepService(uow, container.file_store).cancel(
+            actor, step_id, row_version=body.row_version, reason=body.reason
+        )
+        members = await _users_map(uow, project.id)
+        out = work_item_out(item, project, members)
+    return {"data": out, "meta": meta}
+
+
+@router.post("/work-item-steps/{step_id}/retry")
+async def retry_work_item_step(
+    step_id: str,
+    body: StepRetryIn,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project, item, meta = await StepService(uow, container.file_store).retry(
+            actor, step_id, row_version=body.row_version
+        )
+        members = await _users_map(uow, project.id)
+        out = work_item_out(item, project, members)
+    return {"data": out, "meta": meta}
+
+
+@router.post("/work-item-steps/{step_id}/reassign")
+async def reassign_work_item_step(
+    step_id: str,
+    body: StepReassignIn,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project, item, meta = await StepService(uow, container.file_store).reassign(
+            actor, step_id, row_version=body.row_version, executors=body.executors
         )
         members = await _users_map(uow, project.id)
         out = work_item_out(item, project, members)
