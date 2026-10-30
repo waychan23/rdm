@@ -302,3 +302,83 @@ async def test_comment_mention_notifies_and_whoami(server, owner_token: str) -> 
     comments = r.json()["data"]
     assert len(comments) == 1
     assert comments[0]["author"]["name"] == "backend"
+
+
+async def test_archive_sent_search_delete_and_groups(server, owner_token: str) -> None:
+    client, _settings, _app = server
+    await _project(client, owner_token)
+    _b_id, backend = await _member(client, owner_token, "backend")
+    _f_id, frontend = await _member(client, owner_token, "frontend")
+
+    r = await client.post(
+        f"{API}/projects/DEMO/messages",
+        json={"to": ["frontend"], "subject": "预算确认", "body_md": "请确认 Q4 预算"},
+        headers=auth(backend),
+    )
+    assert r.status_code == 201, r.text
+
+    r = await client.get(
+        f"{API}/projects/DEMO/mailbox?unread_only=false&folder=inbox", headers=auth(frontend)
+    )
+    row = r.json()["data"]["messages"][0]
+    delivery_id = row["delivery_id"]
+    assert row["archived_at"] is None
+
+    # Search hits subject/body inside the selected folder.
+    r = await client.get(
+        f"{API}/projects/DEMO/mailbox?unread_only=false&q=预算", headers=auth(frontend)
+    )
+    assert len(r.json()["data"]["messages"]) == 1
+    r = await client.get(
+        f"{API}/projects/DEMO/mailbox?unread_only=false&q=不存在", headers=auth(frontend)
+    )
+    assert r.json()["data"]["messages"] == []
+
+    # Archive moves it out of the inbox into the archived folder.
+    r = await client.post(
+        f"{API}/messages/archive",
+        json={"delivery_ids": [delivery_id], "archived": True},
+        headers=auth(frontend),
+    )
+    assert r.status_code == 200 and r.json()["data"]["updated"] == 1
+    r = await client.get(f"{API}/projects/DEMO/mailbox?unread_only=false", headers=auth(frontend))
+    assert r.json()["data"]["messages"] == []
+    r = await client.get(f"{API}/projects/DEMO/mailbox?folder=archived", headers=auth(frontend))
+    assert len(r.json()["data"]["messages"]) == 1
+    assert r.json()["data"]["messages"][0]["archived_at"] is not None
+
+    # Sent folder is the sender's own view and lists recipients.
+    r = await client.get(f"{API}/projects/DEMO/mailbox?folder=sent", headers=auth(backend))
+    sent = r.json()["data"]["messages"]
+    assert len(sent) == 1
+    assert sent[0]["subject"] == "预算确认"
+    assert sent[0]["delivery_id"].startswith("sent:")
+    assert sent[0]["recipients"][0]["name"] == "frontend"
+
+    # Group mailboxes are listable after creation.
+    r = await client.post(
+        f"{API}/projects/DEMO/mailboxes",
+        json={"name": "qa-group", "members": ["frontend"]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+    r = await client.get(f"{API}/projects/DEMO/mailboxes", headers=auth(frontend))
+    groups = r.json()["data"]
+    assert [g["name"] for g in groups] == ["qa-group"]
+    assert [m["name"] for m in groups[0]["members"]] == ["frontend"]
+
+    # Deleting is per-recipient and idempotent.
+    r = await client.post(
+        f"{API}/messages/delete",
+        json={"delivery_ids": [delivery_id]},
+        headers=auth(frontend),
+    )
+    assert r.json()["data"]["deleted"] == 1
+    r = await client.get(f"{API}/projects/DEMO/mailbox?folder=archived", headers=auth(frontend))
+    assert r.json()["data"]["messages"] == []
+    r = await client.post(
+        f"{API}/messages/delete",
+        json={"delivery_ids": [delivery_id]},
+        headers=auth(frontend),
+    )
+    assert r.json()["data"]["deleted"] == 0

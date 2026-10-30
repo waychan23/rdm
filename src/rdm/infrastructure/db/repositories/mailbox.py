@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Sequence
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rdm.domain.entities import Mailbox, MailboxMember, Message, MessageDelivery, MessageRef
@@ -92,6 +92,16 @@ class MailboxRepository:
         rows = list((await self._s.execute(stmt)).scalars().all())
         return [mailbox_member_to_domain(r) for r in rows]
 
+    async def list_groups(self, project_id: str) -> list[Mailbox]:
+        stmt = select(MailboxModel).where(
+            MailboxModel.project_id == project_id,
+            MailboxModel.kind == "group",
+            MailboxModel.deleted_at.is_(None),
+        )
+        stmt = stmt.order_by(MailboxModel.created_at)
+        rows = list((await self._s.execute(stmt)).scalars().all())
+        return [mailbox_to_domain(r) for r in rows]
+
 
 class MessageRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -120,6 +130,7 @@ class MessageRepository:
                     recipient_user_id=d.recipient_user_id,
                     recipient_type=d.recipient_type,
                     read_at=d.read_at,
+                    archived_at=d.archived_at,
                     created_at=d.created_at,
                 )
             )
@@ -165,6 +176,8 @@ class MessageRepository:
         project_id: str | None = None,
         since_id: str | None = None,
         unread_only: bool = False,
+        archived: bool | None = None,
+        q: str | None = None,
         limit: int = 20,
     ) -> list[MessageDelivery]:
         if not recipient_user_ids:
@@ -180,6 +193,20 @@ class MessageRepository:
                 MailboxModel.project_id == project_id,
                 MailboxModel.deleted_at.is_(None),
             )
+        if q:
+            stmt = stmt.join(
+                MessageModel, MessageDeliveryModel.message_id == MessageModel.id
+            ).where(
+                MessageModel.deleted_at.is_(None),
+                or_(
+                    MessageModel.subject.ilike(f"%{q}%"),
+                    MessageModel.body_md.ilike(f"%{q}%"),
+                ),
+            )
+        if archived is True:
+            stmt = stmt.where(MessageDeliveryModel.archived_at.is_not(None))
+        elif archived is False:
+            stmt = stmt.where(MessageDeliveryModel.archived_at.is_(None))
         if since_id:
             stmt = stmt.where(MessageDeliveryModel.id > since_id)
         if unread_only:
@@ -187,6 +214,88 @@ class MessageRepository:
         stmt = stmt.order_by(MessageDeliveryModel.id).limit(limit)
         rows = list((await self._s.execute(stmt)).scalars().all())
         return [delivery_to_domain(r) for r in rows]
+
+    async def list_sent_messages(
+        self,
+        project_id: str,
+        from_user_ids: Sequence[str],
+        *,
+        q: str | None = None,
+        since_id: str | None = None,
+        limit: int = 20,
+    ) -> list[Message]:
+        if not from_user_ids:
+            return []
+        stmt = select(MessageModel).where(
+            MessageModel.project_id == project_id,
+            MessageModel.from_user_id.in_(list(from_user_ids)),
+            MessageModel.deleted_at.is_(None),
+        )
+        if q:
+            stmt = stmt.where(
+                or_(
+                    MessageModel.subject.ilike(f"%{q}%"),
+                    MessageModel.body_md.ilike(f"%{q}%"),
+                )
+            )
+        if since_id:
+            stmt = stmt.where(MessageModel.id > since_id)
+        stmt = stmt.order_by(MessageModel.id).limit(limit)
+        rows = list((await self._s.execute(stmt)).scalars().all())
+        return [message_to_domain(r) for r in rows]
+
+    async def list_deliveries_for_messages(
+        self, message_ids: Sequence[str]
+    ) -> list[MessageDelivery]:
+        if not message_ids:
+            return []
+        stmt = select(MessageDeliveryModel).where(
+            MessageDeliveryModel.message_id.in_(list(message_ids)),
+            MessageDeliveryModel.deleted_at.is_(None),
+        )
+        rows = list((await self._s.execute(stmt)).scalars().all())
+        return [delivery_to_domain(r) for r in rows]
+
+    async def archive_for_users(
+        self,
+        recipient_user_ids: Sequence[str],
+        delivery_ids: Sequence[str],
+        when: dt.datetime,
+        *,
+        archived: bool,
+    ) -> int:
+        if not delivery_ids:
+            return 0
+        result = await self._s.execute(
+            update(MessageDeliveryModel)
+            .where(
+                MessageDeliveryModel.id.in_(list(delivery_ids)),
+                MessageDeliveryModel.recipient_user_id.in_(list(recipient_user_ids)),
+                MessageDeliveryModel.deleted_at.is_(None),
+            )
+            .values(archived_at=when if archived else None)
+        )
+        return int(result.rowcount or 0)
+
+    async def delete_for_users(
+        self,
+        recipient_user_ids: Sequence[str],
+        delivery_ids: Sequence[str],
+        when: dt.datetime,
+        actor_id: str,
+    ) -> int:
+        if not delivery_ids:
+            return 0
+        result = await self._s.execute(
+            update(MessageDeliveryModel)
+            .where(
+                MessageDeliveryModel.id.in_(list(delivery_ids)),
+                MessageDeliveryModel.recipient_user_id.in_(list(recipient_user_ids)),
+                MessageDeliveryModel.deleted_at.is_(None),
+            )
+            .values(deleted_at=when, deleted_by=actor_id)
+        )
+        return int(result.rowcount or 0)
 
     async def list_deliveries_by_ids(
         self, delivery_ids: Sequence[str], *, project_id: str | None = None

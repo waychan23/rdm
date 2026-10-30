@@ -32,7 +32,7 @@ import { api, errorCause } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { useNotify } from "../lib/flags";
 import { useCurrentUser } from "../lib/auth";
-import type { MailMessage, Mailbox, OrgUser, ProjectMemberRow } from "../types";
+import type { MailGroup, MailMessage, Mailbox, OrgUser, ProjectMemberRow } from "../types";
 import { flattenMembers } from "../lib/members";
 
 const styles = cssMap({
@@ -62,8 +62,15 @@ export default function MailboxPage() {
   const [messages, setMessages] = useState<MailMessage[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [unreadOnly, setUnreadOnly] = useState(true);
+  const [folder, setFolder] = useState<"inbox" | "archived" | "sent">("inbox");
+  const [query, setQuery] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
   const [identity, setIdentity] = useState<string | null>(null);
   const [agents, setAgents] = useState<OrgUser[]>([]);
+  const [groups, setGroups] = useState<MailGroup[]>([]);
+  const [showGroups, setShowGroups] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [groupMembers, setGroupMembers] = useState<Option[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -80,16 +87,18 @@ export default function MailboxPage() {
   }>({ to: [], subject: "", body: "", replyTo: null, refs: [] });
 
   const fetchPage = useCallback(
-    async (cursor: string | null, replace: boolean, onlyUnread: boolean) => {
+    async (cursor: string | null, replace: boolean) => {
       setLoading(true);
       setError(null);
       try {
         const params = new URLSearchParams({
           limit: "20",
-          unread_only: String(onlyUnread),
+          unread_only: String(folder === "inbox" ? unreadOnly : false),
           include_agents: "true",
+          folder,
         });
         if (identity) params.set("identity", identity);
+        if (query.trim()) params.set("q", query.trim());
         if (cursor) params.set("since", cursor);
         const box = (await api.get<Mailbox>(`/projects/${projectKey}/mailbox?${params}`)).data;
         setMessages((prev) => (replace ? box.messages : [...prev, ...box.messages]));
@@ -100,14 +109,14 @@ export default function MailboxPage() {
         setLoading(false);
       }
     },
-    [projectKey, identity],
+    [projectKey, identity, unreadOnly, folder, query],
   );
 
   useEffect(() => {
     setSelected(new Set());
-    void fetchPage(null, true, unreadOnly);
+    void fetchPage(null, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unreadOnly, projectKey, identity]);
+  }, [unreadOnly, projectKey, identity, folder, query]);
 
   useEffect(() => {
     api
@@ -138,9 +147,63 @@ export default function MailboxPage() {
         [...selected].filter((id) => !ids.includes(id)),
       );
       setSelected(remaining);
-      await fetchPage(null, true, unreadOnly);
+      await fetchPage(null, true);
     } catch (e) {
       notify.error("标记失败", errorCause(e)?.message);
+    }
+  };
+
+  const archive = async (ids: string[], archived: boolean) => {
+    try {
+      await api.post("/messages/archive", { delivery_ids: ids, archived });
+      setSelected(new Set());
+      notify.success(archived ? "已归档" : "已移回收件箱");
+      await fetchPage(null, true);
+    } catch (e) {
+      notify.error("归档失败", errorCause(e)?.message);
+    }
+  };
+
+  const remove = async (ids: string[]) => {
+    try {
+      await api.post("/messages/delete", { delivery_ids: ids });
+      setSelected(new Set());
+      notify.success("已删除");
+      await fetchPage(null, true);
+    } catch (e) {
+      notify.error("删除失败", errorCause(e)?.message);
+    }
+  };
+
+  const openGroups = async () => {
+    setShowGroups(true);
+    setGroupName("");
+    setGroupMembers([]);
+    try {
+      const res = await api.get<MailGroup[]>(`/projects/${projectKey}/mailboxes`);
+      setGroups(res.data);
+    } catch (e) {
+      notify.error("加载群信箱失败", errorCause(e)?.message);
+    }
+  };
+
+  const createGroup = async () => {
+    if (!groupName.trim()) {
+      notify.error("群信箱名称必填");
+      return;
+    }
+    try {
+      await api.post(`/projects/${projectKey}/mailboxes`, {
+        name: groupName.trim(),
+        members: groupMembers.map((m) => m.value),
+      });
+      notify.success("已创建群信箱");
+      setGroupName("");
+      setGroupMembers([]);
+      const res = await api.get<MailGroup[]>(`/projects/${projectKey}/mailboxes`);
+      setGroups(res.data);
+    } catch (e) {
+      notify.error("创建失败", errorCause(e)?.message);
     }
   };
 
@@ -161,7 +224,7 @@ export default function MailboxPage() {
       });
       notify.success(compose.replyTo ? "已回复" : "已发送");
       setShowCompose(false);
-      await fetchPage(null, true, unreadOnly);
+      await fetchPage(null, true);
     } catch (e) {
       notify.error("发送失败", errorCause(e)?.message);
     } finally {
@@ -200,6 +263,19 @@ export default function MailboxPage() {
         testId="mailbox-header"
         actions={
           <Inline space="space.100" alignBlock="center">
+            <Inline space="space.050">
+              {(["inbox", "archived", "sent"] as const).map((f) => (
+                <Button
+                  key={f}
+                  appearance={folder === f ? "primary" : "default"}
+                  spacing="compact"
+                  testId={`mailbox-folder-${f}`}
+                  onClick={() => setFolder(f)}
+                >
+                  {f === "inbox" ? "收件箱" : f === "archived" ? "已归档" : "已发送"}
+                </Button>
+              ))}
+            </Inline>
             <Box style={{ width: 190 }}>
               <Select<Option>
                 isClearable
@@ -210,26 +286,41 @@ export default function MailboxPage() {
                 onChange={(opt) => setIdentity((opt as Option | null)?.value ?? null)}
               />
             </Box>
-            <Checkbox
-              label="仅未读"
-              isChecked={unreadOnly}
-              testId="mailbox-unread-only"
-              onChange={(e) => setUnreadOnly(e.currentTarget.checked)}
-            />
-            <Button
-              appearance="primary"
-              testId="mailbox-compose-button"
-              onClick={openCompose}
-            >
+            <Box style={{ width: 200 }}>
+              <Textfield
+                placeholder="搜索主题/正文"
+                value={searchDraft}
+                testId="mailbox-search"
+                onChange={(e) => setSearchDraft(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") setQuery(searchDraft.trim());
+                }}
+                onBlur={() => setQuery(searchDraft.trim())}
+              />
+            </Box>
+            {folder === "inbox" && (
+              <Checkbox
+                label="仅未读"
+                isChecked={unreadOnly}
+                testId="mailbox-unread-only"
+                onChange={(e) => setUnreadOnly(e.currentTarget.checked)}
+              />
+            )}
+            <Button appearance="primary" testId="mailbox-compose-button" onClick={openCompose}>
               发信
             </Button>
-            <Button
-              isDisabled={selected.size === 0}
-              testId="mailbox-mark-read"
-              onClick={() => void markRead([...selected])}
-            >
-              标记已读
+            <Button testId="mailbox-groups-button" onClick={() => void openGroups()}>
+              群信箱
             </Button>
+            {folder !== "sent" && (
+              <Button
+                isDisabled={selected.size === 0}
+                testId="mailbox-mark-read"
+                onClick={() => void markRead([...selected])}
+              >
+                标记已读
+              </Button>
+            )}
           </Inline>
         }
       />
@@ -237,7 +328,7 @@ export default function MailboxPage() {
       {error ? (
         <ErrorState
           error={error}
-          onRetry={() => void fetchPage(null, true, unreadOnly)}
+          onRetry={() => void fetchPage(null, true)}
           testId="mailbox-error"
         />
       ) : loading ? (
@@ -263,7 +354,7 @@ export default function MailboxPage() {
             >
               <Stack space="space.075">
                 <Inline space="space.100" alignBlock="center">
-                  {!m.read_at && (
+                  {folder !== "sent" && (
                     <Checkbox
                       isChecked={selected.has(m.delivery_id)}
                       testId={`mailbox-item-select-${m.delivery_id}`}
@@ -284,16 +375,37 @@ export default function MailboxPage() {
                   )}
                   <Text weight="semibold">{m.subject}</Text>
                   <Lozenge appearance="default">{m.from.name ?? m.from.id}</Lozenge>
+                  {folder === "sent" && m.recipients?.length ? (
+                    <Text size="small" color="color.text.subtlest">
+                      收件人：{m.recipients.map((r) => r.name ?? r.id).join("、")}
+                    </Text>
+                  ) : null}
                   <Text size="small" color="color.text.subtlest">
                     {formatDate(m.created_at)}
                   </Text>
-                  {!m.read_at && (
+                  {!m.read_at && folder === "inbox" && (
                     <TextButton
                       data-testid={`mailbox-item-mark-read-${m.delivery_id}`}
                       onClick={() => void markRead([m.delivery_id])}
                     >
                       标已读
                     </TextButton>
+                  )}
+                  {folder !== "sent" && (
+                    <>
+                      <TextButton
+                        data-testid={`mailbox-item-archive-${m.delivery_id}`}
+                        onClick={() => void archive([m.delivery_id], folder === "inbox")}
+                      >
+                        {folder === "inbox" ? "归档" : "移回收件箱"}
+                      </TextButton>
+                      <TextButton
+                        data-testid={`mailbox-item-delete-${m.delivery_id}`}
+                        onClick={() => void remove([m.delivery_id])}
+                      >
+                        删除
+                      </TextButton>
+                    </>
                   )}
                   <TextButton
                     data-testid={`mailbox-item-reply-${m.delivery_id}`}
@@ -331,7 +443,7 @@ export default function MailboxPage() {
 
       {nextCursor && (
         <Box paddingBlock="space.200" style={{ textAlign: "center" }}>
-          <Button testId="mailbox-load-more" onClick={() => void fetchPage(nextCursor, false, unreadOnly)}>
+          <Button testId="mailbox-load-more" onClick={() => void fetchPage(nextCursor, false)}>
             加载更多
           </Button>
         </Box>
@@ -395,6 +507,71 @@ export default function MailboxPage() {
                 onClick={() => void send()}
               >
                 发送
+              </Button>
+            </ModalFooter>
+          </ModalDialog>
+        )}
+      </ModalTransition>
+      <ModalTransition>
+        {showGroups && (
+          <ModalDialog
+            onClose={() => setShowGroups(false)}
+            width="560px"
+            label="群信箱"
+            testId="mailbox-groups-dialog"
+          >
+            <ModalHeader>
+              <ModalTitle>群信箱</ModalTitle>
+            </ModalHeader>
+            <ModalBody>
+              <Stack space="space.150">
+                <Text size="small" color="color.text.subtlest">
+                  群信箱用于一次投递给多个成员；成员仍会各自收到一份站内信。
+                </Text>
+                <FormField label="名称" htmlFor="group-name">
+                  <Textfield
+                    id="group-name"
+                    value={groupName}
+                    testId="mailbox-group-name"
+                    onChange={(e) => setGroupName(e.currentTarget.value)}
+                  />
+                </FormField>
+                <FormField label="成员" htmlFor="group-members">
+                  <Select<Option, true> {...portalMenuProps}
+                    inputId="group-members"
+                    isMulti
+                    options={memberOptions}
+                    value={groupMembers}
+                    onChange={(opts) => setGroupMembers(opts as Option[])}
+                    placeholder="选择成员"
+                    testId="mailbox-group-members"
+                  />
+                </FormField>
+                <Button appearance="primary" onClick={() => void createGroup()} testId="mailbox-group-create">
+                  创建群信箱
+                </Button>
+                <Stack space="space.050" testId="mailbox-group-list">
+                  {groups.map((g) => (
+                    <Box key={g.id} style={cardBorder} padding="space.100" testId={`mailbox-group-${g.id}`}>
+                      <Inline space="space.100" alignBlock="center" shouldWrap>
+                        <Text weight="medium">{g.name}</Text>
+                        <Text size="small" color="color.text.subtlest">
+                          {g.members.map((m) => m.name).join("、") || "无成员"}
+                        </Text>
+                      </Inline>
+                    </Box>
+                  ))}
+                  {groups.length === 0 ? (
+                    <Text size="small" color="color.text.subtlest">
+                      还没有群信箱
+                    </Text>
+                  ) : null}
+                </Stack>
+              </Stack>
+            </ModalBody>
+            <ModalFooter>
+              <Button appearance="subtle" onClick={() => setShowGroups(false)}>
+                关闭
               </Button>
             </ModalFooter>
           </ModalDialog>

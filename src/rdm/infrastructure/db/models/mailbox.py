@@ -83,6 +83,7 @@ class MessageDeliveryModel(SoftDeleteMixin, Base):
     recipient_user_id: Mapped[str] = mapped_column(String(32), nullable=False)
     recipient_type: Mapped[str] = mapped_column(String(5), nullable=False)
     read_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (

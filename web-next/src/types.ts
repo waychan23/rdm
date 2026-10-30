@@ -227,9 +227,19 @@ export interface MailMessage {
   subject: string;
   body_md: string;
   recipient_type: string;
+  recipients?: Array<{ id: string; name?: string; type?: string; recipient_type?: string }>;
   refs: string[];
   reply_to_id?: string | null;
   read_at?: string | null;
+  archived_at?: string | null;
+  created_at: string;
+}
+
+export interface MailGroup {
+  id: string;
+  name: string;
+  kind: string;
+  members: Array<{ id: string; name: string; type: string }>;
   created_at: string;
 }
 

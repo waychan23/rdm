@@ -290,6 +290,7 @@ def delivery_to_domain(row: MessageDeliveryModel) -> MessageDelivery:
         recipient_user_id=row.recipient_user_id,
         recipient_type=row.recipient_type,
         read_at=row.read_at,
+        archived_at=row.archived_at,
         created_at=row.created_at,
     )
 

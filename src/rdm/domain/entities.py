@@ -401,6 +401,7 @@ class MessageDelivery:
     recipient_user_id: str
     recipient_type: str  # RecipientType: to | cc
     read_at: dt.datetime | None = None
+    archived_at: dt.datetime | None = None
     created_at: dt.datetime = field(default_factory=_utcnow)
 
 

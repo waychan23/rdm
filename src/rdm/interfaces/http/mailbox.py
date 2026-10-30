@@ -30,6 +30,15 @@ class GroupMailboxIn(BaseModel):
     members: list[str] = Field(default_factory=list)
 
 
+class ArchiveIn(BaseModel):
+    delivery_ids: list[str] = Field(min_length=1)
+    archived: bool = True
+
+
+class DeleteDeliveriesIn(BaseModel):
+    delivery_ids: list[str] = Field(min_length=1)
+
+
 @router.get("/projects/{key}/mailbox")
 async def check_mailbox(
     key: str,
@@ -38,6 +47,8 @@ async def check_mailbox(
     limit: int = 20,
     include_agents: bool = False,
     identity: str | None = None,
+    folder: str = "inbox",
+    q: str | None = None,
     container: Container = Depends(get_container),
     actor: Actor = Depends(get_actor),
 ) -> dict:
@@ -50,6 +61,8 @@ async def check_mailbox(
             limit=min(limit, 100),
             include_agents=include_agents,
             identity=identity,
+            folder=folder,
+            q=q,
         )
     return {"data": body}
 
@@ -104,3 +117,38 @@ async def create_group_mailbox(
             actor, key, body.name, body.members
         )
     return {"data": {"id": mailbox.id, "name": mailbox.name, "kind": str(mailbox.kind)}}
+
+
+@router.get("/projects/{key}/mailboxes")
+async def list_group_mailboxes(
+    key: str,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        _project, groups = await MailboxService(uow).list_groups(actor, key)
+    return {"data": groups}
+
+
+@router.post("/messages/archive")
+async def archive_messages(
+    body: ArchiveIn,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        updated = await MailboxService(uow).archive(
+            actor, body.delivery_ids, archived=body.archived
+        )
+    return {"data": {"updated": updated}}
+
+
+@router.post("/messages/delete")
+async def delete_messages(
+    body: DeleteDeliveriesIn,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        deleted = await MailboxService(uow).delete_deliveries(actor, body.delivery_ids)
+    return {"data": {"deleted": deleted}}

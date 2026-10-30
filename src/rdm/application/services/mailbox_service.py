@@ -278,6 +278,8 @@ class MailboxService:
         limit: int = 20,
         include_agents: bool = False,
         identity: str | None = None,
+        folder: str = "inbox",
+        q: str | None = None,
     ) -> dict[str, Any]:
         assert self.uow.messages is not None and self.uow.work_items is not None
         project = await self.items.resolve_project(actor, project_key)
@@ -287,11 +289,23 @@ class MailboxService:
             if identity not in identity_ids:
                 raise NotFound("信箱身份不存在或无权查看", details={"user_id": identity})
             identity_ids = [identity]
+        if folder not in {"inbox", "archived", "sent"}:
+            raise ValidationError(f"未知信箱分类 {folder!r}", details={"field": "folder"})
+        if folder == "sent":
+            return await self._check_sent(
+                project,
+                identity_ids,
+                since=since,
+                limit=limit,
+                q=q,
+            )
         page = await self.uow.messages.list_deliveries_for_users(
             identity_ids,
             project_id=project.id,
             since_id=since,
-            unread_only=unread_only,
+            unread_only=unread_only and folder == "inbox",
+            archived=folder == "archived",
+            q=q,
             limit=limit + 1,
         )
         has_more = len(page) > limit
@@ -340,6 +354,9 @@ class MailboxService:
                     "refs": item_refs,
                     "reply_to_id": message.reply_to_id,
                     "read_at": iso_utc(delivery.read_at) if delivery.read_at else None,
+                    "archived_at": (
+                        iso_utc(delivery.archived_at) if delivery.archived_at else None
+                    ),
                     "created_at": iso_utc(message.created_at),
                 }
             )
@@ -349,6 +366,82 @@ class MailboxService:
             "unread_count": await self.uow.messages.unread_count_for_users(
                 identity_ids, project_id=project.id
             ),
+        }
+
+    async def _check_sent(
+        self,
+        project: Project,
+        identity_ids: Sequence[str],
+        *,
+        since: str | None,
+        limit: int,
+        q: str | None,
+    ) -> dict[str, Any]:
+        assert self.uow.messages is not None and self.uow.users is not None
+        page = await self.uow.messages.list_sent_messages(
+            project.id,
+            identity_ids,
+            q=q,
+            since_id=since,
+            limit=limit + 1,
+        )
+        has_more = len(page) > limit
+        page = page[:limit]
+        deliveries = await self.uow.messages.list_deliveries_for_messages([m.id for m in page])
+        recipients: dict[str, list[dict[str, Any]]] = {}
+        for delivery in deliveries:
+            user = await self.uow.users.get(delivery.recipient_user_id)
+            recipients.setdefault(delivery.message_id, []).append(
+                {
+                    "id": delivery.recipient_user_id,
+                    "name": user.name if user is not None else delivery.recipient_user_id,
+                    "type": user.type if user is not None else "human",
+                    "recipient_type": delivery.recipient_type,
+                }
+            )
+        refs = await self.uow.messages.list_refs([m.id for m in page])
+        assert self.uow.work_items is not None
+        ref_items: list[WorkItem] = await self.uow.work_items.list_by_ids(
+            project.id, [r.work_item_id for r in refs], include_deleted=True
+        )
+        item_by_id = {i.id: i for i in ref_items}
+        sender = await self.uow.users.get(identity_ids[0]) if identity_ids else None
+        rows = []
+        for message in page:
+            item_refs = [
+                f"{project.key}-{item_by_id[r.work_item_id].display_no}"
+                for r in refs
+                if r.message_id == message.id and r.work_item_id in item_by_id
+            ]
+            rows.append(
+                {
+                    "delivery_id": f"sent:{message.id}",
+                    "message_id": message.id,
+                    "from": (
+                        {"id": sender.id, "name": sender.name, "type": sender.type}
+                        if sender is not None
+                        else {"id": message.from_user_id}
+                    ),
+                    "mailbox_owner": (
+                        {"id": sender.id, "name": sender.name, "type": sender.type}
+                        if sender is not None
+                        else {"id": message.from_user_id}
+                    ),
+                    "subject": message.subject,
+                    "body_md": message.body_md,
+                    "recipient_type": "to",
+                    "recipients": recipients.get(message.id, []),
+                    "refs": item_refs,
+                    "reply_to_id": message.reply_to_id,
+                    "read_at": iso_utc(message.created_at),
+                    "archived_at": None,
+                    "created_at": iso_utc(message.created_at),
+                }
+            )
+        return {
+            "messages": rows,
+            "next_cursor": page[-1].id if has_more and page else None,
+            "unread_count": 0,
         }
 
     async def mark_read(self, actor: Actor, delivery_ids: Sequence[str]) -> int:
@@ -390,6 +483,51 @@ class MailboxService:
                     payload={"delivery_ids": changed, "updated": len(changed)},
                 )
         return count
+
+    async def archive(self, actor: Actor, delivery_ids: Sequence[str], *, archived: bool) -> int:
+        assert self.uow.messages is not None
+        identity_ids = await self._mailbox_identity_ids(actor, include_agents=True)
+        return await self.uow.messages.archive_for_users(
+            identity_ids,
+            delivery_ids,
+            dt.datetime.now(dt.UTC),
+            archived=archived,
+        )
+
+    async def delete_deliveries(self, actor: Actor, delivery_ids: Sequence[str]) -> int:
+        assert self.uow.messages is not None
+        identity_ids = await self._mailbox_identity_ids(actor, include_agents=True)
+        return await self.uow.messages.delete_for_users(
+            identity_ids,
+            delivery_ids,
+            dt.datetime.now(dt.UTC),
+            actor.id,
+        )
+
+    async def list_groups(
+        self, actor: Actor, project_key: str | None
+    ) -> tuple[Project, list[dict[str, Any]]]:
+        assert self.uow.mailboxes is not None and self.uow.users is not None
+        project = await self.items.resolve_project(actor, project_key)
+        groups = await self.uow.mailboxes.list_groups(project.id)
+        out: list[dict[str, Any]] = []
+        for group in groups:
+            members = await self.uow.mailboxes.list_members(group.id)
+            users = []
+            for link in members:
+                user = await self.uow.users.get(link.user_id)
+                if user is not None:
+                    users.append({"id": user.id, "name": user.name, "type": user.type})
+            out.append(
+                {
+                    "id": group.id,
+                    "name": group.name,
+                    "kind": str(group.kind),
+                    "members": users,
+                    "created_at": iso_utc(group.created_at),
+                }
+            )
+        return project, out
 
     async def unread_count(
         self, actor: Actor, *, project_id: str, include_agents: bool = False
