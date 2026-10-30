@@ -107,6 +107,9 @@ export async function activeStep(page: Page): Promise<Locator> {
  * (with intermediate moves past the drag threshold) is required.
  */
 export async function dragCardToColumn(page: Page, card: Locator, column: Locator) {
+  // Long-lived boards accumulate cards below the fold; the pointer gesture
+  // only works on elements inside the viewport.
+  await card.scrollIntoViewIfNeeded();
   await column.scrollIntoViewIfNeeded();
   const from = await card.boundingBox();
   const to = await column.boundingBox();

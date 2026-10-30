@@ -14,6 +14,9 @@ import { Box, Inline } from "@atlaskit/primitives/compiled";
 import { Page, PageHeader } from "../components/Page";
 import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
+import { useRestoreScroll } from "../hooks/useRestoreScroll";
+import { recall, remember } from "../lib/pageCache";
+import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
 import type { ProjectMemberRow, WorkItem, WorkflowDto } from "../types";
 import { flattenMembers } from "../lib/members";
 import { KIND_OPTIONS, PAGE_SIZE } from "../workitems/constants";
@@ -116,6 +119,7 @@ export default function BacklogPage() {
 function BacklogView({ projectKey }: { projectKey: string }) {
   const navigate = useNavigate();
   const location = useLocation();
+  useRestoreScroll();
 
   const [kinds, setKinds] = useState<string[]>(["epic", "story", "issue", "task"]);
   const [status, setStatus] = useState<Option | null>(null);
@@ -170,27 +174,40 @@ function BacklogView({ projectKey }: { projectKey: string }) {
   // Re-fetch only when the request actually changes: the tree loads the whole
   // filtered set once, so paging its roots must not hit the network again.
   const requestKey = treeMode ? `tree:${filterParams}` : `flat:${filterParams}:${page}`;
+  // Keep the last rendered page per request so opening/closing the work-item
+  // overlay does not remount the list into a spinner.
+  const cacheKey = `${projectKey}|${requestKey}`;
+  const cachedItems = recall<ItemsResult>(cacheKey);
 
   const itemsState = useAsync<ItemsResult>(
     async () => {
-      if (treeMode) return loadTreeItems(projectKey, filterParams);
-      const params = new URLSearchParams(filterParams);
-      params.set("limit", String(PAGE_SIZE));
-      params.set("offset", String((page - 1) * PAGE_SIZE));
-      const res = await api.get<WorkItem[]>(`/projects/${projectKey}/work-items?${params}`);
-      return {
-        items: res.data,
-        total: Number(res.meta?.total ?? res.data.length),
-        truncated: false,
-      };
+      let result: ItemsResult;
+      if (treeMode) {
+        result = await loadTreeItems(projectKey, filterParams);
+      } else {
+        const params = new URLSearchParams(filterParams);
+        params.set("limit", String(PAGE_SIZE));
+        params.set("offset", String((page - 1) * PAGE_SIZE));
+        const res = await api.get<WorkItem[]>(`/projects/${projectKey}/work-items?${params}`);
+        result = {
+          items: res.data,
+          total: Number(res.meta?.total ?? res.data.length),
+          truncated: false,
+        };
+      }
+      remember(cacheKey, result);
+      return result;
     },
     [projectKey, requestKey, reloadNonce],
   );
 
+  const itemsData = itemsState.data ?? cachedItems;
+  const listLoading = itemsState.loading && !itemsData;
+
   const tree = useMemo(() => {
-    if (!treeMode || !itemsState.data) return null;
-    return buildWorkItemTree(itemsState.data.items, collapsed, page, PAGE_SIZE);
-  }, [treeMode, itemsState.data, collapsed, page]);
+    if (!treeMode || !itemsData) return null;
+    return buildWorkItemTree(itemsData.items, collapsed, page, PAGE_SIZE);
+  }, [treeMode, itemsData, collapsed, page]);
 
   const toggleKind = (value: string, checked: boolean) => {
     // Zero selected kinds means "all" (only exactly one sends kind=).
@@ -213,13 +230,16 @@ function BacklogView({ projectKey }: { projectKey: string }) {
     writeStorage(COLLAPSED_KEY(projectKey), JSON.stringify([...next]));
   };
 
-  const openItem = (item: WorkItem) =>
-    navigate(`/projects/${projectKey}/items/${item.id}`, {
-      state: { from: location.pathname + location.search },
-    });
+  const openItem = (item: WorkItem) => {
+    const from = location.pathname + location.search;
+    // The backdrop copy receives the item path; only a real list route owns
+    // the shell scroll position.
+    if (!from.includes("/items/")) rememberScroll(from, appContentScrollTop());
+    navigate(`/projects/${projectKey}/items/${item.id}`, { state: { from } });
+  };
 
-  const items = itemsState.data?.items ?? [];
-  const total = itemsState.data?.total ?? 0;
+  const items = itemsData?.items ?? [];
+  const total = itemsData?.total ?? 0;
   const flatRows: WorkItemRowView[] = items.map((item) => ({ item }));
   const rows: WorkItemRowView[] = tree ? tree.rows : flatRows;
   const pageCount = tree
@@ -342,7 +362,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
       </Inline>
 
       <Box xcss={pageStyles.content} testId="backlog-content">
-        {itemsState.loading ? (
+        {listLoading ? (
           <Box xcss={pageStyles.centered} testId="work-item-loading">
             <Spinner size="large" />
           </Box>
@@ -359,7 +379,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
           </Box>
         ) : (
           <>
-            {treeMode && itemsState.data?.truncated && (
+            {treeMode && itemsData?.truncated && (
               <Box paddingBlockEnd="space.150" testId="work-item-tree-truncated">
                 <SectionMessage appearance="warning">
                   层级视图最多加载 {TREE_LIMIT} 条工作项；请缩小筛选范围以查看完整层级。

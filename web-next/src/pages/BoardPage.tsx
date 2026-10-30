@@ -12,10 +12,20 @@ import { Box, Inline } from "@atlaskit/primitives/compiled";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
+import { useRestoreScroll } from "../hooks/useRestoreScroll";
+import { recall, remember } from "../lib/pageCache";
+import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
 import type { WorkItem, WorkflowDto } from "../types";
 import { KIND_OPTIONS } from "../workitems/constants";
 import BoardCard from "./board/BoardCard";
 import BoardColumn from "./board/BoardColumn";
+
+interface BoardSnapshot {
+  items: WorkItem[];
+  workflow: WorkflowDto;
+}
+
+const boardCacheKey = (projectKey: string, kind: string) => `board|${projectKey}|${kind}`;
 
 const styles = cssMap({
   board: {
@@ -39,12 +49,16 @@ export default function BoardPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const notify = useNotify();
+  useRestoreScroll();
 
   const [kind, setKind] = useState("task");
   const [showTerminal, setShowTerminal] = useState(true);
-  const [items, setItems] = useState<WorkItem[]>([]);
-  const [workflow, setWorkflow] = useState<WorkflowDto | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialSnapshot = recall<BoardSnapshot>(boardCacheKey(projectKey, "task"));
+  const [items, setItems] = useState<WorkItem[]>(initialSnapshot?.items ?? []);
+  const [workflow, setWorkflow] = useState<WorkflowDto | null>(
+    initialSnapshot?.workflow ?? null,
+  );
+  const [loading, setLoading] = useState(!initialSnapshot);
 
   // Latest values for the (mount-once) drop monitor.
   const stateRef = useRef({ items, workflow, kind, projectKey });
@@ -52,7 +66,13 @@ export default function BoardPage() {
 
   const load = useCallback(
     async (nextKind: string, initial = false) => {
-      setLoading(true);
+      const cacheKey = boardCacheKey(projectKey, nextKind);
+      const snapshot = initial ? recall<BoardSnapshot>(cacheKey) : undefined;
+      if (snapshot) {
+        setWorkflow(snapshot.workflow);
+        setItems(snapshot.items);
+      }
+      setLoading(initial ? !snapshot : true);
       try {
         const params = new URLSearchParams({ kind: nextKind, limit: "200" });
         const [wf, list] = await Promise.all([
@@ -65,6 +85,7 @@ export default function BoardPage() {
         ]);
         setWorkflow(wf.data);
         setItems(list.data);
+        remember(cacheKey, { items: list.data, workflow: wf.data });
       } finally {
         setLoading(false);
       }
@@ -171,10 +192,11 @@ export default function BoardPage() {
     }));
   }, [workflow, kind, showTerminal, items]);
 
-  const openItem = (item: WorkItem) =>
-    navigate(`/projects/${projectKey}/items/${item.id}`, {
-      state: { from: location.pathname + location.search },
-    });
+  const openItem = (item: WorkItem) => {
+    const from = location.pathname + location.search;
+    if (!from.includes("/items/")) rememberScroll(from, appContentScrollTop());
+    navigate(`/projects/${projectKey}/items/${item.id}`, { state: { from } });
+  };
 
   return (
     <Page fill testId="page-board">

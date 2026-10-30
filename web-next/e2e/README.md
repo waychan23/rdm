@@ -26,8 +26,9 @@ pnpm -C web-next exec playwright test 05-task-mode   # 按文件名过滤
 pnpm -C web-next exec playwright test --repeat-each=2 # 稳定性回归
 ```
 
-- 串行执行（`workers: 1`），因为所有 spec 共用同一个临时项目 `WFE2E`；
-  每个 spec 用唯一标题创建自己的工作项，互不清理。
+- 串行执行（`workers: 1`）。大多数 spec 共用临时项目 `WFE2E`，每个 spec 用唯一标题创建
+  自己的工作项、互不清理；涉及分页/滚动/列表快照的 spec（如 10）会自建隔离项目，
+  避免其他用例积累的行影响断言。
 - 失败时 `e2e/.results/` 保留 trace / screenshot / video；
   `pnpm -C web-next exec playwright show-trace <trace.zip>` 可回放。
 - 服务日志：`e2e/.auth/server.log`。`e2e/.auth/` 同时存放本次运行的
@@ -53,6 +54,7 @@ e2e/
     07-subtype-workflow.spec.ts
     08-board-drag.spec.ts
     09-reassign-step.spec.ts
+    10-dismiss-drawer.spec.ts
 ```
 
 - **认证**：global setup 走完整 OAuth（`/authorize` → login ticket →
@@ -78,6 +80,7 @@ e2e/
 | 07-subtype-workflow | `task_type=code_review` 子类型状态图、子类型字段/自定义字段、看板状态并集、字段就地编辑持久化 |
 | 08-board-drag | 看板只允许「单一步骤 + direct + 备注可选 + 无 gate」的拖拽；审批步骤拒绝并提示进详情 |
 | 09-reassign-step | 只有负责人可改派、PENDING 才可改派、被移出的执行人失去执行权、新执行人可完成步骤 |
+| 10-dismiss-drawer | 点击详情背板空白处关闭面板；列表行等交互元素仍可切换工作项、不误关闭；开关面板不出现列表/看板 loading 闪烁，关闭后恢复列表滚动位置 |
 
 ## 新增 spec
 

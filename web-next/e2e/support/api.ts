@@ -192,7 +192,26 @@ export class Api {
     return this.get<Item>(`/work-items/${encodeURIComponent(ref)}`, actor);
   }
 
+  async createProject(key: string, name = key): Promise<void> {
+    await this.post("/projects", { key, name });
+  }
+
+  async addMember(projectKey: string, user: UserName, roles = ["worker"]): Promise<void> {
+    await this.post(`/projects/${projectKey}/members`, {
+      user_id: this.userId(user),
+      roles,
+    });
+  }
+
   async createItem(seed: CreateItemSeed, actor: UserName = "owner"): Promise<Item> {
+    return this.createItemIn(this.ctx.projectKey, seed, actor);
+  }
+
+  async createItemIn(
+    projectKey: string,
+    seed: CreateItemSeed,
+    actor: UserName = "owner",
+  ): Promise<Item> {
     const payload: Record<string, unknown> = {
       kind: seed.kind,
       title: seed.title,
@@ -206,7 +225,7 @@ export class Api {
     if (seed.reviewer?.length) payload.reviewer = seed.reviewer.map((name) => this.userId(name));
     if (seed.review_content_md !== undefined) payload.review_content_md = seed.review_content_md;
     if (seed.custom_fields !== undefined) payload.custom_fields = seed.custom_fields;
-    const created = (await this.post<Item>(`/projects/${this.ctx.projectKey}/work-items`, payload, actor))
+    const created = (await this.post<Item>(`/projects/${projectKey}/work-items`, payload, actor))
       .data;
     if (seed.status && seed.status !== created.status) {
       if (!seed.assignee) {

@@ -7,6 +7,8 @@ import { useSyncExternalStore } from "react";
 
 import { api } from "./api";
 import { clearTokens, getAccessToken } from "./oauth";
+import { clearPageCache } from "./pageCache";
+import { clearScrollMemory } from "./scrollMemory";
 import type { Whoami } from "../types";
 
 let currentUser: Whoami | null = null;
@@ -83,6 +85,8 @@ export async function logout() {
   try {
     if (getAccessToken()) await api.post("/auth/logout", {});
   } finally {
+    clearPageCache();
+    clearScrollMemory();
     clearTokens();
     currentUser = null;
     readiness = null;
@@ -91,6 +95,8 @@ export async function logout() {
 }
 
 export function clearSession() {
+  clearPageCache();
+  clearScrollMemory();
   currentUser = null;
   readiness = null;
   emit();

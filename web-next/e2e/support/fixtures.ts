@@ -17,10 +17,10 @@ interface Fixtures {
 
 export const test = base.extend<Fixtures>({
   // Default session for every spec is the org owner (project owner).
-  context: async ({ browser }, use) => {
+  context: async ({ browser, contextOptions }, use) => {
     const context = await browser.newContext({
+      ...contextOptions,
       storageState: storageStateFor("owner"),
-      viewport: { width: 1600, height: 900 },
     });
     await use(context);
     await context.close();
@@ -35,12 +35,12 @@ export const test = base.extend<Fixtures>({
   api: async ({ app }, use) => {
     await use(new Api(app));
   },
-  asUser: async ({ browser }, use) => {
+  asUser: async ({ browser, contextOptions }, use) => {
     const contexts: BrowserContext[] = [];
     const open = async (name: UserName): Promise<Page> => {
       const context = await browser.newContext({
+        ...contextOptions,
         storageState: storageStateFor(name),
-        viewport: { width: 1600, height: 900 },
       });
       contexts.push(context);
       return context.newPage();
