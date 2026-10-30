@@ -96,6 +96,57 @@ class NotificationService:
             actor_id=actor.id,
         )
 
+    async def notify_step_event(
+        self,
+        project: Project,
+        item: WorkItem,
+        display_id: str,
+        event_type: str,
+        payload: dict[str, object],
+        actor: Actor,
+    ) -> None:
+        """Fan out step lifecycle notifications to executors / the assignee."""
+        step = payload.get("step") if isinstance(payload.get("step"), dict) else {}
+        step_name = str(step.get("name") or step.get("key") or "步骤")
+        raw_executors = payload.get("executors")
+        executors = (
+            {str(uid) for uid in raw_executors if uid} if isinstance(raw_executors, list) else set()
+        )
+        recipients: set[str]
+        if event_type in {"work_item.step_started", "work_item.step_reassigned"}:
+            recipients = executors
+            title = (
+                f"步骤「{step_name}」待你执行：{display_id}"
+                if event_type == "work_item.step_started"
+                else f"你被指派执行步骤「{step_name}」：{display_id}"
+            )
+        elif event_type == "work_item.step_blocked":
+            recipients = {item.assignee_user_id} if item.assignee_user_id else set()
+            title = f"步骤「{step_name}」被阻塞：{display_id}"
+        elif event_type == "work_item.step_completed":
+            recipients = {item.assignee_user_id} if item.assignee_user_id else set()
+            recipients -= executors
+            title = f"步骤「{step_name}」已完成：{display_id}"
+        elif event_type == "work_item.step_rejected":
+            recipients = {item.assignee_user_id} if item.assignee_user_id else set()
+            title = f"步骤「{step_name}」被拒绝：{display_id}"
+        else:
+            return
+        for recipient_id in recipients:
+            await self.create(
+                org_id=project.org_id,
+                recipient_user_id=recipient_id,
+                type="step",
+                title=title,
+                body=item.title,
+                project_id=project.id,
+                entity_type="work_item",
+                entity_id=item.id,
+                entity_ref=display_id,
+                url=f"/projects/{project.key}/items/{display_id}",
+                actor_id=actor.id,
+            )
+
     # --- reads ------------------------------------------------------------
 
     async def _recipient_id(self, actor: Actor, identity: str | None) -> str:

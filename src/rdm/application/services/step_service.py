@@ -13,6 +13,8 @@ from typing import Any
 from rdm.application import security
 from rdm.application.ports import FileStore
 from rdm.application.services.comment_service import CommentService
+from rdm.application.services.notification_service import NotificationService
+from rdm.application.services.webhook_notify import enqueue as enqueue_webhook
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Project, User, WorkItem, WorkItemStep, WorkItemStepExecutor
 from rdm.domain.enums import StepExecutorStatus, StepStatus
@@ -140,7 +142,7 @@ class StepService:
     ) -> int:
         seq = await self.uow.allocate_event_seq(project.org_id)
         assert self.uow.events is not None
-        return await self.uow.events.append(
+        event_id = await self.uow.events.append(
             org_id=project.org_id,
             project_id=project.id,
             seq=seq,
@@ -150,6 +152,59 @@ class StepService:
             event_type=event_type,
             actor_user_id=actor.id,
             payload=payload,
+        )
+        await self._notify_step(project, item, event_type.value, payload, actor, event_id)
+        return event_id
+
+    async def _notify_step(
+        self,
+        project: Project,
+        item: WorkItem,
+        event_type: str,
+        payload: dict[str, Any],
+        actor: Actor,
+        event_id: int,
+    ) -> None:
+        """In-app + webhook fan-out for the step lifecycle events (§17 M7)."""
+        if event_type not in {
+            "work_item.step_started",
+            "work_item.step_reassigned",
+            "work_item.step_blocked",
+            "work_item.step_completed",
+            "work_item.step_rejected",
+        }:
+            return
+        display_id = f"{project.key}-{item.display_no}"
+        await NotificationService(self.uow).notify_step_event(
+            project, item, display_id, event_type, payload, actor
+        )
+        raw_executors = payload.get("executors")
+        executors = (
+            {str(uid) for uid in raw_executors if uid} if isinstance(raw_executors, list) else set()
+        )
+        if event_type in {"work_item.step_started", "work_item.step_reassigned"}:
+            targets = executors
+        else:
+            targets = {item.assignee_user_id} if item.assignee_user_id else set()
+        if not targets:
+            return
+        step = payload.get("step") if isinstance(payload.get("step"), dict) else {}
+        await enqueue_webhook(
+            self.uow,
+            project=project,
+            event_id=event_id,
+            logical_event=event_type,
+            actor=actor,
+            targets=sorted(targets),
+            data={
+                "display_id": display_id,
+                "title": item.title,
+                "kind": item.kind,
+                "status": item.status,
+                "step_key": step.get("key"),
+                "step_name": step.get("name"),
+                "mode": payload.get("mode"),
+            },
         )
 
     def _step_payload(self, step: WorkItemStep) -> dict[str, Any]:

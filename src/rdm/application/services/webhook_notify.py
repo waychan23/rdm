@@ -120,6 +120,14 @@ def _human_summary(view: dict[str, Any]) -> tuple[str, list[str]]:
     elif event in {"sprint.started", "sprint.closed"}:
         title = f"[{key}] Sprint {data.get('name')} {event.split('.')[1]}"
         lines.append(f"Sprint: {data.get('name')}")
+    elif event.startswith("work_item.step_"):
+        display_id = data.get("display_id")
+        step_name = data.get("step_name") or data.get("step_key") or "步骤"
+        title = f"[{key}] {display_id} 步骤「{step_name}」{event.split('.')[1]}"
+        lines.append(f"工作项: {display_id} {data.get('title', '')}")
+        lines.append(f"步骤: {step_name}")
+        if data.get("status"):
+            lines.append(f"状态: {data['status']}")
     else:
         title = f"[{key}] {event}"
     return title, lines
