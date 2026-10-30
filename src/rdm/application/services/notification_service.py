@@ -53,6 +53,10 @@ class NotificationService:
         recipient = await self.uow.users.get(recipient_user_id)
         if recipient is None or not recipient.is_active:
             return None
+        if recipient.is_agent:
+            manager = await self.uow.users.get(recipient.manager_user_id or "")
+            if manager is None or not manager.is_active:
+                return None
         if recipient.notification_prefs.get(type) is False:
             return None
         if actor_id is not None and actor_id == recipient_user_id:

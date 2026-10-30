@@ -48,7 +48,8 @@ CREATE TRIGGER search_comment_ai AFTER INSERT ON comment BEGIN
   SELECT
     'comment', NEW.id, NEW.project_id,
     CAST(w.display_no AS TEXT), '', NEW.body_md
-  FROM work_item w WHERE w.id = NEW.work_item_id AND NEW.deleted_at IS NULL;
+  FROM work_item w WHERE w.id = NEW.work_item_id AND NEW.deleted_at IS NULL
+    AND w.deleted_at IS NULL;
 END
 """
 
@@ -59,7 +60,8 @@ CREATE TRIGGER search_comment_au AFTER UPDATE OF body_md, deleted_at ON comment 
   SELECT
     'comment', NEW.id, NEW.project_id,
     CAST(w.display_no AS TEXT), '', NEW.body_md
-  FROM work_item w WHERE w.id = NEW.work_item_id AND NEW.deleted_at IS NULL;
+  FROM work_item w WHERE w.id = NEW.work_item_id AND NEW.deleted_at IS NULL
+    AND w.deleted_at IS NULL;
 END
 """
 
@@ -148,6 +150,30 @@ def upgrade() -> None:
     )
     for sql in TRIGGERS:
         op.execute(sql)
+    # Backfill rows that existed before the index was introduced.
+    op.execute(
+        "INSERT INTO search_index(entity_type, entity_id, project_id, ref, title, body) "
+        "SELECT 'work_item', id, project_id, CAST(display_no AS TEXT), title, "
+        "COALESCE(description_md, '') || ' ' || COALESCE(review_content_md, '') "
+        "FROM work_item WHERE deleted_at IS NULL"
+    )
+    op.execute(
+        "INSERT INTO search_index(entity_type, entity_id, project_id, ref, title, body) "
+        "SELECT 'comment', c.id, c.project_id, CAST(w.display_no AS TEXT), '', c.body_md "
+        "FROM comment c JOIN work_item w ON w.id = c.work_item_id "
+        "WHERE c.deleted_at IS NULL AND w.deleted_at IS NULL"
+    )
+    op.execute(
+        "INSERT INTO search_index(entity_type, entity_id, project_id, ref, title, body) "
+        "SELECT 'message', id, project_id, '', subject, body_md "
+        "FROM message WHERE deleted_at IS NULL"
+    )
+    op.execute(
+        "INSERT INTO search_index(entity_type, entity_id, project_id, ref, title, body) "
+        "SELECT 'artifact', id, project_id, '', label, "
+        "COALESCE(description_md, '') || ' ' || url "
+        "FROM artifact WHERE deleted_at IS NULL"
+    )
 
 
 def downgrade() -> None:
