@@ -21,7 +21,11 @@ def _cfg(db_path: Path) -> Config:
 def test_0007_rebuilds_empty_database(tmp_path: Path) -> None:
     db_path = tmp_path / "m.db"
     command.upgrade(_cfg(db_path), "head")
-    tables = set(inspect(create_engine(f"sqlite:///{db_path}")).get_table_names())
+    tables = {
+        t
+        for t in inspect(create_engine(f"sqlite:///{db_path}")).get_table_names()
+        if not t.startswith("search_index")
+    }
     assert {"organization", "users", "user_token", "project_member"} <= tables
     assert "member_token" not in tables
     assert len(tables - {"alembic_version"}) == 32
@@ -40,7 +44,11 @@ def test_0007_refuses_populated_legacy_database(tmp_path: Path) -> None:
         )
     with pytest.raises(RuntimeError, match="M5"):
         command.upgrade(_cfg(db_path), "head")
-    tables = set(inspect(create_engine(f"sqlite:///{db_path}")).get_table_names())
+    tables = {
+        t
+        for t in inspect(create_engine(f"sqlite:///{db_path}")).get_table_names()
+        if not t.startswith("search_index")
+    }
     assert "organization" not in tables
     with create_engine(f"sqlite:///{db_path}").connect() as conn:
         version = conn.execute(text("select version_num from alembic_version")).scalar_one()

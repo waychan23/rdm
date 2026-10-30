@@ -6,6 +6,7 @@ import IconButton from "@atlaskit/button/icon/button";
 import Badge from "@atlaskit/badge";
 import { Box, Inline, Text } from "@atlaskit/primitives/compiled";
 import NotificationIcon from "@atlaskit/icon/core/notification";
+import SearchIcon from "@atlaskit/icon/core/search";
 import InboxIcon from "@atlaskit/icon/core/inbox";
 import GridIcon from "@atlaskit/icon/core/grid";
 import BoardIcon from "@atlaskit/icon/core/board";
@@ -151,6 +152,13 @@ export default function AppShell() {
           )}
         </Inline>
         <Inline space="space.150" alignBlock="center">
+          <IconButton
+            icon={(iconProps) => <SearchIcon {...iconProps} />}
+            label="搜索"
+            appearance="subtle"
+            testId="topbar-search"
+            onClick={() => navigate("/search")}
+          />
           <Box xcss={styles.bellWrapper}>
             <IconButton
               icon={(iconProps) => <InboxIcon {...iconProps} spacing="spacious" />}

@@ -1,4 +1,4 @@
-"""FastMCP factory: register every MCP tool module (28 tools, M5)."""
+"""FastMCP factory: register every MCP tool module (30 tools, M7)."""
 
 from __future__ import annotations
 

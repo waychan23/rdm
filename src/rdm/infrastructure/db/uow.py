@@ -37,6 +37,7 @@ from rdm.infrastructure.db.repositories.oauth import (
 from rdm.infrastructure.db.repositories.organization import OrganizationRepository
 from rdm.infrastructure.db.repositories.outbox import OutboxRepository
 from rdm.infrastructure.db.repositories.project import ProjectRepository
+from rdm.infrastructure.db.repositories.search import SearchRepository
 from rdm.infrastructure.db.repositories.sprint import (
     SprintItemRepository,
     SprintRepository,
@@ -96,6 +97,7 @@ class SqlAlchemyUnitOfWork:
         self.workspaces: WorkspaceRepository | None = None
         self.outboxes: OutboxRepository | None = None
         self.notifications: NotificationRepository | None = None
+        self.search: SearchRepository | None = None
         self.events: EventStore | None = None
 
     async def __aenter__(self) -> SqlAlchemyUnitOfWork:
@@ -129,6 +131,7 @@ class SqlAlchemyUnitOfWork:
             self.workspaces = WorkspaceRepository(self.session)
             self.outboxes = OutboxRepository(self.session)
             self.notifications = NotificationRepository(self.session)
+            self.search = SearchRepository(self.session)
             self.events = EventStore(self.session)
         except BaseException:
             self._write_lock.release()

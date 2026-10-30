@@ -355,3 +355,13 @@ export interface TodoBundle {
   overdue: WorkItem[];
   mentions: Notification[];
 }
+
+export interface SearchHit {
+  entity_type: "work_item" | "comment" | "message" | "artifact" | string;
+  entity_id: string;
+  project_key: string;
+  ref: string;
+  title: string;
+  snippet: string;
+  url: string;
+}

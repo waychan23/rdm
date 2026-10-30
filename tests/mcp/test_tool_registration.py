@@ -11,6 +11,7 @@ EXPECTED_TOOLS = {
     "work_item_get",
     "my_work_list",
     "backlog_list",
+    "search",
     "sprint_list",
     "sprint_get",
     "member_list",
@@ -39,12 +40,12 @@ EXPECTED_TOOLS = {
 }
 
 
-async def test_exactly_29_tools_registered(mcp_clients) -> None:
+async def test_exactly_30_tools_registered(mcp_clients) -> None:
     owner = mcp_clients["owner_token"]
     async with mcp_clients["client_for"](owner) as client:
         tools = await client.list_tools()
     assert {t.name for t in tools} == EXPECTED_TOOLS
-    assert len(tools) == 29
+    assert len(tools) == 30
 
 
 async def test_transition_schema_requires_to_and_version(mcp_clients) -> None:

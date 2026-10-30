@@ -24,7 +24,11 @@ def test_migrated_schema_matches_metadata(tmp_path: Path) -> None:
     db_path = tmp_path / "migrated.db"
     command.upgrade(_alembic_config(db_path), "head")
 
-    migrated = set(inspect(create_engine(f"sqlite:///{db_path}")).get_table_names())
+    migrated = {
+        t
+        for t in inspect(create_engine(f"sqlite:///{db_path}")).get_table_names()
+        if not t.startswith("search_index")
+    }
 
     engine2 = create_engine(f"sqlite:///{tmp_path / 'orm.db'}")
     Base.metadata.create_all(engine2)
@@ -41,6 +45,6 @@ def test_migrated_schema_matches_metadata(tmp_path: Path) -> None:
                     "select name from sqlite_master where type='index' and name not like 'sqlite_%'"
                 )
             )
-            return {r[0] for r in rows}
+            return {r[0] for r in rows if not r[0].startswith("search_index")}
 
     assert index_names(db_path) == index_names(tmp_path / "orm.db")

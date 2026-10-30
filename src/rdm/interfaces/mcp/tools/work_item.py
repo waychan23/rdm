@@ -523,3 +523,46 @@ def register(mcp: FastMCP, container: Container) -> None:
             return ok(work_item_out(item, proj, members), **meta)
 
         return await run_tool(container, run)
+
+    @mcp.tool
+    async def search(
+        q: str,
+        types: str | None = None,
+        project: str | None = None,
+        limit: int = 20,
+    ) -> Any:
+        """跨实体全文检索：工作项/评论/信件/产出物的标题与正文。
+
+        q 必填；types 逗号分隔（work_item,comment,message,artifact），默认全部；
+        project 限定当前项目，缺省搜索所有可访问项目。返回 entity_type/ref/
+        title/snippet/url，可直接跳转。结果按相关度排序，最多 50 条。
+        """
+        from rdm.application.services.search_service import SearchService
+
+        async def run(uow, actor):
+            type_list = (
+                [part.strip() for part in types.split(",") if part.strip()] if types else None
+            )
+            hits = await SearchService(uow).search(
+                actor,
+                q,
+                project_key=project,
+                types=type_list,
+                limit=limit,
+            )
+            return ok(
+                [
+                    {
+                        "entity_type": hit.entity_type,
+                        "entity_id": hit.entity_id,
+                        "project_key": hit.project_key,
+                        "ref": hit.ref,
+                        "title": hit.title,
+                        "snippet": hit.snippet,
+                        "url": hit.url,
+                    }
+                    for hit in hits
+                ]
+            )
+
+        return await run_tool(container, run)
