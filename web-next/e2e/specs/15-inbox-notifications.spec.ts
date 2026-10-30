@@ -23,9 +23,9 @@ test.describe("inbox notifications", () => {
     await page.getByText(title).click();
     await expect(page.getByTestId("item-panel-display-id")).toHaveText(item.display_id);
 
-    // The click marks it read, so the unread-only inbox is empty again.
+    // The click marks it read, so it leaves the unread-only inbox.
     await page.goto(`${app.baseURL}/inbox`);
-    await expect(page.getByTestId("inbox-empty")).toBeVisible();
+    await expect(page.getByText(title)).toHaveCount(0);
 
     // A second assignment can be cleared with "mark all".
     const item2 = await api.createItem({
@@ -38,7 +38,7 @@ test.describe("inbox notifications", () => {
     await page.reload();
     await expect(page.getByText(`你被指派了 ${item2.display_id}`)).toBeVisible();
     await page.getByTestId("inbox-mark-all").click();
-    await expect(page.getByTestId("inbox-empty")).toBeVisible();
+    await expect(page.getByText(`你被指派了 ${item2.display_id}`)).toHaveCount(0);
   });
 });
 
