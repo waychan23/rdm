@@ -113,7 +113,10 @@ async def test_backlog_and_my_work_semantics(server, mcp_clients) -> None:
         )
         async with mcp_clients["client_for"](dev_token) as dev_client:
             mine = await call(dev_client, "my_work_list", {})
+            mine_with_steps = await call(dev_client, "my_work_list", {"include_steps": True})
         assert story_display in {i["display_id"] for i in mine["data"]}
+        assert "pending_steps" not in mine["meta"]
+        assert mine_with_steps["meta"]["pending_steps"] == []
 
 
 async def test_sprint_manage_validation_and_closed_freeze(server, mcp_clients) -> None:

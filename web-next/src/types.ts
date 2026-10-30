@@ -322,3 +322,24 @@ export interface Notification {
   read_at?: string | null;
   created_at: string;
 }
+
+export interface TodoStepEntry {
+  step: {
+    id: string;
+    key: string;
+    name: string;
+    mode: string;
+    status: string;
+  };
+  executor_user_id: string;
+  project_key: string;
+  item: WorkItem;
+}
+
+export interface TodoBundle {
+  assigned: WorkItem[];
+  pending_steps: TodoStepEntry[];
+  approvals: TodoStepEntry[];
+  overdue: WorkItem[];
+  mentions: Notification[];
+}

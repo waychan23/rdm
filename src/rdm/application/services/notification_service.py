@@ -106,7 +106,8 @@ class NotificationService:
         actor: Actor,
     ) -> None:
         """Fan out step lifecycle notifications to executors / the assignee."""
-        step = payload.get("step") if isinstance(payload.get("step"), dict) else {}
+        raw_step = payload.get("step")
+        step: dict[str, object] = raw_step if isinstance(raw_step, dict) else {}
         step_name = str(step.get("name") or step.get("key") or "步骤")
         raw_executors = payload.get("executors")
         executors = (

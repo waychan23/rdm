@@ -78,12 +78,17 @@ def register(mcp: FastMCP, container: Container) -> None:
         return await run_tool(container, run)
 
     @mcp.tool
-    async def my_work_list(status: str | None = None, project: str | None = None) -> Any:
+    async def my_work_list(
+        status: str | None = None,
+        project: str | None = None,
+        include_steps: bool = False,
+    ) -> Any:
         """我的待办：分配给我且非终态的工作项（传 status 时按该状态精确过滤）。
 
         传 project=<工作区 .rdm/project.json 中的 KEY>，只列当前绑定项目；
         不要遍历其他项目。开工三步之一；认领任务用它找未负责人的任务时
-        改用 backlog_list。
+        改用 backlog_list。include_steps=true 时在 meta.pending_steps 返回
+        待我执行/审批的命名步骤（含 step 与 item 摘要），默认关闭以保持旧返回。
         """
 
         async def run(uow, actor):
@@ -100,7 +105,42 @@ def register(mcp: FastMCP, container: Container) -> None:
                 out.append(
                     work_item_summary_out(item, item_project, users_by_project[item.project_id])
                 )
-            return ok(out)
+            if not include_steps:
+                return ok(out)
+
+            assert uow.work_item_steps is not None
+            identities = (
+                [actor.id] if actor.is_act_as else [actor.id, *sorted(actor.managed_agent_ids)]
+            )
+            pending: list[dict] = []
+            for step, executor in await uow.work_item_steps.list_pending_for_users(identities):
+                item = await uow.work_items.get(step.work_item_id)
+                if item is None:
+                    continue
+                item_project = await uow.projects.get(item.project_id)
+                if item_project is None:
+                    continue
+                if project is not None and item_project.key != project:
+                    continue
+                if item_project.id not in users_by_project:
+                    users_by_project[item_project.id] = await _users(uow, item_project.id)
+                pending.append(
+                    {
+                        "step": {
+                            "id": step.id,
+                            "key": step.step_key,
+                            "name": step.step_name,
+                            "mode": step.mode,
+                            "status": step.status,
+                        },
+                        "executor_user_id": executor.user_id,
+                        "project_key": item_project.key,
+                        "item": work_item_summary_out(
+                            item, item_project, users_by_project[item_project.id]
+                        ),
+                    }
+                )
+            return ok(out, pending_steps=pending)
 
         return await run_tool(container, run)
 

@@ -94,6 +94,31 @@ class WorkItemStepRepository:
         rows = (await self._s.execute(stmt)).scalars()
         return {row.work_item_id: work_item_step_to_domain(row) for row in rows}
 
+    async def list_pending_for_users(
+        self, user_ids: Sequence[str]
+    ) -> list[tuple[WorkItemStep, WorkItemStepExecutor]]:
+        """Active steps where one of these identities still has a PENDING row."""
+        if not user_ids:
+            return []
+        stmt = (
+            select(WorkItemStepModel, WorkItemStepExecutorModel)
+            .join(
+                WorkItemStepExecutorModel,
+                WorkItemStepExecutorModel.step_id == WorkItemStepModel.id,
+            )
+            .where(
+                WorkItemStepExecutorModel.user_id.in_(list(user_ids)),
+                WorkItemStepExecutorModel.status == "PENDING",
+                WorkItemStepModel.status.in_(ACTIVE_STEP_STATUSES),
+            )
+            .order_by(WorkItemStepModel.created_at.desc())
+        )
+        rows = (await self._s.execute(stmt)).all()
+        return [
+            (work_item_step_to_domain(step), step_executor_to_domain(executor))
+            for step, executor in rows
+        ]
+
     async def list_executors(self, step_id: str) -> list[WorkItemStepExecutor]:
         stmt = (
             select(WorkItemStepExecutorModel)

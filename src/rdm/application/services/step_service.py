@@ -188,7 +188,8 @@ class StepService:
             targets = {item.assignee_user_id} if item.assignee_user_id else set()
         if not targets:
             return
-        step = payload.get("step") if isinstance(payload.get("step"), dict) else {}
+        raw_step = payload.get("step")
+        step: dict[str, Any] = raw_step if isinstance(raw_step, dict) else {}
         await enqueue_webhook(
             self.uow,
             project=project,
