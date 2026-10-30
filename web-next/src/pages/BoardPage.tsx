@@ -186,7 +186,7 @@ export default function BoardPage() {
           ]
         : spec.states;
     const visible = states.filter((s) => showTerminal || !terminal.has(s));
-    return states.map((status) => ({
+    return visible.map((status) => ({
       status,
       items: items.filter((i) => i.status === status),
     }));

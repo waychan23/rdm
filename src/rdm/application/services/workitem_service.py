@@ -280,8 +280,17 @@ class WorkItemService:
         """Like list_items but also returns the unpaginated match count."""
         project = await self.resolve_project(actor, project_key)
         assert self.uow.work_items is not None
-        if kind is not None and kind not in VALID_KINDS:
-            raise ValidationError(f"未知 kind {kind!r}", details={"field": "kind"})
+        kinds: list[str] | None = None
+        if kind is not None:
+            parsed = [part.strip() for part in kind.split(",") if part.strip()]
+            for part in parsed:
+                if part not in VALID_KINDS:
+                    raise ValidationError(f"未知 kind {part!r}", details={"field": "kind"})
+            if len(parsed) > 1:
+                kinds = parsed
+                kind = None
+            elif parsed:
+                kind = parsed[0]
         assignee_id = None
         if assignee_ref is not None:
             assignee_id = (
@@ -314,6 +323,7 @@ class WorkItemService:
                 project,
                 sprint_ref,
                 kind=kind,
+                kinds=kinds,
                 status=status,
                 assignee_id=assignee_id,
                 reviewer_id=reviewer_id,
@@ -328,6 +338,7 @@ class WorkItemService:
         total = await self.uow.work_items.count(
             project.id,
             kind=kind,
+            kinds=kinds,
             status=status,
             assignee_user_id=assignee_id,
             reviewer_user_id=reviewer_id,
@@ -340,6 +351,7 @@ class WorkItemService:
         items = await self.uow.work_items.list(
             project.id,
             kind=kind,
+            kinds=kinds,
             status=status,
             assignee_user_id=assignee_id,
             reviewer_user_id=reviewer_id,
@@ -369,6 +381,7 @@ class WorkItemService:
         sprint_ref: str,
         *,
         kind: str | None,
+        kinds: list[str] | None = None,
         status: str | None,
         assignee_id: str | None,
         reviewer_id: str | None,
@@ -395,6 +408,8 @@ class WorkItemService:
 
         def keep(item: WorkItem) -> bool:
             if kind is not None and item.kind != kind:
+                return False
+            if kinds is not None and item.kind not in kinds:
                 return False
             if status is not None and item.status != status:
                 return False

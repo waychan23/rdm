@@ -163,7 +163,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
 
   const filterParams = useMemo(() => {
     const params = new URLSearchParams();
-    if (kinds.length === 1) params.set("kind", kinds[0]);
+    if (kinds.length > 0) params.set("kind", kinds.join(","));
     if (status) params.set("status", status.value);
     if (assignee) params.set("assignee", assignee.value === "me" ? "me" : assignee.value);
     if (reviewer) params.set("reviewer", reviewer.value === "me" ? "me" : reviewer.value);
@@ -210,7 +210,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
   }, [treeMode, itemsData, collapsed, page]);
 
   const toggleKind = (value: string, checked: boolean) => {
-    // Zero selected kinds means "all" (only exactly one sends kind=).
+    // Zero selected kinds means "all"; multiple kinds travel as one comma list.
     setKinds((prev) => (checked ? [...prev, value] : prev.filter((k) => k !== value)));
     setPage(1);
   };

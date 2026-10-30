@@ -90,6 +90,7 @@ class WorkItemRepository:
         project_id: str,
         *,
         kind: str | None = None,
+        kinds: Sequence[str] | None = None,
         status: str | None = None,
         assignee_user_id: str | None = None,
         reviewer_user_id: str | None = None,
@@ -107,6 +108,8 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.deleted_at.is_(None))
         if kind is not None:
             stmt = stmt.where(WorkItemModel.kind == kind)
+        if kinds:
+            stmt = stmt.where(WorkItemModel.kind.in_(list(kinds)))
         if status is not None:
             stmt = stmt.where(WorkItemModel.status == status)
         if exclude_statuses:
@@ -152,6 +155,7 @@ class WorkItemRepository:
         project_id: str,
         *,
         kind: str | None = None,
+        kinds: Sequence[str] | None = None,
         status: str | None = None,
         assignee_user_id: str | None = None,
         reviewer_user_id: str | None = None,
@@ -170,6 +174,8 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.deleted_at.is_(None))
         if kind is not None:
             stmt = stmt.where(WorkItemModel.kind == kind)
+        if kinds:
+            stmt = stmt.where(WorkItemModel.kind.in_(list(kinds)))
         if status is not None:
             stmt = stmt.where(WorkItemModel.status == status)
         if exclude_statuses:

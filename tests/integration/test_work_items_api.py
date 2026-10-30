@@ -270,6 +270,19 @@ async def test_list_filters_and_q(server, owner_token: str) -> None:
     assert r.status_code == 200
     assert {i["display_id"] for i in r.json()["data"]} == {"DEMO-1", "DEMO-2"}
 
+    # Multiple kinds arrive as a comma list from the backlog filter.
+    r = await client.get(
+        f"{API}/projects/DEMO/work-items?kind=task,epic", headers=auth(owner_token)
+    )
+    assert r.status_code == 200
+    assert {i["display_id"] for i in r.json()["data"]} == {"DEMO-1", "DEMO-2", "DEMO-3"}
+
+    r = await client.get(
+        f"{API}/projects/DEMO/work-items?kind=task,story", headers=auth(owner_token)
+    )
+    assert r.status_code == 200
+    assert {i["display_id"] for i in r.json()["data"]} == {"DEMO-1", "DEMO-2"}
+
 
 async def test_permissions_worker_and_cross_project(server, owner_token: str) -> None:
     client, _settings, _app = server
