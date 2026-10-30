@@ -26,6 +26,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
 from rdm.config import Settings
+from rdm.domain.workflow.engine import WorkflowEngine
 from rdm.domain.workflow.loader import load_spec
 from rdm.infrastructure.files.local_store import LocalFileStore
 
@@ -146,7 +147,85 @@ def check_workflow(_settings: Settings) -> CheckResult:
     except Exception as exc:  # noqa: BLE001 - any parse failure is a hard FAIL
         return CheckResult("workflow", FAIL, f"workflow.json5 校验失败：{exc}")
     kinds = ", ".join(sorted(spec.kinds))
-    return CheckResult("workflow", OK, f"version {spec.version}（{kinds}）")
+    return CheckResult(
+        "workflow", OK, f"version {spec.version} revision {spec.revision}（{kinds}）"
+    )
+
+
+def check_workflow_data(settings: Settings) -> CheckResult:
+    """In-flight items and active steps must still exist in the current definition."""
+    try:
+        spec = load_spec()
+        engine = WorkflowEngine(spec)
+    except Exception as exc:  # noqa: BLE001
+        return CheckResult("workflow-data", FAIL, f"workflow.json5 校验失败：{exc}")
+    if not settings.db_path.exists():
+        return CheckResult("workflow-data", OK, "数据库不存在，跳过")
+    engine = WorkflowEngine(spec)
+    issues: list[str] = []
+    engine_conn = create_engine(settings.db_sync_url)
+    try:
+        with engine_conn.connect() as conn:
+            tables = set(inspect(conn).get_table_names())
+            if "work_item" not in tables:
+                return CheckResult("workflow-data", OK, "工作项表不存在，跳过")
+            rows = conn.execute(
+                text(
+                    "select distinct w.kind, w.status, t.task_type from work_item w "
+                    "left join work_item_task t on t.work_item_id = w.id "
+                    "where w.deleted_at is null"
+                )
+            ).all()
+            for kind, status, task_type in rows:
+                try:
+                    engine.resolve(kind, task_type)
+                    engine.allowed(kind, status, task_type=task_type)
+                except Exception:  # noqa: BLE001
+                    issues.append(f"{kind}/{task_type or '-'} 状态 {status} 不在当前定义")
+            if "work_item_step" in tables:
+                steps = conn.execute(
+                    text(
+                        "select s.step_key, s.from_status, w.kind, t.task_type, "
+                        "w.display_no, p.key "
+                        "from work_item_step s join work_item w on w.id = s.work_item_id "
+                        "left join work_item_task t on t.work_item_id = w.id "
+                        "join project p on p.id = w.project_id "
+                        "where s.status in ('PENDING','BLOCKED') and w.deleted_at is null"
+                    )
+                ).all()
+                for step_key, from_status, kind, task_type, display_no, project_key in steps:
+                    try:
+                        keys = {
+                            step.key
+                            for step in engine.steps_from(kind, from_status, task_type=task_type)
+                        }
+                    except Exception:  # noqa: BLE001
+                        keys = set()
+                    if step_key not in keys:
+                        issues.append(
+                            f"{project_key}-{display_no} 的活动步骤 {step_key} 在当前定义中不存在"
+                        )
+            stale = conn.execute(
+                text(
+                    "select count(*) from work_item "
+                    "where deleted_at is null and workflow_version <> :rev"
+                ),
+                {"rev": spec.revision},
+            ).scalar()
+    except Exception as exc:  # noqa: BLE001
+        return CheckResult("workflow-data", FAIL, f"工作流数据校验失败：{str(exc)[:160]}")
+    finally:
+        engine_conn.dispose()
+    if issues:
+        return CheckResult(
+            "workflow-data",
+            FAIL,
+            f"revision {spec.revision}；" + "；".join(issues[:8]),
+        )
+    detail = f"revision {spec.revision}；活动步骤均存在于当前定义"
+    if stale:
+        detail += f"；{stale} 个工作项停留在旧修订（可继续操作）"
+    return CheckResult("workflow-data", OK, detail)
 
 
 def check_endpoint(settings: Settings) -> CheckResult:
@@ -285,6 +364,7 @@ def run_checks(settings: Settings, *, include_endpoint: bool = True) -> list[Che
         check_database(settings),
         check_bootstrap(settings),
         check_workflow(settings),
+        check_workflow_data(settings),
         check_outbox(settings),
         check_attachments(settings),
     ]

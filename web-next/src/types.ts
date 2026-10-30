@@ -278,6 +278,7 @@ export interface WorkflowKind {
 
 export interface WorkflowDto {
   version: number;
+  revision: number;
   task_types: { value: string; label: string }[];
   kinds: Record<string, WorkflowKind>;
 }

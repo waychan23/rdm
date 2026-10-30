@@ -365,6 +365,9 @@ class WorkflowSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     version: int
+    # Definition revision; bumped whenever states/steps/gates change in a way
+    # that matters for in-flight items (§17 M7). Distinct from schema version.
+    revision: int = 1
     task_types: dict[str, str] = {}
     kinds: dict[str, KindWorkflow]
 

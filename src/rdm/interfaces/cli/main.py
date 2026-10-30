@@ -28,6 +28,7 @@ app = typer.Typer(
     add_completion=False,
 )
 db_app = typer.Typer(help="Database migration commands (direct DB connection).")
+workflow_app = typer.Typer(help="Workflow definition validation.")
 account_app = typer.Typer(help="Org-owner recovery through the loopback endpoint.")
 project_app = typer.Typer(help="Projects and project membership (API client).")
 user_app = typer.Typer(help="Organization user administration (API client).")
@@ -41,6 +42,7 @@ uninstall_app = typer.Typer(
 )
 
 app.add_typer(db_app, name="db")
+app.add_typer(workflow_app, name="workflow")
 app.add_typer(account_app, name="account")
 app.add_typer(project_app, name="project")
 project_app.add_typer(project_members, name="members")
@@ -100,6 +102,14 @@ def account_recover_owner(
     link = account_commands.recover_owner(url)
     typer.secho("把下面的链接交给 Org Owner（7 天内有效）：", fg=typer.colors.GREEN)
     typer.echo(link)
+
+
+@workflow_app.command("validate")
+def workflow_validate(data_dir: DataDirOpt = DEFAULT_DATA_DIR) -> None:
+    """解析 workflow.json5 并检查在途工作项/活动步骤是否仍兼容。"""
+    from rdm.interfaces.cli import workflow as workflow_commands
+
+    raise typer.Exit(workflow_commands.validate(data_dir))
 
 
 @db_app.command("upgrade")

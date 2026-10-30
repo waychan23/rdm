@@ -148,3 +148,41 @@ def test_outbox_thresholds(tmp_path) -> None:
     checks = run_checks(Settings(data_dir=data_dir, port=1), include_endpoint=True)
     endpoint = next(c for c in checks if c.name == "endpoint")
     assert endpoint.status == WARN
+
+
+def test_workflow_validate_cli(tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    assert runner.invoke(app, ["init", "--data-dir", str(data_dir)]).exit_code == 0
+    result = runner.invoke(app, ["workflow", "validate", "--data-dir", str(data_dir)])
+    assert result.exit_code == 0, result.output
+    assert "revision 1" in result.output
+    assert "workflow-data" in result.output
+
+
+def test_workflow_validate_rejects_unknown_active_step(tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    assert runner.invoke(app, ["init", "--data-dir", str(data_dir)]).exit_code == 0
+    db = data_dir / "rdm.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "insert into organization(id,name,event_seq,created_at) "
+            "values ('org1','默认组织',0,'2026-10-25 00:00:00')"
+        )
+        conn.execute(
+            "insert into project(id,org_id,key,name,status,item_seq,created_at) "
+            "values ('p1','org1','DEMO','DEMO','active',1,'2026-10-25 00:00:00')"
+        )
+        conn.execute(
+            "insert into work_item(id,project_id,display_no,kind,status,title,priority,rank,"
+            "workflow_version,row_version,created_at,custom_fields) "
+            "values ('w1','p1',1,'task','TODO','t',3,0,1,0,'2026-10-25 00:00:00','{}')"
+        )
+        conn.execute(
+            "insert into work_item_step(id,project_id,work_item_id,step_key,step_name,"
+            "from_status,to_status,mode,status,required_count,row_version,config,created_at) "
+            "values ('s1','p1','w1','GONE','Gone','TODO','IN_PROGRESS','direct','PENDING',"
+            "1,0,'{}','2026-10-25 00:00:00')"
+        )
+    result = runner.invoke(app, ["workflow", "validate", "--data-dir", str(data_dir)])
+    assert result.exit_code == 1, result.output
+    assert "GONE" in result.output

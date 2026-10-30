@@ -717,6 +717,7 @@ class WorkItemService:
             planned_start_date=_date_value("planned_start_date", data.get("planned_start_date")),
             planned_end_date=_date_value("planned_end_date", data.get("planned_end_date")),
             assignee_user_id=assignee.id if assignee else None,
+            workflow_version=load_engine().spec.revision,
             fields=fields,
             participant_user_ids=participant_ids,
             reviewer_user_ids=reviewer_ids,
@@ -1161,6 +1162,7 @@ class WorkItemService:
 
         old_status = item.status
         item.status = to
+        item.workflow_version = engine.spec.revision
         await self.uow.work_items.save(item)
         allowed_next = list(engine.allowed(item.kind, to, task_type=task_type))
         blocking = [

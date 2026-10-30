@@ -249,6 +249,7 @@ class WorkItem:
     planned_end_date: dt.date | None = None
     rank: int = 0
     assignee_user_id: str | None = None
+    workflow_version: int = 1
     row_version: int = 0
     fields: KindFields | None = None
     # M6: explicit participant/reviewer rows and configurable fields.

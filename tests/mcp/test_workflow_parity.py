@@ -22,6 +22,7 @@ async def test_workflow_dto_parity(mcp_clients) -> None:
 
     assert issue_only["data"] == {
         "version": 3,
+        "revision": rest_dto["revision"],
         "task_types": rest_dto["task_types"],
         "kinds": {"issue": rest_dto["kinds"]["issue"]},
     }

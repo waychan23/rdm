@@ -123,6 +123,7 @@ def build_workflow_dto(
             kinds[name] = _workflow_dto(engine, resolved, include_subtypes=True)
     return {
         "version": spec.version,
+        "revision": spec.revision,
         "task_types": [{"value": code, "label": label} for code, label in spec.task_types.items()],
         "kinds": kinds,
     }
