@@ -176,6 +176,22 @@
   height: var(--ds-space-500, 40px);
   border-radius: var(--ds-radius-small, 4px);
 }
+/* Planned date rows inside the detail drawer's right column. */
+.rdm-planned-date-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-100, 8px);
+}
+.rdm-planned-date-label {
+  flex: 0 0 auto;
+  min-width: var(--ds-space-600, 48px);
+  font-size: 12px;
+  color: var(--ds-text-subtle);
+}
+.rdm-planned-date-input {
+  flex: 1;
+  min-width: 0;
+}
 .rdm-inline-editor {
   display: flex;
   flex-direction: column;

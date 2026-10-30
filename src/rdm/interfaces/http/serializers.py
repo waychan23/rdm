@@ -155,6 +155,8 @@ def work_item_out(item: WorkItem, project: Project, users: dict[str, User] | Non
         "description_md": item.description_md,
         "status": item.status,
         "priority": item.priority,
+        "planned_start_date": _iso(item.planned_start_date),
+        "planned_end_date": _iso(item.planned_end_date),
         "rank": item.rank,
         "parent_id": item.parent_id,
         "assignee": _assignee_out(item, users),

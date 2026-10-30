@@ -7,6 +7,7 @@ VALIDATION_ERROR with an actionable message).
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -27,6 +28,8 @@ class WorkItemCreateIn(_Strict):
     parent: str | None = None
     description_md: str | None = None
     priority: int = Field(default=DEFAULT_PRIORITY, ge=PRIORITY_MIN, le=PRIORITY_MAX)
+    planned_start_date: dt.date | None = None
+    planned_end_date: dt.date | None = None
     assignee: str | None = None
     # M6 people/optional fields (enabled per workflow; validated in the service)
     participants: list[str] | None = None
@@ -54,6 +57,8 @@ class WorkItemUpdateIn(_Strict):
     title: str | None = Field(default=None, min_length=1, max_length=300)
     description_md: str | None = None
     priority: int | None = Field(default=None, ge=PRIORITY_MIN, le=PRIORITY_MAX)
+    planned_start_date: dt.date | None = None
+    planned_end_date: dt.date | None = None
     participants: list[str] | None = None
     reviewer: list[str] | None = None
     review_content_md: str | None = None

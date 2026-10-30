@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Button from "@atlaskit/button/default/button";
 import IconButton from "@atlaskit/button/icon/button";
+import { DatePicker } from "@atlaskit/datetime-picker";
 import Heading from "@atlaskit/heading";
 import CrossIcon from "@atlaskit/icon/core/cross";
 import Link from "@atlaskit/link";
@@ -1096,6 +1097,41 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                 style={{ backgroundColor: priorityColor(item.priority) }}
               />
             </div>
+          </div>
+          <hr className="rdm-item-divider" />
+
+          <div className="rdm-item-field" data-testid="item-field-planned-dates">
+            <div className="rdm-item-section-label">计划日期</div>
+            <Stack space="space.100">
+              <div className="rdm-planned-date-row">
+                <span className="rdm-planned-date-label">开始</span>
+                <div className="rdm-planned-date-input">
+                  <DatePicker
+                    value={item.planned_start_date ?? ""}
+                    placeholder="未设置"
+                    isDisabled={!canEdit}
+                    testId="item-planned-start"
+                    onChange={(value) =>
+                      void patchItem({ planned_start_date: value || null })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="rdm-planned-date-row">
+                <span className="rdm-planned-date-label">完成</span>
+                <div className="rdm-planned-date-input">
+                  <DatePicker
+                    value={item.planned_end_date ?? ""}
+                    placeholder="未设置"
+                    isDisabled={!canEdit}
+                    testId="item-planned-end"
+                    onChange={(value) =>
+                      void patchItem({ planned_end_date: value || null })
+                    }
+                  />
+                </div>
+              </div>
+            </Stack>
           </div>
           <hr className="rdm-item-divider" />
 

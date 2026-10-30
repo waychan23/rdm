@@ -7,6 +7,7 @@ import decimal
 
 from sqlalchemy import (
     JSON,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -38,6 +39,8 @@ class WorkItemModel(AuditMixin, SoftDeleteMixin, Base):
     description_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=DEFAULT_PRIORITY)
+    planned_start_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    planned_end_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
     rank: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     assignee_user_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Built-in optional field enabled per workflow (architecture §17, M6).

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import Button from "@atlaskit/button/default/button";
+import { DatePicker } from "@atlaskit/datetime-picker";
 import ModalDialog, {
   ModalBody,
   ModalFooter,
@@ -80,6 +81,8 @@ export default function CreateWorkItemDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState(DEFAULT_PRIORITY);
+  const [plannedStart, setPlannedStart] = useState("");
+  const [plannedEnd, setPlannedEnd] = useState("");
   const [parent, setParent] = useState<WorkItemOption | null>(initialParent);
   const [acceptance, setAcceptance] = useState("");
   const [issue, setIssue] = useState<IssueFields>({
@@ -121,6 +124,8 @@ export default function CreateWorkItemDialog({
     setTitle("");
     setDescription("");
     setPriority(DEFAULT_PRIORITY);
+    setPlannedStart("");
+    setPlannedEnd("");
     setParent(initialParent);
     setAcceptance("");
     setIssue({
@@ -170,6 +175,8 @@ export default function CreateWorkItemDialog({
         title,
         description_md: description,
         priority,
+        planned_start_date: plannedStart || null,
+        planned_end_date: plannedEnd || null,
       };
       const parentRef = parentLocked ? initialParent : parent;
       if (parentRef) payload.parent = parentRef.display_id;
@@ -287,6 +294,24 @@ export default function CreateWorkItemDialog({
                   onChange={(option) =>
                     option && setPriority((option as { value: number }).value)
                   }
+                />
+              </FormField>
+              <FormField label="计划开始日期" htmlFor="wi-planned-start">
+                <DatePicker
+                  id="wi-planned-start"
+                  value={plannedStart}
+                  placeholder="选择日期"
+                  testId="work-item-create-planned-start"
+                  onChange={setPlannedStart}
+                />
+              </FormField>
+              <FormField label="计划完成日期" htmlFor="wi-planned-end">
+                <DatePicker
+                  id="wi-planned-end"
+                  value={plannedEnd}
+                  placeholder="选择日期"
+                  testId="work-item-create-planned-end"
+                  onChange={setPlannedEnd}
                 />
               </FormField>
               {parentKinds.length > 0 && (

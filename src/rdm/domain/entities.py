@@ -242,6 +242,9 @@ class WorkItem:
     parent_id: str | None = None
     description_md: str | None = None
     priority: int = DEFAULT_PRIORITY
+    # Optional calendar dates (YYYY-MM-DD), set by humans in the web UI.
+    planned_start_date: dt.date | None = None
+    planned_end_date: dt.date | None = None
     rank: int = 0
     assignee_user_id: str | None = None
     row_version: int = 0

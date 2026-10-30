@@ -319,6 +319,54 @@ async def test_ulid_accepted_as_id(server, owner_token: str) -> None:
     assert r.json()["data"]["display_id"] == "DEMO-1"
 
 
+async def test_planned_dates_are_optional_and_clearable(server, owner_token: str) -> None:
+    client, _settings, _app = server
+    await _create_project(client, owner_token)
+
+    # Dates are optional; when present they are plain calendar dates.
+    r = await client.post(
+        f"{API}/projects/DEMO/work-items",
+        json={
+            "kind": "task",
+            "title": "dated",
+            "planned_start_date": "2026-11-01",
+            "planned_end_date": "2026-11-15",
+        },
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+    item = r.json()["data"]
+    assert item["planned_start_date"] == "2026-11-01"
+    assert item["planned_end_date"] == "2026-11-15"
+
+    # Malformed dates are rejected by the shared schema/service.
+    r = await client.post(
+        f"{API}/projects/DEMO/work-items",
+        json={"kind": "task", "title": "bad-date", "planned_start_date": "2026-13-01"},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 422, r.text
+
+    # PATCH one date and clear the other; absent fields keep their value.
+    r = await client.patch(
+        f"{API}/work-items/{item['display_id']}",
+        json={"row_version": item["row_version"], "planned_end_date": None},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    updated = r.json()["data"]
+    assert updated["planned_start_date"] == "2026-11-01"
+    assert updated["planned_end_date"] is None
+
+    r = await client.patch(
+        f"{API}/work-items/{item['display_id']}",
+        json={"row_version": updated["row_version"], "planned_end_date": "2026-11-20"},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["planned_end_date"] == "2026-11-20"
+
+
 async def test_priority_is_mandatory_and_validated(server, owner_token: str) -> None:
     client, _settings, _app = server
     await _create_project(client, owner_token)

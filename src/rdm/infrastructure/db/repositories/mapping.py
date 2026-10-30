@@ -186,6 +186,8 @@ def work_item_to_domain(
         parent_id=row.parent_id,
         description_md=row.description_md,
         priority=row.priority,
+        planned_start_date=row.planned_start_date,
+        planned_end_date=row.planned_end_date,
         rank=row.rank,
         assignee_user_id=row.assignee_user_id,
         row_version=row.row_version,

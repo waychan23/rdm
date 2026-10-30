@@ -18,6 +18,8 @@ const FIELD_LABELS: Record<string, string> = {
   title: "标题",
   description_md: "描述",
   priority: "优先级",
+  planned_start_date: "计划开始日期",
+  planned_end_date: "计划完成日期",
   parent_id: "父项",
   source_story_id: "来源 story",
   acceptance_criteria_md: "验收标准",

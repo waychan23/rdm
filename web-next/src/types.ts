@@ -54,6 +54,8 @@ export interface WorkItem {
   description_md?: string | null;
   status: string;
   priority: number;
+  planned_start_date?: string | null;
+  planned_end_date?: string | null;
   rank?: number;
   parent_id?: string | null;
   assignee?: Assignee | null;

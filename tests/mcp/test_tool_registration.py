@@ -66,6 +66,9 @@ async def test_transition_schema_requires_to_and_version(mcp_clients) -> None:
     # lives in the shared pydantic model + service.
     assert create_props["kind"]["type"] == "string"
     assert create_props["title"]["type"] == "string"
+    assert {"planned_start_date", "planned_end_date"} <= set(create_props)
+    update_props = tools["work_item_update"].input_schema["properties"]
+    assert {"planned_start_date", "planned_end_date"} <= set(update_props)
 
 
 async def test_m2_tool_schemas(mcp_clients) -> None:

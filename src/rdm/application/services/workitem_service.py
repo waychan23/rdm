@@ -12,6 +12,7 @@ Business rules (docs/architecture.md §3.2, §5; rulings §16.22-26, §17 M6):
 
 from __future__ import annotations
 
+import datetime as dt
 import re
 from collections.abc import Iterable, Mapping
 from decimal import Decimal
@@ -66,7 +67,16 @@ KIND_FIELDS: dict[str, set[str]] = {
     },
     "task": {"task_type", "est_work_hours", "actual_work_hours", "code_branch"},
 }
-MASTER_UPDATABLE = {"title", "description_md", "priority"}
+MASTER_UPDATABLE = {
+    "title",
+    "description_md",
+    "priority",
+    "planned_start_date",
+    "planned_end_date",
+}
+# Master fields accepted on create (assignee/parent/kind are handled separately).
+MASTER_CREATABLE = {"title", "description_md", "priority", "planned_start_date", "planned_end_date"}
+PLANNED_DATE_FIELDS = ("planned_start_date", "planned_end_date")
 # Optional M6 fields accepted on create/update (enabled per workflow).
 OPTIONAL_FIELDS = {"participants", "reviewer", "review_content_md", "custom_fields"}
 # Input keys that are not entity fields.
@@ -74,6 +84,28 @@ _CREATE_ONLY = {"kind", "parent", "assignee"}
 
 VALID_KINDS = {"epic", "story", "issue", "task"}
 PRIORITY_VALUES = list(range(PRIORITY_MIN, PRIORITY_MAX + 1))
+
+
+def _date_value(field: str, value: Any) -> dt.date | None:
+    """Parse an optional calendar date (``YYYY-MM-DD``); empty clears it."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, dt.datetime):
+        return value.date()
+    if isinstance(value, dt.date):
+        return value
+    if isinstance(value, str):
+        try:
+            return dt.date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValidationError(
+                f"{field} 必须是 YYYY-MM-DD 格式的日期",
+                details={"field": field},
+            ) from exc
+    raise ValidationError(
+        f"{field} 必须是 YYYY-MM-DD 格式的日期",
+        details={"field": field},
+    )
 
 
 def _priority_value(value: Any) -> int:
@@ -666,6 +698,8 @@ class WorkItemService:
             parent_id=parent.id if parent else None,
             description_md=data.get("description_md"),
             priority=_priority_value(data.get("priority", DEFAULT_PRIORITY)),
+            planned_start_date=_date_value("planned_start_date", data.get("planned_start_date")),
+            planned_end_date=_date_value("planned_end_date", data.get("planned_end_date")),
             assignee_user_id=assignee.id if assignee else None,
             fields=fields,
             participant_user_ids=participant_ids,
@@ -747,9 +781,11 @@ class WorkItemService:
                     raise ValidationError("title 不能为空", details={"field": "title"})
             if key == "priority":
                 new = _priority_value(new)
+            if key in PLANNED_DATE_FIELDS:
+                new = _date_value(key, new)
             if old != new:
                 setattr(item, key, new)
-                changes[key] = [old, new]
+                changes[key] = [_json_value(old), _json_value(new)]
 
         field_changes = await self._apply_kind_fields(item, payload, keys, actor)
         changes.update(field_changes)
@@ -1246,7 +1282,7 @@ class WorkItemService:
         keys = set(data) - {"row_version"}
         allowed = KIND_FIELDS[kind] | (_CREATE_ONLY if creating else set()) | OPTIONAL_FIELDS
         # Master fields valid for every kind.
-        allowed |= MASTER_UPDATABLE if not creating else {"title", "description_md", "priority"}
+        allowed |= MASTER_UPDATABLE if not creating else MASTER_CREATABLE
         stray = keys - allowed - KIND_FIELDS[kind]
         # Fields belonging to *other* kinds get the actionable message.
         other_owned = stray & set().union(*KIND_FIELDS.values())
@@ -1387,6 +1423,8 @@ class WorkItemService:
             "title": item.title,
             "status": item.status,
             "priority": item.priority,
+            "planned_start_date": _json_value(item.planned_start_date),
+            "planned_end_date": _json_value(item.planned_end_date),
             "assignee_user_id": item.assignee_user_id,
             "parent_id": item.parent_id,
             "task_type": item_task_type(item),
@@ -1484,4 +1522,6 @@ def _json_value(value: Any) -> Any:
     """Make a value safe for the JSON event payload column."""
     if isinstance(value, Decimal):
         return float(value)
+    if isinstance(value, (dt.date, dt.datetime)):
+        return value.isoformat()
     return value
