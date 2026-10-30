@@ -1,7 +1,7 @@
 # rd-manager（rdm）
 
 human/agent 协作的研发工作管理：受工作流引擎约束的 WorkItem/Sprint、站内信箱、
-附件/产出物/工作区、Webhook 通知、27 个 MCP 工具与完整 Web。单组织部署（初始化
+附件/产出物/工作区、站内通知、Webhook、全局搜索、30 个 MCP 工具与完整 Web。单组织部署（初始化
 创建默认组织，预留多租户隔离），SQLite，服务只监听 127.0.0.1。
 
 ## 5 分钟跑起来
@@ -141,5 +141,6 @@ uv build
 
 前端写码规则见仓库根 `CLAUDE.md`，UI 设计与组件/token 规范见 [docs/web-next-ui.md](docs/web-next-ui.md)；
 工作流 `workflow.json5` 的完整配置手册见 [docs/workflow-config.md](docs/workflow-config.md)；
+运维/备份/升级/排障见 [docs/runbook.md](docs/runbook.md)；
 测试与关键裁决见 `docs/`（architecture.md §16/§17）。
 M1 手工验收脚本见 `docs/acceptance/m1-loop.md`。

@@ -64,9 +64,7 @@ def run(h: Harness) -> None:
     assert r.status_code == 200, r.text
     assert h.db.item(story["display_id"])["status"] == "DONE"
     out = result.stdout.lower()
-    assert any(
-        token in out for token in ("gate_blocked", "blocking", "workflow_step_forbidden")
-    )
+    assert any(token in out for token in ("gate_blocked", "blocking", "workflow_step_forbidden"))
     assert "work_item.status_changed" in h.db.event_types("S4")
 
 

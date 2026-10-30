@@ -118,6 +118,4 @@ def run(h: Harness) -> None:
 
 
 def _version(h: Harness, display_id: str, token: str | None = None) -> int:
-    return h.rest.get(f"/work-items/{display_id}", token=token).json()["data"][
-        "row_version"
-    ]
+    return h.rest.get(f"/work-items/{display_id}", token=token).json()["data"]["row_version"]

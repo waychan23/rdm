@@ -30,7 +30,7 @@ test.describe("workflow: reassign executors", () => {
     await startStepThroughDialog(alice, "CODE_REVIEW", ["alice"]);
 
     const card = await activeStep(alice);
-    await expect(card).toContainText("PENDING");
+    await expect(card).toContainText("待执行");
 
     // Reassignment is a PENDING-only action of the current assignee.
     await alice.getByTestId("step-active-reassign").click();
@@ -40,8 +40,8 @@ test.describe("workflow: reassign executors", () => {
 
     await expectSuccessNotice(alice, "执行人已更新");
     await expect(card).toContainText("bob");
-    await expect(card).toContainText("CANCELLED");
-    await expect(card).toContainText("PENDING");
+    await expect(card).toContainText("已取消");
+    await expect(card).toContainText("待执行");
     // The removed executor loses the execute button.
     await expect(alice.getByTestId("step-active-execute")).toHaveCount(0);
 

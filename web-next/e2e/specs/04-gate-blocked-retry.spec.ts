@@ -50,7 +50,7 @@ test.describe("workflow: required-field gate", () => {
     await confirmStepExecution(page, "approve without content");
 
     await expectStatus(page, "TO_REVIEW");
-    await expect(card).toContainText("BLOCKED");
+    await expect(card).toContainText("阻塞");
     await expect(page.getByTestId("item-panel-fields")).toContainText(
       "缺少必填字段：评审意见",
     );

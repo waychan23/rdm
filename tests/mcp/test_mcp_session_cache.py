@@ -172,7 +172,7 @@ async def test_repeated_requests_keep_session(server, kind_label, header_factory
     # 3) tools/list on the same session — must not be rejected as missing session
     r = await client.post("/mcp", headers=sess_headers, json=body("tools/list", 2))
     assert r.status_code == 200, r.text
-    assert len(_sse_json(r.text)["result"]["tools"]) == 29
+    assert len(_sse_json(r.text)["result"]["tools"]) == 30
 
 
 async def test_cached_oauth_token_keeps_client_id_and_expiry(server):

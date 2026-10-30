@@ -8,7 +8,7 @@
 1. **状态推进只走具名工具**（direct 用 `work_item_transition`；approval/task 用 `work_item_step`；sprint 用 `sprint_start` / `sprint_close`），不存在"直接 update status"的通用工具。
 2. **读响应自带下一步**：任何 item 级响应都带 `allowed_transitions`、`accountable_human`、`children_summary`，agent 不需要猜。
 3. **错误即指引**：错误 `message` 必须包含"当前状态 → 允许去向 → 建议的下一步工具"；`details` 结构化（见 §5）。
-4. **工具数量受控**（当前 29 个，下文逐字枚举为准）：查询/编辑通用化，状态推进具名化。新增/签名变更须在 architecture §17 记裁决。
+4. **工具数量受控**（当前 30 个，下文逐字枚举为准）：查询/编辑通用化，状态推进具名化。新增/签名变更须在 architecture §17 记裁决。
 5. **MCP 不传二进制**：附件只读列表/下载链接；上传走 OpenAPI/Web。
 6. **返回精简**：列表默认 20 条、只回摘要字段（`display_id, kind, title, status, assignee, priority`）；详情用 `expand` 参数按需展开。
 7. **幂等/并发**：写工具返回 `row_version`；冲突时返回 `CONFLICT_VERSION` 并附最新版本，agent 重读后重试。
@@ -25,12 +25,13 @@
              "details": { "blocking_children": ["RDM-13"], "allowed_transitions": ["CANCELLED"], "hint": "..." } } }
 ```
 
-## 3. 工具清单（29）
+## 3. 工具清单（30）
 
 > 计数勘误（2026-10-24，architecture §16.24）：早期版本标称 26 个，实际枚举为 **27 个**——§3.2 标题写 7 但实列 8（`sprint_list`/`sprint_get` 在表中合占一行）。分节实数：3+8+7+4+3+2=27。
 > **实现口径**：M1 交付 17 个；M2 已补齐全部 **27 个**（见 §16.51）；M5 新增 `project_bind` 后为 **28 个**，注册数测试改为精确匹配 28 个。
 > **M5 变更**：新增 `project_bind`（architecture §17.80），总数 **28**；注册数测试改为精确匹配 28 个。
 > **M6 变更**：新增 `work_item_step`（architecture §17.93），总数 **29**；注册数测试改为精确匹配 29 个。
+> **M7 变更**：新增 `search`（architecture §17.103），总数 **30**；`work_item_step` 增加 `reject`，`my_work_list` 增加 `include_steps`（签名变更，不增工具）。
 
 ### 3.1 身份 / 上下文（4）【M1 全量 + M5】
 
@@ -41,17 +42,18 @@
 | `workflow_get` 【M1】 | 拉取流程定义（状态、转换、终态、gate），**skill 引导 agent 时先调它** | `kind?` | `{kinds: {...}}` |
 | `project_bind` 【M5】 | 校验/返回项目目录绑定；`project` 为空时返回可访问项目 options（带 `selection=user_choice_required`，禁止推荐）；不读写文件、无服务端状态 | `project?, current?` | `{project, options, selection, persist, change?, use_project}` |
 
-### 3.2 查询（8）
+### 3.2 查询（9）
 
 | 工具 | 用途 | 关键入参 |
 |---|---|---|
 | `work_item_list` 【M1/M6】 | 通用筛选：kind/status/assignee/reviewer/sprint/parent/priority/keyword，分页 | `kind?, status?, assignee?, reviewer?, sprint?, parent?, q?, limit?, cursor?, include_deleted?` |
 | `work_item_get` 【M1/M6】 | 详情 + 子项 + 父项 + attachments + `allowed_transitions` + `available_steps`/`active_step`/`permissions` + allowed parent/child kinds | `id` |
-| `my_work_list` 【M2】 | 我的待办（assignee=me 且非终态，按 priority/display_no 排序）；传 `status` 时按状态精确过滤；传 `project` 时只列该项目 | `status?, project?` |
+| `my_work_list` 【M2/M7】 | 我的待办（assignee=me 且非终态，按 priority/display_no 排序）；传 `status` 时按状态精确过滤；传 `project` 时只列该项目；`include_steps=true` 时 `meta.pending_steps` 返回待执行/待审批步骤 | `status?, project?, include_steps?` |
 | `backlog_list` 【M2】 | ProductBacklog：**未进入任何 Sprint** 且非终态的 items（跨全部 sprint 链接差集） | `kind?, project?` |
 | `sprint_list` / `sprint_get` 【M2】 | Sprint 列表（可按状态过滤）/ 详情（含 items 与 status_counts） | `status?, project?` / `id` |
 | `member_list` 【M2】 | 项目成员（含 agent 的 manager、角色、可接 kinds、webhook 配置） | `type?, project?` |
 | `comment_list` 【M2】 | 某个 item 的讨论，含每条评论挂载的附件与正文内联图片元数据 | `work_item_id, limit?, offset?` |
+| `search` 【M7】 | 跨实体全文检索（工作项/评论/信件/产出物），按可访问项目过滤；返回 `entity_type/ref/title/snippet/url` | `q, types?, project?, limit?` |
 
 ### 3.3 写入（工作项，8）【M1 全量 + M6】
 
@@ -61,7 +63,7 @@
 | `work_item_update` 【M1/M6】 | 编辑字段（**不含 status**）；带 `row_version` 乐观锁；支持 participants/reviewer/review_content_md/custom_fields；计划日期可选（`YYYY-MM-DD`；REST 可传 `null` 清空） | `id, row_version, fields{...}` |
 | `work_item_assign` 【M1/M6】 | 指派负责人（可为 agent）；未指派时任何成员可自领（human 也可为名下 agent 领取），已有负责人时仅负责人/参与人/manager/project_owner 可改派；负责人若是 agent，其 human manager 同样可改派 | `id, member` |
 | `work_item_transition` 【M1/M6】 | direct/legacy 状态入口；非 direct 或目标有多条步骤时返回 `WORKFLOW_STEP_REQUIRED`，改用 `work_item_step`；`reason?` 作为 direct 步骤备注 | `id, to, row_version, reason?` |
-| `work_item_step` 【M6】 | 命名步骤生命周期：`start`（负责人发起 approval/task，direct 由唯一候选直接执行）/`execute`（执行人提交备注）/`cancel`/`retry`/`reassign`；负责人为 agent 时其 human manager 可代操作（执行人同理），事件仍记实际操作身份；先 `work_item_get` 读 `available_steps`/`active_step` | `id, action, step_key?, step_id?, row_version?, executors?, note_md?, attachment_ids?` |
+| `work_item_step` 【M6/M7】 | 命名步骤生命周期：`start`（负责人发起 approval/task，direct 由唯一候选直接执行）/`execute`（执行人提交备注）/`reject`（审批执行人拒绝，必须 `reason`）/`cancel`/`retry`/`reassign`；负责人为 agent 时其 human manager 可代操作（执行人同理），事件仍记实际操作身份；先 `work_item_get` 读 `available_steps`/`active_step` | `id, action, step_key?, step_id?, row_version?, executors?, note_md?, attachment_ids?` |
 | `work_item_delete` 【M1】 | 级联软删（返回被删 id 列表） | `id` |
 | `work_item_restore` 【M1】 | 恢复软删（校验父链，§16.26） | `id` |
 | `comment_add` 【M1】 | 在 item 下留言，可 @member（触发站内信，§16.30）；M2 起支持 `attachment_ids`：先经 REST multipart 把附件传到工作项，再在发评论时把 id 一并提交（服务端同事务改绑到评论） | `work_item_id, body_md, reply_to?, attachment_ids?` |
@@ -224,4 +226,4 @@ MCP 请求不携带 cwd；绑定事实源是客户端工作区根目录的 `.rdm
 - 命名：`资源_动作`（`work_item_*`、`sprint_*`、`mailbox_*`），全小写蛇形；无前缀 `rdm_`（server 名已隔离）。
 - 注册：`interfaces/mcp/tools/<resource>.py` 每文件一个模块，`register(mcp, container)` 函数（container 用于开 UoW）；工具函数只做 pydantic 入参 → 调 service → 包信封。
 - 测试：每个工具至少一条 happy path + 一条错误码映射测试；`workflow_get` 的工具输出必须与 REST `/api/v1/workflow` 完全一致（同一函数生成）。
-- 工具总数当前 29（见 §3）；新增或签名变更必须在 `docs/architecture.md` §17 记裁决，不做无理由扩张。
+- 工具总数当前 30（见 §3）；新增或签名变更必须在 `docs/architecture.md` §17 记裁决，不做无理由扩张。

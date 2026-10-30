@@ -1,4 +1,4 @@
-"""MCP tool catalogue and key input schemas (M6: 29 tools, §17.80/M6)."""
+"""MCP tool catalogue and key input schemas (M7: 30 tools, §17.112)."""
 
 EXPECTED_TOOLS = {
     # 3.1 identity / context (4)
@@ -6,7 +6,7 @@ EXPECTED_TOOLS = {
     "project_get",
     "workflow_get",
     "project_bind",
-    # 3.2 queries (8)
+    # 3.2 queries (9)
     "work_item_list",
     "work_item_get",
     "my_work_list",
