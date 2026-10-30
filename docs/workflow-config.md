@@ -292,7 +292,7 @@
 | `reviewers` | `reviewer` 字段的人 |
 
 - 只保留仍在本项目、启用的成员。
-- 目标状态为 `DONE` 的步骤会过滤掉 agent；即 agent 不能作为 DONE 步骤的执行人。
+- 候选执行人不按目标状态过滤 agent（§17.102）：agent 只要是 `actors` 来源解析出的候选人，就可以作为 `DONE` 步骤的执行人；其 human manager 也可代操作（§17.101）。
 - `reviewers` 为空且 `actors` 只有 `reviewers` 时，该步骤没有候选人，无法发起。
 
 ### 7.2 自动指定与人数
@@ -654,7 +654,6 @@ uv run python -c "import json,pyjson5; from rdm.domain.workflow.loader import lo
 - 自定义字段定义只在 JSON5，不提供 Web 字段设计器。
 - 自定义字段不参与列表检索；reviewer/review_content 可检索。
 - `mode="task"` 不能要求步骤备注；备注由子任务承担。
-- DONE 目标的步骤执行人只能是 human；agent 可作为非 DONE 步骤执行人或参与人。
 - 不做步骤级“拒绝/退回”审批语义；取消 + 重新发起即可。
 - 步骤事件暂不进入 webhook 白名单；通知能力后续实现。
 - 运行中的步骤会快照 edge 配置（mode/note/tasks/gates 等）；gate 最终校验仍以当前加载的

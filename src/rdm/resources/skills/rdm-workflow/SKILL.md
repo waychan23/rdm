@@ -57,8 +57,8 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 
 1. task 完成后先回填实际工时（`work_item_update` 改 `actual_work_hours` 等特型字段）。
 2. 按工作流推进到 `TO_REVIEW`（direct 步骤）。
-3. **停住。agent 不能作为 DONE 步骤的执行人**（服务端按身份类型判定，§17.70/81）：DONE 目标的候选执行人会过滤 agent。需要评审时，负责人维护 reviewer 并启动 `CODE_REVIEW`/任务式步骤，由 human 执行人收口；agent 可以执行非 DONE 步骤或完成自己的评审子任务。
-4. story 在 TO_TEST、task 在 TO_REVIEW 后用 `mailbox_send` 通知 accountable_human 验收。issue 的 CLOSED_DONE 是 QA 关单，不受 DONE 身份限制。
+3. **agent 可以作为 DONE 步骤的执行人**（§17.102）：DONE 目标不再按身份类型过滤候选人。只要 `actors`（assignee/participants/reviewers）解析到你，就可以发起并执行 `CODE_REVIEW`/任务式步骤收口到 `DONE`；需要人类验收时，由负责人把 reviewer/执行人配置为 human，或由该 agent 的 human manager 代操作（操作历史仍记实际操作身份）。
+4. story 在 TO_TEST、task 在 TO_REVIEW 后用 `mailbox_send` 通知 accountable_human 验收。issue 的 CLOSED_DONE 是 QA 关单语义。
 5. Story/Issue/Epic 进入终态有 gate：所有直接子项必须先终态；issue 关闭还要求至少 1 个子任务。
 ## 6. 异常处理
 
@@ -88,6 +88,5 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 - 不要猜工作项/成员 id；先查询。
 - 不要尝试绕过 `work_item_transition`/`work_item_step` 改状态。
 - 不要执行未指派给自己的步骤；不要修改分配给他人的工作项状态。
-- 不要作为 agent 执行 DONE 目标的步骤（服务端会过滤候选）。
 - 不要重复 `mailbox_send` 同一内容；对同一事项用 reply_to 回信。
 - 不要忽略 gate 阻塞去尝试其他转换路径——状态机没有"绕路"。

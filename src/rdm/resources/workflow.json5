@@ -373,7 +373,7 @@
           },
           {
             key: "CODE_REVIEW_TASKS",
-            name: "Code Review（子任务）",
+            name: "Code Review Task",
             to: "DONE",
             mode: "task", // direct | approval | task
             actors: ["assignee", "reviewers"],

@@ -100,6 +100,25 @@ class StepService:
         assert self.uow.work_item_steps is not None
         return await self.uow.work_item_steps.list_executors(step_id)
 
+    async def _actor_executor(self, step_id: str, actor: Actor) -> WorkItemStepExecutor | None:
+        """The actor's own executor row, else one of its managed agents' (§17.101).
+
+        Pending rows win so a human can still submit for another managed agent
+        after already executing on one agent's behalf.
+        """
+        assert self.uow.work_item_steps is not None
+        own = await self.uow.work_item_steps.get_executor(step_id, actor.id)
+        if own is not None or not actor.managed_agent_ids or actor.is_act_as:
+            return own
+        managed = [
+            row
+            for row in await self.uow.work_item_steps.list_executors(step_id)
+            if actor.manages_agent(row.user_id)
+        ]
+        pending = [row for row in managed if row.status == StepExecutorStatus.PENDING]
+        fallback = pending or managed
+        return fallback[0] if fallback else None
+
     @staticmethod
     def _active_executors(
         executors: Sequence[WorkItemStepExecutor],
@@ -168,11 +187,8 @@ class StepService:
             for user_id in item.reviewer_user_ids:
                 add(user_id)
 
-        candidates = [members[user_id][0] for user_id in ids]
-        # Completion (DONE) stays a human privilege (§17.70/81).
-        if step.to in security.COMPLETION_STATES:
-            candidates = [user for user in candidates if not user.is_agent]
-        return candidates
+        # Agents are valid candidates for every target, including DONE (§17.102).
+        return [members[user_id][0] for user_id in ids]
 
     @staticmethod
     def _max_executors(step: StepSpec, candidate_count: int) -> int:
@@ -251,11 +267,6 @@ class StepService:
                     "selected": len(chosen),
                 },
             )
-        if step.to in security.COMPLETION_STATES and any(u.is_agent for u in chosen):
-            raise WorkflowStepForbidden(
-                "DONE 步骤必须由 human 执行人收口；agent 不能作为完成态执行人。",
-                details={"step_key": step.key, "target": step.to},
-            )
         return chosen
 
     def _config(self, item: WorkItem, step: StepSpec) -> dict[str, Any]:
@@ -311,7 +322,7 @@ class StepService:
         engine = self._engine()
         task_type = self._task_type(item)
         active = await self.uow.work_item_steps.get_active_for_item(item.id)
-        is_assignee = item.assignee_user_id == actor.id
+        is_assignee = security.is_assignee(actor, item)
 
         available: list[dict[str, Any]] = []
         for step in engine.steps_from(item.kind, item.status, task_type=task_type):
@@ -328,7 +339,7 @@ class StepService:
             if step.mode == "direct":
                 if len(candidates) != 1:
                     reasons.append("direct 步骤需要唯一候选执行人")
-                elif candidates[0].id != actor.id:
+                elif not actor.can_act_for_user(candidates[0].id):
                     reasons.append(f"该步骤只能由 {candidates[0].name} 执行")
             can_start = (
                 active is None
@@ -340,7 +351,7 @@ class StepService:
                 active is None
                 and step.mode == "direct"
                 and len(candidates) == 1
-                and candidates[0].id == actor.id
+                and actor.can_act_for_user(candidates[0].id)
             )
             available.append(
                 {
@@ -396,7 +407,16 @@ class StepService:
                         ),
                     }
                 )
+            pending_managed = [
+                e
+                for e in executors
+                if actor.manages_agent(e.user_id) and e.status == StepExecutorStatus.PENDING
+            ]
             my_executor = next((e for e in executors if e.user_id == actor.id), None)
+            if my_executor is None:
+                managed = [e for e in executors if actor.manages_agent(e.user_id)]
+                candidates_for_me = pending_managed or managed
+                my_executor = candidates_for_me[0] if candidates_for_me else None
             active_dto = {
                 "id": active.id,
                 "key": active.step_key,
@@ -520,9 +540,10 @@ class StepService:
                 note_md=note_md,
                 attachment_ids=attachment_ids,
             )
-        if item.assignee_user_id != actor.id:
+        if not security.is_assignee(actor, item):
             raise WorkflowStepForbidden(
-                f"只有负责人可以发起 {display_id} 的步骤；需要接管请先变更负责人。",
+                f"只有负责人（或其管理的 agent 的 human）可以发起 {display_id} 的步骤；"
+                "需要接管请先变更负责人。",
                 details={"item": display_id, "assignee_user_id": item.assignee_user_id},
             )
 
@@ -563,10 +584,10 @@ class StepService:
         attachment_ids: Sequence[str] | None,
     ) -> tuple[Project, WorkItem, dict[str, Any]]:
         candidates = await self.resolve_candidates(item, step)
-        if len(candidates) != 1 or candidates[0].id != actor.id:
+        if len(candidates) != 1 or not actor.can_act_for_user(candidates[0].id):
             names = "、".join(user.name for user in candidates) or "（无）"
             raise WorkflowStepForbidden(
-                f"步骤「{step.name}」只能由指定执行人执行；当前候选：{names}",
+                f"步骤「{step.name}」只能由指定执行人（或其 human）执行；当前候选：{names}",
                 details={
                     "step_key": step.key,
                     "actor_id": actor.id,
@@ -578,16 +599,19 @@ class StepService:
                 f"步骤「{step.name}」必须填写备注后才能执行。",
                 details={"step_key": step.key, "note": "required"},
             )
+        assignee = candidates[0]
         step_row = await self._create_step_row(
-            project, item, step, [candidates[0]], actor, status=StepStatus.COMPLETED
+            project, item, step, [assignee], actor, status=StepStatus.COMPLETED
         )
         executor = WorkItemStepExecutor(
             id=new_id(),
             step_id=step_row.id,
             project_id=project.id,
-            user_id=actor.id,
+            user_id=assignee.id,
             status=StepExecutorStatus.DONE,
             created_at=dt.datetime.now(dt.UTC),
+            # Attribution stays with the actual operator (the human when they
+            # act for a managed agent); the row records who the step belonged to.
             created_by=actor.id,
             completed_at=dt.datetime.now(dt.UTC),
         )
@@ -605,7 +629,7 @@ class StepService:
             EventType.WORK_ITEM_STEP_COMPLETED,
             {
                 "step": self._step_payload(step_row),
-                "executors": [actor.id],
+                "executors": [assignee.id],
                 "mode": "direct",
             },
             actor,
@@ -726,11 +750,11 @@ class StepService:
                 "任务式步骤通过子任务完成推进，不能直接执行。",
                 details={"step_id": step.id, "mode": step.mode},
             )
-        assert self.uow.work_item_steps is not None
-        executor = await self.uow.work_item_steps.get_executor(step.id, actor.id)
+        executor = await self._actor_executor(step.id, actor)
         if executor is None:
             raise WorkflowStepForbidden(
-                f"{actor.name} 不是步骤「{step.step_name}」的执行人",
+                f"{actor.name} 不是步骤「{step.step_name}」的执行人"
+                "（也不是其管理的 agent 的 human）",
                 details={"step_id": step.id, "user_id": actor.id},
             )
         if executor.status == StepExecutorStatus.DONE:
@@ -752,6 +776,7 @@ class StepService:
         executor.status = StepExecutorStatus.DONE
         executor.note_comment_id = comment_id
         executor.completed_at = dt.datetime.now(dt.UTC)
+        assert self.uow.work_item_steps is not None
         await self.uow.work_item_steps.save_executor(executor)
         await self._append_event(
             project,
@@ -759,7 +784,9 @@ class StepService:
             EventType.WORK_ITEM_STEP_EXECUTED,
             {
                 "step": self._step_payload(step),
-                "user_id": actor.id,
+                # The executor row may belong to a managed agent while the
+                # actor (operator) is its human (§17.101).
+                "user_id": executor.user_id,
                 "note_comment_id": comment_id,
             },
             actor,
@@ -886,8 +913,11 @@ class StepService:
         step = await self._step(step_id)
         item = await self._item(step.work_item_id)
         project = await self._project(item)
-        if item.assignee_user_id != actor.id:
-            raise WorkflowStepForbidden("只有负责人可以取消步骤。", details={"step_id": step.id})
+        if not security.is_assignee(actor, item):
+            raise WorkflowStepForbidden(
+                "只有负责人（或其管理的 agent 的 human）可以取消步骤。",
+                details={"step_id": step.id},
+            )
         if step.row_version != row_version:
             raise ConflictVersion("步骤已被修改，请重读后再试。", details={"step_id": step.id})
         if step.status not in (StepStatus.PENDING, StepStatus.BLOCKED):
@@ -925,9 +955,10 @@ class StepService:
         step = await self._step(step_id)
         item = await self._item(step.work_item_id)
         project = await self._project(item)
-        if item.assignee_user_id != actor.id:
+        if not security.is_assignee(actor, item):
             raise WorkflowStepForbidden(
-                "只有负责人可以改派步骤执行人。", details={"step_id": step.id}
+                "只有负责人（或其管理的 agent 的 human）可以改派步骤执行人。",
+                details={"step_id": step.id},
             )
         if step.status != StepStatus.PENDING:
             raise WorkflowStepInvalid(
@@ -1009,8 +1040,11 @@ class StepService:
         step = await self._step(step_id)
         item = await self._item(step.work_item_id)
         project = await self._project(item)
-        if item.assignee_user_id != actor.id:
-            raise WorkflowStepForbidden("只有负责人可以重试步骤。", details={"step_id": step.id})
+        if not security.is_assignee(actor, item):
+            raise WorkflowStepForbidden(
+                "只有负责人（或其管理的 agent 的 human）可以重试步骤。",
+                details={"step_id": step.id},
+            )
         if step.status != StepStatus.BLOCKED:
             raise WorkflowStepInvalid(
                 "只有 BLOCKED 步骤可以重试。",

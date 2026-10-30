@@ -23,6 +23,9 @@ class Actor:
     human: User
     identity: User
     memberships: Mapping[str, ProjectMember] = field(default_factory=dict)
+    # Agents whose ``manager_user_id`` is ``human.id`` (§17.101). A human may
+    # operate items assigned to these agents when acting as themselves.
+    managed_agent_ids: frozenset[str] = field(default_factory=frozenset)
     token_id: str = ""
     token_kind: str = "pat"
     client_id: str | None = None
@@ -53,6 +56,18 @@ class Actor:
     @property
     def is_act_as(self) -> bool:
         return self.identity.id != self.human.id
+
+    def manages_agent(self, user_id: str | None) -> bool:
+        """Whether ``user_id`` is an agent managed by this actor's human.
+
+        Only valid when the human acts as themselves: an agent identity may not
+        operate its sibling agents' work just because they share a manager.
+        """
+        return not self.is_act_as and user_id is not None and user_id in self.managed_agent_ids
+
+    def can_act_for_user(self, user_id: str | None) -> bool:
+        """True for the acting identity itself or an agent it manages."""
+        return user_id is not None and (user_id == self.id or self.manages_agent(user_id))
 
     # --- organization -----------------------------------------------------
 

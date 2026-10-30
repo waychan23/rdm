@@ -59,9 +59,9 @@
 |---|---|---|
 | `work_item_create` 【M1/M6】 | 创建 epic/story/issue/task；`kind` 判别联合 schema，特型字段随 kind 不同；支持 `assignee`（默认创建人）、participants/reviewer/review_content_md/custom_fields；`priority` 必填默认 3（1=紧急…4=低）；计划日期可选（`YYYY-MM-DD`） | `kind, title, parent?, description_md?, priority?, planned_start_date?, planned_end_date?, assignee?, ...kind 特型` |
 | `work_item_update` 【M1/M6】 | 编辑字段（**不含 status**）；带 `row_version` 乐观锁；支持 participants/reviewer/review_content_md/custom_fields；计划日期可选（`YYYY-MM-DD`；REST 可传 `null` 清空） | `id, row_version, fields{...}` |
-| `work_item_assign` 【M1/M6】 | 指派负责人（可为 agent）；未指派时任何成员可自领，已有负责人时仅负责人/参与人/manager/project_owner 可改派 | `id, member` |
+| `work_item_assign` 【M1/M6】 | 指派负责人（可为 agent）；未指派时任何成员可自领（human 也可为名下 agent 领取），已有负责人时仅负责人/参与人/manager/project_owner 可改派；负责人若是 agent，其 human manager 同样可改派 | `id, member` |
 | `work_item_transition` 【M1/M6】 | direct/legacy 状态入口；非 direct 或目标有多条步骤时返回 `WORKFLOW_STEP_REQUIRED`，改用 `work_item_step`；`reason?` 作为 direct 步骤备注 | `id, to, row_version, reason?` |
-| `work_item_step` 【M6】 | 命名步骤生命周期：`start`（负责人发起 approval/task，direct 由唯一候选直接执行）/`execute`（执行人提交备注）/`cancel`/`retry`/`reassign`；先 `work_item_get` 读 `available_steps`/`active_step` | `id, action, step_key?, step_id?, row_version?, executors?, note_md?, attachment_ids?` |
+| `work_item_step` 【M6】 | 命名步骤生命周期：`start`（负责人发起 approval/task，direct 由唯一候选直接执行）/`execute`（执行人提交备注）/`cancel`/`retry`/`reassign`；负责人为 agent 时其 human manager 可代操作（执行人同理），事件仍记实际操作身份；先 `work_item_get` 读 `available_steps`/`active_step` | `id, action, step_key?, step_id?, row_version?, executors?, note_md?, attachment_ids?` |
 | `work_item_delete` 【M1】 | 级联软删（返回被删 id 列表） | `id` |
 | `work_item_restore` 【M1】 | 恢复软删（校验父链，§16.26） | `id` |
 | `comment_add` 【M1】 | 在 item 下留言，可 @member（触发站内信，§16.30）；M2 起支持 `attachment_ids`：先经 REST multipart 把附件传到工作项，再在发评论时把 id 一并提交（服务端同事务改绑到评论） | `work_item_id, body_md, reply_to?, attachment_ids?` |

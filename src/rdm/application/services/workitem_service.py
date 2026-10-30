@@ -923,8 +923,9 @@ class WorkItemService:
         security.require_can_assign(actor, item, target.id, display_id, item.participant_user_ids)
         assert self.uow.work_items is not None
 
-        if item.assignee_user_id is None and target.id == actor.id:
-            # Atomic self-claim against concurrent agents.
+        if item.assignee_user_id is None and actor.can_act_for_user(target.id):
+            # Atomic self-claim (or claim for a managed agent) against
+            # concurrent agents.
             won = await self.uow.work_items.claim(item.id, target.id, actor.id)
             if not won:
                 fresh = await self.uow.work_items.get(item.id)

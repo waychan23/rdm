@@ -98,11 +98,12 @@ def run(h: Harness) -> None:
     assert blocked.status_code == 409, blocked.text
     assert blocked.json()["error"]["code"] == "WORKFLOW_GATE_BLOCKED"
 
-    # Agents advance their tasks to the review state; DONE is a human step.
+    # Agents advance their tasks to the review state; the manager closes them
+    # out below.
     agent_expect(
         h,
         "frontend-dev",
-        f"把 {t1['display_id']} 依次转到 IN_PROGRESS、TO_REVIEW，然后停住（不要尝试推 DONE）。",
+        f"把 {t1['display_id']} 依次转到 IN_PROGRESS、TO_REVIEW。",
         lambda out: "TO_REVIEW" in out,
     )
     assert h.db.item(t1["display_id"])["status"] == "TO_REVIEW"

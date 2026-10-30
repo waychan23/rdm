@@ -20,11 +20,9 @@ from rdm.domain.actor import Actor
 from rdm.domain.entities import User, WorkItem
 from rdm.domain.errors import Forbidden, NotFound
 
-# Human-review gate (architecture §16.52, tightened in §17.70): completion of
-# epic/story/task is a human privilege, enforced purely on identity type. An
-# agent acting on behalf of a human manager still cannot close an item; any
-# human who can transition the item (assignee or privileged role) may.
-COMPLETION_STATES = {"DONE"}
+# DONE is no longer restricted by identity type (§17.102): an agent that is a
+# step actor (e.g. the assignee) may complete DONE, and so may its human
+# manager.
 
 
 # --- organization ---------------------------------------------------------
@@ -119,13 +117,22 @@ def assert_project_access(actor: Actor, project_id: str) -> None:
     raise NotFound("项目不存在（或你无权访问）", details={"project_id": project_id})
 
 
+def is_assignee(actor: Actor, item: WorkItem) -> bool:
+    """The assignee identity, or the human who manages that agent (§17.101).
+
+    A human acting as themselves inherits every work-item operation available
+    to an agent they manage; an agent identity never inherits its siblings'.
+    """
+    return actor.can_act_for_user(item.assignee_user_id)
+
+
 def can_edit(
     actor: Actor,
     item: WorkItem,
     participant_user_ids: list[str] | None = None,
 ) -> bool:
     """Content editors: assignee, participants, manager/project_owner (§17)."""
-    if item.assignee_user_id == actor.id:
+    if is_assignee(actor, item):
         return True
     if actor.id in (participant_user_ids or []):
         return True
@@ -159,8 +166,12 @@ def require_can_assign(
     display_id: str,
     participant_user_ids: list[str] | None = None,
 ) -> None:
-    """Self-claim an unassigned item; otherwise editors may reassign."""
-    if item.assignee_user_id is None and target_user_id == actor.id:
+    """Self-claim an unassigned item; otherwise editors may reassign.
+
+    A human may also claim an unassigned item for an agent they manage, which
+    is equivalent to the agent self-claiming (§17.101).
+    """
+    if item.assignee_user_id is None and actor.can_act_for_user(target_user_id):
         return
     if can_edit(actor, item, participant_user_ids):
         return

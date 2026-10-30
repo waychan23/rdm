@@ -228,7 +228,8 @@ async def test_agent_membership_lifecycle(server, owner_token) -> None:
     assert r.json()["data"]["identity"]["name"] == "dev"
 
 
-async def test_agent_identity_cannot_complete_done(server, owner_token) -> None:
+async def test_agent_identity_can_complete_done(server, owner_token) -> None:
+    """§17.102: an agent that is a step actor may close DONE itself."""
     client, _settings, _app = server
     await client.post(
         "/api/v1/projects", headers=auth(owner_token), json={"key": "DEMO", "name": "D"}
@@ -266,42 +267,29 @@ async def test_agent_identity_cannot_complete_done(server, owner_token) -> None:
     assert blocked.status_code == 409
     assert blocked.json()["error"]["code"] == "WORKFLOW_STEP_REQUIRED"
 
-    # The agent can start the review step but cannot be its DONE executor.
     r = await client.patch(
         f"/api/v1/work-items/{task['display_id']}",
         headers=auth(agent_pat),
-        json={
-            "row_version": 3,
-            "reviewer": ["tl"],
-            "review_content_md": "agent finished implementation",
-        },
+        json={"row_version": 3, "review_content_md": "agent finished implementation"},
     )
     assert r.status_code == 200, r.text
     version = r.json()["data"]["row_version"]
 
+    # The assignee agent is a DONE candidate and may execute the review.
     r = await client.post(
         f"/api/v1/work-items/{task['display_id']}/steps/CODE_REVIEW",
         headers=auth(agent_pat),
-        json={"row_version": version, "executors": ["tl"]},
+        json={"row_version": version},
     )
     assert r.status_code == 200, r.text
     active = r.json()["meta"]["active_step"]
     assert active is not None
+    assert active["executors"][0]["user"]["id"] == agent_id
 
-    # The agent is not the executor.
     r = await client.post(
         f"/api/v1/work-item-steps/{active['id']}/execute",
         headers=auth(agent_pat),
         json={"note_md": "self close"},
-    )
-    assert r.status_code == 403
-
-    # The human manager (privileged) executes the review and closes DONE.
-    human_pat = await login_pat(client, "tl")
-    r = await client.post(
-        f"/api/v1/work-item-steps/{active['id']}/execute",
-        headers=auth(human_pat),
-        json={"note_md": "验收通过"},
     )
     assert r.status_code == 200, r.text
     assert r.json()["data"]["status"] == "DONE"

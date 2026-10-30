@@ -87,6 +87,15 @@ class HistoryService:
         for record in records:
             if record.actor_user_id:
                 ids.add(record.actor_user_id)
+            payload = record.payload or {}
+            # Step events name the executor separately from the actor: a human
+            # may submit for a managed agent (§17.101).
+            user_id = payload.get("user_id")
+            if isinstance(user_id, str) and user_id:
+                ids.add(user_id)
+            for executor_id in payload.get("executors") or []:
+                if isinstance(executor_id, str) and executor_id:
+                    ids.add(executor_id)
             changes = record.payload.get("changes", {})
             if isinstance(changes, dict):
                 for field_name, pair in changes.items():

@@ -60,10 +60,12 @@ class ActorResolver:
             identity = agent
 
         memberships = await self.memberships.list_by_user(human.id)
+        agents = await self.users.list_agents_of(human.id)
         return Actor(
             human=human,
             identity=identity,
             memberships={m.project_id: m for m in memberships},
+            managed_agent_ids=frozenset(a.id for a in agents),
             token_id=token.id,
             token_kind=token.kind,
             client_id=token.client_id,
