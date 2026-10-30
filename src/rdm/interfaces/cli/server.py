@@ -42,6 +42,19 @@ def run_serve(data_dir: Path, host: str, port: int) -> None:
     initialize_data_dir(data_dir)
     run_upgrade(data_dir)
 
+    # Workflow edits are code changes; a stale active step is not fatal at
+    # boot (operators may be mid-upgrade) but must be visible immediately.
+    from rdm.interfaces.cli.doctor import FAIL, check_workflow_data
+
+    workflow_check = check_workflow_data(settings)
+    if workflow_check.status == FAIL:
+        typer.secho(
+            f"WARNING workflow-data: {workflow_check.detail}\n"
+            "Run `rdm workflow validate` before continuing to serve.",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+
     app = create_app(settings)
     typer.secho(f"rdm serving on http://{host}:{port} (data-dir {data_dir})", fg=typer.colors.GREEN)
     uvicorn.run(app, host=host, port=port, log_config=None)
