@@ -48,6 +48,12 @@ import ChildrenSection from "./ChildrenSection";
 import HistorySection from "./HistorySection";
 import StepExecuteDialog from "./StepExecuteDialog";
 import StepStartDialog from "./StepStartDialog";
+import {
+  InlineMarkdownField,
+  InlineMemberField,
+  InlineTextField,
+  type MemberOption,
+} from "./InlineFields";
 import WorkItemFieldsView from "./WorkItemFieldsView";
 
 interface Props {
@@ -151,6 +157,9 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   const [uploading, setUploading] = useState(false);
   const [hasMoreComments, setHasMoreComments] = useState(false);
   const [loadingMoreComments, setLoadingMoreComments] = useState(false);
+  // Latest known row_version: inline edits can be saved back to back while a
+  // refresh is still in flight, so read it from a ref instead of render state.
+  const versionRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -187,6 +196,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         attachments: am.data,
         artifacts: artm.data,
       });
+      versionRef.current = detail.data.row_version;
       setHasMoreComments(cm.data.length >= COMMENTS_PAGE);
       setLoadError(false);
     } catch {
@@ -197,6 +207,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   useEffect(() => {
     // Switching items reuses this panel; clear all per-item transient state so
     // a previous item's gate/step error or open dialog cannot leak across.
+    versionRef.current = null;
     setBundle(null);
     setGateMessage(null);
     setStepStart(null);
@@ -215,6 +226,31 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     await load();
     setRefreshKey((value) => value + 1);
   }, [load]);
+
+  /**
+   * Save one field at a time. Inline editors stay open when this returns
+   * false, so a conflict/validation error never discards the user's draft.
+   */
+  const patchItem = useCallback(
+    async (payload: Record<string, unknown>): Promise<boolean> => {
+      const rowVersion = versionRef.current;
+      if (rowVersion === null) return false;
+      try {
+        const res = await api.patch<WorkItem>(`/work-items/${itemId}`, {
+          row_version: rowVersion,
+          ...payload,
+        });
+        versionRef.current = res.data.row_version;
+        await refresh();
+        return true;
+      } catch (e) {
+        notify.error("保存失败", errorCause(e)?.message);
+        await refresh();
+        return false;
+      }
+    },
+    [itemId, notify, refresh],
+  );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -291,7 +327,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         });
       } else if (stepExecute.step) {
         await api.post(`/work-items/${itemId}/steps/${stepExecute.step.key}`, {
-          row_version: bundle.item.row_version,
+          row_version: versionRef.current ?? bundle.item.row_version,
           note_md: noteMd,
           attachment_ids: attachmentIds,
         });
@@ -310,7 +346,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     if (!bundle || !stepStart) return;
     try {
       await api.post(`/work-items/${itemId}/steps/${stepStart.key}`, {
-        row_version: bundle.item.row_version,
+        row_version: versionRef.current ?? bundle.item.row_version,
         executors,
       });
       notify.success(`已发起步骤「${stepStart.name}」`);
@@ -368,14 +404,18 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     }
   };
 
-  const assign = async (memberId: string | null) => {
-    if (!memberId) return;
+  const assignMember = async (ids: string[]): Promise<boolean> => {
+    const memberId = ids[0];
+    if (!memberId) return false;
+    if (bundle?.item.assignee?.id === memberId) return true;
     try {
       await api.post(`/work-items/${itemId}/assign`, { member: memberId });
       await refresh();
+      return true;
     } catch (e) {
       notify.error("指派失败", errorCause(e)?.message);
       await refresh();
+      return false;
     }
   };
 
@@ -383,7 +423,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     if (!bundle) return;
     try {
       await api.patch(`/work-items/${itemId}`, {
-        row_version: bundle.item.row_version,
+        row_version: versionRef.current ?? bundle.item.row_version,
         priority,
       });
       await refresh();
@@ -398,7 +438,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     try {
       await api.post(`/work-items/${itemId}/reparent`, {
         parent: option?.display_id ?? null,
-        row_version: bundle.item.row_version,
+        row_version: versionRef.current ?? bundle.item.row_version,
       });
       notify.success(option ? `已改为 ${option.display_id} 的子项` : "已移出父项");
       setParentEditing(false);
@@ -585,9 +625,11 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     attachments,
     artifacts,
   } = bundle;
-  const memberOptions = members.map((m) => ({ label: m.name, value: m.id }));
-  const peopleById = new Map(members.map((member) => [member.id, member]));
-  const personName = (id: string) => peopleById.get(id)?.name ?? id;
+  const memberOptions: MemberOption[] = members.map((m) => ({
+    label: `${m.name}${m.type === "agent" ? "（agent）" : ""}`,
+    value: m.id,
+    name: m.name,
+  }));
   const priorityValues = PRIORITY_VALUES.includes(item.priority)
     ? PRIORITY_VALUES
     : [...PRIORITY_VALUES, item.priority].sort((a, b) => a - b);
@@ -602,6 +644,8 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     Boolean(me?.org_roles.includes("org_owner")) ||
     projectRoles.includes("project_owner") ||
     projectRoles.includes("manager");
+  const canEdit = Boolean(permissions.can_edit);
+  const canAssign = Boolean(permissions.can_assign);
 
   return (
     <aside className="rdm-item-panel" aria-label="工作项详情" data-testid="item-panel">
@@ -617,9 +661,9 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         <Text weight="medium" color="color.link" testId="item-panel-display-id">
           {item.display_id}
         </Text>
-        {permissions.can_edit && (
+        {canEdit && (
           <TextButton data-testid="item-panel-edit" onClick={() => setShowEdit(true)}>
-            编辑
+            完整编辑
           </TextButton>
         )}
         <TextButton data-testid="item-panel-copy-link" onClick={() => void copyLink()}>
@@ -629,30 +673,43 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
 
       <div className="rdm-item-body">
         <section className="rdm-item-content" data-testid="item-panel-content">
-          <Box paddingBlockEnd="space.200">
-            <Heading size="medium" as="h2" testId="item-panel-title">
-              {item.title}
-            </Heading>
-          </Box>
+          <InlineTextField
+            testId="item-panel-title-field"
+            value={item.title}
+            canEdit={canEdit}
+            editLabel="编辑标题"
+            validate={(next) => (next.trim() ? undefined : "标题不能为空")}
+            readClassName="rdm-inline-title"
+            renderView={(value) => (
+              <Heading size="medium" as="h2" testId="item-panel-title">
+                {value}
+              </Heading>
+            )}
+            onSave={(next) => patchItem({ title: next.trim() })}
+          />
 
-          <div className="rdm-item-section-label">描述</div>
-          {item.description_md ? (
-            <div className="rdm-item-desc" data-testid="item-panel-description">
-              <MarkdownText source={item.description_md} onImageClick={setPreview} />
-            </div>
-          ) : (
-            <div
-              className="rdm-item-desc rdm-item-desc-empty"
-              data-testid="item-panel-description-empty"
-            >
-              未填写描述
-            </div>
-          )}
+          <InlineMarkdownField
+            testId="item-panel-description"
+            label="描述"
+            value={item.description_md}
+            canEdit={canEdit}
+            projectKey={projectKey}
+            emptyText="未填写描述"
+            placeholder="写点什么（支持 Markdown，可直接粘贴图片）"
+            minimumRows={6}
+            editLabel="编辑描述"
+            readClassName="rdm-inline-read-desc"
+            onImageClick={setPreview}
+            onSave={(next) => patchItem({ description_md: next.trim() ? next : null })}
+          />
 
           <div className="rdm-item-section-label">特型字段</div>
           <div data-testid="item-panel-fields-json">
             <WorkItemFieldsView
               item={item}
+              projectKey={projectKey}
+              canEdit={canEdit}
+              onPatch={patchItem}
               onOpenItem={onOpenItem}
               onImageClick={setPreview}
             />
@@ -840,87 +897,141 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           </div>
 
           <div className="rdm-item-field" data-testid="item-field-assignee">
-            <div className="rdm-item-section-label">负责人</div>
-            <Select
-              {...portalMenuProps}
+            <InlineMemberField
+              testId="item-assignee"
+              label="负责人"
+              canEdit={canAssign}
+              multiple={false}
+              ids={item.assignee ? [item.assignee.id] : []}
               options={memberOptions}
-              value={memberOptions.find((o) => o.value === item.assignee?.id) ?? null}
-              placeholder="未指派"
-              isClearable
-              isDisabled={!permissions.can_assign}
-              onChange={(opt) => assign((opt as { value: string } | null)?.value ?? null)}
+              emptyText="未指派"
+              placeholder="选择负责人"
+              editLabel="编辑负责人"
+              onSave={assignMember}
             />
           </div>
 
           <div className="rdm-item-field" data-testid="item-field-participants">
-            <div className="rdm-item-section-label">参与人</div>
-            {(item.participants ?? []).length === 0 ? (
-              <Text size="small" color="color.text.subtlest">
-                未设置
-              </Text>
-            ) : (
-              <Inline space="space.100" shouldWrap>
-                {(item.participants ?? []).map((participant) => (
-                  <PersonCell key={participant.id} name={participant.name ?? participant.id} />
-                ))}
-              </Inline>
-            )}
+            <InlineMemberField
+              testId="item-participants"
+              label="参与人"
+              canEdit={canEdit}
+              multiple
+              ids={(item.participants ?? []).map((participant) => participant.id)}
+              options={memberOptions}
+              emptyText="未设置"
+              placeholder="选择参与人"
+              editLabel="编辑参与人"
+              onSave={(next) => patchItem({ participants: next })}
+            />
           </div>
 
           {workflowFields.reviewer && (
             <div className="rdm-item-field" data-testid="item-field-reviewer">
-              <div className="rdm-item-section-label">评审人</div>
-              {(item.reviewer ?? []).length === 0 ? (
-                <Text size="small" color="color.text.subtlest">
-                  未设置
-                </Text>
-              ) : (
-                <Inline space="space.100" shouldWrap>
-                  {(item.reviewer ?? []).map((reviewer) => (
-                    <PersonCell key={reviewer.id} name={reviewer.name ?? reviewer.id} />
-                  ))}
-                </Inline>
-              )}
+              <InlineMemberField
+                testId="item-reviewer"
+                label="评审人"
+                canEdit={canEdit}
+                multiple
+                ids={(item.reviewer ?? []).map((reviewer) => reviewer.id)}
+                options={memberOptions}
+                emptyText="未设置"
+                placeholder="选择评审人"
+                editLabel="编辑评审人"
+                onSave={(next) => patchItem({ reviewer: next })}
+              />
             </div>
           )}
 
           {workflowFields.review_content && (
             <div className="rdm-item-field" data-testid="item-field-review-content">
-              <div className="rdm-item-section-label">评审意见</div>
-              {item.review_content_md ? (
-                <MarkdownText
-                  source={item.review_content_md}
-                  onImageClick={setPreview}
-                />
-              ) : (
-                <Text size="small" color="color.text.subtlest">
-                  未填写
-                </Text>
-              )}
+              <InlineMarkdownField
+                testId="item-review-content"
+                label="评审意见"
+                value={item.review_content_md}
+                canEdit={canEdit}
+                projectKey={projectKey}
+                emptyText="未填写"
+                placeholder="填写评审意见（支持 Markdown）"
+                minimumRows={3}
+                editLabel="编辑评审意见"
+                onImageClick={setPreview}
+                onSave={(next) =>
+                  patchItem({ review_content_md: next.trim() ? next : null })
+                }
+              />
             </div>
           )}
 
           {workflowFields.custom.length > 0 && (
-            <div className="rdm-item-field" data-testid="item-field-custom">
-              <div className="rdm-item-section-label">自定义字段</div>
-              <Stack space="space.050">
-                {workflowFields.custom.map((field) => {
-                  const value = item.custom_fields?.[field.key];
-                  let display = "未填写";
-                  if (field.type === "user") {
-                    display = Array.isArray(value)
-                      ? value.map((id) => personName(String(id))).join("、") || "未填写"
-                      : "未填写";
-                  } else if (value !== null && value !== undefined && value !== "") {
-                    display = String(value);
+            <div data-testid="item-field-custom">
+              {workflowFields.custom.map((field) => {
+                const raw = item.custom_fields?.[field.key];
+                // Send every declared key (never stale ones): the backend
+                // rejects custom_fields keys the current workflow no longer
+                // declares, and PATCH replaces the whole map.
+                const save = (value: unknown) => {
+                  const next: Record<string, unknown> = {};
+                  for (const def of workflowFields.custom) {
+                    next[def.key] =
+                      def.key === field.key ? value : item.custom_fields?.[def.key] ?? null;
                   }
+                  return patchItem({ custom_fields: next });
+                };
+                if (field.type === "text") {
                   return (
-                    <Text key={field.key} size="small">
-                      {field.label}：{display}
-                    </Text>
+                    <div className="rdm-item-field" key={field.key}>
+                      <InlineMarkdownField
+                        testId={`item-custom-${field.key}`}
+                        label={field.label}
+                        value={typeof raw === "string" ? raw : ""}
+                        canEdit={canEdit}
+                        projectKey={projectKey}
+                        minimumRows={2}
+                        editLabel={`编辑${field.label}`}
+                        onImageClick={setPreview}
+                        onSave={(next) => save(next.trim() ? next : null)}
+                      />
+                    </div>
                   );
-                })}
-              </Stack>
+                }
+                if (field.type === "number") {
+                  return (
+                    <div className="rdm-item-field" key={field.key}>
+                      <InlineTextField
+                        testId={`item-custom-${field.key}`}
+                        label={field.label}
+                        value={raw === null || raw === undefined ? "" : String(raw)}
+                        canEdit={canEdit}
+                        inputType="number"
+                        editLabel={`编辑${field.label}`}
+                        onSave={(next) => save(next.trim() === "" ? null : Number(next))}
+                      />
+                    </div>
+                  );
+                }
+                const ids = Array.isArray(raw)
+                  ? raw.map(String)
+                  : raw
+                    ? [String(raw)]
+                    : [];
+                return (
+                  <div className="rdm-item-field" key={field.key}>
+                    <InlineMemberField
+                      testId={`item-custom-${field.key}`}
+                      label={field.label}
+                      canEdit={canEdit}
+                      multiple={field.multiple}
+                      ids={ids}
+                      options={memberOptions}
+                      emptyText="未选择"
+                      placeholder="选择成员"
+                      editLabel={`编辑${field.label}`}
+                      onSave={(next) => save(next)}
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
 

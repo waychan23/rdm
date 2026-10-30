@@ -85,18 +85,40 @@
   margin: var(--ds-space-200, 16px) 0 var(--ds-space-100, 8px);
 }
 
-.rdm-item-desc {
-  border: 1px dashed var(--ds-border-bold, #758195);
-  border-radius: var(--ds-radius-small, 4px);
-  min-height: 96px;
-  padding: var(--ds-space-150, 12px);
+/* In-place field editing (ADS InlineEdit): read view, editor and actions. */
+.rdm-inline-read {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--ds-space-050, 4px);
+  min-height: var(--ds-space-400, 2pc);
   color: var(--ds-text-subtle);
 }
-.rdm-item-desc-empty {
+.rdm-inline-read > * {
+  min-width: 0;
+}
+.rdm-inline-read-desc {
+  justify-content: flex-start;
+  min-height: 96px;
+  padding: var(--ds-space-150, 12px);
+}
+.rdm-inline-title {
+  min-height: 0;
+}
+.rdm-inline-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-100, 8px);
+}
+.rdm-inline-foot {
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: var(--ds-text-subtlest);
+  gap: var(--ds-space-100, 8px);
+}
+.rdm-inline-actions {
+  display: flex;
+  gap: var(--ds-space-100, 8px);
+  margin-inline-start: auto;
 }
 
 .rdm-item-child {
