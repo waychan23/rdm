@@ -53,9 +53,49 @@ jobs:
       - name: Verify SPA bundle landed in package resources
         run: test -f ../src/rdm/resources/web-next-dist/index.html
 
+  web-e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-next
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - name: Set up Python
+        run: uv python install 3.13
+      - name: Install Python dependencies
+        working-directory: .
+        run: uv sync --frozen
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-next/pnpm-lock.yaml
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      # Builds the SPA, boots a throwaway `rdm serve`, and drives the
+      # workflow-engine UI specs in Chromium.
+      - name: Web e2e (workflow engine)
+        run: pnpm e2e
+      - name: Upload e2e artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-e2e
+          path: |
+            web-next/playwright-report
+            web-next/e2e/.results
+            web-next/e2e/.auth/server.log
+
   package:
     runs-on: ubuntu-latest
-    needs: [test, web]
+    needs: [test, web, web-e2e]
     steps:
       - uses: actions/checkout@v4
       - name: Install uv

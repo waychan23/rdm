@@ -1,5 +1,9 @@
 # e2e — 双 CLI 端到端验收（S1–S10）
 
+> Web 端（浏览器 UI，重点覆盖工作流引擎）的 e2e 在
+> [web-next/e2e/](../web-next/e2e/README.md)，用 Playwright 驱动构建后的 SPA；
+> 与本目录的 agent CLI 验收互不依赖。
+
 用**真实的 agent CLI**（`claude -p` / `opencode run`，非 MCP 客户端模拟）驱动
 rdm，验收 `docs/plan.md §4` 的十个场景。断言落在临时 sqlite 的投影与事件上。
 

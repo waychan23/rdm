@@ -29,6 +29,12 @@ web-next/node_modules/
 web-next/dist/
 src/rdm/resources/web-next-dist/
 
+# Web e2e artifacts
+web-next/e2e/.auth/
+web-next/e2e/.results/
+web-next/playwright-report/
+web-next/test-results/
+
 # OS/editor
 .DS_Store
 .idea/

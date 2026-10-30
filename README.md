@@ -110,6 +110,15 @@ uv run python e2e/run_e2e.py --cli claude,opencode
 
 详见 [e2e/README.md](e2e/README.md)。
 
+Web UI 的浏览器 e2e（重点覆盖工作流引擎的命名步骤、审批、gate/retry、
+任务式子任务、子类型与看板拖拽规则）使用 Playwright 驱动构建后的 SPA：
+
+```bash
+pnpm -C web-next e2e
+```
+
+详见 [web-next/e2e/README.md](web-next/e2e/README.md)。
+
 ## 开发
 
 ```bash

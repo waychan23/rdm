@@ -264,6 +264,11 @@ async def test_reassign_and_cancel_step(server, owner_token: str) -> None:
         headers=auth(rev2_token),
     )
     assert r.status_code == 200, r.text
+    # Reassigned-away executors are CANCELLED for audit and must not block the
+    # remaining assignments from completing the step.
+    completed = r.json()
+    assert completed["data"]["status"] == "DONE"
+    assert completed["meta"]["active_step"] is None
 
     # Cancel a fresh step.
     task2 = await _item(client, owner_token, {"kind": "task", "title": "cancel", "assignee": "dev"})

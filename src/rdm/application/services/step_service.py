@@ -99,6 +99,17 @@ class StepService:
         assert self.uow.work_item_steps is not None
         return await self.uow.work_item_steps.list_executors(step_id)
 
+    @staticmethod
+    def _active_executors(
+        executors: Sequence[WorkItemStepExecutor],
+    ) -> list[WorkItemStepExecutor]:
+        """Executors still part of the assignment.
+
+        Reassigned-away rows stay CANCELLED for the audit trail; they must not
+        block completion once every remaining executor has submitted.
+        """
+        return [row for row in executors if row.status != StepExecutorStatus.CANCELLED]
+
     async def _append_event(
         self,
         project: Project,
@@ -752,8 +763,8 @@ class StepService:
             },
             actor,
         )
-        executors = await self._executors(step.id)
-        if all(row.status == StepExecutorStatus.DONE for row in executors):
+        executors = self._active_executors(await self._executors(step.id))
+        if executors and all(row.status == StepExecutorStatus.DONE for row in executors):
             await self._complete_step(actor, step, item, project, depth=0)
         return await self._result(project, item, actor)
 
@@ -769,8 +780,8 @@ class StepService:
         from rdm.application.services.workitem_service import WorkItemService
 
         assert self.uow.work_item_steps is not None
-        executors = await self._executors(step.id)
-        if any(row.status != StepExecutorStatus.DONE for row in executors):
+        executors = self._active_executors(await self._executors(step.id))
+        if not executors or any(row.status != StepExecutorStatus.DONE for row in executors):
             return
         try:
             await WorkItemService(self.uow).apply_system_transition(
@@ -836,8 +847,8 @@ class StepService:
             },
             actor,
         )
-        executors = await self._executors(step.id)
-        if all(row.status == StepExecutorStatus.DONE for row in executors):
+        executors = self._active_executors(await self._executors(step.id))
+        if executors and all(row.status == StepExecutorStatus.DONE for row in executors):
             await self._complete_step(actor, step, parent, project, depth=depth + 1)
 
     async def _create_note(
