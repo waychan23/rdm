@@ -162,3 +162,53 @@ async def test_owner_can_delete_others_comments(server, owner_token) -> None:
     comment_id = r.json()["data"]["id"]
     r = await client.delete(f"{API}/comments/{comment_id}", headers=auth(owner_token))
     assert r.status_code == 204
+
+
+async def test_comment_edit_and_edited_flag(server, owner_token: str) -> None:
+    client, _settings, _app = server
+    r = await client.post(
+        f"{API}/projects", json={"key": "DEMO", "name": "DEMO"}, headers=auth(owner_token)
+    )
+    assert r.status_code == 201
+    r = await client.post(
+        f"{API}/projects/DEMO/work-items",
+        json={"kind": "task", "title": "comment edit"},
+        headers=auth(owner_token),
+    )
+    item = r.json()["data"]
+    r = await client.post(
+        f"{API}/work-items/{item['display_id']}/comments",
+        json={"body_md": "原始内容"},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+    comment = r.json()["data"]
+    assert comment["edited"] is False
+
+    r = await client.patch(
+        f"{API}/comments/{comment['id']}",
+        json={"body_md": "修改后的内容"},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    edited = r.json()["data"]
+    assert edited["body_md"] == "修改后的内容"
+    assert edited["edited"] is True
+    assert edited["updated_at"] is not None
+
+    r = await client.get(
+        f"{API}/work-items/{item['display_id']}/comments", headers=auth(owner_token)
+    )
+    assert r.json()["data"][0]["body_md"] == "修改后的内容"
+
+    # Step-note comments are immutable.
+    r = await client.get(
+        f"{API}/work-items/{item['display_id']}/history", headers=auth(owner_token)
+    )
+    assert any(e["event_type"] == "comment.updated" for e in r.json()["data"])
+
+    # Empty body is rejected.
+    r = await client.patch(
+        f"{API}/comments/{comment['id']}", json={"body_md": "   "}, headers=auth(owner_token)
+    )
+    assert r.status_code == 422

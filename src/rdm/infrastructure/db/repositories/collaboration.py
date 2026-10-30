@@ -63,6 +63,14 @@ class CommentRepository:
         rows = list((await self._s.execute(stmt)).scalars().all())
         return [comment_to_domain(r) for r in rows]
 
+    async def update_body(self, comment_id: str, body_md: str, when: dt.datetime) -> bool:
+        result = await self._s.execute(
+            update(CommentModel)
+            .where(CommentModel.id == comment_id, CommentModel.deleted_at.is_(None))
+            .values(body_md=body_md, updated_at=when)
+        )
+        return result.rowcount == 1
+
     async def soft_delete(self, comment_id: str, actor_id: str, when: dt.datetime) -> bool:
         result = await self._s.execute(
             update(CommentModel)

@@ -23,6 +23,12 @@ class CommentIn(BaseModel):
     attachment_ids: list[str] | None = None
 
 
+class CommentUpdateIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    body_md: str = Field(min_length=1)
+
+
 async def _comments_view(uow, file_store, project_id: str, comments) -> list[dict]:
     """Comment DTOs with explicit attachments plus inline (markdown) images."""
     members = await MembershipService(uow).users_index(project_id)
@@ -93,6 +99,19 @@ async def add_comment(
         )
         out = (await _comments_view(uow, container.file_store, project.id, [comment]))[0]
     return {"data": out, "meta": {"unresolved_mentions": unresolved}}
+
+
+@router.patch("/comments/{comment_id}")
+async def update_comment(
+    comment_id: str,
+    body: CommentUpdateIn,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project, _item, comment = await CommentService(uow).update(actor, comment_id, body.body_md)
+        out = (await _comments_view(uow, container.file_store, project.id, [comment]))[0]
+    return {"data": out}
 
 
 @router.delete("/comments/{comment_id}", status_code=204)

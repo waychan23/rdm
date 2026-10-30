@@ -189,6 +189,8 @@ export interface Comment {
   author: { id: string; name?: string; type?: string };
   attachments?: Attachment[];
   created_at: string;
+  updated_at?: string | null;
+  edited?: boolean;
 }
 
 export interface Sprint {

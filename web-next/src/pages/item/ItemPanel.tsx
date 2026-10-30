@@ -14,6 +14,7 @@ import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { token } from "@atlaskit/tokens";
 
 import ConfirmDialog from "../../components/ConfirmDialog";
+import AttachmentPreviewDialog from "../../components/AttachmentPreviewDialog";
 import ImagePreviewDialog from "../../components/ImagePreviewDialog";
 import MarkdownEditor from "../../components/MarkdownEditor";
 import MarkdownText from "../../components/MarkdownText";
@@ -137,9 +138,13 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   const [showArtifact, setShowArtifact] = useState(false);
   const [gateMessage, setGateMessage] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewImage | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [parentEditing, setParentEditing] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState<Comment | null>(null);
+  const [editingComment, setEditingComment] = useState<{ id: string; body: string } | null>(
+    null,
+  );
 
   const [commenting, setCommenting] = useState(false);
   const [commentCancelConfirm, setCommentCancelConfirm] = useState(false);
@@ -152,6 +157,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   const commentFileInput = useRef<HTMLInputElement>(null);
   const attachFileInput = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [hasMoreComments, setHasMoreComments] = useState(false);
   const [loadingMoreComments, setLoadingMoreComments] = useState(false);
   // Latest known row_version: inline edits can be saved back to back while a
@@ -474,13 +480,19 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   const uploadFiles = async (files: FileList | null, attachToComment: boolean) => {
     if (!files || files.length === 0) return;
     setUploading(true);
+    setUploadProgress(0);
     try {
       for (const file of Array.from(files)) {
         const form = new FormData();
         form.append("file", file);
         form.append("owner_type", "work_item");
         form.append("owner_ref", itemId);
-        const res = await api.upload<Attachment>(`/projects/${projectKey}/attachments`, form);
+        const res = await api.uploadWithProgress<Attachment>(
+          `/projects/${projectKey}/attachments`,
+          form,
+          setUploadProgress,
+        );
+        setUploadProgress(null);
         if (attachToComment) {
           pendingIds.current.push(res.data.id);
           setPendingFiles((p) => [...p, { name: file.name, id: res.data.id }]);
@@ -493,6 +505,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       notify.error("上传失败", errorCause(e)?.message);
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -594,6 +607,20 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       await refresh();
     } catch (e) {
       notify.error("删除评论失败", errorCause(e)?.message);
+    }
+  };
+
+  const saveCommentEdit = async () => {
+    if (!editingComment || !editingComment.body.trim()) return;
+    try {
+      await api.patch(`/comments/${editingComment.id}`, {
+        body_md: editingComment.body.trim(),
+      });
+      setEditingComment(null);
+      notify.success("评论已更新");
+      await refresh();
+    } catch (e) {
+      notify.error("保存评论失败", errorCause(e)?.message);
     }
   };
 
@@ -844,6 +871,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                   type="file"
                   multiple
                   hidden
+                  data-testid="item-attachment-input"
                   onChange={(e) => void uploadFiles(e.target.files, false)}
                 />
                 <Button
@@ -851,7 +879,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                   testId="item-attachment-upload"
                   onClick={() => attachFileInput.current?.click()}
                 >
-                  上传附件
+                  {uploadProgress !== null ? `上传中 ${uploadProgress}%` : "上传附件"}
                 </Button>
                 {attachments.map((a) => (
                   <div
@@ -865,6 +893,12 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                     <Text size="small" color="color.text.subtlest">
                       {formatSize(a.size_bytes)}
                     </Text>
+                    <TextButton
+                      data-testid={`item-attachment-preview-${a.id}`}
+                      onClick={() => setPreviewAttachment(a)}
+                    >
+                      预览
+                    </TextButton>
                     <TextButton danger onClick={() => removeAttachment(a.id)}>
                       删除
                     </TextButton>
@@ -961,6 +995,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                     <Inline space="space.100" alignBlock="center">
                       <Text size="small" color="color.text.subtlest">
                         {formatDate(c.created_at)}
+                        {c.edited ? " · 已编辑" : ""}
                       </Text>
                       <TextButton
                         data-testid={`item-comment-reply-${c.id}`}
@@ -971,6 +1006,14 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                       >
                         回复
                       </TextButton>
+                      {canDelete && (
+                        <TextButton
+                          data-testid={`item-comment-edit-${c.id}`}
+                          onClick={() => setEditingComment({ id: c.id, body: c.body_md })}
+                        >
+                          编辑
+                        </TextButton>
+                      )}
                       {canDelete && (
                         <TextButton
                           danger
@@ -988,7 +1031,40 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                       {parentComment.body_md.slice(0, 80)}
                     </div>
                   )}
-                  <MarkdownText source={c.body_md} onImageClick={setPreview} />
+                  {editingComment?.id === c.id ? (
+                    <Stack space="space.100">
+                      <MarkdownEditor
+                        value={editingComment.body}
+                        onChange={(body) =>
+                          setEditingComment((current) =>
+                            current ? { ...current, body } : current,
+                          )
+                        }
+                        projectKey={projectKey}
+                        minimumRows={3}
+                        testId={`item-comment-edit-input-${c.id}`}
+                        onSubmit={() => void saveCommentEdit()}
+                      />
+                      <Inline space="space.100">
+                        <Button
+                          appearance="primary"
+                          testId={`item-comment-edit-save-${c.id}`}
+                          onClick={() => void saveCommentEdit()}
+                        >
+                          保存
+                        </Button>
+                        <Button
+                          appearance="subtle"
+                          testId={`item-comment-edit-cancel-${c.id}`}
+                          onClick={() => setEditingComment(null)}
+                        >
+                          取消
+                        </Button>
+                      </Inline>
+                    </Stack>
+                  ) : (
+                    <MarkdownText source={c.body_md} onImageClick={setPreview} />
+                  )}
                   {c.attachments
                     ?.filter((a) => !c.body_md.includes(a.download_url))
                     .map((a) => (
@@ -1447,6 +1523,10 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         src={preview?.src ?? null}
         alt={preview?.alt}
         onClose={() => setPreview(null)}
+      />
+      <AttachmentPreviewDialog
+        attachment={previewAttachment}
+        onClose={() => setPreviewAttachment(null)}
       />
       <ConfirmDialog
         open={commentToDelete !== null}

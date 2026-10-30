@@ -64,6 +64,7 @@ class EventType(StrEnum):
     SPRINT_CLOSED = "sprint.closed"
     # comment
     COMMENT_CREATED = "comment.created"
+    COMMENT_UPDATED = "comment.updated"
     COMMENT_DELETED = "comment.deleted"
     # artifact / attachment
     ARTIFACT_ADDED = "artifact.added"

@@ -213,6 +213,8 @@ def comment_out(
         else {"id": c.author_user_id},
         "attachments": attachments or [],
         "created_at": _iso(c.created_at),
+        "updated_at": _iso(c.updated_at),
+        "edited": c.updated_at is not None,
     }
 
 

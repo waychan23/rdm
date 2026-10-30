@@ -122,6 +122,40 @@ export const api = {
     return payload as Envelope<T>;
   },
 
+  /** Multipart upload with progress (XHR is the only browser API exposing it). */
+  uploadWithProgress<T>(
+    path: string,
+    form: FormData,
+    onProgress: (percent: number) => void,
+  ): Promise<Envelope<T>> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `/api/v1${path}`);
+      const token = getAccessToken();
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          onProgress(Math.round((event.loaded / event.total) * 100));
+        }
+      };
+      xhr.onerror = () => reject(new Error("上传失败：网络错误"));
+      xhr.onload = () => {
+        let payload: unknown = {};
+        try {
+          payload = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+        } catch {
+          payload = {};
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(payload as Envelope<T>);
+        } else {
+          reject(new Error("API_ERROR", { cause: errorFrom(payload, xhr.status) }));
+        }
+      };
+      xhr.send(form);
+    });
+  },
+
   download(downloadUrl: string, filename: string): Promise<void> {
     return (async () => {
       const blob = await api.fetchBlob(downloadUrl);

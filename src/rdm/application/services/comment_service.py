@@ -136,6 +136,86 @@ class CommentService:
         self.uow.defer_after_commit(lambda: get_bus().publish_project(project.id, change))
         return project, item, comment, unresolved
 
+    async def update(
+        self, actor: Actor, comment_id: str, body_md: str
+    ) -> tuple[Project, WorkItem, Comment]:
+        """Edit a comment; author or a project manager (§17 M7)."""
+        assert self.uow.comments is not None and self.uow.projects is not None
+        comment = await self.uow.comments.get(comment_id)
+        if comment is None:
+            raise NotFound(f"评论 {comment_id} 不存在", details={"comment_id": comment_id})
+        security.assert_project_access(actor, comment.project_id)
+        if comment.author_user_id != actor.id and not security.can_manage_sprint(
+            actor, comment.project_id
+        ):
+            raise Forbidden(
+                "只有作者本人或 Owner/Manager 可以编辑该评论。",
+                details={"comment_id": comment_id, "author_user_id": comment.author_user_id},
+            )
+        assert self.uow.work_item_steps is not None
+        if await self.uow.work_item_steps.is_note_comment(comment.id):
+            raise Forbidden(
+                "该评论是工作流步骤的执行备注，不能编辑；如需更正请追加评论。",
+                details={"comment_id": comment_id},
+            )
+        body_md = (body_md or "").strip()
+        if not body_md:
+            raise ValidationError("body_md 必填", details={"field": "body_md"})
+        project = await self.uow.projects.get(comment.project_id)
+        assert project is not None
+        assert self.uow.work_items is not None
+        item = await self.uow.work_items.get(comment.work_item_id)
+        if item is None:
+            raise NotFound("评论所属工作项不存在", details={"comment_id": comment_id})
+        old_body = comment.body_md
+        if old_body == body_md:
+            return project, item, comment
+        when = dt.datetime.now(dt.UTC)
+        updated = await self.uow.comments.update_body(comment.id, body_md, when)
+        if not updated:
+            raise NotFound(f"评论 {comment_id} 已删除", details={"comment_id": comment_id})
+        comment.body_md = body_md
+        comment.updated_at = when
+        await commit_inline_images(self.uow, project.id, body_md)
+        display_id = f"{project.key}-{item.display_no}"
+        seq = await self.uow.allocate_event_seq(project.org_id)
+        assert self.uow.events is not None
+        await self.uow.events.append(
+            org_id=project.org_id,
+            project_id=project.id,
+            seq=seq,
+            aggregate_type="comment",
+            aggregate_id=comment.id,
+            aggregate_version=0,
+            event_type=EventType.COMMENT_UPDATED,
+            actor_user_id=actor.id,
+            payload={
+                "snapshot": {
+                    "id": comment.id,
+                    "work_item_id": item.id,
+                    "work_item_display_id": display_id,
+                    "body_md": body_md,
+                },
+                "changes": {"body_md": [old_body, body_md]},
+            },
+        )
+        from rdm.infrastructure.events.bus import StreamEvent, get_bus
+
+        change = StreamEvent(
+            event="comment.changed",
+            id=str(seq),
+            data={
+                "project_id": project.id,
+                "project_key": project.key,
+                "item_id": item.id,
+                "display_id": display_id,
+                "comment_id": comment.id,
+                "action": "updated",
+            },
+        )
+        self.uow.defer_after_commit(lambda: get_bus().publish_project(project.id, change))
+        return project, item, comment
+
     async def delete(self, actor: Actor, comment_id: str) -> tuple[Project, Comment, list[str]]:
         """Author/owner/manager only; cascades to comment-owned records (§16.44)."""
         assert self.uow.comments is not None and self.uow.projects is not None
