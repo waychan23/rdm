@@ -382,6 +382,14 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     }
   };
 
+  // Hooks must run unconditionally: compute this before the loading/error
+  // early returns below, otherwise React sees a different hook count once
+  // the detail bundle arrives (error #310).
+  const parentOption = useMemo(
+    () => (bundle?.parent ? toWorkItemOption(bundle.parent) : null),
+    [bundle?.parent],
+  );
+
   if (loadError) {
     return (
       <aside className="rdm-item-panel" aria-label="工作项详情" data-testid="item-panel">
@@ -433,10 +441,6 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     Boolean(me?.org_roles.includes("org_owner")) ||
     projectRoles.includes("project_owner") ||
     projectRoles.includes("manager");
-  const parentOption = useMemo(
-    () => (parent ? toWorkItemOption(parent) : null),
-    [parent],
-  );
 
   return (
     <aside className="rdm-item-panel" aria-label="工作项详情" data-testid="item-panel">
