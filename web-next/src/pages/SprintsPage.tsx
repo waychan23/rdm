@@ -77,7 +77,7 @@ export default function SprintsPage() {
       await api.patch(`/sprints/${detail.id}`, v);
       setShowEdit(false);
       await Promise.all([refreshDetail(), reload()]);
-      notify.success("已保存");
+      notify.success("保存成功");
     } catch (e) {
       notify.error("保存失败", errorCause(e)?.message);
     }

@@ -200,7 +200,7 @@ export default function EditWorkItemDialog({
           })
         ).data;
       }
-      notify.success("已保存");
+      notify.success("保存成功");
       onSaved(updated);
       onClose();
     } catch (e) {

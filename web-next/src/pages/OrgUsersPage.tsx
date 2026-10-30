@@ -158,6 +158,7 @@ export default function OrgUsersPage() {
       await api.put(`/users/${rolesTarget.id}/org-roles`, { roles });
       setRolesTarget(null);
       reload();
+      notify.success("保存成功");
     } catch (e) {
       notify.error("保存失败", errorCause(e)?.message);
     }

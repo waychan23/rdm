@@ -115,6 +115,7 @@ export default function WorkspacesPage() {
       else await api.post(`/projects/${projectKey}/workspaces`, payload);
       setDialogOpen(false);
       reload();
+      notify.success("保存成功");
     } catch (e) {
       setSaveError(errorCause(e)?.message ?? "请稍后重试");
     } finally {

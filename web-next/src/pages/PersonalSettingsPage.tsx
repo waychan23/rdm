@@ -207,6 +207,7 @@ export default function PersonalSettingsPage() {
        });
        setEditAgent(null);
        reload();
+       notify.success("保存成功");
      } catch (e) {
        notify.error("保存失败", errorCause(e)?.message);
      }

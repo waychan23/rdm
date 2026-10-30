@@ -62,7 +62,22 @@ export function NotifyProvider({ children }: { children: ReactNode }) {
   const show = useCallback(
     (appearance: Notice["appearance"], title: string, description?: string) => {
       const id = nextId.current++;
-      setNotices((current) => [...current, { id, appearance, title, description }]);
+      setNotices((current) => {
+        // Rapid inline saves all report the same result; keep one success card
+        // (new id restarts its dismiss timer) instead of stacking duplicates.
+        const kept =
+          appearance === "success"
+            ? current.filter(
+                (notice) =>
+                  !(
+                    notice.appearance === "success" &&
+                    notice.title === title &&
+                    notice.description === description
+                  ),
+              )
+            : current;
+        return [...kept, { id, appearance, title, description }];
+      });
     },
     [],
   );

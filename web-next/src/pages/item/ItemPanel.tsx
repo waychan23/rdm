@@ -242,6 +242,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         });
         versionRef.current = res.data.row_version;
         await refresh();
+        notify.success("保存成功");
         return true;
       } catch (e) {
         notify.error("保存失败", errorCause(e)?.message);
@@ -411,6 +412,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     try {
       await api.post(`/work-items/${itemId}/assign`, { member: memberId });
       await refresh();
+      notify.success("保存成功");
       return true;
     } catch (e) {
       notify.error("指派失败", errorCause(e)?.message);
@@ -427,6 +429,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         priority,
       });
       await refresh();
+      notify.success("保存成功");
     } catch (e) {
       notify.error("优先级保存失败", errorCause(e)?.message);
       await refresh();
