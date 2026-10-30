@@ -10,22 +10,6 @@ import {
   InlineTextField,
 } from "./InlineFields";
 
-const TASK_TYPES: Record<string, string> = {
-  product_design: "产品设计",
-  ui_design: "UI设计",
-  ux_design: "UI设计",
-  frontend: "前端开发",
-  backend: "后端开发",
-  fullstack: "全栈开发",
-  code_review: "代码评审",
-  testing: "测试",
-  qa: "测试",
-  test_case_design: "测试用例设计",
-  release: "系统发布",
-  docs: "文档编写",
-  other: "其他",
-};
-
 function Empty() {
   return (
     <Text size="small" color="color.text.subtlest">
@@ -45,6 +29,7 @@ interface Props {
   item: WorkItem;
   projectKey: string;
   canEdit: boolean;
+  requiredFields?: ReadonlySet<string>;
   onPatch: (payload: Record<string, unknown>) => Promise<boolean>;
   onOpenItem: (id: string) => void;
   onImageClick: (image: MarkdownImageClick) => void;
@@ -58,11 +43,13 @@ export default function WorkItemFieldsView({
   item,
   projectKey,
   canEdit,
+  requiredFields,
   onPatch,
   onOpenItem,
   onImageClick,
 }: Props) {
   const fields = (item.fields ?? {}) as Record<string, unknown>;
+  const isRequired = (key: string) => Boolean(requiredFields?.has(key));
   if (item.kind === "epic" || Object.keys(fields).length === 0) {
     return (
       <Text size="small" color="color.text.subtlest">
@@ -76,6 +63,7 @@ export default function WorkItemFieldsView({
       <InlineMarkdownField
         testId="item-acceptance"
         label="验收标准"
+        required={isRequired("acceptance_criteria_md")}
         value={fields.acceptance_criteria_md as string | undefined}
         canEdit={canEdit}
         projectKey={projectKey}
@@ -96,6 +84,7 @@ export default function WorkItemFieldsView({
         <InlineChoiceField
           testId="item-severity"
           label="严重度"
+          required={isRequired("severity")}
           value={String(fields.severity ?? "major")}
           options={SEVERITY_OPTIONS}
           canEdit={canEdit}
@@ -105,6 +94,7 @@ export default function WorkItemFieldsView({
         <InlineTextField
           testId="item-environment"
           label="环境"
+          required={isRequired("environment")}
           value={String(fields.environment ?? "")}
           canEdit={canEdit}
           emptyText="未填写"
@@ -132,6 +122,7 @@ export default function WorkItemFieldsView({
             key={key}
             testId={`item-${key}`}
             label={label}
+            required={isRequired(key)}
             value={fields[key] as string | undefined}
             canEdit={canEdit}
             projectKey={projectKey}
@@ -149,15 +140,10 @@ export default function WorkItemFieldsView({
 
   return (
     <Stack space="space.150">
-      <div className="rdm-inline-field" data-testid="item-task-type">
-        <div className="rdm-item-section-label">任务类型</div>
-        <Text size="small">
-          {TASK_TYPES[String(fields.task_type ?? "other")] ?? String(fields.task_type ?? "—")}
-        </Text>
-      </div>
       <InlineTextField
         testId="item-est-work-hours"
         label="预估工时（小时）"
+        required={isRequired("est_work_hours")}
         value={fields.est_work_hours === null || fields.est_work_hours === undefined
           ? ""
           : String(fields.est_work_hours)}
@@ -173,6 +159,7 @@ export default function WorkItemFieldsView({
       <InlineTextField
         testId="item-actual-work-hours"
         label="实际工时（小时）"
+        required={isRequired("actual_work_hours")}
         value={fields.actual_work_hours === null || fields.actual_work_hours === undefined
           ? ""
           : String(fields.actual_work_hours)}
@@ -188,6 +175,7 @@ export default function WorkItemFieldsView({
       <InlineTextField
         testId="item-code-branch"
         label="代码分支"
+        required={isRequired("code_branch")}
         value={String(fields.code_branch ?? "")}
         canEdit={canEdit}
         emptyText="未填写"

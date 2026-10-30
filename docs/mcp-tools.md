@@ -57,7 +57,7 @@
 
 | 工具 | 用途 | 关键入参 |
 |---|---|---|
-| `work_item_create` 【M1/M6】 | 创建 epic/story/issue/task；`kind` 判别联合 schema，特型字段随 kind 不同；支持 `assignee`（默认创建人）、participants/reviewer/review_content_md/custom_fields | `kind, title, parent?, description_md?, priority?, assignee?, ...kind 特型` |
+| `work_item_create` 【M1/M6】 | 创建 epic/story/issue/task；`kind` 判别联合 schema，特型字段随 kind 不同；支持 `assignee`（默认创建人）、participants/reviewer/review_content_md/custom_fields；`priority` 必填默认 3（1=紧急…4=低） | `kind, title, parent?, description_md?, priority?, assignee?, ...kind 特型` |
 | `work_item_update` 【M1/M6】 | 编辑字段（**不含 status**）；带 `row_version` 乐观锁；支持 participants/reviewer/review_content_md/custom_fields | `id, row_version, fields{...}` |
 | `work_item_assign` 【M1/M6】 | 指派负责人（可为 agent）；未指派时任何成员可自领，已有负责人时仅负责人/参与人/manager/project_owner 可改派 | `id, member` |
 | `work_item_transition` 【M1/M6】 | direct/legacy 状态入口；非 direct 或目标有多条步骤时返回 `WORKFLOW_STEP_REQUIRED`，改用 `work_item_step`；`reason?` 作为 direct 步骤备注 | `id, to, row_version, reason?` |
@@ -105,7 +105,7 @@ class WorkItemCreateIn(BaseModel):
     title: str
     parent: str | None = None  # display_id
     description_md: str | None = None
-    priority: int = 0
+    priority: int = 3  # 1=紧急 2=高 3=中 4=低（必填，默认 3）
     assignee: str | None = None  # member name 或 id
     sprint: str | None = None
     # kind=story
@@ -151,11 +151,11 @@ M6 命名步骤（architecture §17.88–93）：
 class WorkItemStepIn(BaseModel):
     id: str
     action: Literal["start", "execute", "cancel", "retry", "reassign"]
-    step_key: str | None = None      # start
-    step_id: str | None = None       # execute/cancel/retry/reassign
-    row_version: int | None = None   # start/cancel/retry/reassign
+    step_key: str | None = None  # start
+    step_id: str | None = None  # execute/cancel/retry/reassign
+    row_version: int | None = None  # start/cancel/retry/reassign
     executors: list[str] | None = None  # start/reassign；成员 name/id
-    note_md: str | None = None       # start(direct)/execute；Markdown
+    note_md: str | None = None  # start(direct)/execute；Markdown
     attachment_ids: list[str] | None = None
 ```
 

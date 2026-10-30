@@ -6,16 +6,25 @@ import type { Api, Item } from "./api";
 import { expect } from "./fixtures";
 import type { E2EContext } from "./context";
 
-export function itemPath(app: E2EContext, item: Pick<Item, "id">): string {
-  return `/projects/${app.projectKey}/items/${item.id}`;
+export function itemPath(
+  app: E2EContext,
+  item: Pick<Item, "id">,
+  projectKey = app.projectKey,
+): string {
+  return `/projects/${projectKey}/items/${item.id}`;
 }
 
 export function boardPath(app: E2EContext): string {
   return `/projects/${app.projectKey}/board`;
 }
 
-export async function openItem(page: Page, app: E2EContext, item: Pick<Item, "id">) {
-  await page.goto(`${app.baseURL}${itemPath(app, item)}`);
+export async function openItem(
+  page: Page,
+  app: E2EContext,
+  item: Pick<Item, "id">,
+  projectKey = app.projectKey,
+) {
+  await page.goto(`${app.baseURL}${itemPath(app, item, projectKey)}`);
   await expect(page.getByTestId("item-panel")).toBeVisible();
   await expect(page.getByTestId("item-panel-loading")).toBeHidden();
 }

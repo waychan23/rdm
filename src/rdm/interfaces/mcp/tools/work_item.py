@@ -108,6 +108,7 @@ def register(mcp: FastMCP, container: Container) -> None:
     async def backlog_list(kind: str | None = None, project: str | None = None) -> Any:
         """ProductBacklog：未进入任何 Sprint 且非终态的工作项（最多 200 条）。
 
+        按 priority 升序（1=紧急 最前，4=低 最后），同优先级按 display_no。
         查 Sprint 内的工作项用 sprint_get；已终态或已入 Sprint 的项不会出现。
         """
 
@@ -206,6 +207,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         """创建 epic/story/issue/task；特型字段随 kind，串 kind 字段会报错。
 
         父子规则：story 父=epic，task 父=story/issue，epic/issue 不能有父。
+        priority 必填：1=紧急、2=高、3=中（默认）、4=低。
         不要用它改状态（创建后是初始态，流转一律 work_item_transition）。
         """
 
@@ -269,6 +271,7 @@ def register(mcp: FastMCP, container: Container) -> None:
     ) -> Any:
         """编辑字段（不含 status），必须带最新 row_version。
 
+        priority 必填且不可清空：1=紧急、2=高、3=中、4=低。
         改状态请用 work_item_transition；冲突（CONFLICT_VERSION）时先
         work_item_get 重读再改。串 kind 的特型字段会报 VALIDATION_ERROR。
         """

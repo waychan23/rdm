@@ -317,3 +317,49 @@ async def test_ulid_accepted_as_id(server, owner_token: str) -> None:
     r = await client.get(f"{API}/work-items/{created['id']}", headers=auth(owner_token))
     assert r.status_code == 200
     assert r.json()["data"]["display_id"] == "DEMO-1"
+
+
+async def test_priority_is_mandatory_and_validated(server, owner_token: str) -> None:
+    client, _settings, _app = server
+    await _create_project(client, owner_token)
+
+    async def create(payload: dict) -> httpx.Response:
+        return await client.post(
+            f"{API}/projects/DEMO/work-items",
+            json={"kind": "task", "title": f"p-{payload.get('priority', 'default')}", **payload},
+            headers=auth(owner_token),
+        )
+
+    # Omitted -> medium (3). 0/"unset" and out-of-range values are rejected.
+    r = await create({})
+    assert r.status_code == 201, r.text
+    assert r.json()["data"]["priority"] == 3
+    for invalid in (0, 5):
+        r = await create({"priority": invalid})
+        assert r.status_code == 422, r.text
+
+    created = {}
+    for priority in (1, 2, 3, 4):
+        r = await create({"priority": priority})
+        assert r.status_code == 201, r.text
+        assert r.json()["data"]["priority"] == priority
+        created[priority] = r.json()["data"]
+
+    task = created[4]
+    r = await client.patch(
+        f"{API}/work-items/{task['display_id']}",
+        json={"row_version": task["row_version"], "priority": 1},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["priority"] == 1
+
+    # Priority cannot be cleared or set outside 1..4.
+    updated = r.json()["data"]
+    for invalid in (0, 5, None):
+        r = await client.patch(
+            f"{API}/work-items/{task['display_id']}",
+            json={"row_version": updated["row_version"], "priority": invalid},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 422, r.text

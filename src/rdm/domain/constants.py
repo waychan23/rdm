@@ -24,3 +24,9 @@ SCOPE_MCP = "mcp"
 
 # The org role held by exactly one active human at any time.
 ORG_OWNER_ROLE = "org_owner"
+
+# Work-item priority is always set: 1=urgent, 2=high, 3=medium, 4=low.
+# Lower numbers mean higher priority (P-level convention).
+PRIORITY_MIN = 1
+PRIORITY_MAX = 4
+DEFAULT_PRIORITY = 3

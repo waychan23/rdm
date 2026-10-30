@@ -5,6 +5,7 @@ import IconButton from "@atlaskit/button/icon/button";
 import Heading from "@atlaskit/heading";
 import CrossIcon from "@atlaskit/icon/core/cross";
 import Link from "@atlaskit/link";
+import Lozenge from "@atlaskit/lozenge";
 import Select from "@atlaskit/select";
 import SectionMessage from "@atlaskit/section-message";
 import Spinner from "@atlaskit/spinner";
@@ -16,11 +17,12 @@ import ImagePreviewDialog from "../../components/ImagePreviewDialog";
 import MarkdownEditor from "../../components/MarkdownEditor";
 import MarkdownText from "../../components/MarkdownText";
 import PersonCell from "../../components/PersonCell";
-import PriorityMark from "../../components/PriorityMark";
 import TextButton from "../../components/TextButton";
 import TypeKindIcon from "../../components/TypeKindIcon";
 import WorkItemPicker, { type WorkItemOption } from "../../components/WorkItemPicker";
 import EditWorkItemDialog from "../../workitems/EditWorkItemDialog";
+import { TASK_TYPE_OPTIONS } from "../../workitems/constants";
+import { PRIORITY_OPTIONS, priorityColor, priorityOption } from "../../workitems/priority";
 import StatusLozenge from "../../workitems/status";
 import { api, errorCause } from "../../lib/api";
 import { useCurrentUser } from "../../lib/auth";
@@ -97,7 +99,6 @@ interface StepReassignTarget {
   step: WorkflowStepDef;
 }
 
-const PRIORITY_VALUES = [0, 1, 2, 3, 4];
 const COMMENTS_PAGE = 50;
 const EMPTY_FIELDS: WorkflowFields = {
   reviewer: false,
@@ -146,6 +147,8 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   const [parentEditing, setParentEditing] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState<Comment | null>(null);
 
+  const [commenting, setCommenting] = useState(false);
+  const [commentCancelConfirm, setCommentCancelConfirm] = useState(false);
   const [draft, setDraft] = useState("");
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const [savingComment, setSavingComment] = useState(false);
@@ -219,6 +222,12 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     setShowArtifact(false);
     setCommentToDelete(null);
     setPreview(null);
+    setCommenting(false);
+    setCommentCancelConfirm(false);
+    setDraft("");
+    setReplyTo(null);
+    pendingIds.current = [];
+    setPendingFiles([]);
     void load();
   }, [load]);
 
@@ -523,6 +532,23 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     }
   };
 
+  const discardComment = () => {
+    setDraft("");
+    setReplyTo(null);
+    pendingIds.current = [];
+    setPendingFiles([]);
+    setCommenting(false);
+    setCommentCancelConfirm(false);
+  };
+
+  const requestCancelComment = () => {
+    if (draft.trim() || pendingIds.current.length > 0) {
+      setCommentCancelConfirm(true);
+      return;
+    }
+    discardComment();
+  };
+
   const postComment = async () => {
     if (!draft.trim() || savingComment || uploadingDraftImage) return;
     setSavingComment(true);
@@ -540,6 +566,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       setReplyTo(null);
       pendingIds.current = [];
       setPendingFiles([]);
+      setCommenting(false);
     } catch (e) {
       notify.error("评论失败", errorCause(e)?.message);
     } finally {
@@ -633,13 +660,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     value: m.id,
     name: m.name,
   }));
-  const priorityValues = PRIORITY_VALUES.includes(item.priority)
-    ? PRIORITY_VALUES
-    : [...PRIORITY_VALUES, item.priority].sort((a, b) => a - b);
-  const priorityOptions = priorityValues.map((value) => ({
-    label: value === 0 ? "未设置" : `P${value}`,
-    value,
-  }));
+  const currentPriority = priorityOption(item.priority).value;
   const identityId = me?.identity.id ?? me?.user.id ?? null;
   const projectRoles =
     me?.projects.find((project) => project.key === projectKey)?.roles ?? [];
@@ -649,6 +670,93 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     projectRoles.includes("manager");
   const canEdit = Boolean(permissions.can_edit);
   const canAssign = Boolean(permissions.can_assign);
+  // Epic has no kind extension table; empty field maps render no editor either.
+  const hasKindFields =
+    item.kind !== "epic" && Object.keys(item.fields ?? {}).length > 0;
+  const taskTypeLabel =
+    TASK_TYPE_OPTIONS.find((option) => option.value === (item.task_type ?? "other"))?.label ??
+    item.task_type ??
+    "其他";
+  // Gate-required fields for the steps reachable from this status (and the
+  // active step) drive the red asterisk next to field labels. Plain compute:
+  // this sits after the early returns, so it must not be a hook.
+  const requiredFieldKeys = new Set<string>();
+  {
+    const collect = (gates: Record<string, unknown> | undefined) => {
+      const required = gates?.required_fields;
+      if (Array.isArray(required)) {
+        for (const key of required) requiredFieldKeys.add(String(key));
+      }
+    };
+    for (const step of steps) collect(step.gates);
+    collect(
+      (activeStep?.config as { gates?: Record<string, unknown> } | undefined)?.gates,
+    );
+  }
+
+  // The composer belongs to the left column's bottom edge, not the drawer
+  // footer (which would span the fields column too).
+  const commentBar = (
+    <footer className="rdm-item-comment-bar" data-testid="item-comment-bar">
+      {replyTo && (
+        <div className="rdm-item-comment-reply-chip">
+          <Text size="small" color="color.text.subtlest">
+            回复 {replyTo.author.name ?? replyTo.author.id}
+          </Text>
+          <TextButton onClick={() => setReplyTo(null)}>取消</TextButton>
+        </div>
+      )}
+      <MarkdownEditor
+        value={draft}
+        onChange={setDraft}
+        projectKey={projectKey}
+        minimumRows={2}
+        placeholder="写评论；@成员名 会给对方发站内信"
+        testId="item-comment"
+        onSubmit={() => void postComment()}
+        onImageClick={setPreview}
+        onUploadingChange={setUploadingDraftImage}
+        isDisabled={savingComment}
+        autoFocus
+      />
+      {pendingFiles.length > 0 && (
+        <Inline space="space.100" shouldWrap>
+          {pendingFiles.map((f) => (
+            <Text key={f.id} size="small" color="color.text.subtlest">
+              📎 {f.name}
+            </Text>
+          ))}
+        </Inline>
+      )}
+      <div className="rdm-item-comment-actions">
+        <input
+          ref={commentFileInput}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => void uploadFiles(e.target.files, true)}
+        />
+        <TextButton
+          data-testid="item-comment-cancel"
+          onClick={requestCancelComment}
+        >
+          取消
+        </TextButton>
+        <Button testId="item-comment-attach" onClick={() => commentFileInput.current?.click()}>
+          添加附件
+        </Button>
+        <Button
+          appearance="primary"
+          isLoading={savingComment}
+          isDisabled={uploadingDraftImage}
+          testId="item-comment-submit"
+          onClick={() => void postComment()}
+        >
+          提交评论
+        </Button>
+      </div>
+    </footer>
+  );
 
   return (
     <aside className="rdm-item-panel" aria-label="工作项详情" data-testid="item-panel">
@@ -676,60 +784,155 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
 
       <div className="rdm-item-body">
         <section className="rdm-item-content" data-testid="item-panel-content">
-          <InlineTextField
-            testId="item-panel-title-field"
-            value={item.title}
-            canEdit={canEdit}
-            editLabel="编辑标题"
-            validate={(next) => (next.trim() ? undefined : "标题不能为空")}
-            readClassName="rdm-inline-title"
-            renderView={(value) => (
-              <Heading size="medium" as="h2" testId="item-panel-title">
-                {value}
-              </Heading>
+          <div className="rdm-item-content-scroll">
+            <div className="rdm-item-title-row">
+              {item.kind === "task" && (
+                <span className="rdm-item-task-type" data-testid="item-task-type">
+                  <Lozenge appearance="default">{taskTypeLabel}</Lozenge>
+                </span>
+              )}
+              <div className="rdm-item-title-main">
+                <InlineTextField
+                  testId="item-panel-title-field"
+                  value={item.title}
+                  canEdit={canEdit}
+                  editLabel="编辑标题"
+                  validate={(next) => (next.trim() ? undefined : "标题不能为空")}
+                  readClassName="rdm-inline-title"
+                  renderView={(value) => (
+                    <Heading size="medium" as="h2" testId="item-panel-title">
+                      {value}
+                    </Heading>
+                  )}
+                  onSave={(next) => patchItem({ title: next.trim() })}
+                />
+              </div>
+            </div>
+
+            <section className="rdm-item-section" data-testid="item-section-base">
+              <InlineMarkdownField
+                testId="item-panel-description"
+                label="描述"
+                required={requiredFieldKeys.has("description_md")}
+                value={item.description_md}
+                canEdit={canEdit}
+                projectKey={projectKey}
+                emptyText="未填写描述"
+                placeholder="写点什么（支持 Markdown，可直接粘贴图片）"
+                minimumRows={6}
+                editLabel="编辑描述"
+                readClassName="rdm-inline-read-desc"
+                onImageClick={setPreview}
+                onSave={(next) => patchItem({ description_md: next.trim() ? next : null })}
+              />
+
+              <div className="rdm-item-field" data-testid="item-field-attachments">
+                <div className="rdm-item-section-label">附件</div>
+                <input
+                  ref={attachFileInput}
+                  type="file"
+                  multiple
+                  hidden
+                  onChange={(e) => void uploadFiles(e.target.files, false)}
+                />
+                <Button
+                  isLoading={uploading}
+                  testId="item-attachment-upload"
+                  onClick={() => attachFileInput.current?.click()}
+                >
+                  上传附件
+                </Button>
+                {attachments.map((a) => (
+                  <div
+                    key={a.id}
+                    className="rdm-item-att"
+                    data-testid={`item-attachment-${a.id}`}
+                  >
+                    <TextButton onClick={() => api.download(a.download_url, a.filename)}>
+                      <span className="rdm-item-att-name">{a.filename}</span>
+                    </TextButton>
+                    <Text size="small" color="color.text.subtlest">
+                      {formatSize(a.size_bytes)}
+                    </Text>
+                    <TextButton danger onClick={() => removeAttachment(a.id)}>
+                      删除
+                    </TextButton>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rdm-item-field" data-testid="item-field-artifacts">
+                <div className="rdm-item-section-label">产出物</div>
+                {artifacts.map((art) => (
+                  <div
+                    key={art.id}
+                    className="rdm-item-att"
+                    data-testid={`item-artifact-${art.id}`}
+                  >
+                    <Link href={art.url} target="_blank" testId={`item-artifact-link-${art.id}`}>
+                      {art.label}
+                    </Link>
+                    <Text size="small" color="color.text.subtlest">
+                      {art.kind}
+                    </Text>
+                    <TextButton danger onClick={() => removeArtifact(art.id)}>
+                      删除
+                    </TextButton>
+                  </div>
+                ))}
+                <Button testId="item-artifact-add" onClick={() => setShowArtifact(true)}>
+                  挂产出物
+                </Button>
+              </div>
+            </section>
+
+            <hr className="rdm-item-divider" />
+
+            {hasKindFields && (
+              <>
+                <section className="rdm-item-section" data-testid="item-section-kind">
+                  <div data-testid="item-panel-fields-json">
+                    <WorkItemFieldsView
+                      item={item}
+                      projectKey={projectKey}
+                      canEdit={canEdit}
+                      requiredFields={requiredFieldKeys}
+                      onPatch={patchItem}
+                      onOpenItem={onOpenItem}
+                      onImageClick={setPreview}
+                    />
+                  </div>
+                </section>
+                <hr className="rdm-item-divider" />
+              </>
             )}
-            onSave={(next) => patchItem({ title: next.trim() })}
-          />
 
-          <InlineMarkdownField
-            testId="item-panel-description"
-            label="描述"
-            value={item.description_md}
-            canEdit={canEdit}
-            projectKey={projectKey}
-            emptyText="未填写描述"
-            placeholder="写点什么（支持 Markdown，可直接粘贴图片）"
-            minimumRows={6}
-            editLabel="编辑描述"
-            readClassName="rdm-inline-read-desc"
-            onImageClick={setPreview}
-            onSave={(next) => patchItem({ description_md: next.trim() ? next : null })}
-          />
+            <section className="rdm-item-section" data-testid="item-section-children">
+              <ChildrenSection
+                projectKey={projectKey}
+                parent={item}
+                children={children}
+                allowedKinds={allowedChildKinds}
+                onOpen={onOpenItem}
+                onChanged={() => void refresh()}
+              />
+            </section>
 
-          <div className="rdm-item-section-label">特型字段</div>
-          <div data-testid="item-panel-fields-json">
-            <WorkItemFieldsView
-              item={item}
-              projectKey={projectKey}
-              canEdit={canEdit}
-              onPatch={patchItem}
-              onOpenItem={onOpenItem}
-              onImageClick={setPreview}
-            />
-          </div>
+            <hr className="rdm-item-divider" />
 
-          <div className="rdm-item-spacer" />
-          <ChildrenSection
-            projectKey={projectKey}
-            parent={item}
-            children={children}
-            allowedKinds={allowedChildKinds}
-            onOpen={onOpenItem}
-            onChanged={() => void refresh()}
-          />
-
-          <div className="rdm-item-section-label">评论（{comments.length}）</div>
-          <div data-testid="item-panel-comments">
+            <section className="rdm-item-section" data-testid="item-section-comments">
+              <div className="rdm-item-section-head">
+                <div className="rdm-item-section-label">评论（{comments.length}）</div>
+                {!commenting && (
+                  <TextButton
+                    data-testid="item-comment-add"
+                    onClick={() => setCommenting(true)}
+                  >
+                    添加评论
+                  </TextButton>
+                )}
+              </div>
+              <div data-testid="item-panel-comments">
             {comments.length === 0 && (
               <Text size="small" color="color.text.subtlest">
                 还没有评论
@@ -750,7 +953,10 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                       </Text>
                       <TextButton
                         data-testid={`item-comment-reply-${c.id}`}
-                        onClick={() => setReplyTo(c)}
+                        onClick={() => {
+                          setReplyTo(c);
+                          setCommenting(true);
+                        }}
                       >
                         回复
                       </TextButton>
@@ -798,7 +1004,10 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                 </TextButton>
               </Box>
             )}
+              </div>
+            </section>
           </div>
+          {commenting && commentBar}
         </section>
 
         <section className="rdm-item-fields" data-testid="item-panel-fields">
@@ -809,6 +1018,86 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
               </SectionMessage>
             </Box>
           )}
+
+          {allowedParentKinds.length > 0 && (
+            <>
+              <div className="rdm-item-field" data-testid="item-field-parent">
+                <div className="rdm-item-section-label">父项</div>
+                {parent && !parentEditing ? (
+                  <Inline space="space.100" alignBlock="center">
+                    <TextButton onClick={() => onOpenItem(parent.id)}>
+                      {parent.display_id}
+                    </TextButton>
+                    <Text size="small" color="color.text.subtlest">
+                      {parent.title}
+                    </Text>
+                  </Inline>
+                ) : (
+                  <Text size="small" color="color.text.subtlest">
+                    无父项
+                  </Text>
+                )}
+                <Box paddingBlockStart="space.100">
+                  {parentEditing ? (
+                    <Stack space="space.100">
+                      <WorkItemPicker
+                        projectKey={projectKey}
+                        allowedKinds={allowedParentKinds}
+                        excludeIds={[item.id, ...children.map((c) => c.id)]}
+                        value={parentOption}
+                        onChange={(option) => void reparent(option)}
+                        placeholder="选择父项"
+                        testId="item-parent-picker"
+                      />
+                      <TextButton onClick={() => setParentEditing(false)}>取消</TextButton>
+                    </Stack>
+                  ) : permissions.can_edit ? (
+                    <Inline space="space.100">
+                      <TextButton
+                        data-testid="item-parent-change"
+                        onClick={() => setParentEditing(true)}
+                      >
+                        {parent ? "更改父项" : "设置父项"}
+                      </TextButton>
+                      {parent && (
+                        <TextButton danger onClick={() => void reparent(null)}>
+                          移出父项
+                        </TextButton>
+                      )}
+                    </Inline>
+                  ) : null}
+                </Box>
+              </div>
+              <hr className="rdm-item-divider" />
+            </>
+          )}
+
+          <div className="rdm-item-field" data-testid="item-field-priority">
+            <div className="rdm-item-section-label">优先级</div>
+            <div className="rdm-priority-row">
+              <div className="rdm-priority-select" data-testid="priority-select">
+                <Select
+                  {...portalMenuProps}
+                  options={PRIORITY_OPTIONS}
+                  value={
+                    PRIORITY_OPTIONS.find((o) => o.value === currentPriority) ?? null
+                  }
+                  isDisabled={!permissions.can_edit}
+                  onChange={(opt) =>
+                    opt && void changePriority((opt as { value: number }).value)
+                  }
+                  isClearable={false}
+                />
+              </div>
+              <span
+                className="rdm-priority-swatch"
+                data-testid="priority-swatch"
+                data-priority={item.priority}
+                style={{ backgroundColor: priorityColor(item.priority) }}
+              />
+            </div>
+          </div>
+          <hr className="rdm-item-divider" />
 
           <div className="rdm-item-field" data-testid="item-field-status">
             <div className="rdm-item-section-label">状态</div>
@@ -881,23 +1170,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
               </Box>
             )}
           </div>
-
-          <div className="rdm-item-field" data-testid="item-field-priority">
-            <div className="rdm-item-section-label">优先级</div>
-            <Select
-              {...portalMenuProps}
-              options={priorityOptions}
-              value={priorityOptions.find((o) => o.value === item.priority) ?? null}
-              isDisabled={!permissions.can_edit}
-              onChange={(opt) =>
-                opt && void changePriority((opt as { value: number }).value)
-              }
-              isClearable={false}
-            />
-            <Box paddingBlockStart="space.050">
-              <PriorityMark priority={item.priority} />
-            </Box>
-          </div>
+          <hr className="rdm-item-divider" />
 
           <div className="rdm-item-field" data-testid="item-field-assignee">
             <InlineMemberField
@@ -928,12 +1201,14 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
               onSave={(next) => patchItem({ participants: next })}
             />
           </div>
+          <hr className="rdm-item-divider" />
 
           {workflowFields.reviewer && (
             <div className="rdm-item-field" data-testid="item-field-reviewer">
               <InlineMemberField
                 testId="item-reviewer"
                 label="评审人"
+                required={requiredFieldKeys.has("reviewer")}
                 canEdit={canEdit}
                 multiple
                 ids={(item.reviewer ?? []).map((reviewer) => reviewer.id)}
@@ -951,6 +1226,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
               <InlineMarkdownField
                 testId="item-review-content"
                 label="评审意见"
+                required={requiredFieldKeys.has("review_content")}
                 value={item.review_content_md}
                 canEdit={canEdit}
                 projectKey={projectKey}
@@ -987,6 +1263,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                       <InlineMarkdownField
                         testId={`item-custom-${field.key}`}
                         label={field.label}
+                        required={requiredFieldKeys.has(field.key)}
                         value={typeof raw === "string" ? raw : ""}
                         canEdit={canEdit}
                         projectKey={projectKey}
@@ -1004,6 +1281,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                       <InlineTextField
                         testId={`item-custom-${field.key}`}
                         label={field.label}
+                        required={requiredFieldKeys.has(field.key)}
                         value={raw === null || raw === undefined ? "" : String(raw)}
                         canEdit={canEdit}
                         inputType="number"
@@ -1023,6 +1301,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                     <InlineMemberField
                       testId={`item-custom-${field.key}`}
                       label={field.label}
+                      required={requiredFieldKeys.has(field.key)}
                       canEdit={canEdit}
                       multiple={field.multiple}
                       ids={ids}
@@ -1038,176 +1317,28 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             </div>
           )}
 
-          <div className="rdm-item-field" data-testid="item-field-parent">
-            <div className="rdm-item-section-label">父项</div>
-            {parent && !parentEditing ? (
-              <Inline space="space.100" alignBlock="center">
-                <TextButton onClick={() => onOpenItem(parent.id)}>
-                  {parent.display_id}
-                </TextButton>
-                <Text size="small" color="color.text.subtlest">
-                  {parent.title}
-                </Text>
-              </Inline>
-            ) : (
+          {(workflowFields.reviewer ||
+            workflowFields.review_content ||
+            workflowFields.custom.length > 0) && <hr className="rdm-item-divider" />}
+
+          <div data-testid="item-section-metadata">
+            <div className="rdm-item-field">
+              <div className="rdm-item-section-label">类型 / 版本</div>
               <Text size="small" color="color.text.subtlest">
-                {allowedParentKinds.length === 0 ? "该类型不支持父项" : "无父项"}
+                {item.kind} · v{item.row_version}
               </Text>
-            )}
-            {allowedParentKinds.length > 0 && (
-              <Box paddingBlockStart="space.100">
-                {parentEditing ? (
-                  <Stack space="space.100">
-                    <WorkItemPicker
-                      projectKey={projectKey}
-                      allowedKinds={allowedParentKinds}
-                      excludeIds={[item.id, ...children.map((c) => c.id)]}
-                      value={parentOption}
-                      onChange={(option) => void reparent(option)}
-                      placeholder="选择父项"
-                      testId="item-parent-picker"
-                    />
-                    <TextButton onClick={() => setParentEditing(false)}>取消</TextButton>
-                  </Stack>
-                ) : permissions.can_edit ? (
-                  <Inline space="space.100">
-                    <TextButton
-                      data-testid="item-parent-change"
-                      onClick={() => setParentEditing(true)}
-                    >
-                      {parent ? "更改父项" : "设置父项"}
-                    </TextButton>
-                    {parent && (
-                      <TextButton danger onClick={() => void reparent(null)}>
-                        移出父项
-                      </TextButton>
-                    )}
-                  </Inline>
-                ) : null}
-              </Box>
-            )}
-          </div>
+            </div>
+            <div className="rdm-item-field">
+              <div className="rdm-item-section-label">创建时间</div>
+              <Text size="small" color="color.text.subtlest">
+                {formatDate(item.created_at)}
+              </Text>
+            </div>
 
-          <div className="rdm-item-field">
-            <div className="rdm-item-section-label">类型 / 版本</div>
-            <Text size="small" color="color.text.subtlest">
-              {item.kind} · v{item.row_version}
-            </Text>
+            <HistorySection itemId={item.id} refreshKey={refreshKey} />
           </div>
-          <div className="rdm-item-field">
-            <div className="rdm-item-section-label">创建时间</div>
-            <Text size="small" color="color.text.subtlest">
-              {formatDate(item.created_at)}
-            </Text>
-          </div>
-
-          <div className="rdm-item-field" data-testid="item-field-attachments">
-            <div className="rdm-item-section-label">附件</div>
-            <input
-              ref={attachFileInput}
-              type="file"
-              multiple
-              hidden
-              onChange={(e) => void uploadFiles(e.target.files, false)}
-            />
-            <Button
-              isLoading={uploading}
-              testId="item-attachment-upload"
-              onClick={() => attachFileInput.current?.click()}
-            >
-              上传附件
-            </Button>
-            {attachments.map((a) => (
-              <div key={a.id} className="rdm-item-att" data-testid={`item-attachment-${a.id}`}>
-                <TextButton onClick={() => api.download(a.download_url, a.filename)}>
-                  <span className="rdm-item-att-name">{a.filename}</span>
-                </TextButton>
-                <Text size="small" color="color.text.subtlest">
-                  {formatSize(a.size_bytes)}
-                </Text>
-                <TextButton danger onClick={() => removeAttachment(a.id)}>
-                  删除
-                </TextButton>
-              </div>
-            ))}
-          </div>
-
-          <div className="rdm-item-field" data-testid="item-field-artifacts">
-            <div className="rdm-item-section-label">产出物</div>
-            {artifacts.map((art) => (
-              <div key={art.id} className="rdm-item-att" data-testid={`item-artifact-${art.id}`}>
-                <Link href={art.url} target="_blank" testId={`item-artifact-link-${art.id}`}>
-                  {art.label}
-                </Link>
-                <Text size="small" color="color.text.subtlest">
-                  {art.kind}
-                </Text>
-                <TextButton danger onClick={() => removeArtifact(art.id)}>
-                  删除
-                </TextButton>
-              </div>
-            ))}
-            <Button testId="item-artifact-add" onClick={() => setShowArtifact(true)}>
-              挂产出物
-            </Button>
-          </div>
-
-          <HistorySection itemId={item.id} refreshKey={refreshKey} />
         </section>
       </div>
-
-      <footer className="rdm-item-comment-bar" data-testid="item-comment-bar">
-        {replyTo && (
-          <div className="rdm-item-comment-reply-chip">
-            <Text size="small" color="color.text.subtlest">
-              回复 {replyTo.author.name ?? replyTo.author.id}
-            </Text>
-            <TextButton onClick={() => setReplyTo(null)}>取消</TextButton>
-          </div>
-        )}
-        <MarkdownEditor
-          value={draft}
-          onChange={setDraft}
-          projectKey={projectKey}
-          minimumRows={2}
-          placeholder="写评论；@成员名 会给对方发站内信"
-          testId="item-comment"
-          onSubmit={() => void postComment()}
-          onImageClick={setPreview}
-          onUploadingChange={setUploadingDraftImage}
-          isDisabled={savingComment}
-        />
-        {pendingFiles.length > 0 && (
-          <Inline space="space.100" shouldWrap>
-            {pendingFiles.map((f) => (
-              <Text key={f.id} size="small" color="color.text.subtlest">
-                📎 {f.name}
-              </Text>
-            ))}
-          </Inline>
-        )}
-        <div className="rdm-item-comment-actions">
-          <input
-            ref={commentFileInput}
-            type="file"
-            multiple
-            hidden
-            onChange={(e) => void uploadFiles(e.target.files, true)}
-          />
-          <Button testId="item-comment-attach" onClick={() => commentFileInput.current?.click()}>
-            添加附件
-          </Button>
-          <Button
-            appearance="primary"
-            isLoading={savingComment}
-            isDisabled={uploadingDraftImage}
-            testId="item-comment-submit"
-            onClick={() => void postComment()}
-          >
-            提交评论
-          </Button>
-        </div>
-      </footer>
 
       <StepStartDialog
         open={stepStart !== null}
@@ -1273,6 +1404,17 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         onConfirm={() => void deleteComment()}
       >
         删除后不可恢复，确认删除这条评论？
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={commentCancelConfirm}
+        title="放弃评论"
+        confirmLabel="放弃"
+        testId="comment-cancel-dialog"
+        danger
+        onClose={() => setCommentCancelConfirm(false)}
+        onConfirm={discardComment}
+      >
+        当前评论内容尚未提交，确认放弃？
       </ConfirmDialog>
     </aside>
   );

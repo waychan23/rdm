@@ -11,6 +11,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from rdm.domain.constants import DEFAULT_PRIORITY, PRIORITY_MAX, PRIORITY_MIN
+
 Kind = Literal["epic", "story", "issue", "task"]
 Severity = Literal["blocker", "critical", "major", "minor", "trivial"]
 
@@ -24,7 +26,7 @@ class WorkItemCreateIn(_Strict):
     title: str = Field(min_length=1, max_length=300)
     parent: str | None = None
     description_md: str | None = None
-    priority: int = Field(default=0, ge=0, le=999)
+    priority: int = Field(default=DEFAULT_PRIORITY, ge=PRIORITY_MIN, le=PRIORITY_MAX)
     assignee: str | None = None
     # M6 people/optional fields (enabled per workflow; validated in the service)
     participants: list[str] | None = None
@@ -51,7 +53,7 @@ class WorkItemUpdateIn(_Strict):
     row_version: int
     title: str | None = Field(default=None, min_length=1, max_length=300)
     description_md: str | None = None
-    priority: int | None = Field(default=None, ge=0, le=999)
+    priority: int | None = Field(default=None, ge=PRIORITY_MIN, le=PRIORITY_MAX)
     participants: list[str] | None = None
     reviewer: list[str] | None = None
     review_content_md: str | None = None

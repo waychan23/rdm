@@ -11,12 +11,13 @@ import ModalDialog, {
 import { Inline, Stack } from "@atlaskit/primitives/compiled";
 
 import FormField from "../../components/FormField";
-import TextButton from "../../components/TextButton";
+import PersonCell from "../../components/PersonCell";
 import WorkItemPicker, { type WorkItemOption } from "../../components/WorkItemPicker";
 import { api, errorCause } from "../../lib/api";
 import { useNotify } from "../../lib/flags";
 import type { WorkItem } from "../../types";
 import CreateWorkItemDialog from "../../workitems/CreateWorkItemDialog";
+import StatusLozenge from "../../workitems/status";
 
 function toWorkItemOption(item: WorkItem): WorkItemOption {
   return {
@@ -141,7 +142,6 @@ export default function ChildrenSection({
   onOpen,
   onChanged,
 }: ChildrenSectionProps) {
-  const notify = useNotify();
   const [showCreate, setShowCreate] = useState(false);
   const [showLink, setShowLink] = useState(false);
   const parentOption = useMemo(() => toWorkItemOption(parent), [parent]);
@@ -149,19 +149,6 @@ export default function ChildrenSection({
     () => [parent.id, ...children.map((child) => child.id)],
     [parent.id, children],
   );
-
-  const removeChild = async (child: WorkItem) => {
-    try {
-      await api.post(`/work-items/${child.display_id}/reparent`, {
-        parent: null,
-        row_version: child.row_version,
-      });
-      notify.success(`已解除 ${child.display_id} 的父子关系`);
-      onChanged();
-    } catch (e) {
-      notify.error("解除失败", errorCause(e)?.message);
-    }
-  };
 
   const disabled = allowedKinds.length === 0;
 
@@ -212,17 +199,11 @@ export default function ChildrenSection({
             >
               <span className="rdm-item-child-id">{child.display_id}</span>
               <span className="rdm-item-child-title">{child.title}</span>
-              <span className="rdm-item-child-actions">
-                <TextButton
-                  danger
-                  data-testid={`item-child-detach-${child.display_id}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void removeChild(child);
-                  }}
-                >
-                  解除
-                </TextButton>
+              <span className="rdm-item-child-status">
+                <StatusLozenge status={child.status} />
+              </span>
+              <span className="rdm-item-child-assignee">
+                <PersonCell name={child.assignee?.name} />
               </span>
             </span>
           </div>

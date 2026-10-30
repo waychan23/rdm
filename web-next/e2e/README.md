@@ -55,6 +55,8 @@ e2e/
     08-board-drag.spec.ts
     09-reassign-step.spec.ts
     10-dismiss-drawer.spec.ts
+    11-reparent.spec.ts
+    12-drawer-layout.spec.ts
 ```
 
 - **认证**：global setup 走完整 OAuth（`/authorize` → login ticket →
@@ -81,6 +83,8 @@ e2e/
 | 08-board-drag | 看板只允许「单一步骤 + direct + 备注可选 + 无 gate」的拖拽；审批步骤拒绝并提示进详情 |
 | 09-reassign-step | 只有负责人可改派、PENDING 才可改派、被移出的执行人失去执行权、新执行人可完成步骤 |
 | 10-dismiss-drawer | 点击详情背板空白处关闭面板；列表行等交互元素仍可切换工作项、不误关闭；开关面板不出现列表/看板 loading 闪烁，关闭后恢复列表滚动位置 |
+| 11-reparent | 在需求详情抽屉内把 story 从一个 epic 移到另一个 epic；子树跟随、两侧 epic 子项列表与历史记录正确 |
+| 12-drawer-layout | 左右栏主题 divider；父项置顶（不支持时整段隐藏）；优先级在状态前+等高色块（1 紧急红/2 高黄/3 中蓝/4 低灰，无未设置）；任务类型只显值并与标题居中；子项状态/负责人且无解除；附件/产出物在左栏；评论编辑器默认隐藏、添加/取消（有内容需确认）/提交后收起；label 蓝色竖线 + gate 必填红星；metadata 在历史之上；图片高度 ≤ 面板 1/3 且保持比例 |
 
 ## 新增 spec
 

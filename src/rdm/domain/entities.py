@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
+from rdm.domain.constants import DEFAULT_PRIORITY
 from rdm.domain.enums import (
     ProjectStatus,
     Severity,
@@ -240,7 +241,7 @@ class WorkItem:
     title: str
     parent_id: str | None = None
     description_md: str | None = None
-    priority: int = 0
+    priority: int = DEFAULT_PRIORITY
     rank: int = 0
     assignee_user_id: str | None = None
     row_version: int = 0

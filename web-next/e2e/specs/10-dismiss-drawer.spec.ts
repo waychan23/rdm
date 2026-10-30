@@ -1,6 +1,5 @@
 import type { Page } from "@playwright/test";
 
-import type { Api } from "../support/api";
 import { expect, test } from "../support/fixtures";
 
 test.describe("work item drawer dismissal", () => {
@@ -11,7 +10,7 @@ test.describe("work item drawer dismissal", () => {
   }) => {
     // Isolated project: the shared WFE2E list accumulates items across specs
     // and would push this test's rows off page 1.
-    const projectKey = await isolatedProject(api);
+    const projectKey = await api.createSandboxProject();
     const first = await api.createItemIn(projectKey, {
       kind: "task",
       title: `dismiss-a-${Date.now()}`,
@@ -57,7 +56,7 @@ test.describe("work item drawer dismissal", () => {
   });
 
   test("the board keeps its cards across open and close", async ({ api, app, page }) => {
-    const projectKey = await isolatedProject(api);
+    const projectKey = await api.createSandboxProject();
     const item = await api.createItemIn(projectKey, {
       kind: "task",
       title: `dismiss-board-${Date.now()}`,
@@ -91,7 +90,7 @@ test.describe("scroll restoration", () => {
     app,
     page,
   }) => {
-    const projectKey = await isolatedProject(api);
+    const projectKey = await api.createSandboxProject();
     for (let index = 0; index < 10; index += 1) {
       await api.createItemIn(projectKey, {
         kind: "task",
@@ -120,17 +119,6 @@ test.describe("scroll restoration", () => {
     await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBe(before);
   });
 });
-
-/** Fresh project per test (2–12 uppercase alphanumerics). */
-async function isolatedProject(api: Api): Promise<string> {
-  const suffix = `${Date.now().toString(36)}${Math.floor(Math.random() * 36).toString(36)}`
-    .toUpperCase()
-    .slice(-9);
-  const key = `D${suffix}`;
-  await api.createProject(key, "Drawer E2E");
-  await api.addMember(key, "alice");
-  return key;
-}
 
 /** Record whether the list/board loading node is ever mounted from now on. */
 async function watchLoading(page: Page, loadingTestId: string) {

@@ -56,6 +56,8 @@ export interface ItemDetail {
   meta: {
     available_steps?: StepDef[];
     active_step?: { id: string; name: string; status: string; executors: unknown[] } | null;
+    parent?: Item | null;
+    children?: Item[];
   };
 }
 
@@ -63,6 +65,7 @@ export interface CreateItemSeed {
   kind: "epic" | "story" | "issue" | "task";
   title: string;
   task_type?: string;
+  priority?: number;
   parent?: string;
   assignee?: UserName;
   participants?: UserName[];
@@ -203,6 +206,17 @@ export class Api {
     });
   }
 
+  /** Fresh project for specs that must not see rows accumulated by others. */
+  async createSandboxProject(members: UserName[] = ["alice"]): Promise<string> {
+    const suffix = `${Date.now().toString(36)}${Math.floor(Math.random() * 36).toString(36)}`
+      .toUpperCase()
+      .slice(-9);
+    const key = `D${suffix}`;
+    await this.createProject(key, "E2E Sandbox");
+    for (const member of members) await this.addMember(key, member);
+    return key;
+  }
+
   async createItem(seed: CreateItemSeed, actor: UserName = "owner"): Promise<Item> {
     return this.createItemIn(this.ctx.projectKey, seed, actor);
   }
@@ -217,6 +231,7 @@ export class Api {
       title: seed.title,
     };
     if (seed.task_type) payload.task_type = seed.task_type;
+    if (seed.priority !== undefined) payload.priority = seed.priority;
     if (seed.parent) payload.parent = seed.parent;
     if (seed.assignee) payload.assignee = this.userId(seed.assignee);
     if (seed.participants?.length) {

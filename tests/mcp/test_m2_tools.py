@@ -375,3 +375,29 @@ async def test_project_inline_images_and_signed_fetch_url(server, mcp_clients) -
 
         r = await rest.get(parsed.path + "?exp=9999999999&sig=bad")
         assert r.status_code == 401
+
+
+async def test_backlog_orders_by_priority(server, mcp_clients) -> None:
+    rest, _settings, _app = server
+    owner = mcp_clients["owner_token"]
+    async with mcp_clients["client_for"](owner) as owner_client:
+        await _project(rest, owner, key="PRI")
+        for priority in (4, 1, 3, 2):
+            created = await call(
+                owner_client,
+                "work_item_create",
+                {
+                    "kind": "task",
+                    "title": f"p{priority}",
+                    "project": "PRI",
+                    "priority": priority,
+                    "assignee": "me",
+                },
+            )
+            assert not created["_is_error"], created
+
+        backlog = await call(owner_client, "backlog_list", {"project": "PRI"})
+        assert [item["priority"] for item in backlog["data"]] == [1, 2, 3, 4]
+
+        mine = await call(owner_client, "my_work_list", {"project": "PRI"})
+        assert [item["priority"] for item in mine["data"]] == [1, 2, 3, 4]

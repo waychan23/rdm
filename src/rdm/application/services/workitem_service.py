@@ -20,6 +20,7 @@ from typing import Any
 from rdm.application import security
 from rdm.application.services.attachment_commit import commit_inline_images
 from rdm.domain.actor import Actor
+from rdm.domain.constants import DEFAULT_PRIORITY, PRIORITY_MAX, PRIORITY_MIN
 from rdm.domain.entities import (
     IssueFields,
     KindFields,
@@ -72,6 +73,26 @@ OPTIONAL_FIELDS = {"participants", "reviewer", "review_content_md", "custom_fiel
 _CREATE_ONLY = {"kind", "parent", "assignee"}
 
 VALID_KINDS = {"epic", "story", "issue", "task"}
+PRIORITY_VALUES = list(range(PRIORITY_MIN, PRIORITY_MAX + 1))
+
+
+def _priority_value(value: Any) -> int:
+    """Priority is mandatory: 1=urgent, 2=high, 3=medium, 4=low."""
+    try:
+        priority = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError(
+            "priority 必须是 1（紧急）到 4（低）的整数",
+            details={"field": "priority", "allowed": PRIORITY_VALUES},
+        ) from exc
+    if priority not in PRIORITY_VALUES:
+        raise ValidationError(
+            "priority 必须是 1（紧急）到 4（低）；不再支持未设置",
+            details={"field": "priority", "allowed": PRIORITY_VALUES},
+        )
+    return priority
+
+
 _ALLOWED_PARENT: dict[str, set[str]] = {
     "epic": set(),
     "story": {"epic"},
@@ -382,7 +403,7 @@ class WorkItemService:
             if i.id not in in_sprint
             and not engine.is_terminal(i.kind, i.status, task_type=item_task_type(i))
         ]
-        items.sort(key=lambda i: (-i.priority, i.display_no))
+        items.sort(key=lambda i: (i.priority, i.display_no))
         return project, items
 
     async def my_items(
@@ -407,13 +428,16 @@ class WorkItemService:
                 )
             )
         if status is not None:
+            items.sort(key=lambda i: (i.priority, i.display_no))
             return items
         engine = load_engine()
-        return [
+        items = [
             i
             for i in items
             if not engine.is_terminal(i.kind, i.status, task_type=item_task_type(i))
         ]
+        items.sort(key=lambda i: (i.priority, i.display_no))
+        return items
 
     async def my_open_items(self, actor: Actor) -> list[WorkItem]:
         assert self.uow.work_items is not None
@@ -641,7 +665,7 @@ class WorkItemService:
             title=title,
             parent_id=parent.id if parent else None,
             description_md=data.get("description_md"),
-            priority=int(data.get("priority", 0) or 0),
+            priority=_priority_value(data.get("priority", DEFAULT_PRIORITY)),
             assignee_user_id=assignee.id if assignee else None,
             fields=fields,
             participant_user_ids=participant_ids,
@@ -722,7 +746,7 @@ class WorkItemService:
                 if not new:
                     raise ValidationError("title 不能为空", details={"field": "title"})
             if key == "priority":
-                new = int(new or 0)
+                new = _priority_value(new)
             if old != new:
                 setattr(item, key, new)
                 changes[key] = [old, new]

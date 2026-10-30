@@ -39,15 +39,26 @@ function stopInteractiveClick(event: MouseEvent<HTMLDivElement>) {
 function FieldShell({
   label,
   testId,
+  required,
   children,
 }: {
   label?: ReactNode;
   testId: string;
+  required?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className="rdm-inline-field" data-testid={testId}>
-      {label ? <div className="rdm-item-section-label">{label}</div> : null}
+      {label ? (
+        <div className="rdm-item-section-label">
+          {label}
+          {required ? (
+            <span className="rdm-required-mark" title="必填" aria-hidden="true">
+              *
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {children}
     </div>
   );
@@ -147,6 +158,7 @@ function useInlineSave<T>(
 interface InlineMarkdownFieldProps {
   testId: string;
   label?: ReactNode;
+  required?: boolean;
   value: string | null | undefined;
   canEdit: boolean;
   projectKey: string;
@@ -162,6 +174,7 @@ interface InlineMarkdownFieldProps {
 export function InlineMarkdownField({
   testId,
   label,
+  required,
   value,
   canEdit,
   projectKey,
@@ -193,7 +206,7 @@ export function InlineMarkdownField({
   );
 
   return (
-    <FieldShell label={label} testId={testId}>
+    <FieldShell label={label} testId={testId} required={required}>
       {canEdit ? (
         <InlineEdit<string>
           testId={testId}
@@ -242,6 +255,7 @@ export function InlineMarkdownField({
 interface InlineTextFieldProps {
   testId: string;
   label?: ReactNode;
+  required?: boolean;
   value: string;
   canEdit: boolean;
   emptyText?: string;
@@ -258,6 +272,7 @@ interface InlineTextFieldProps {
 export function InlineTextField({
   testId,
   label,
+  required,
   value,
   canEdit,
   emptyText = "未填写",
@@ -298,7 +313,7 @@ export function InlineTextField({
   };
 
   return (
-    <FieldShell label={label} testId={testId}>
+    <FieldShell label={label} testId={testId} required={required}>
       {canEdit ? (
         <InlineEdit<string>
           testId={testId}
@@ -346,6 +361,7 @@ export function InlineTextField({
 interface InlineMemberFieldProps {
   testId: string;
   label?: ReactNode;
+  required?: boolean;
   canEdit: boolean;
   multiple: boolean;
   ids: string[];
@@ -359,6 +375,7 @@ interface InlineMemberFieldProps {
 export function InlineMemberField({
   testId,
   label,
+  required,
   canEdit,
   multiple,
   ids,
@@ -389,7 +406,7 @@ export function InlineMemberField({
   );
 
   return (
-    <FieldShell label={label} testId={testId}>
+    <FieldShell label={label} testId={testId} required={required}>
       {canEdit ? (
         <InlineEdit<string[]>
           testId={testId}
@@ -462,6 +479,7 @@ export function InlineMemberField({
 interface InlineChoiceFieldProps {
   testId: string;
   label?: ReactNode;
+  required?: boolean;
   canEdit: boolean;
   value: string;
   options: { label: string; value: string }[];
@@ -472,6 +490,7 @@ interface InlineChoiceFieldProps {
 export function InlineChoiceField({
   testId,
   label,
+  required,
   canEdit,
   value,
   options,
@@ -489,7 +508,7 @@ export function InlineChoiceField({
   );
 
   return (
-    <FieldShell label={label} testId={testId}>
+    <FieldShell label={label} testId={testId} required={required}>
       {canEdit ? (
         <InlineEdit<string>
           testId={testId}

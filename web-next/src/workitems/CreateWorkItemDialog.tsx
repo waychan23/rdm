@@ -24,6 +24,7 @@ import type { WorkflowDto, WorkflowFields, WorkItem } from "../types";
 import { KIND_OPTIONS, TASK_TYPE_OPTIONS } from "./constants";
 import KindSpecificFields, { type IssueFields, type TaskFields } from "./KindSpecificFields";
 import { allowedParentKinds } from "./parentRules";
+import { DEFAULT_PRIORITY, PRIORITY_OPTIONS } from "./priority";
 import WorkItemPeopleFields, {
   emptyOptionalValues,
   type OptionalFieldValues,
@@ -78,7 +79,7 @@ export default function CreateWorkItemDialog({
   const [kind, setKind] = useState(allowedKinds?.[0] ?? "task");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState(0);
+  const [priority, setPriority] = useState(DEFAULT_PRIORITY);
   const [parent, setParent] = useState<WorkItemOption | null>(initialParent);
   const [acceptance, setAcceptance] = useState("");
   const [issue, setIssue] = useState<IssueFields>({
@@ -119,7 +120,7 @@ export default function CreateWorkItemDialog({
     setKind(allowedKinds?.[0] ?? "task");
     setTitle("");
     setDescription("");
-    setPriority(0);
+    setPriority(DEFAULT_PRIORITY);
     setParent(initialParent);
     setAcceptance("");
     setIssue({
@@ -276,15 +277,16 @@ export default function CreateWorkItemDialog({
                 />
               </FormField>
               <FormField label="优先级" htmlFor="wi-priority">
-                <Textfield
-                  id="wi-priority"
-                  type="number"
-                  min={0}
-                  max={999}
-                  width={120}
-                  value={priority}
+                <Select
+                  {...portalMenuProps}
+                  inputId="wi-priority"
+                  options={PRIORITY_OPTIONS}
+                  value={PRIORITY_OPTIONS.find((option) => option.value === priority) ?? null}
+                  isClearable={false}
                   testId="work-item-create-priority"
-                  onChange={(e) => setPriority(Number(e.currentTarget.value))}
+                  onChange={(option) =>
+                    option && setPriority((option as { value: number }).value)
+                  }
                 />
               </FormField>
               {parentKinds.length > 0 && (
