@@ -16,6 +16,7 @@ from rdm.infrastructure.db.models.mailbox import (
     MessageRefModel,
 )
 from rdm.infrastructure.db.models.membership import ProjectMemberModel
+from rdm.infrastructure.db.models.notification import NotificationModel
 from rdm.infrastructure.db.models.oauth import (
     OAuthAuthorizationCodeModel,
     OAuthClientModel,
@@ -49,6 +50,7 @@ __all__ = [
     "PasswordTicketModel",
     "ProjectModel",
     "ProjectMemberModel",
+    "NotificationModel",
     "WorkItemModel",
     "WorkItemStoryModel",
     "WorkItemIssueModel",

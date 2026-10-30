@@ -78,7 +78,34 @@ export default function PersonalSettingsPage() {
      async () => (await api.get<OrgUser[]>("/me/agents")).data,
      [nonce],
   );
-  const loadError = tokensError ?? agentsError;
+  const prefsState = useAsync<Record<string, boolean>>(
+     async () =>
+       (await api.get<{ prefs: Record<string, boolean> }>("/me/notification-prefs")).data.prefs,
+     [nonce],
+  );
+  const [prefs, setPrefs] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+     if (prefsState.data) setPrefs(prefsState.data);
+  }, [prefsState.data]);
+  const loadError = tokensError ?? agentsError ?? prefsState.error;
+
+  const togglePref = async (type: string, enabled: boolean) => {
+     setPrefs((prev) => ({ ...prev, [type]: enabled }));
+     try {
+       await api.patch("/me/notification-prefs", { prefs: { [type]: enabled } });
+     } catch (e) {
+       setPrefs((prev) => ({ ...prev, [type]: !enabled }));
+       notify.error("保存通知设置失败", errorCause(e)?.message);
+     }
+  };
+
+  const NOTIFICATION_LABELS: Array<[string, string]> = [
+     ["assignment", "工作项指派"],
+     ["step", "步骤分配/审批"],
+     ["comment", "评论"],
+     ["mention", "被 @ 提到"],
+     ["system", "系统通知"],
+  ];
 
   // --- password ---
   const [oldPw, setOldPw] = useState("");
@@ -260,6 +287,26 @@ export default function PersonalSettingsPage() {
            <Text size="small" color="color.text.subtlest">
              修改后浏览器会话需要重新登录；已签发的访问令牌（PAT）不受影响。
            </Text>
+         </Stack>
+       </Box>
+
+       <Box testId="personal-notification-section">
+         <Stack space="space.150">
+           <Heading size="small">通知设置</Heading>
+           <Text size="small" color="color.text.subtle">
+             控制站内通知；关闭后仍可在收件箱查看历史。
+           </Text>
+           <Inline space="space.200" shouldWrap>
+             {NOTIFICATION_LABELS.map(([type, label]) => (
+               <Checkbox
+                 key={type}
+                 label={label}
+                 isChecked={prefs[type] ?? true}
+                 testId={`personal-notification-${type}`}
+                 onChange={(e) => void togglePref(type, e.currentTarget.checked)}
+               />
+             ))}
+           </Inline>
          </Stack>
        </Box>
 

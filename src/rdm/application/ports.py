@@ -23,6 +23,7 @@ from rdm.domain.entities import (
     Message,
     MessageDelivery,
     MessageRef,
+    Notification,
     OAuthAuthorizationCode,
     OAuthClient,
     OAuthConsent,
@@ -56,6 +57,7 @@ MailboxMemberList = list[MailboxMember]
 MessageList = list[Message]
 DeliveryList = list[MessageDelivery]
 MessageRefList = list[MessageRef]
+NotificationList = list[Notification]
 AttachmentList = list[Attachment]
 ArtifactList = list[Artifact]
 WorkspaceList = list[Workspace]
@@ -537,6 +539,44 @@ class EventStore(Protocol):
     ) -> list[EventRecord]: ...
 
 
+class NotificationRepository(Protocol):
+    async def add(self, notification: Notification) -> None: ...
+
+    async def list_for_user(
+        self,
+        recipient_user_id: str,
+        *,
+        unread_only: bool = False,
+        project_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> NotificationList: ...
+
+    async def count_for_user(
+        self,
+        recipient_user_id: str,
+        *,
+        unread_only: bool = False,
+        project_id: str | None = None,
+    ) -> int: ...
+
+    async def unread_count(
+        self, recipient_user_id: str, *, project_id: str | None = None
+    ) -> int: ...
+
+    async def mark_read(
+        self, recipient_user_id: str, ids: list[str], when: dt.datetime
+    ) -> int: ...
+
+    async def mark_all_read(
+        self,
+        recipient_user_id: str,
+        when: dt.datetime,
+        *,
+        project_id: str | None = None,
+    ) -> int: ...
+
+
 class UnitOfWork(Protocol):
     organizations: OrganizationRepository
     projects: ProjectRepository
@@ -558,6 +598,7 @@ class UnitOfWork(Protocol):
     artifacts: ArtifactRepository
     workspaces: WorkspaceRepository
     outboxes: OutboxRepository
+    notifications: NotificationRepository
     events: EventStore
 
     async def __aenter__(self) -> UnitOfWork: ...

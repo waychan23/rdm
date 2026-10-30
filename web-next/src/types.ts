@@ -304,5 +304,21 @@ export interface Whoami {
   projects: Project[];
   default_project: Project | null;
   unread_count: number;
+  notification_unread_count: number;
   my_open_items: number;
+}
+
+export interface Notification {
+  id: string;
+  recipient_user_id: string;
+  type: "assignment" | "step" | "comment" | "mention" | "system" | string;
+  title: string;
+  body?: string | null;
+  project_id?: string | null;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  entity_ref?: string | null;
+  url?: string | null;
+  read_at?: string | null;
+  created_at: string;
 }

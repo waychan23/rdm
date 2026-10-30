@@ -11,6 +11,7 @@ from rdm.domain.entities import (
     Artifact,
     Attachment,
     Comment,
+    Notification,
     Project,
     ProjectMember,
     Sprint,
@@ -287,4 +288,21 @@ def sprint_out(s: Sprint) -> dict:
         "end_date": _iso(s.end_date),
         "manager_user_id": s.manager_user_id,
         "created_at": _iso(s.created_at),
+    }
+
+
+def notification_out(n: Notification) -> dict:
+    return {
+        "id": n.id,
+        "recipient_user_id": n.recipient_user_id,
+        "type": n.type,
+        "title": n.title,
+        "body": n.body,
+        "project_id": n.project_id,
+        "entity_type": n.entity_type,
+        "entity_id": n.entity_id,
+        "entity_ref": n.entity_ref,
+        "url": n.url,
+        "read_at": _iso(n.read_at),
+        "created_at": _iso(n.created_at),
     }

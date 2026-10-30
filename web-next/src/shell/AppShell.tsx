@@ -6,6 +6,7 @@ import IconButton from "@atlaskit/button/icon/button";
 import Badge from "@atlaskit/badge";
 import { Box, Inline, Text } from "@atlaskit/primitives/compiled";
 import NotificationIcon from "@atlaskit/icon/core/notification";
+import InboxIcon from "@atlaskit/icon/core/inbox";
 import GridIcon from "@atlaskit/icon/core/grid";
 import BoardIcon from "@atlaskit/icon/core/board";
 import BacklogIcon from "@atlaskit/icon/core/backlog";
@@ -118,6 +119,7 @@ export default function AppShell() {
   const unreadCount = projectKey
     ? (who?.projects.find((p) => p.key === projectKey)?.unread_count ?? 0)
     : (who?.unread_count ?? 0);
+  const notificationUnread = who?.notification_unread_count ?? 0;
 
   const onLogout = async () => {
     const returnTo = safePostLoginPath(location.pathname + location.search);
@@ -149,6 +151,20 @@ export default function AppShell() {
           )}
         </Inline>
         <Inline space="space.150" alignBlock="center">
+          <Box xcss={styles.bellWrapper}>
+            <IconButton
+              icon={(iconProps) => <InboxIcon {...iconProps} spacing="spacious" />}
+              label="通知"
+              appearance="subtle"
+              testId="topbar-inbox"
+              onClick={() => navigate("/inbox")}
+            />
+            {notificationUnread > 0 ? (
+              <Box xcss={styles.bellBadge}>
+                <Badge appearance="danger">{notificationUnread}</Badge>
+              </Box>
+            ) : null}
+          </Box>
           <Box xcss={styles.bellWrapper}>
             <IconButton
               icon={(iconProps) => <NotificationIcon {...iconProps} spacing="spacious" />}
@@ -188,6 +204,7 @@ export default function AppShell() {
         <nav className="rdm-rail" aria-label="主导航" data-testid="app-sidebar">
           <div className="rdm-rail-group" data-testid="rail-group-org">
             <RailItem to="/projects" label="项目" testId="projects" icon={GridIcon} end />
+            <RailItem to="/inbox" label="收件箱" testId="inbox" icon={InboxIcon} />
             {(who?.org_roles.includes("org_owner") ||
               who?.org_roles.includes("user_manager")) && (
               <RailItem to="/org/users" label="用户" testId="org-users" icon={PeopleIcon} />

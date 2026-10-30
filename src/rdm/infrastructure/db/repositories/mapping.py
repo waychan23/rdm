@@ -14,6 +14,7 @@ from rdm.domain.entities import (
     Message,
     MessageDelivery,
     MessageRef,
+    Notification,
     OAuthAuthorizationCode,
     OAuthClient,
     OAuthConsent,
@@ -44,6 +45,7 @@ from rdm.infrastructure.db.models import (
     MessageDeliveryModel,
     MessageModel,
     MessageRefModel,
+    NotificationModel,
     OAuthAuthorizationCodeModel,
     OAuthClientModel,
     OAuthConsentModel,
@@ -107,6 +109,7 @@ def user_to_domain(row: UserModel) -> User:
         email=row.email,
         notify_webhook=row.notify_webhook,
         notify_webhook_format=row.notify_webhook_format,
+        notification_prefs=dict(row.notification_prefs or {}),
         password_hash=row.password_hash,
         must_reset_password=bool(row.must_reset_password),
         is_active=row.is_active,
@@ -501,4 +504,23 @@ def step_executor_to_domain(row: WorkItemStepExecutorModel) -> WorkItemStepExecu
         created_by=row.created_by,
         updated_at=row.updated_at,
         completed_at=row.completed_at,
+    )
+
+
+def notification_to_domain(row: NotificationModel) -> Notification:
+    return Notification(
+        id=row.id,
+        org_id=row.org_id,
+        recipient_user_id=row.recipient_user_id,
+        type=row.type,
+        title=row.title,
+        body=row.body,
+        project_id=row.project_id,
+        entity_type=row.entity_type,
+        entity_id=row.entity_id,
+        entity_ref=row.entity_ref,
+        url=row.url,
+        read_at=row.read_at,
+        created_at=row.created_at,
+        created_by=row.created_by,
     )

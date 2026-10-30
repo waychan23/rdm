@@ -14,6 +14,7 @@ const AuthCallbackPage = lazy(() => import("./pages/AuthCallbackPage"));
 const SetPasswordPage = lazy(() => import("./pages/SetPasswordPage"));
 const ConsentPage = lazy(() => import("./pages/ConsentPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
+const InboxPage = lazy(() => import("./pages/InboxPage"));
 const OverviewPage = lazy(() => import("./pages/OverviewPage"));
 const BoardPage = lazy(() => import("./pages/BoardPage"));
 const BacklogPage = lazy(() => import("./pages/BacklogPage"));
@@ -71,6 +72,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/projects" replace /> },
       { path: "projects", Component: () => withSuspense(<ProjectsPage />) },
+      { path: "inbox", Component: () => withSuspense(<InboxPage />) },
       { path: "projects/:key", Component: () => withSuspense(<OverviewPage />) },
       { path: "projects/:key/board", Component: () => withSuspense(<BoardPage />) },
       { path: "projects/:key/backlog", Component: () => withSuspense(<BacklogPage />) },

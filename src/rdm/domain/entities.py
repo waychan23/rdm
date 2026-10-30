@@ -78,6 +78,8 @@ class User:
     email: str | None = None
     notify_webhook: str | None = None
     notify_webhook_format: str = "generic"
+    # Per-type in-app notification switches; missing keys default to enabled.
+    notification_prefs: dict[str, bool] = field(default_factory=dict)
     # argon2id hash for console login; always None for agents (§16.55/§17).
     password_hash: str | None = None
     # Set on creation and after an admin reset; cleared by set-password.
@@ -562,6 +564,30 @@ class OAuthLoginTicket:
         if expires.tzinfo is None:
             expires = expires.replace(tzinfo=dt.UTC)
         return expires <= _utcnow()
+
+
+@dataclass(kw_only=True)
+class Notification:
+    """An in-app system notification for one identity (§17 M7).
+
+    Separate from mailbox: mailbox is human-to-human mail, notifications are
+    derived from domain events (assignment, step lifecycle, comments).
+    """
+
+    id: str
+    org_id: str
+    recipient_user_id: str
+    type: str  # assignment | step | comment | mention | system
+    title: str
+    body: str | None = None
+    project_id: str | None = None
+    entity_type: str | None = None
+    entity_id: str | None = None
+    entity_ref: str | None = None
+    url: str | None = None
+    read_at: dt.datetime | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
 
 
 @dataclass(kw_only=True)

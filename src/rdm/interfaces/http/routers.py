@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from rdm import __version__
 from rdm.application.services.membership_service import MembershipService
+from rdm.application.services.notification_service import NotificationService
 from rdm.application.services.project_service import ProjectService
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.actor import Actor
@@ -44,6 +45,7 @@ async def whoami(
             for p in projects
         }
         my_open = await WorkItemService(uow).my_open_items(actor)
+        notification_unread = await NotificationService(uow).unread_count(actor)
         memberships = {pid: actor.membership(pid) for pid in actor.project_ids()}
     return {
         "data": {
@@ -70,6 +72,7 @@ async def whoami(
             ],
             "default_project": project_out(default) if default else None,
             "unread_count": unread,
+            "notification_unread_count": notification_unread,
             "my_open_items": len(my_open),
         }
     }

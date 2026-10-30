@@ -27,6 +27,7 @@ from rdm.infrastructure.db.repositories.mailbox import (
     MessageRepository,
 )
 from rdm.infrastructure.db.repositories.membership import MembershipRepository
+from rdm.infrastructure.db.repositories.notification import NotificationRepository
 from rdm.infrastructure.db.repositories.oauth import (
     AuthorizationCodeRepository,
     ConsentRepository,
@@ -94,6 +95,7 @@ class SqlAlchemyUnitOfWork:
         self.artifacts: ArtifactRepository | None = None
         self.workspaces: WorkspaceRepository | None = None
         self.outboxes: OutboxRepository | None = None
+        self.notifications: NotificationRepository | None = None
         self.events: EventStore | None = None
 
     async def __aenter__(self) -> SqlAlchemyUnitOfWork:
@@ -126,6 +128,7 @@ class SqlAlchemyUnitOfWork:
             self.artifacts = ArtifactRepository(self.session)
             self.workspaces = WorkspaceRepository(self.session)
             self.outboxes = OutboxRepository(self.session)
+            self.notifications = NotificationRepository(self.session)
             self.events = EventStore(self.session)
         except BaseException:
             self._write_lock.release()

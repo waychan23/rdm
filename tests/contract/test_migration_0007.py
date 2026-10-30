@@ -24,7 +24,7 @@ def test_0007_rebuilds_empty_database(tmp_path: Path) -> None:
     tables = set(inspect(create_engine(f"sqlite:///{db_path}")).get_table_names())
     assert {"organization", "users", "user_token", "project_member"} <= tables
     assert "member_token" not in tables
-    assert len(tables - {"alembic_version"}) == 31
+    assert len(tables - {"alembic_version"}) == 32
 
 
 def test_0007_refuses_populated_legacy_database(tmp_path: Path) -> None:

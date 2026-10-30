@@ -20,6 +20,7 @@ from typing import Any
 
 from rdm.application import security
 from rdm.application.services.attachment_commit import commit_inline_images
+from rdm.application.services.notification_service import NotificationService
 from rdm.domain.actor import Actor
 from rdm.domain.constants import DEFAULT_PRIORITY, PRIORITY_MAX, PRIORITY_MIN
 from rdm.domain.entities import (
@@ -976,6 +977,9 @@ class WorkItemService:
             project.id, item, EventType.WORK_ITEM_ASSIGNED, payload, actor=actor
         )
         await self._notify(project, item, event_id, "work_item.assigned", actor, target)
+        await NotificationService(self.uow).notify_assignment(
+            project, item, target, actor, display_id
+        )
         return project, item
 
     async def transition(
