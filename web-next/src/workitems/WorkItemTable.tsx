@@ -1,4 +1,7 @@
 import Pagination from "@atlaskit/pagination";
+import IconButton from "@atlaskit/button/icon/button";
+import ChevronDownIcon from "@atlaskit/icon/core/chevron-down";
+import ChevronRightIcon from "@atlaskit/icon/core/chevron-right";
 import { Text } from "@atlaskit/primitives/compiled";
 
 import PersonCell from "../components/PersonCell";
@@ -8,24 +11,36 @@ import type { WorkItem } from "../types";
 import StatusLozenge from "./status";
 import "../styles/table.css";
 
+export interface WorkItemRowView {
+  item: WorkItem;
+  /** Nesting level in the hierarchical view (0 = top level). */
+  depth?: number;
+  childCount?: number;
+  collapsed?: boolean;
+}
+
 interface Props {
-  items: WorkItem[];
+  rows: WorkItemRowView[];
   total: number;
   page: number;
-  pageSize: number;
+  pageCount: number;
   onOpen: (item: WorkItem) => void;
   onPageChange: (page: number) => void;
+  /** Present in the hierarchical view; renders expand/collapse toggles. */
+  onToggle?: (item: WorkItem) => void;
+  countNote?: string;
 }
 
 export default function WorkItemTable({
-  items,
+  rows,
   total,
   page,
-  pageSize,
+  pageCount,
   onOpen,
   onPageChange,
+  onToggle,
+  countNote,
 }: Props) {
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
   return (
     <div
       style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
@@ -52,7 +67,7 @@ export default function WorkItemTable({
           </tr>
         </thead>
         <tbody>
-          {items.map((row) => (
+          {rows.map(({ item: row, depth = 0, childCount = 0, collapsed = false }) => (
             <tr
               key={row.id}
               data-clickable="true"
@@ -60,6 +75,8 @@ export default function WorkItemTable({
               data-testid={`work-item-row-${row.display_id}`}
               onClick={() => onOpen(row)}
               onKeyDown={(e) => {
+                // Ignore keys bubbling from the row's own buttons.
+                if (e.target !== e.currentTarget) return;
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   onOpen(row);
@@ -67,7 +84,35 @@ export default function WorkItemTable({
               }}
             >
               <td>
-                <span className="cell-title">
+                <span
+                  className="cell-title"
+                  style={{
+                    paddingInlineStart: `calc(var(--ds-space-200, 16px) * ${depth})`,
+                  }}
+                >
+                  {onToggle ? (
+                    childCount > 0 ? (
+                      <IconButton
+                        icon={(iconProps) =>
+                          collapsed ? (
+                            <ChevronRightIcon {...iconProps} />
+                          ) : (
+                            <ChevronDownIcon {...iconProps} />
+                          )
+                        }
+                        label={`${collapsed ? "展开" : "折叠"} ${row.display_id} 的子项`}
+                        appearance="subtle"
+                        spacing="compact"
+                        testId={`work-item-toggle-${row.display_id}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onToggle(row);
+                        }}
+                      />
+                    ) : (
+                      <span className="rdm-tree-toggle-spacer" aria-hidden />
+                    )
+                  ) : null}
                   <TypeKindIcon kind={row.kind} />
                   <span className="display-id">{row.display_id}</span>
                   <span className="title-text">{row.title}</span>
@@ -91,7 +136,7 @@ export default function WorkItemTable({
       </table>
       <div className="rdm-pager" data-testid="work-item-pager">
         <Text size="small" color="color.text.subtlest" testId="work-item-total">
-          共 {total} 条
+          共 {total} 条{countNote ? ` · ${countNote}` : ""}
         </Text>
         <Pagination
           pages={Array.from({ length: pageCount }, (_, i) => i + 1)}

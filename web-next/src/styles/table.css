@@ -136,6 +136,13 @@
   font-size: 12px;
 }
 
+/* Hierarchical list: leaf rows reserve the toggle width so depth indentation
+   lines up with rows that can expand. */
+.rdm-tree-toggle-spacer {
+  width: var(--ds-space-300, 24px);
+  flex-shrink: 0;
+}
+
 .rdm-pager {
   display: flex;
   align-items: center;

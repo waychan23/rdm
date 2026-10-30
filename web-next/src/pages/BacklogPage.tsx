@@ -17,12 +17,49 @@ import { useAsync } from "../hooks/useAsync";
 import type { ProjectMemberRow, WorkItem, WorkflowDto } from "../types";
 import { flattenMembers } from "../lib/members";
 import { KIND_OPTIONS, PAGE_SIZE } from "../workitems/constants";
-import WorkItemTable from "../workitems/WorkItemTable";
+import { buildWorkItemTree } from "../workitems/hierarchy";
+import WorkItemTable, { type WorkItemRowView } from "../workitems/WorkItemTable";
 import CreateWorkItemDialog from "../workitems/CreateWorkItemDialog";
 
 interface Option {
   label: string;
   value: string;
+}
+
+type ViewMode = "flat" | "tree";
+
+/** The tree view needs every filtered item to nest children under parents. */
+const TREE_BATCH = 100;
+const TREE_LIMIT = 1000;
+
+const VIEW_KEY = (projectKey: string) => `rdm.work-items.view.${projectKey}`;
+const COLLAPSED_KEY = (projectKey: string) => `rdm.work-items.collapsed.${projectKey}`;
+
+function readView(projectKey: string): ViewMode {
+  try {
+    return localStorage.getItem(VIEW_KEY(projectKey)) === "tree" ? "tree" : "flat";
+  } catch {
+    return "flat";
+  }
+}
+
+function readCollapsed(projectKey: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_KEY(projectKey));
+    const ids: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(ids) ? ids.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/** UI preferences survive opening an item (the list remounts behind the panel). */
+function writeStorage(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Private mode / storage disabled: keep the in-memory state.
+  }
 }
 
 const pageStyles = cssMap({
@@ -48,8 +85,35 @@ const pageStyles = cssMap({
   },
 });
 
+interface ItemsResult {
+  items: WorkItem[];
+  total: number;
+  truncated: boolean;
+}
+
+async function loadTreeItems(projectKey: string, filterParams: string): Promise<ItemsResult> {
+  const items: WorkItem[] = [];
+  let total = 0;
+  for (let offset = 0; offset < TREE_LIMIT; offset += TREE_BATCH) {
+    const params = new URLSearchParams(filterParams);
+    params.set("limit", String(TREE_BATCH));
+    params.set("offset", String(offset));
+    const res = await api.get<WorkItem[]>(`/projects/${projectKey}/work-items?${params}`);
+    total = Number(res.meta?.total ?? res.data.length);
+    items.push(...res.data);
+    if (items.length >= total || res.data.length === 0) break;
+  }
+  return { items, total, truncated: items.length < total };
+}
+
 export default function BacklogPage() {
   const { key: projectKey = "RDM" } = useParams();
+  // Remount per project so the stored view/collapse preferences are re-read
+  // when switching projects without a full remount of the route.
+  return <BacklogView key={projectKey} projectKey={projectKey} />;
+}
+
+function BacklogView({ projectKey }: { projectKey: string }) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -62,6 +126,9 @@ export default function BacklogPage() {
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [view, setView] = useState<ViewMode>(() => readView(projectKey));
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => readCollapsed(projectKey));
+  const treeMode = view === "tree";
 
   const membersState = useAsync<ProjectMemberRow[]>(
     async () => (await api.get<ProjectMemberRow[]>(`/projects/${projectKey}/members`)).data,
@@ -90,28 +157,40 @@ export default function BacklogPage() {
     ];
   }, [membersState.data]);
 
-  const queryString = useMemo(() => {
-    const params = new URLSearchParams({
-      limit: String(PAGE_SIZE),
-      offset: String((page - 1) * PAGE_SIZE),
-    });
+  const filterParams = useMemo(() => {
+    const params = new URLSearchParams();
     if (kinds.length === 1) params.set("kind", kinds[0]);
     if (status) params.set("status", status.value);
     if (assignee) params.set("assignee", assignee.value === "me" ? "me" : assignee.value);
     if (reviewer) params.set("reviewer", reviewer.value === "me" ? "me" : reviewer.value);
     if (q) params.set("q", q);
     return params.toString();
-  }, [kinds, status, assignee, reviewer, q, page]);
+  }, [kinds, status, assignee, reviewer, q]);
 
-  const itemsState = useAsync<{ items: WorkItem[]; total: number }>(
+  // Re-fetch only when the request actually changes: the tree loads the whole
+  // filtered set once, so paging its roots must not hit the network again.
+  const requestKey = treeMode ? `tree:${filterParams}` : `flat:${filterParams}:${page}`;
+
+  const itemsState = useAsync<ItemsResult>(
     async () => {
-      const res = await api.get<WorkItem[]>(
-        `/projects/${projectKey}/work-items?${queryString}`,
-      );
-      return { items: res.data, total: Number(res.meta?.total ?? res.data.length) };
+      if (treeMode) return loadTreeItems(projectKey, filterParams);
+      const params = new URLSearchParams(filterParams);
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String((page - 1) * PAGE_SIZE));
+      const res = await api.get<WorkItem[]>(`/projects/${projectKey}/work-items?${params}`);
+      return {
+        items: res.data,
+        total: Number(res.meta?.total ?? res.data.length),
+        truncated: false,
+      };
     },
-    [projectKey, queryString, reloadNonce],
+    [projectKey, requestKey, reloadNonce],
   );
+
+  const tree = useMemo(() => {
+    if (!treeMode || !itemsState.data) return null;
+    return buildWorkItemTree(itemsState.data.items, collapsed, page, PAGE_SIZE);
+  }, [treeMode, itemsState.data, collapsed, page]);
 
   const toggleKind = (value: string, checked: boolean) => {
     // Zero selected kinds means "all" (only exactly one sends kind=).
@@ -119,10 +198,33 @@ export default function BacklogPage() {
     setPage(1);
   };
 
+  const changeView = (next: ViewMode) => {
+    if (next === view) return;
+    setView(next);
+    writeStorage(VIEW_KEY(projectKey), next);
+    setPage(1);
+  };
+
+  const toggleNode = (item: WorkItem) => {
+    const next = new Set(collapsed);
+    if (next.has(item.id)) next.delete(item.id);
+    else next.add(item.id);
+    setCollapsed(next);
+    writeStorage(COLLAPSED_KEY(projectKey), JSON.stringify([...next]));
+  };
+
   const openItem = (item: WorkItem) =>
     navigate(`/projects/${projectKey}/items/${item.id}`, {
       state: { from: location.pathname + location.search },
     });
+
+  const items = itemsState.data?.items ?? [];
+  const total = itemsState.data?.total ?? 0;
+  const flatRows: WorkItemRowView[] = items.map((item) => ({ item }));
+  const rows: WorkItemRowView[] = tree ? tree.rows : flatRows;
+  const pageCount = tree
+    ? tree.pageCount
+    : Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <Page fill testId="page-backlog">
@@ -130,13 +232,35 @@ export default function BacklogPage() {
         title="工作项"
         testId="backlog-header"
         actions={
-          <Button
-            appearance="primary"
-            testId="work-item-create-button"
-            onClick={() => setShowCreate(true)}
-          >
-            新建
-          </Button>
+          <>
+            <Inline space="space.050" alignBlock="center" testId="work-item-view-switch">
+              <Button
+                spacing="compact"
+                isSelected={view === "flat"}
+                aria-pressed={view === "flat"}
+                testId="work-item-view-flat"
+                onClick={() => changeView("flat")}
+              >
+                扁平
+              </Button>
+              <Button
+                spacing="compact"
+                isSelected={view === "tree"}
+                aria-pressed={view === "tree"}
+                testId="work-item-view-tree"
+                onClick={() => changeView("tree")}
+              >
+                层级
+              </Button>
+            </Inline>
+            <Button
+              appearance="primary"
+              testId="work-item-create-button"
+              onClick={() => setShowCreate(true)}
+            >
+              新建
+            </Button>
+          </>
         }
       />
 
@@ -226,7 +350,7 @@ export default function BacklogPage() {
           <SectionMessage appearance="error" title="加载失败">
             无法获取工作项列表，请调整筛选或刷新页面重试。
           </SectionMessage>
-        ) : (itemsState.data?.items.length ?? 0) === 0 ? (
+        ) : items.length === 0 ? (
           <Box testId="work-item-empty">
             <EmptyState
               header="没有符合条件的工作项"
@@ -234,14 +358,25 @@ export default function BacklogPage() {
             />
           </Box>
         ) : (
-          <WorkItemTable
-            items={itemsState.data!.items}
-            total={itemsState.data!.total}
-            page={page}
-            pageSize={PAGE_SIZE}
-            onOpen={openItem}
-            onPageChange={setPage}
-          />
+          <>
+            {treeMode && itemsState.data?.truncated && (
+              <Box paddingBlockEnd="space.150" testId="work-item-tree-truncated">
+                <SectionMessage appearance="warning">
+                  层级视图最多加载 {TREE_LIMIT} 条工作项；请缩小筛选范围以查看完整层级。
+                </SectionMessage>
+              </Box>
+            )}
+            <WorkItemTable
+              rows={rows}
+              total={total}
+              page={page}
+              pageCount={pageCount}
+              onOpen={openItem}
+              onPageChange={setPage}
+              onToggle={treeMode ? toggleNode : undefined}
+              countNote={tree ? `${tree.rootCount} 个顶层` : undefined}
+            />
+          </>
         )}
       </Box>
 
