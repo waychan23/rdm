@@ -19,6 +19,8 @@ import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack } from "@atlaskit/primitives/compiled";
 import { portalMenuProps } from "../lib/portalMenu";
 
+import ErrorState from "../components/ErrorState";
+
 import FormField from "../components/FormField";
 import MarkdownEditor from "../components/MarkdownEditor";
 import { Page, PageHeader } from "../components/Page";
@@ -69,7 +71,7 @@ export default function WorkspacesPage() {
     description_md: "",
   });
 
-  const { data: workspaces, loading } = useAsync<Workspace[]>(
+  const { data: workspaces, loading, error } = useAsync<Workspace[]>(
     async () => (await api.get<Workspace[]>(`/projects/${projectKey}/workspaces`)).data,
     [projectKey, nonce],
   );
@@ -147,7 +149,9 @@ export default function WorkspacesPage() {
         }
       />
 
-      {loading ? (
+      {error ? (
+        <ErrorState error={error} onRetry={reload} testId="workspaces-error" />
+      ) : loading ? (
         <Box xcss={styles.centered} testId="workspaces-loading">
           <Spinner size="large" />
         </Box>

@@ -7,6 +7,7 @@ import Spinner from "@atlaskit/spinner";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
 import { cardBorder } from "../components/cardBorder";
+import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
 import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
@@ -57,12 +58,20 @@ const styles = cssMap({
 export default function OverviewPage() {
   const { key: projectKey = "" } = useParams();
   const navigate = useNavigate();
-  const { data, loading } = useAsync<Overview>(
+  const { data, loading, error, reload } = useAsync<Overview>(
     async () => (await api.get<Overview>(`/projects/${projectKey}/overview`)).data,
     [projectKey],
   );
 
   const go = (page: string) => navigate(`/projects/${projectKey}/${page}`);
+
+  if (error) {
+    return (
+      <Page testId="page-project-overview">
+        <ErrorState error={error} onRetry={reload} testId="overview-error" />
+      </Page>
+    );
+  }
 
   if (loading || !data) {
     return (

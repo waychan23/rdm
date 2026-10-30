@@ -10,6 +10,7 @@ import Spinner from "@atlaskit/spinner";
 import { Box, Inline } from "@atlaskit/primitives/compiled";
 
 import { Page, PageHeader } from "../components/Page";
+import ErrorState from "../components/ErrorState";
 import { api, errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";
@@ -59,6 +60,7 @@ export default function BoardPage() {
     initialSnapshot?.workflow ?? null,
   );
   const [loading, setLoading] = useState(!initialSnapshot);
+  const [error, setError] = useState<unknown>(null);
 
   // Latest values for the (mount-once) drop monitor.
   const stateRef = useRef({ items, workflow, kind, projectKey });
@@ -73,6 +75,7 @@ export default function BoardPage() {
         setItems(snapshot.items);
       }
       setLoading(initial ? !snapshot : true);
+      setError(null);
       try {
         const params = new URLSearchParams({ kind: nextKind, limit: "200" });
         const [wf, list] = await Promise.all([
@@ -86,6 +89,8 @@ export default function BoardPage() {
         setWorkflow(wf.data);
         setItems(list.data);
         remember(cacheKey, { items: list.data, workflow: wf.data });
+      } catch (e) {
+        setError(e);
       } finally {
         setLoading(false);
       }
@@ -229,7 +234,9 @@ export default function BoardPage() {
       />
 
       <Box xcss={styles.board} testId="board-columns">
-        {loading ? (
+        {error ? (
+          <ErrorState error={error} onRetry={() => load(kind, true)} testId="board-error" />
+        ) : loading ? (
           <Box xcss={styles.loading} testId="board-loading">
             <Spinner size="large" />
           </Box>

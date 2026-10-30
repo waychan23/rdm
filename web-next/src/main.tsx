@@ -10,6 +10,7 @@ import type { RouterLinkComponent } from "@atlaskit/app-provider";
 import AppProvider from "@atlaskit/app-provider";
 
 import "./styles/global.css";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { NotifyProvider } from "./lib/flags";
 import { router } from "./router";
 
@@ -19,9 +20,11 @@ setGlobalTheme({ colorMode: "light", light: "light", dark: "dark" });
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <AppProvider routerLinkComponent={Link as unknown as RouterLinkComponent<any>}>
-      <NotifyProvider>
-        <RouterProvider router={router} />
-      </NotifyProvider>
+      <ErrorBoundary>
+        <NotifyProvider>
+          <RouterProvider router={router} />
+        </NotifyProvider>
+      </ErrorBoundary>
     </AppProvider>
   </React.StrictMode>,
 );

@@ -20,6 +20,7 @@ import { portalMenuProps } from "../lib/portalMenu";
 
 import FormField from "../components/FormField";
 import ConfirmDialog from "../components/ConfirmDialog";
+import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { formatDate } from "../lib/format";
@@ -69,14 +70,15 @@ export default function PersonalSettingsPage() {
   const [nonce, setNonce] = useState(0);
   const reload = () => setNonce((n) => n + 1);
 
-  const { data: tokens } = useAsync<Token[]>(
+  const { data: tokens, error: tokensError } = useAsync<Token[]>(
      async () => (await api.get<Token[]>("/me/tokens")).data,
      [nonce],
   );
-  const { data: agents } = useAsync<OrgUser[]>(
+  const { data: agents, error: agentsError } = useAsync<OrgUser[]>(
      async () => (await api.get<OrgUser[]>("/me/agents")).data,
      [nonce],
   );
+  const loadError = tokensError ?? agentsError;
 
   // --- password ---
   const [oldPw, setOldPw] = useState("");
@@ -217,6 +219,10 @@ export default function PersonalSettingsPage() {
   return (
      <Page testId="page-personal-settings">
        <PageHeader title="我的设置" testId="personal-settings-header" />
+
+       {loadError ? (
+         <ErrorState error={loadError} onRetry={reload} testId="personal-settings-error" />
+       ) : null}
 
        <Box testId="personal-password-section">
          <Stack space="space.150" xcss={styles.form}>

@@ -9,6 +9,7 @@ import Spinner from "@atlaskit/spinner";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
 import ConfirmDialog from "../components/ConfirmDialog";
+import ErrorState from "../components/ErrorState";
 import ImagePreviewDialog from "../components/ImagePreviewDialog";
 import MarkdownText from "../components/MarkdownText";
 import { Page, PageHeader } from "../components/Page";
@@ -46,13 +47,20 @@ export default function SprintsPage() {
     async () => (await api.get<Sprint[]>(`/projects/${projectKey}/sprints`)).data,
     [projectKey],
   );
-  const { data: sprints, loading, reload } = useAsync(loadSprints, [projectKey]);
+  const { data: sprints, loading, error, reload } = useAsync(loadSprints, [projectKey]);
 
-  const openDetail = useCallback(async (id: string) => {
-    setDetailId(id);
-    const res = await api.get<SprintDetail>(`/sprints/${id}`);
-    setDetail(res.data);
-  }, []);
+  const openDetail = useCallback(
+    async (id: string) => {
+      setDetailId(id);
+      try {
+        const res = await api.get<SprintDetail>(`/sprints/${id}`);
+        setDetail(res.data);
+      } catch (e) {
+        notify.error("加载 Sprint 失败", errorCause(e)?.message);
+      }
+    },
+    [notify],
+  );
 
   const refreshDetail = useCallback(async () => {
     if (detailId) {
@@ -146,7 +154,9 @@ export default function SprintsPage() {
         }
       />
 
-      {loading ? (
+      {error ? (
+        <ErrorState error={error} onRetry={reload} testId="sprints-error" />
+      ) : loading ? (
         <Box padding="space.400" style={centeredRow} testId="sprints-loading">
           <Spinner size="large" />
         </Box>

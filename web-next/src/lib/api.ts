@@ -48,9 +48,33 @@ function requestHeaders(body: unknown, token: string | null): HeadersInit {
   return headers;
 }
 
+const TIMEOUT_MS = 15_000;
+
+/**
+ * Every request is bounded; a hung backend must surface as a retryable error
+ * instead of an endless spinner. `AbortSignal.timeout` is supported by all
+ * browsers we target (loopback-only internal tool).
+ */
+async function fetchWithTimeout(input: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "TimeoutError") {
+      throw new Error("API_ERROR", {
+        cause: {
+          code: "TIMEOUT",
+          message: `请求超时（${TIMEOUT_MS / 1000} 秒），请稍后重试。`,
+          details: {},
+        } satisfies ApiError,
+      });
+    }
+    throw e;
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const send = (token: string | null) =>
-    fetch(`/api/v1${path}`, {
+    fetchWithTimeout(`/api/v1${path}`, {
       method,
       headers: requestHeaders(body, token),
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -83,7 +107,7 @@ export const api = {
   // Multipart upload: do not set Content-Type (the browser adds the boundary).
   async upload<T>(path: string, form: FormData): Promise<Envelope<T>> {
     const send = (token: string | null) =>
-      fetch(`/api/v1${path}`, {
+      fetchWithTimeout(`/api/v1${path}`, {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: form,
@@ -118,7 +142,7 @@ export const api = {
       ? downloadUrl.slice("/api/v1".length)
       : downloadUrl;
     const send = (token: string | null) =>
-      fetch(`/api/v1${path}`, {
+      fetchWithTimeout(`/api/v1${path}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
     let res = await send(getAccessToken());

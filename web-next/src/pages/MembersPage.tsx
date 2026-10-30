@@ -9,6 +9,7 @@ import Spinner from "@atlaskit/spinner";
 import { Box, Inline, Text } from "@atlaskit/primitives/compiled";
 
 import ConfirmDialog from "../components/ConfirmDialog";
+import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
@@ -72,7 +73,7 @@ export default function MembersPage() {
   const [removeTarget, setRemoveTarget] = useState<ProjectMemberRow | null>(null);
   const [nonce, setNonce] = useState(0);
 
-  const { data: members, loading } = useAsync<ProjectMemberRow[]>(
+  const { data: members, loading, error, reload: reloadAsync } = useAsync<ProjectMemberRow[]>(
     async () => (await api.get<ProjectMemberRow[]>(`/projects/${projectKey}/members`)).data,
     [projectKey, nonce],
   );
@@ -143,7 +144,9 @@ export default function MembersPage() {
         }
       />
 
-      {loading ? (
+      {error ? (
+        <ErrorState error={error} onRetry={reloadAsync} testId="members-error" />
+      ) : loading ? (
         <Box xcss={styles.centered} testId="members-loading">
           <Spinner size="large" />
         </Box>

@@ -21,6 +21,7 @@ import { token } from "@atlaskit/tokens";
 import { portalMenuProps } from "../lib/portalMenu";
 
 import { cardBorder } from "../components/cardBorder";
+import ErrorState from "../components/ErrorState";
 import FormField from "../components/FormField";
 import ImagePreviewDialog from "../components/ImagePreviewDialog";
 import MarkdownEditor from "../components/MarkdownEditor";
@@ -64,6 +65,7 @@ export default function MailboxPage() {
   const [identity, setIdentity] = useState<string | null>(null);
   const [agents, setAgents] = useState<OrgUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [members, setMembers] = useState<OrgUser[]>([]);
   const [showCompose, setShowCompose] = useState(false);
@@ -80,6 +82,7 @@ export default function MailboxPage() {
   const fetchPage = useCallback(
     async (cursor: string | null, replace: boolean, onlyUnread: boolean) => {
       setLoading(true);
+      setError(null);
       try {
         const params = new URLSearchParams({
           limit: "20",
@@ -91,6 +94,8 @@ export default function MailboxPage() {
         const box = (await api.get<Mailbox>(`/projects/${projectKey}/mailbox?${params}`)).data;
         setMessages((prev) => (replace ? box.messages : [...prev, ...box.messages]));
         setNextCursor(box.next_cursor);
+      } catch (e) {
+        setError(e);
       } finally {
         setLoading(false);
       }
@@ -229,7 +234,13 @@ export default function MailboxPage() {
         }
       />
 
-      {loading ? (
+      {error ? (
+        <ErrorState
+          error={error}
+          onRetry={() => void fetchPage(null, true, unreadOnly)}
+          testId="mailbox-error"
+        />
+      ) : loading ? (
         <Box xcss={styles.centered} testId="mailbox-loading">
           <Spinner size="large" />
         </Box>

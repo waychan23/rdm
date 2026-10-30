@@ -18,6 +18,8 @@ import Spinner from "@atlaskit/spinner";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
+import ErrorState from "../components/ErrorState";
+
 import ConfirmDialog from "../components/ConfirmDialog";
 import FormField from "../components/FormField";
 import { Page, PageHeader } from "../components/Page";
@@ -52,7 +54,7 @@ export default function OrgUsersPage() {
   const [nonce, setNonce] = useState(0);
   const reload = () => setNonce((n) => n + 1);
 
-  const { data: users, loading } = useAsync<OrgUser[]>(
+  const { data: users, loading, error, reload: reloadUsers } = useAsync<OrgUser[]>(
     async () => (await api.get<OrgUser[]>("/users")).data,
     [nonce],
   );
@@ -196,7 +198,9 @@ export default function OrgUsersPage() {
         }
       />
 
-      {loading ? (
+      {error ? (
+        <ErrorState error={error} onRetry={reloadUsers} testId="org-users-error" />
+      ) : loading ? (
         <Box xcss={styles.centered} testId="org-users-loading">
           <Spinner size="large" />
         </Box>

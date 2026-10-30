@@ -11,6 +11,7 @@ import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
 import ConfirmDialog from "../components/ConfirmDialog";
+import ErrorState from "../components/ErrorState";
 import { cardBorder } from "../components/cardBorder";
 import FormField from "../components/FormField";
 import MarkdownEditor from "../components/MarkdownEditor";
@@ -54,7 +55,7 @@ export default function SettingsPage() {
   const [pendingOwnerId, setPendingOwnerId] = useState<string | null>(null);
   const [reassigning, setReassigning] = useState(false);
 
-  const { data, loading } = useAsync<{ project: Project; members: ProjectMemberRow[] }>(
+  const { data, loading, error, reload: reloadAsync } = useAsync<{ project: Project; members: ProjectMemberRow[] }>(
      async () => {
        const [p, m] = await Promise.all([
          api.get<Project>(`/projects/${projectKey}`),
@@ -124,6 +125,14 @@ export default function SettingsPage() {
        notify.error("归档失败", errorCause(e)?.message);
      }
   };
+
+  if (error) {
+     return (
+       <Page testId="page-project-settings">
+         <ErrorState error={error} onRetry={reloadAsync} testId="project-settings-error" />
+       </Page>
+     );
+  }
 
   if (loading || !data) {
      return (
