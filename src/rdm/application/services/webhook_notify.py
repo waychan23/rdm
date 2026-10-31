@@ -24,6 +24,7 @@ from rdm.domain.entities import (
     WorkItem,
 )
 from rdm.domain.timefmt import iso_utc
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
@@ -93,41 +94,103 @@ def _human_summary(view: dict[str, Any]) -> tuple[str, list[str]]:
     data = view.get("data", {})
     event = view["event"]
     actor = (view.get("actor") or {}).get("name")
-    lines = [f"项目: {key}"]
+    lines = [tr("webhook.project", default="项目: {key}", key=key)]
     if actor:
-        lines.append(f"操作人: {actor}")
+        lines.append(tr("webhook.actor", default="操作人: {actor}", actor=actor))
 
     if event in {"work_item.assigned", "work_item.status_changed"}:
         display_id = data.get("display_id")
-        title = f"[{key}] {display_id} {event.split('.')[1]}"
+        title = tr(
+            "webhook.work_item_title",
+            default="[{key}] {display_id} {action}",
+            key=key,
+            display_id=display_id,
+            action=event.split(".")[1],
+        )
         lines += [
-            f"工作项: {display_id} {data.get('title', '')}",
-            f"状态: {data.get('status')}",
+            tr(
+                "webhook.work_item",
+                default="工作项: {display_id} {title}",
+                display_id=display_id,
+                title=data.get("title", ""),
+            ),
+            tr("webhook.status", default="状态: {status}", status=data.get("status")),
         ]
         if data.get("assignee_name"):
-            lines.append(f"负责人: {data['assignee_name']}")
+            lines.append(
+                tr("webhook.assignee", default="负责人: {name}", name=data["assignee_name"])
+            )
     elif event == "comment.created":
         display_id = data.get("display_id")
-        title = f"[{key}] {display_id} 有新评论"
-        lines.append(f"工作项: {display_id} {data.get('title', '')}")
-        lines.append(f"摘要: {_excerpt(data.get('body_md', ''))}")
+        title = tr(
+            "webhook.new_comment",
+            default="[{key}] {display_id} 有新评论",
+            key=key,
+            display_id=display_id,
+        )
+        lines.append(
+            tr(
+                "webhook.work_item",
+                default="工作项: {display_id} {title}",
+                display_id=display_id,
+                title=data.get("title", ""),
+            )
+        )
+        lines.append(
+            tr("webhook.summary", default="摘要: {text}", text=_excerpt(data.get("body_md", "")))
+        )
     elif event == "mailbox.delivered":
-        title = f"[{key}] 新信件：{data.get('subject', '')}"
-        lines.append(f"发件人: {data.get('from_name')}")
+        title = tr(
+            "webhook.new_message",
+            default="[{key}] 新信件：{subject}",
+            key=key,
+            subject=data.get("subject", ""),
+        )
+        lines.append(tr("webhook.from", default="发件人: {name}", name=data.get("from_name")))
         if data.get("refs"):
-            lines.append(f"关联: {', '.join(data['refs'])}")
-        lines.append(f"摘要: {_excerpt(data.get('body_excerpt', ''))}")
+            lines.append(tr("webhook.refs", default="关联: {refs}", refs=", ".join(data["refs"])))
+        lines.append(
+            tr(
+                "webhook.summary",
+                default="摘要: {text}",
+                text=_excerpt(data.get("body_excerpt", "")),
+            )
+        )
     elif event in {"sprint.started", "sprint.closed"}:
-        title = f"[{key}] Sprint {data.get('name')} {event.split('.')[1]}"
-        lines.append(f"Sprint: {data.get('name')}")
+        title = tr(
+            "webhook.sprint_title",
+            default="[{key}] Sprint {name} {action}",
+            key=key,
+            name=data.get("name"),
+            action=event.split(".")[1],
+        )
+        lines.append(tr("webhook.sprint", default="Sprint: {name}", name=data.get("name")))
     elif event.startswith("work_item.step_"):
         display_id = data.get("display_id")
-        step_name = data.get("step_name") or data.get("step_key") or "步骤"
-        title = f"[{key}] {display_id} 步骤「{step_name}」{event.split('.')[1]}"
-        lines.append(f"工作项: {display_id} {data.get('title', '')}")
-        lines.append(f"步骤: {step_name}")
+        step_name = (
+            data.get("step_name")
+            or data.get("step_key")
+            or tr("webhook.step_fallback", default="步骤")
+        )
+        title = tr(
+            "webhook.step_title",
+            default="[{key}] {display_id} 步骤「{name}」{action}",
+            key=key,
+            display_id=display_id,
+            name=step_name,
+            action=event.split(".")[1],
+        )
+        lines.append(
+            tr(
+                "webhook.work_item",
+                default="工作项: {display_id} {title}",
+                display_id=display_id,
+                title=data.get("title", ""),
+            )
+        )
+        lines.append(tr("webhook.step", default="步骤: {name}", name=step_name))
         if data.get("status"):
-            lines.append(f"状态: {data['status']}")
+            lines.append(tr("webhook.status", default="状态: {status}", status=data["status"]))
     else:
         title = f"[{key}] {event}"
     return title, lines

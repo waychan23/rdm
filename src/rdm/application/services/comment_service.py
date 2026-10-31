@@ -21,6 +21,7 @@ from rdm.domain.actor import Actor
 from rdm.domain.entities import Comment, Project, User, WorkItem
 from rdm.domain.errors import Forbidden, NotFound, ValidationError
 from rdm.domain.events import EventType
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
@@ -46,14 +47,22 @@ class CommentService:
         project, item = await self.items.get_item(actor, item_ref)
         body_md = (body_md or "").strip()
         if not body_md:
-            raise ValidationError("body_md 必填", details={"field": "body_md"})
+            raise ValidationError(
+                tr("comment.body_required", default="body_md 必填"),
+                details={"field": "body_md"},
+            )
 
         assert self.uow.comments is not None
         if reply_to_id:
             parent = await self.uow.comments.get(reply_to_id)
             if parent is None or parent.work_item_id != item.id:
                 raise NotFound(
-                    f"回复的评论 {reply_to_id} 不存在或不属于 {project.key}-{item.display_no}",
+                    tr(
+                        "comment.reply_not_found",
+                        default="回复的评论 {id} 不存在或不属于 {display_id}",
+                        id=reply_to_id,
+                        display_id=f"{project.key}-{item.display_no}",
+                    ),
                     details={"comment_id": reply_to_id},
                 )
 
@@ -74,7 +83,8 @@ class CommentService:
         if attachment_ids:
             if self._file_store is None:
                 raise ValidationError(
-                    "附件挂载需要 FileStore", details={"attachment_ids": attachment_ids}
+                    tr("comment.filestore_required", default="附件挂载需要 FileStore"),
+                    details={"attachment_ids": attachment_ids},
                 )
             await AttachmentService(self.uow, self._file_store).rebind_to_comment(
                 project, item, comment.id, attachment_ids
@@ -143,37 +153,55 @@ class CommentService:
         assert self.uow.comments is not None and self.uow.projects is not None
         comment = await self.uow.comments.get(comment_id)
         if comment is None:
-            raise NotFound(f"评论 {comment_id} 不存在", details={"comment_id": comment_id})
+            raise NotFound(
+                tr("comment.not_found", default="评论 {id} 不存在", id=comment_id),
+                details={"comment_id": comment_id},
+            )
         security.assert_project_access(actor, comment.project_id)
         if comment.author_user_id != actor.id and not security.can_manage_sprint(
             actor, comment.project_id
         ):
             raise Forbidden(
-                "只有作者本人或 Owner/Manager 可以编辑该评论。",
+                tr(
+                    "comment.edit_forbidden",
+                    default="只有作者本人或 Owner/Manager 可以编辑该评论。",
+                ),
                 details={"comment_id": comment_id, "author_user_id": comment.author_user_id},
             )
         assert self.uow.work_item_steps is not None
         if await self.uow.work_item_steps.is_note_comment(comment.id):
             raise Forbidden(
-                "该评论是工作流步骤的执行备注，不能编辑；如需更正请追加评论。",
+                tr(
+                    "comment.note_readonly",
+                    default="该评论是工作流步骤的执行备注，不能编辑；如需更正请追加评论。",
+                ),
                 details={"comment_id": comment_id},
             )
         body_md = (body_md or "").strip()
         if not body_md:
-            raise ValidationError("body_md 必填", details={"field": "body_md"})
+            raise ValidationError(
+                tr("comment.body_required", default="body_md 必填"),
+                details={"field": "body_md"},
+            )
         project = await self.uow.projects.get(comment.project_id)
         assert project is not None
         assert self.uow.work_items is not None
         item = await self.uow.work_items.get(comment.work_item_id)
         if item is None:
-            raise NotFound("评论所属工作项不存在", details={"comment_id": comment_id})
+            raise NotFound(
+                tr("comment.work_item_missing", default="评论所属工作项不存在"),
+                details={"comment_id": comment_id},
+            )
         old_body = comment.body_md
         if old_body == body_md:
             return project, item, comment
         when = dt.datetime.now(dt.UTC)
         updated = await self.uow.comments.update_body(comment.id, body_md, when)
         if not updated:
-            raise NotFound(f"评论 {comment_id} 已删除", details={"comment_id": comment_id})
+            raise NotFound(
+                tr("comment.deleted", default="评论 {id} 已删除", id=comment_id),
+                details={"comment_id": comment_id},
+            )
         comment.body_md = body_md
         comment.updated_at = when
         await commit_inline_images(self.uow, project.id, body_md)
@@ -221,13 +249,20 @@ class CommentService:
         assert self.uow.comments is not None and self.uow.projects is not None
         comment = await self.uow.comments.get(comment_id)
         if comment is None:
-            raise NotFound(f"评论 {comment_id} 不存在", details={"comment_id": comment_id})
+            raise NotFound(
+                tr("comment.not_found", default="评论 {id} 不存在", id=comment_id),
+                details={"comment_id": comment_id},
+            )
         security.assert_project_access(actor, comment.project_id)
         if comment.author_user_id != actor.id and not (
             security.can_manage_sprint(actor, comment.project_id)
         ):
             raise Forbidden(
-                f"成员 {actor.name} 不能删除该评论：仅作者本人或 Owner/Manager 可删除。",
+                tr(
+                    "comment.delete_forbidden",
+                    default="成员 {user} 不能删除该评论：仅作者本人或 Owner/Manager 可删除。",
+                    user=actor.name,
+                ),
                 details={"comment_id": comment_id, "author_user_id": comment.author_user_id},
             )
         project = await self.uow.projects.get(comment.project_id)
@@ -235,7 +270,10 @@ class CommentService:
         assert self.uow.work_item_steps is not None
         if await self.uow.work_item_steps.is_note_comment(comment.id):
             raise Forbidden(
-                "该评论是工作流步骤的执行备注，不能删除；如需更正请追加评论。",
+                tr(
+                    "comment.note_not_deletable",
+                    default="该评论是工作流步骤的执行备注，不能删除；如需更正请追加评论。",
+                ),
                 details={"comment_id": comment_id},
             )
         now = dt.datetime.now(dt.UTC)
@@ -249,7 +287,10 @@ class CommentService:
         )
         deleted = await self.uow.comments.soft_delete(comment.id, actor.id, now)
         if not deleted:
-            raise NotFound(f"评论 {comment_id} 已删除", details={"comment_id": comment_id})
+            raise NotFound(
+                tr("comment.deleted", default="评论 {id} 已删除", id=comment_id),
+                details={"comment_id": comment_id},
+            )
         comment.deleted_at = now
         comment.deleted_by = actor.id
 

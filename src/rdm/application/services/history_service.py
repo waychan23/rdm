@@ -20,6 +20,7 @@ from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Project, WorkItem
 from rdm.domain.events import EventRecord
+from rdm.domain.workflow.names import localized_name
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 
 _CONTENT_FIELDS = {
@@ -186,7 +187,10 @@ class HistoryService:
                 "step": {
                     "id": step.get("id"),
                     "key": step.get("key"),
-                    "name": step.get("name"),
+                    "name": localized_name(
+                        str(step.get("name") or ""),
+                        str(step["name_en"]) if step.get("name_en") else None,
+                    ),
                 }
             }
             if payload.get("executors"):

@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
@@ -19,6 +20,7 @@ import SettingsIcon from "@atlaskit/icon/core/settings";
 import LogOutIcon from "@atlaskit/icon/core/log-out";
 import { token } from "@atlaskit/tokens";
 
+import LocaleSwitcher from "../components/LocaleSwitcher";
 import { logout, refreshSession, useCurrentUser } from "../lib/auth";
 import { safePostLoginPath } from "../lib/oauth";
 import { startEventStream } from "../lib/stream";
@@ -83,26 +85,35 @@ const styles = cssMap({
   },
 });
 
+type NavKey =
+  | "project.board"
+  | "project.backlog"
+  | "project.sprints"
+  | "project.mailbox"
+  | "project.workspaces"
+  | "project.members"
+  | "project.settings";
+
 interface NavEntry {
   to: (key: string) => string;
-  label: string;
+  labelKey: NavKey;
   testId: string;
   icon: (props: { label: string }) => ReactNode;
 }
 
 const PROJECT_NAV: NavEntry[] = [
-  { to: (k) => `/projects/${k}/board`, label: "看板", testId: "board", icon: BoardIcon },
-  { to: (k) => `/projects/${k}/backlog`, label: "工作项", testId: "backlog", icon: BacklogIcon },
-  { to: (k) => `/projects/${k}/sprints`, label: "迭代", testId: "sprints", icon: CalendarIcon },
-  { to: (k) => `/projects/${k}/mailbox`, label: "信箱", testId: "mailbox", icon: EmailIcon },
+  { to: (k) => `/projects/${k}/board`, labelKey: "project.board", testId: "board", icon: BoardIcon },
+  { to: (k) => `/projects/${k}/backlog`, labelKey: "project.backlog", testId: "backlog", icon: BacklogIcon },
+  { to: (k) => `/projects/${k}/sprints`, labelKey: "project.sprints", testId: "sprints", icon: CalendarIcon },
+  { to: (k) => `/projects/${k}/mailbox`, labelKey: "project.mailbox", testId: "mailbox", icon: EmailIcon },
   {
     to: (k) => `/projects/${k}/workspaces`,
-    label: "工作区",
+    labelKey: "project.workspaces",
     testId: "workspaces",
     icon: FolderIcon,
   },
-  { to: (k) => `/projects/${k}/members`, label: "成员", testId: "members", icon: PeopleIcon },
-  { to: (k) => `/projects/${k}/settings`, label: "设置", testId: "project-settings", icon: SettingsIcon },
+  { to: (k) => `/projects/${k}/members`, labelKey: "project.members", testId: "members", icon: PeopleIcon },
+  { to: (k) => `/projects/${k}/settings`, labelKey: "project.settings", testId: "project-settings", icon: SettingsIcon },
 ];
 
 export default function AppShell() {
@@ -111,6 +122,7 @@ export default function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const who = useCurrentUser();
+  const { t } = useTranslation("nav");
 
   useEffect(() => {
     void refreshSession();
@@ -167,7 +179,7 @@ export default function AppShell() {
         <Inline space="space.150" alignBlock="center">
           <IconButton
             icon={(iconProps) => <SearchIcon {...iconProps} />}
-            label="搜索"
+            label={t("topbar.search")}
             appearance="subtle"
             testId="topbar-search"
             onClick={() => navigate("/search")}
@@ -175,7 +187,7 @@ export default function AppShell() {
           <Box xcss={styles.bellWrapper}>
             <IconButton
               icon={(iconProps) => <InboxIcon {...iconProps} spacing="spacious" />}
-              label="通知"
+              label={t("topbar.notifications")}
               appearance="subtle"
               testId="topbar-inbox"
               onClick={() => navigate("/inbox")}
@@ -189,7 +201,7 @@ export default function AppShell() {
           <Box xcss={styles.bellWrapper}>
             <IconButton
               icon={(iconProps) => <NotificationIcon {...iconProps} spacing="spacious" />}
-              label="信箱"
+              label={t("topbar.mailbox")}
               appearance="subtle"
               testId="topbar-mailbox"
               onClick={() =>
@@ -202,12 +214,16 @@ export default function AppShell() {
               </Box>
             ) : null}
           </Box>
+          <LocaleSwitcher />
           <Link to="/settings" className="rdm-topbar-user" data-testid="topbar-current-user">
             <Box xcss={styles.userLink}>
               <Text color="color.text.subtle">
                 {who
                   ? who.identity.act_as
-                    ? `${who.identity.name}（以 ${who.user.name} 身份）`
+                    ? t("topbar.actingAs", {
+                        identity: who.identity.name,
+                        user: who.user.name,
+                      })
                     : who.user.name
                   : "—"}
               </Text>
@@ -215,7 +231,7 @@ export default function AppShell() {
           </Link>
           <IconButton
             icon={(iconProps) => <LogOutIcon {...iconProps} />}
-            label="登出"
+            label={t("topbar.logout")}
             appearance="subtle"
             testId="topbar-logout"
             onClick={onLogout}
@@ -224,15 +240,15 @@ export default function AppShell() {
       </Box>
 
       <Box xcss={styles.body}>
-        <nav className="rdm-rail" aria-label="主导航" data-testid="app-sidebar">
+        <nav className="rdm-rail" aria-label={t("rail.main")} data-testid="app-sidebar">
           <div className="rdm-rail-group" data-testid="rail-group-org">
-            <RailItem to="/projects" label="项目" testId="projects" icon={GridIcon} end />
-            <RailItem to="/inbox" label="通知/待办" testId="inbox" icon={InboxIcon} />
+            <RailItem to="/projects" label={t("rail.projects")} testId="projects" icon={GridIcon} end />
+            <RailItem to="/inbox" label={t("rail.inbox")} testId="inbox" icon={InboxIcon} />
             {(who?.org_roles.includes("org_owner") ||
               who?.org_roles.includes("user_manager")) && (
-              <RailItem to="/org/users" label="用户" testId="org-users" icon={PeopleIcon} />
+              <RailItem to="/org/users" label={t("rail.orgUsers")} testId="org-users" icon={PeopleIcon} />
             )}
-            <RailItem to="/settings" label="我的" testId="settings" icon={SettingsIcon} end />
+            <RailItem to="/settings" label={t("rail.settings")} testId="settings" icon={SettingsIcon} end />
           </div>
           {projectKey && (
             <>
@@ -245,9 +261,9 @@ export default function AppShell() {
               <div className="rdm-rail-group" data-testid="rail-group-project" data-project={projectKey}>
                 {PROJECT_NAV.map((entry) => (
                   <RailItem
-                    key={entry.label}
+                    key={entry.labelKey}
                     to={entry.to(projectKey)}
-                    label={entry.label}
+                    label={t(entry.labelKey)}
                     testId={`project-${entry.testId}`}
                     icon={entry.icon}
                   />

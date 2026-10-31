@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 
 import Button from "@atlaskit/button/default/button";
@@ -30,6 +31,7 @@ function previewKind(mime: string | null | undefined): "pdf" | "text" | "image" 
 }
 
 export default function AttachmentPreviewDialog({ attachment, onClose }: Props) {
+  const { t } = useTranslation("components");
   const [url, setUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export default function AttachmentPreviewDialog({ attachment, onClose }: Props) 
         .fetchBlob(attachment.download_url)
         .then((blob) => blob.text())
         .then((value) => alive && setText(value.slice(0, 200_000)))
-        .catch(() => alive && setError("无法读取文本内容"));
+        .catch(() => alive && setError(t("attachment.textReadFailed")));
     } else if (kind === "pdf" || kind === "image") {
       api
         .blobUrl(attachment.download_url)
@@ -59,7 +61,7 @@ export default function AttachmentPreviewDialog({ attachment, onClose }: Props) 
           revoked = value;
           setUrl(value);
         })
-        .catch(() => alive && setError("无法加载附件"));
+        .catch(() => alive && setError(t("attachment.loadFailed")));
     }
     return () => {
       alive = false;
@@ -78,7 +80,7 @@ export default function AttachmentPreviewDialog({ attachment, onClose }: Props) 
             <Box testId="attachment-preview-body" style={{ minHeight: 240 }}>
               {kind === "none" ? (
                 <Button onClick={() => api.download(attachment.download_url, attachment.filename)}>
-                  下载附件
+                  {t("attachment.downloadAttachment")}
                 </Button>
               ) : error ? (
                 <Box>{error}</Box>
@@ -109,10 +111,10 @@ export default function AttachmentPreviewDialog({ attachment, onClose }: Props) 
           </ModalBody>
           <ModalFooter>
             <Button appearance="subtle" onClick={onClose}>
-              关闭
+              {t("attachment.close")}
             </Button>
             <Button onClick={() => api.download(attachment.download_url, attachment.filename)}>
-              下载
+              {t("attachment.download")}
             </Button>
           </ModalFooter>
         </ModalDialog>

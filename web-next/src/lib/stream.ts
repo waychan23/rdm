@@ -1,6 +1,7 @@
 // Authenticated SSE over fetch: EventSource cannot send the Bearer header.
 // Reconnects with the last notification id; the server replays unread items.
 
+import { apiLocale } from "../i18n";
 import { getAccessToken, refreshTokens } from "./oauth";
 
 export interface StreamEvent {
@@ -42,7 +43,10 @@ async function connect(onEvent: (event: StreamEvent) => void, signal: AbortSigna
       const params = new URLSearchParams();
       if (lastNotificationId) params.set("since", lastNotificationId);
       const res = await fetch(`/api/v1/stream?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Accept-Language": apiLocale(),
+        },
         signal,
       });
       if (res.status === 401) {

@@ -10,6 +10,7 @@ import ModalDialog, {
 } from "@atlaskit/modal-dialog";
 import { Stack, Text } from "@atlaskit/primitives/compiled";
 import TextArea from "@atlaskit/textarea";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   open: boolean;
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export default function StepRejectDialog({ open, stepName, onClose, onConfirm }: Props) {
+  const { t } = useTranslation("item");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -44,26 +46,26 @@ export default function StepRejectDialog({ open, stepName, onClose, onConfirm }:
       {open && (
         <ModalDialog onClose={onClose} width="520px" testId="step-reject-dialog">
           <ModalHeader>
-            <ModalTitle>拒绝步骤 · {stepName}</ModalTitle>
+            <ModalTitle>{t("stepReject.title", { name: stepName })}</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.150">
               <Text size="small" color="color.text.subtlest">
-                拒绝后本步骤终止，工作项保持当前状态；已完成的其他执行记录保留。
+                {t("stepReject.description")}
               </Text>
               <TextArea
                 value={reason}
                 onChange={(e) => setReason(e.currentTarget.value)}
                 minimumRows={4}
                 testId="step-reject-reason"
-                placeholder="请填写拒绝理由"
+                placeholder={t("stepReject.reasonPlaceholder")}
                 autoFocus
               />
             </Stack>
           </ModalBody>
           <ModalFooter>
             <Button appearance="subtle" onClick={onClose}>
-              取消
+              {t("stepReject.cancel")}
             </Button>
             <Button
               appearance="danger"
@@ -72,7 +74,7 @@ export default function StepRejectDialog({ open, stepName, onClose, onConfirm }:
               testId="step-reject-confirm"
               onClick={() => void submit()}
             >
-              拒绝
+              {t("stepReject.reject")}
             </Button>
           </ModalFooter>
         </ModalDialog>

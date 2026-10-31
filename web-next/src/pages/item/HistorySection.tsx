@@ -5,6 +5,8 @@ import ChevronDownIcon from "@atlaskit/icon/core/chevron-down";
 import ChevronRightIcon from "@atlaskit/icon/core/chevron-right";
 import Spinner from "@atlaskit/spinner";
 import { Inline, Stack, Text } from "@atlaskit/primitives/compiled";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 
 import TextButton from "../../components/TextButton";
 import PersonCell from "../../components/PersonCell";
@@ -14,80 +16,86 @@ import { formatDate } from "../../lib/format";
 import { useNotify } from "../../lib/flags";
 import type { HistoryEntry } from "../../types";
 
-const FIELD_LABELS: Record<string, string> = {
-  title: "标题",
-  description_md: "描述",
-  priority: "优先级",
-  planned_start_date: "计划开始日期",
-  planned_end_date: "计划完成日期",
-  parent_id: "父项",
-  source_story_id: "来源 story",
-  acceptance_criteria_md: "验收标准",
-  severity: "严重度",
-  environment: "环境",
-  repro_steps_md: "复现步骤",
-  expected_behavior_md: "期望行为",
-  actual_behavior_md: "实际行为",
-  task_type: "任务类型",
-  est_work_hours: "预估工时",
-  actual_work_hours: "实际工时",
-  code_branch: "代码分支",
-  participants: "参与人",
-  reviewer: "评审人",
-  review_content_md: "评审意见",
-  custom_fields: "自定义字段",
-};
+function fieldLabel(key: string, t: TFunction<"item">): string {
+  const labels: Record<string, string> = {
+    title: t("history.field.title"),
+    description_md: t("history.field.description_md"),
+    priority: t("history.field.priority"),
+    planned_start_date: t("history.field.planned_start_date"),
+    planned_end_date: t("history.field.planned_end_date"),
+    parent_id: t("history.field.parent_id"),
+    source_story_id: t("history.field.source_story_id"),
+    acceptance_criteria_md: t("history.field.acceptance_criteria_md"),
+    severity: t("history.field.severity"),
+    environment: t("history.field.environment"),
+    repro_steps_md: t("history.field.repro_steps_md"),
+    expected_behavior_md: t("history.field.expected_behavior_md"),
+    actual_behavior_md: t("history.field.actual_behavior_md"),
+    task_type: t("history.field.task_type"),
+    est_work_hours: t("history.field.est_work_hours"),
+    actual_work_hours: t("history.field.actual_work_hours"),
+    code_branch: t("history.field.code_branch"),
+    participants: t("history.field.participants"),
+    reviewer: t("history.field.reviewer"),
+    review_content_md: t("history.field.review_content_md"),
+    custom_fields: t("history.field.custom_fields"),
+  };
+  return labels[key] ?? key;
+}
 
-function stepName(entry: HistoryEntry): string {
+function stepName(entry: HistoryEntry, t: TFunction<"item">): string {
   const step = entry.meta?.step;
   if (step && typeof step === "object") {
-    return String((step as { name?: string }).name ?? "步骤");
+    return String((step as { name?: string }).name ?? t("history.step"));
   }
-  return "步骤";
+  return t("history.step");
 }
 
-function nameOf(ref: unknown): string {
+function nameOf(ref: unknown, t: TFunction<"item">): string {
   if (ref && typeof ref === "object" && "name" in ref) {
-    return String((ref as { name?: string }).name ?? "未指派");
+    return String((ref as { name?: string }).name ?? t("history.unassigned"));
   }
-  return "未指派";
+  return t("history.unassigned");
 }
 
-function describe(entry: HistoryEntry) {
+function describe(entry: HistoryEntry, t: TFunction<"item">) {
   switch (entry.action) {
     case "created":
-      return "创建了工作项";
+      return t("history.created");
     case "content_edited":
-      return "编辑了内容";
+      return t("history.contentEdited");
     case "updated": {
       const fields = Object.keys(entry.changes);
-      const labels = fields.map((f) => FIELD_LABELS[f] ?? f);
-      return labels.length > 0 ? `修改了${labels.join("、")}` : "编辑了内容";
+      const labels = fields.map((f) => fieldLabel(f, t));
+      return labels.length > 0
+        ? t("history.updated", { fields: labels.join(t("listSeparator")) })
+        : t("history.contentEdited");
     }
     case "assigned":
-      return `负责人从 ${nameOf(entry.changes.assignee?.from)} 改为 ${nameOf(
-        entry.changes.assignee?.to,
-      )}`;
+      return t("history.assigned", {
+        from: nameOf(entry.changes.assignee?.from, t),
+        to: nameOf(entry.changes.assignee?.to, t),
+      });
     case "deleted":
-      return "删除了工作项";
+      return t("history.deleted");
     case "restored":
-      return "恢复了工作项";
+      return t("history.restored");
     case "comment_created":
-      return "评论了工作项";
+      return t("history.commentCreated");
     case "comment_deleted":
-      return "删除了评论";
+      return t("history.commentDeleted");
     case "step_started":
-      return `发起了步骤「${stepName(entry)}」`;
+      return t("history.stepStarted", { name: stepName(entry, t) });
     case "step_executed":
-      return `执行了步骤「${stepName(entry)}」`;
+      return t("history.stepExecuted", { name: stepName(entry, t) });
     case "step_completed":
-      return `步骤「${stepName(entry)}」完成并流转`;
+      return t("history.stepCompleted", { name: stepName(entry, t) });
     case "step_blocked":
-      return `步骤「${stepName(entry)}」被 gate 阻塞`;
+      return t("history.stepBlocked", { name: stepName(entry, t) });
     case "step_cancelled":
-      return `取消了步骤「${stepName(entry)}」`;
+      return t("history.stepCancelled", { name: stepName(entry, t) });
     case "step_reassigned":
-      return `改派了步骤「${stepName(entry)}」的执行人`;
+      return t("history.stepReassigned", { name: stepName(entry, t) });
     default:
       return entry.event_type;
   }
@@ -99,6 +107,7 @@ interface Props {
 }
 
 export default function HistorySection({ itemId, refreshKey }: Props) {
+  const { t } = useTranslation("item");
   const notify = useNotify();
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
@@ -120,7 +129,7 @@ export default function HistorySection({ itemId, refreshKey }: Props) {
         const next = res.meta?.next_before_seq;
         setCursor(typeof next === "number" ? next : null);
       } catch (e) {
-        notify.error("历史加载失败", errorCause(e)?.message);
+        notify.error(t("history.loadFailed"), errorCause(e)?.message);
       } finally {
         setLoading(false);
       }
@@ -140,14 +149,14 @@ export default function HistorySection({ itemId, refreshKey }: Props) {
           icon={(p) =>
             open ? <ChevronDownIcon {...p} /> : <ChevronRightIcon {...p} />
           }
-          label={open ? "收起操作历史" : "展开操作历史"}
+          label={open ? t("history.collapse") : t("history.expand")}
           appearance="subtle"
           spacing="compact"
           testId="item-history-toggle"
           onClick={() => setOpen((value) => !value)}
         />
         <Text size="small" weight="medium" color="color.text.subtle">
-          操作历史
+          {t("history.title")}
         </Text>
       </Inline>
 
@@ -157,7 +166,7 @@ export default function HistorySection({ itemId, refreshKey }: Props) {
             <Spinner size="small" />
           ) : entries.length === 0 ? (
             <Text size="small" color="color.text.subtlest">
-              还没有操作记录
+              {t("history.empty")}
             </Text>
           ) : (
             <Stack space="space.100">
@@ -168,7 +177,7 @@ export default function HistorySection({ itemId, refreshKey }: Props) {
                   data-testid={`item-history-entry-${entry.id}`}
                 >
                   <div className="rdm-history-head">
-                    <PersonCell name={entry.actor?.name ?? entry.actor?.id ?? "系统"} />
+                    <PersonCell name={entry.actor?.name ?? entry.actor?.id ?? t("history.system")} />
                     <Text size="small" color="color.text.subtlest">
                       {formatDate(entry.occurred_at)}
                     </Text>
@@ -183,13 +192,13 @@ export default function HistorySection({ itemId, refreshKey }: Props) {
                         <StatusLozenge status={String(entry.changes.status?.to ?? "")} />
                         {typeof entry.meta?.reason === "string" && (
                           <Text size="small" color="color.text.subtlest">
-                            （{entry.meta.reason}）
+                            {t("history.reasonWrap", { reason: entry.meta.reason })}
                           </Text>
                         )}
                       </Inline>
                     ) : (
                       <>
-                        <Text size="small">{describe(entry)}</Text>
+                        <Text size="small">{describe(entry, t)}</Text>
                         {entry.comment?.excerpt && (
                           <Text size="small" color="color.text.subtlest">
                             “{entry.comment.excerpt}”
@@ -205,7 +214,7 @@ export default function HistorySection({ itemId, refreshKey }: Props) {
                   onClick={() => void load(cursor, false)}
                   data-testid="item-history-more"
                 >
-                  加载更多
+                  {t("history.loadMore")}
                 </TextButton>
               )}
             </Stack>

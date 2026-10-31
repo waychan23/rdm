@@ -12,6 +12,7 @@ import SectionMessage from "@atlaskit/section-message";
 import Spinner from "@atlaskit/spinner";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { token } from "@atlaskit/tokens";
+import { useTranslation } from "react-i18next";
 
 import ConfirmDialog from "../../components/ConfirmDialog";
 import AttachmentPreviewDialog from "../../components/AttachmentPreviewDialog";
@@ -26,11 +27,12 @@ import WorkItemPicker, {
   type WorkItemOption,
 } from "../../components/WorkItemPicker";
 import EditWorkItemDialog from "../../workitems/EditWorkItemDialog";
-import { TASK_TYPE_OPTIONS } from "../../workitems/constants";
-import { PRIORITY_OPTIONS, priorityColor, priorityOption } from "../../workitems/priority";
+import { taskTypeOptions } from "../../workitems/constants";
+import { priorityOptions, priorityColor, priorityOption } from "../../workitems/priority";
 import StatusLozenge from "../../workitems/status";
 import { api, errorCause } from "../../lib/api";
 import { artifactKindLabel, kindLabel } from "../../lib/labels";
+import { i18n } from "../../i18n";
 import { useCurrentUser } from "../../lib/auth";
 import { formatDate, formatSize } from "../../lib/format";
 import { useNotify } from "../../lib/flags";
@@ -124,6 +126,7 @@ function effectiveFields(workflow: WorkflowDto, item: WorkItem): WorkflowFields 
 }
 
 export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: Props) {
+  const { t } = useTranslation("item");
   const notify = useNotify();
   const me = useCurrentUser();
   const [bundle, setBundle] = useState<DetailBundle | null>(null);
@@ -205,7 +208,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     } catch {
       setLoadError(true);
     }
-  }, [itemId, projectKey]);
+  }, [itemId, projectKey, i18n.language]);
 
   useEffect(() => {
     // Switching items reuses this panel; clear all per-item transient state so
@@ -251,10 +254,10 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         });
         versionRef.current = res.data.row_version;
         await refresh();
-        notify.success("保存成功");
+        notify.success(t("panel.saveSuccess"));
         return true;
       } catch (e) {
-        notify.error("保存失败", errorCause(e)?.message);
+        notify.error(t("panel.saveFailed"), errorCause(e)?.message);
         await refresh();
         return false;
       }
@@ -311,13 +314,18 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       )
         ?.map((field) => field.label)
         .filter(Boolean)
-        .join("、");
-      const extra = [ids && `阻塞: ${ids}`, missing && `缺少字段: ${missing}`]
+        .join(t("listSeparator"));
+      const extra = [
+        ids && t("panel.gateBlocked", { ids }),
+        missing && t("panel.gateMissing", { missing }),
+      ]
         .filter(Boolean)
-        .join("；");
-      setGateMessage(extra ? `${cause.message}（${extra}）` : cause.message);
+        .join(t("panel.gateSeparator"));
+      setGateMessage(
+        extra ? t("panel.gateWrap", { message: cause.message, extra }) : cause.message,
+      );
     } else {
-      notify.error("操作失败", cause?.message);
+      notify.error(t("panel.actionFailed"), cause?.message);
     }
   };
 
@@ -344,7 +352,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           attachment_ids: attachmentIds,
         });
       }
-      notify.success("步骤已执行");
+      notify.success(t("panel.stepExecuted"));
       setGateMessage(null);
       setStepExecute(null);
       await refresh();
@@ -361,7 +369,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         row_version: versionRef.current ?? bundle.item.row_version,
         executors,
       });
-      notify.success(`已发起步骤「${stepStart.name}」`);
+      notify.success(t("panel.stepStarted", { name: stepStart.name }));
       setGateMessage(null);
       setStepStart(null);
       await refresh();
@@ -378,7 +386,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         row_version: stepReassign.active.row_version,
         executors,
       });
-      notify.success("执行人已更新");
+      notify.success(t("panel.executorsUpdated"));
       setGateMessage(null);
       setStepReassign(null);
       await refresh();
@@ -396,7 +404,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       await api.post(`/work-item-steps/${target.id}/cancel`, {
         row_version: target.row_version,
       });
-      notify.success("步骤已取消");
+      notify.success(t("panel.stepCancelled"));
       setGateMessage(null);
       await refresh();
     } catch (e) {
@@ -411,7 +419,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         row_version: stepReject.row_version,
         reason,
       });
-      notify.success("步骤已拒绝");
+      notify.success(t("panel.stepRejected"));
       setGateMessage(null);
       setStepReject(null);
       await refresh();
@@ -438,10 +446,10 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     try {
       await api.post(`/work-items/${itemId}/assign`, { member: memberId });
       await refresh();
-      notify.success("保存成功");
+      notify.success(t("panel.saveSuccess"));
       return true;
     } catch (e) {
-      notify.error("指派失败", errorCause(e)?.message);
+      notify.error(t("panel.assignFailed"), errorCause(e)?.message);
       await refresh();
       return false;
     }
@@ -455,9 +463,9 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         priority,
       });
       await refresh();
-      notify.success("保存成功");
+      notify.success(t("panel.saveSuccess"));
     } catch (e) {
-      notify.error("优先级保存失败", errorCause(e)?.message);
+      notify.error(t("panel.prioritySaveFailed"), errorCause(e)?.message);
       await refresh();
     }
   };
@@ -469,11 +477,15 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         parent: option?.display_id ?? null,
         row_version: versionRef.current ?? bundle.item.row_version,
       });
-      notify.success(option ? `已改为 ${option.display_id} 的子项` : "已移出父项");
+      notify.success(
+        option
+          ? t("panel.reparented", { id: option.display_id })
+          : t("panel.parentCleared"),
+      );
       setParentEditing(false);
       await refresh();
     } catch (e) {
-      notify.error("更改父项失败", errorCause(e)?.message);
+      notify.error(t("panel.reparentFailed"), errorCause(e)?.message);
     }
   };
 
@@ -500,9 +512,9 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           setBundle((b) => (b ? { ...b, attachments: [...b.attachments, res.data] } : b));
         }
       }
-      if (attachToComment) notify.success("附件已上传，提交评论时挂载");
+      if (attachToComment) notify.success(t("panel.attachmentsUploaded"));
     } catch (e) {
-      notify.error("上传失败", errorCause(e)?.message);
+      notify.error(t("panel.uploadFailed"), errorCause(e)?.message);
     } finally {
       setUploading(false);
       setUploadProgress(null);
@@ -516,16 +528,16 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         b ? { ...b, attachments: b.attachments.filter((a) => a.id !== id) } : b,
       );
     } catch (e) {
-      notify.error("删除失败", errorCause(e)?.message);
+      notify.error(t("panel.deleteFailed"), errorCause(e)?.message);
     }
   };
 
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
-      notify.success("链接已复制");
+      notify.success(t("panel.linkCopied"));
     } catch {
-      notify.error("复制失败", "浏览器未授予剪贴板权限");
+      notify.error(t("panel.copyFailed"), t("panel.clipboardDenied"));
     }
   };
 
@@ -540,7 +552,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       );
       setHasMoreComments(res.data.length >= COMMENTS_PAGE);
     } catch (e) {
-      notify.error("评论加载失败", errorCause(e)?.message);
+      notify.error(t("panel.commentsLoadFailed"), errorCause(e)?.message);
     } finally {
       setLoadingMoreComments(false);
     }
@@ -552,7 +564,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         b ? { ...b, artifacts: b.artifacts.filter((a) => a.id !== id) } : b,
       );
     } catch (e) {
-      notify.error("删除失败", errorCause(e)?.message);
+      notify.error(t("panel.deleteFailed"), errorCause(e)?.message);
     }
   };
 
@@ -592,7 +604,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       setPendingFiles([]);
       setCommenting(false);
     } catch (e) {
-      notify.error("评论失败", errorCause(e)?.message);
+      notify.error(t("panel.commentFailed"), errorCause(e)?.message);
     } finally {
       setSavingComment(false);
     }
@@ -606,7 +618,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       await api.del(`/comments/${target.id}`);
       await refresh();
     } catch (e) {
-      notify.error("删除评论失败", errorCause(e)?.message);
+      notify.error(t("panel.commentDeleteFailed"), errorCause(e)?.message);
     }
   };
 
@@ -617,16 +629,16 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         body_md: editingComment.body.trim(),
       });
       setEditingComment(null);
-      notify.success("评论已更新");
+      notify.success(t("panel.commentUpdated"));
       await refresh();
     } catch (e) {
-      notify.error("保存评论失败", errorCause(e)?.message);
+      notify.error(t("panel.commentSaveFailed"), errorCause(e)?.message);
     }
   };
 
   const addArtifact = async (a: { kind: string; label: string; url: string }) => {
     if (!a.label || !a.url) {
-      notify.error("标题和 URL 必填");
+      notify.error(t("panel.artifactRequired"));
       return;
     }
     try {
@@ -641,7 +653,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       setBundle((b) => (b ? { ...b, artifacts: [...b.artifacts, res.data] } : b));
       setShowArtifact(false);
     } catch (e) {
-      notify.error("挂载失败", errorCause(e)?.message);
+      notify.error(t("panel.artifactAddFailed"), errorCause(e)?.message);
     }
   };
 
@@ -655,12 +667,12 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
 
   if (loadError) {
     return (
-      <aside className="rdm-item-panel" aria-label="工作项详情" data-testid="item-panel">
+      <aside className="rdm-item-panel" aria-label={t("panel.ariaLabel")} data-testid="item-panel">
         <Box padding="space.400">
-          <SectionMessage appearance="error">工作项加载失败或已被删除。</SectionMessage>
+          <SectionMessage appearance="error">{t("panel.loadFailed")}</SectionMessage>
           <Box paddingBlockStart="space.200">
             <Button appearance="primary" testId="item-panel-error-back" onClick={onClose}>
-              返回列表
+              {t("panel.backToList")}
             </Button>
           </Box>
         </Box>
@@ -669,7 +681,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   }
   if (!bundle) {
     return (
-      <aside className="rdm-item-panel" aria-label="工作项详情" data-testid="item-panel">
+      <aside className="rdm-item-panel" aria-label={t("panel.ariaLabel")} data-testid="item-panel">
         <Box padding="space.400" testId="item-panel-loading">
           <Spinner size="large" />
         </Box>
@@ -694,7 +706,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     artifacts,
   } = bundle;
   const memberOptions: MemberOption[] = members.map((m) => ({
-    label: `${m.name}${m.type === "agent" ? "（agent）" : ""}`,
+    label: `${m.name}${m.type === "agent" ? t("panel.agentSuffix") : ""}`,
     value: m.id,
     name: m.name,
   }));
@@ -712,9 +724,9 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   const hasKindFields =
     item.kind !== "epic" && Object.keys(item.fields ?? {}).length > 0;
   const taskTypeLabel =
-    TASK_TYPE_OPTIONS.find((option) => option.value === (item.task_type ?? "other"))?.label ??
+    taskTypeOptions().find((option) => option.value === (item.task_type ?? "other"))?.label ??
     item.task_type ??
-    "其他";
+    t("panel.otherTaskType");
   // Gate-required fields for the steps reachable from this status (and the
   // active step) drive the red asterisk next to field labels. Plain compute:
   // this sits after the early returns, so it must not be a hook.
@@ -739,9 +751,9 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       {replyTo && (
         <div className="rdm-item-comment-reply-chip">
           <Text size="small" color="color.text.subtlest">
-            回复 {replyTo.author.name ?? replyTo.author.id}
+            {t("panel.replyChip", { name: replyTo.author.name ?? replyTo.author.id })}
           </Text>
-          <TextButton onClick={() => setReplyTo(null)}>取消</TextButton>
+          <TextButton onClick={() => setReplyTo(null)}>{t("inlineField.cancel")}</TextButton>
         </div>
       )}
       <MarkdownEditor
@@ -749,7 +761,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         onChange={setDraft}
         projectKey={projectKey}
         minimumRows={2}
-        placeholder="写评论；@成员名 会给对方发站内信"
+        placeholder={t("panel.commentPlaceholder")}
         testId="item-comment"
         onSubmit={() => void postComment()}
         onImageClick={setPreview}
@@ -778,10 +790,10 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           data-testid="item-comment-cancel"
           onClick={requestCancelComment}
         >
-          取消
+          {t("inlineField.cancel")}
         </TextButton>
         <Button testId="item-comment-attach" onClick={() => commentFileInput.current?.click()}>
-          添加附件
+          {t("panel.addAttachment")}
         </Button>
         <Button
           appearance="primary"
@@ -790,18 +802,18 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           testId="item-comment-submit"
           onClick={() => void postComment()}
         >
-          提交评论
+          {t("panel.submitComment")}
         </Button>
       </div>
     </footer>
   );
 
   return (
-    <aside className="rdm-item-panel" aria-label="工作项详情" data-testid="item-panel">
+    <aside className="rdm-item-panel" aria-label={t("panel.ariaLabel")} data-testid="item-panel">
       <header className="rdm-item-head" data-testid="item-panel-header">
         <IconButton
           icon={(iconProps) => <CrossIcon {...iconProps} />}
-          label="关闭"
+          label={t("panel.close")}
           appearance="subtle"
           testId="item-panel-close"
           onClick={onClose}
@@ -812,11 +824,11 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         </Text>
         {canEdit && (
           <TextButton data-testid="item-panel-edit" onClick={() => setShowEdit(true)}>
-            完整编辑
+            {t("panel.editFull")}
           </TextButton>
         )}
         <TextButton data-testid="item-panel-copy-link" onClick={() => void copyLink()}>
-          复制链接
+          {t("panel.copyLink")}
         </TextButton>
       </header>
 
@@ -834,8 +846,8 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                   testId="item-panel-title-field"
                   value={item.title}
                   canEdit={canEdit}
-                  editLabel="编辑标题"
-                  validate={(next) => (next.trim() ? undefined : "标题不能为空")}
+                  editLabel={t("panel.editTitle")}
+                  validate={(next) => (next.trim() ? undefined : t("panel.titleRequired"))}
                   readClassName="rdm-inline-title"
                   renderView={(value) => (
                     <Heading size="medium" as="h2" testId="item-panel-title">
@@ -850,22 +862,22 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             <section className="rdm-item-section" data-testid="item-section-base">
               <InlineMarkdownField
                 testId="item-panel-description"
-                label="描述"
+                label={t("panel.description")}
                 required={requiredFieldKeys.has("description_md")}
                 value={item.description_md}
                 canEdit={canEdit}
                 projectKey={projectKey}
-                emptyText="未填写描述"
-                placeholder="写点什么（支持 Markdown，可直接粘贴图片）"
+                emptyText={t("panel.descriptionEmpty")}
+                placeholder={t("panel.descriptionPlaceholder")}
                 minimumRows={6}
-                editLabel="编辑描述"
+                editLabel={t("panel.editDescription")}
                 readClassName="rdm-inline-read-desc"
                 onImageClick={setPreview}
                 onSave={(next) => patchItem({ description_md: next.trim() ? next : null })}
               />
 
               <div className="rdm-item-field" data-testid="item-field-attachments">
-                <div className="rdm-item-section-label">附件</div>
+                <div className="rdm-item-section-label">{t("panel.attachments")}</div>
                 <input
                   ref={attachFileInput}
                   type="file"
@@ -879,7 +891,9 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                   testId="item-attachment-upload"
                   onClick={() => attachFileInput.current?.click()}
                 >
-                  {uploadProgress !== null ? `上传中 ${uploadProgress}%` : "上传附件"}
+                  {uploadProgress !== null
+                    ? t("panel.uploading", { percent: uploadProgress })
+                    : t("panel.uploadAttachment")}
                 </Button>
                 {attachments.map((a) => (
                   <div
@@ -897,17 +911,17 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                       data-testid={`item-attachment-preview-${a.id}`}
                       onClick={() => setPreviewAttachment(a)}
                     >
-                      预览
+                      {t("panel.preview")}
                     </TextButton>
                     <TextButton danger onClick={() => removeAttachment(a.id)}>
-                      删除
+                      {t("panel.delete")}
                     </TextButton>
                   </div>
                 ))}
               </div>
 
               <div className="rdm-item-field" data-testid="item-field-artifacts">
-                <div className="rdm-item-section-label">产出物</div>
+                <div className="rdm-item-section-label">{t("panel.artifacts")}</div>
                 {artifacts.map((art) => (
                   <div
                     key={art.id}
@@ -921,12 +935,12 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                       {artifactKindLabel(art.kind)}
                     </Text>
                     <TextButton danger onClick={() => removeArtifact(art.id)}>
-                      删除
+                      {t("panel.delete")}
                     </TextButton>
                   </div>
                 ))}
                 <Button testId="item-artifact-add" onClick={() => setShowArtifact(true)}>
-                  挂产出物
+                  {t("panel.addArtifact")}
                 </Button>
               </div>
             </section>
@@ -967,20 +981,22 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
 
             <section className="rdm-item-section" data-testid="item-section-comments">
               <div className="rdm-item-section-head">
-                <div className="rdm-item-section-label">评论（{comments.length}）</div>
+                <div className="rdm-item-section-label">
+                  {t("panel.comments", { total: comments.length })}
+                </div>
                 {!commenting && (
                   <TextButton
                     data-testid="item-comment-add"
                     onClick={() => setCommenting(true)}
                   >
-                    添加评论
+                    {t("panel.addComment")}
                   </TextButton>
                 )}
               </div>
               <div data-testid="item-panel-comments">
             {comments.length === 0 && (
               <Text size="small" color="color.text.subtlest">
-                还没有评论
+                {t("panel.commentsEmpty")}
               </Text>
             )}
             {comments.map((c) => {
@@ -995,7 +1011,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                     <Inline space="space.100" alignBlock="center">
                       <Text size="small" color="color.text.subtlest">
                         {formatDate(c.created_at)}
-                        {c.edited ? " · 已编辑" : ""}
+                        {c.edited ? t("panel.edited") : ""}
                       </Text>
                       <TextButton
                         data-testid={`item-comment-reply-${c.id}`}
@@ -1004,14 +1020,14 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                           setCommenting(true);
                         }}
                       >
-                        回复
+                        {t("panel.reply")}
                       </TextButton>
                       {canDelete && (
                         <TextButton
                           data-testid={`item-comment-edit-${c.id}`}
                           onClick={() => setEditingComment({ id: c.id, body: c.body_md })}
                         >
-                          编辑
+                          {t("inlineField.edit")}
                         </TextButton>
                       )}
                       {canDelete && (
@@ -1020,14 +1036,16 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                           data-testid={`item-comment-delete-${c.id}`}
                           onClick={() => setCommentToDelete(c)}
                         >
-                          删除
+                          {t("panel.delete")}
                         </TextButton>
                       )}
                     </Inline>
                   </div>
                   {parentComment && (
                     <div className="rdm-item-comment-reply">
-                      回复 {parentComment.author.name ?? parentComment.author.id}：
+                      {t("panel.replyQuote", {
+                        name: parentComment.author.name ?? parentComment.author.id,
+                      })}
                       {parentComment.body_md.slice(0, 80)}
                     </div>
                   )}
@@ -1051,14 +1069,14 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                           testId={`item-comment-edit-save-${c.id}`}
                           onClick={() => void saveCommentEdit()}
                         >
-                          保存
+                          {t("inlineField.save")}
                         </Button>
                         <Button
                           appearance="subtle"
                           testId={`item-comment-edit-cancel-${c.id}`}
                           onClick={() => setEditingComment(null)}
                         >
-                          取消
+                          {t("inlineField.cancel")}
                         </Button>
                       </Inline>
                     </Stack>
@@ -1087,7 +1105,9 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                   data-testid="item-comment-more"
                   onClick={() => void loadMoreComments()}
                 >
-                  {loadingMoreComments ? "加载中…" : "加载更多评论"}
+                  {loadingMoreComments
+                    ? t("panel.loadingMore")
+                    : t("panel.loadMoreComments")}
                 </TextButton>
               </Box>
             )}
@@ -1109,7 +1129,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           {allowedParentKinds.length > 0 && (
             <>
               <div className="rdm-item-field" data-testid="item-field-parent">
-                <div className="rdm-item-section-label">父项</div>
+                <div className="rdm-item-section-label">{t("panel.parent")}</div>
                 {parent && !parentEditing ? (
                   <Inline space="space.100" alignBlock="center">
                     <TextButton onClick={() => onOpenItem(parent.id)}>
@@ -1121,7 +1141,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                   </Inline>
                 ) : (
                   <Text size="small" color="color.text.subtlest">
-                    无父项
+                    {t("panel.noParent")}
                   </Text>
                 )}
                 <Box paddingBlockStart="space.100">
@@ -1133,10 +1153,12 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                         excludeIds={[item.id, ...children.map((c) => c.id)]}
                         value={parentOption}
                         onChange={(option) => void reparent(option)}
-                        placeholder="选择父项"
+                        placeholder={t("panel.selectParent")}
                         testId="item-parent-picker"
                       />
-                      <TextButton onClick={() => setParentEditing(false)}>取消</TextButton>
+                      <TextButton onClick={() => setParentEditing(false)}>
+                        {t("inlineField.cancel")}
+                      </TextButton>
                     </Stack>
                   ) : permissions.can_edit ? (
                     <Inline space="space.100">
@@ -1144,11 +1166,11 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                         data-testid="item-parent-change"
                         onClick={() => setParentEditing(true)}
                       >
-                        {parent ? "更改父项" : "设置父项"}
+                        {parent ? t("panel.changeParent") : t("panel.setParent")}
                       </TextButton>
                       {parent && (
                         <TextButton danger onClick={() => void reparent(null)}>
-                          移出父项
+                          {t("panel.removeParent")}
                         </TextButton>
                       )}
                     </Inline>
@@ -1160,14 +1182,14 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           )}
 
           <div className="rdm-item-field" data-testid="item-field-priority">
-            <div className="rdm-item-section-label">优先级</div>
+            <div className="rdm-item-section-label">{t("panel.priority")}</div>
             <div className="rdm-priority-row">
               <div className="rdm-priority-select" data-testid="priority-select">
                 <Select
                   {...portalMenuProps}
-                  options={PRIORITY_OPTIONS}
+                  options={priorityOptions()}
                   value={
-                    PRIORITY_OPTIONS.find((o) => o.value === currentPriority) ?? null
+                    priorityOptions().find((o) => o.value === currentPriority) ?? null
                   }
                   isDisabled={!permissions.can_edit}
                   onChange={(opt) =>
@@ -1187,14 +1209,14 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           <hr className="rdm-item-divider" />
 
           <div className="rdm-item-field" data-testid="item-field-planned-dates">
-            <div className="rdm-item-section-label">计划日期</div>
+            <div className="rdm-item-section-label">{t("panel.plannedDates")}</div>
             <Stack space="space.100">
               <div className="rdm-planned-date-row">
-                <span className="rdm-planned-date-label">开始</span>
+                <span className="rdm-planned-date-label">{t("panel.start")}</span>
                 <div className="rdm-planned-date-input">
                   <DatePicker
                     value={item.planned_start_date ?? ""}
-                    placeholder="未设置"
+                    placeholder={t("panel.notSet")}
                     isDisabled={!canEdit}
                     testId="item-planned-start"
                     onChange={(value) =>
@@ -1204,11 +1226,11 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                 </div>
               </div>
               <div className="rdm-planned-date-row">
-                <span className="rdm-planned-date-label">完成</span>
+                <span className="rdm-planned-date-label">{t("panel.end")}</span>
                 <div className="rdm-planned-date-input">
                   <DatePicker
                     value={item.planned_end_date ?? ""}
-                    placeholder="未设置"
+                    placeholder={t("panel.notSet")}
                     isDisabled={!canEdit}
                     testId="item-planned-end"
                     onChange={(value) =>
@@ -1222,12 +1244,12 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           <hr className="rdm-item-divider" />
 
           <div className="rdm-item-field" data-testid="item-field-status">
-            <div className="rdm-item-section-label">状态</div>
+            <div className="rdm-item-section-label">{t("panel.status")}</div>
             <StatusLozenge status={item.status} />
           </div>
 
           <div className="rdm-item-field" data-testid="item-field-steps">
-            <div className="rdm-item-section-label">可执行步骤</div>
+            <div className="rdm-item-section-label">{t("panel.availableSteps")}</div>
             {activeStep && (
               <Box paddingBlockEnd="space.100">
                 <ActiveStepCard
@@ -1254,7 +1276,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             )}
             {steps.length === 0 && !activeStep && (
               <Text size="small" color="color.text.subtlest">
-                当前状态没有可执行步骤
+                {t("panel.noSteps")}
               </Text>
             )}
             <Stack space="space.100">
@@ -1272,9 +1294,9 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                     >
                       {step.name}
                       {step.mode === "task"
-                        ? "（子任务）"
+                        ? t("panel.taskStepSuffix")
                         : step.mode === "approval"
-                          ? "（多人）"
+                          ? t("panel.approvalStepSuffix")
                           : ""}
                     </Button>
                   );
@@ -1288,7 +1310,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                   {steps
                     .filter((step) => !step.can_start && !step.can_execute)
                     .flatMap((step) => step.blocked_reasons)
-                    .join("；")}
+                    .join(t("listSeparator"))}
                 </Text>
               </Box>
             )}
@@ -1298,14 +1320,14 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           <div className="rdm-item-field" data-testid="item-field-assignee">
             <InlineMemberField
               testId="item-assignee"
-              label="负责人"
+              label={t("panel.assignee")}
               canEdit={canAssign}
               multiple={false}
               ids={item.assignee ? [item.assignee.id] : []}
               options={memberOptions}
-              emptyText="未指派"
-              placeholder="选择负责人"
-              editLabel="编辑负责人"
+              emptyText={t("panel.unassigned")}
+              placeholder={t("panel.selectAssignee")}
+              editLabel={t("panel.editAssignee")}
               onSave={assignMember}
             />
           </div>
@@ -1313,14 +1335,14 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           <div className="rdm-item-field" data-testid="item-field-participants">
             <InlineMemberField
               testId="item-participants"
-              label="参与人"
+              label={t("panel.participants")}
               canEdit={canEdit}
               multiple
               ids={(item.participants ?? []).map((participant) => participant.id)}
               options={memberOptions}
-              emptyText="未设置"
-              placeholder="选择参与人"
-              editLabel="编辑参与人"
+              emptyText={t("panel.notSet")}
+              placeholder={t("panel.selectParticipants")}
+              editLabel={t("panel.editParticipants")}
               onSave={(next) => patchItem({ participants: next })}
             />
           </div>
@@ -1330,15 +1352,15 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             <div className="rdm-item-field" data-testid="item-field-reviewer">
               <InlineMemberField
                 testId="item-reviewer"
-                label="评审人"
+                label={t("panel.reviewer")}
                 required={requiredFieldKeys.has("reviewer")}
                 canEdit={canEdit}
                 multiple
                 ids={(item.reviewer ?? []).map((reviewer) => reviewer.id)}
                 options={memberOptions}
-                emptyText="未设置"
-                placeholder="选择评审人"
-                editLabel="编辑评审人"
+                emptyText={t("panel.notSet")}
+                placeholder={t("panel.selectReviewer")}
+                editLabel={t("panel.editReviewer")}
                 onSave={(next) => patchItem({ reviewer: next })}
               />
             </div>
@@ -1348,15 +1370,15 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             <div className="rdm-item-field" data-testid="item-field-review-content">
               <InlineMarkdownField
                 testId="item-review-content"
-                label="评审意见"
+                label={t("panel.reviewContent")}
                 required={requiredFieldKeys.has("review_content")}
                 value={item.review_content_md}
                 canEdit={canEdit}
                 projectKey={projectKey}
-                emptyText="未填写"
-                placeholder="填写评审意见（支持 Markdown）"
+                emptyText={t("panel.reviewContentEmpty")}
+                placeholder={t("panel.reviewContentPlaceholder")}
                 minimumRows={3}
-                editLabel="编辑评审意见"
+                editLabel={t("panel.editReviewContent")}
                 onImageClick={setPreview}
                 onSave={(next) =>
                   patchItem({ review_content_md: next.trim() ? next : null })
@@ -1391,7 +1413,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                         canEdit={canEdit}
                         projectKey={projectKey}
                         minimumRows={2}
-                        editLabel={`编辑${field.label}`}
+                        editLabel={t("panel.editField", { label: field.label })}
                         onImageClick={setPreview}
                         onSave={(next) => save(next.trim() ? next : null)}
                       />
@@ -1408,7 +1430,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                         value={raw === null || raw === undefined ? "" : String(raw)}
                         canEdit={canEdit}
                         inputType="number"
-                        editLabel={`编辑${field.label}`}
+                        editLabel={t("panel.editField", { label: field.label })}
                         onSave={(next) => save(next.trim() === "" ? null : Number(next))}
                       />
                     </div>
@@ -1429,9 +1451,9 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                       multiple={field.multiple}
                       ids={ids}
                       options={memberOptions}
-                      emptyText="未选择"
-                      placeholder="选择成员"
-                      editLabel={`编辑${field.label}`}
+                      emptyText={t("panel.customEmpty")}
+                      placeholder={t("panel.selectMember")}
+                      editLabel={t("panel.editField", { label: field.label })}
                       onSave={(next) => save(next)}
                     />
                   </div>
@@ -1446,13 +1468,13 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
 
           <div data-testid="item-section-metadata">
             <div className="rdm-item-field">
-              <div className="rdm-item-section-label">类型 / 版本</div>
+              <div className="rdm-item-section-label">{t("panel.typeVersion")}</div>
               <Text size="small" color="color.text.subtlest">
                 {kindLabel(item.kind)} · v{item.row_version}
               </Text>
             </div>
             <div className="rdm-item-field">
-              <div className="rdm-item-section-label">创建时间</div>
+              <div className="rdm-item-section-label">{t("panel.createdAt")}</div>
               <Text size="small" color="color.text.subtlest">
                 {formatDate(item.created_at)}
               </Text>
@@ -1495,13 +1517,13 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       />
       <ConfirmDialog
         open={stepCancel !== null}
-        title="取消步骤"
-        confirmLabel="取消步骤"
+        title={t("panel.cancelStepTitle")}
+        confirmLabel={t("panel.cancelStepTitle")}
         testId="step-cancel-dialog"
         onClose={() => setStepCancel(null)}
         onConfirm={() => void cancelStep()}
       >
-        取消后已完成的执行记录会保留，未执行的执行人不再需要提交。确认取消？
+        {t("panel.cancelStepBody")}
       </ConfirmDialog>
       <ArtifactDialog
         open={showArtifact}
@@ -1530,24 +1552,24 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       />
       <ConfirmDialog
         open={commentToDelete !== null}
-        title="删除评论"
-        confirmLabel="删除"
+        title={t("panel.deleteCommentTitle")}
+        confirmLabel={t("panel.delete")}
         testId="item-comment-delete-dialog"
         onClose={() => setCommentToDelete(null)}
         onConfirm={() => void deleteComment()}
       >
-        删除后不可恢复，确认删除这条评论？
+        {t("panel.deleteCommentBody")}
       </ConfirmDialog>
       <ConfirmDialog
         open={commentCancelConfirm}
-        title="放弃评论"
-        confirmLabel="放弃"
+        title={t("panel.discardCommentTitle")}
+        confirmLabel={t("panel.discardConfirm")}
         testId="comment-cancel-dialog"
         danger
         onClose={() => setCommentCancelConfirm(false)}
         onConfirm={discardComment}
       >
-        当前评论内容尚未提交，确认放弃？
+        {t("panel.discardCommentBody")}
       </ConfirmDialog>
     </aside>
   );

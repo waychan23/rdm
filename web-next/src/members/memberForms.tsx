@@ -11,20 +11,24 @@ import ModalDialog, {
 } from "@atlaskit/modal-dialog";
 import { Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import Select from "@atlaskit/select";
+import { useTranslation } from "react-i18next";
 
 import FormField from "../components/FormField";
 import { roleLabel } from "../lib/labels";
 import { portalMenuProps } from "../lib/portalMenu";
 import type { OrgUser, ProjectMemberRow } from "../types";
 
-export const PROJECT_ROLES = [
-  { label: roleLabel("manager"), value: "manager" },
-  { label: roleLabel("sprint_manager"), value: "sprint_manager" },
-  { label: roleLabel("worker"), value: "worker" },
-];
+// Resolved per render so role labels follow the active language.
+function projectRoleOptions() {
+  return [
+    { label: roleLabel("manager"), value: "manager" },
+    { label: roleLabel("sprint_manager"), value: "sprint_manager" },
+    { label: roleLabel("worker"), value: "worker" },
+  ];
+}
 
-function rolesToOptions(roles: string[]) {
-  return PROJECT_ROLES.filter((r) => roles.includes(r.value));
+function rolesToOptions(roles: string[], options: ReturnType<typeof projectRoleOptions>) {
+  return options.filter((r) => roles.includes(r.value));
 }
 
 /** Add an existing organization human to the project (§17). */
@@ -39,6 +43,8 @@ export function AddMemberDialog({
   onClose: () => void;
   onAdd: (userId: string, roles: string[]) => Promise<void>;
 }) {
+  const { t } = useTranslation("members");
+  const roleOptions = projectRoleOptions();
   const [userId, setUserId] = useState<string | null>(null);
   const [roles, setRoles] = useState<string[]>(["worker"]);
   const [saving, setSaving] = useState(false);
@@ -65,18 +71,18 @@ export function AddMemberDialog({
       {open && (
         <ModalDialog onClose={onClose} testId="member-add-dialog">
           <ModalHeader>
-            <ModalTitle>添加项目成员</ModalTitle>
+            <ModalTitle>{t("addDialog.title")}</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.200">
               <FormField
-                label="组织用户"
+                label={t("addDialog.userLabel")}
                 htmlFor="add-member-user"
-                hint="该用户名下的 agent 会自动加入项目；agent 不需要也不能单独添加。"
+                hint={t("addDialog.userHint")}
               >
                 <Select
                   inputId="add-member-user"
-                  placeholder="选择组织内的 human 用户"
+                  placeholder={t("addDialog.userPlaceholder")}
                   options={candidates.map((u) => ({ label: u.name, value: u.id }))}
                   value={
                     userId
@@ -94,15 +100,15 @@ export function AddMemberDialog({
                 />
               </FormField>
               <FormField
-                label="项目角色"
-                hint="项目经理只能通过「转让项目经理」变更，不能在此授予或移除。"
+                label={t("addDialog.roleLabel")}
+                hint={t("addDialog.roleHint")}
               >
                 <Select
                   inputId="add-member-roles"
                   isMulti
-                  placeholder="选择项目角色"
-                  options={PROJECT_ROLES}
-                  value={rolesToOptions(roles)}
+                  placeholder={t("addDialog.rolePlaceholder")}
+                  options={roleOptions}
+                  value={rolesToOptions(roles, roleOptions)}
                   onChange={(opts) =>
                     setRoles((opts as readonly { value: string }[]).map((o) => o.value))
                   }
@@ -113,7 +119,7 @@ export function AddMemberDialog({
           </ModalBody>
           <ModalFooter>
             <Button appearance="subtle" onClick={onClose} testId="member-add-cancel">
-              取消
+              {t("addDialog.cancel")}
             </Button>
             <Button
               appearance="primary"
@@ -122,7 +128,7 @@ export function AddMemberDialog({
               isDisabled={!userId}
               testId="member-add-submit"
             >
-              添加
+              {t("addDialog.add")}
             </Button>
           </ModalFooter>
         </ModalDialog>
@@ -145,6 +151,8 @@ export function MemberEditDialog({
   onClose: () => void;
   onSave: (userId: string, roles: string[]) => Promise<void>;
 }) {
+  const { t } = useTranslation("members");
+  const roleOptions = projectRoleOptions();
   const [roles, setRoles] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const isOwner = !!member && member.id === ownerUserId;
@@ -171,14 +179,14 @@ export function MemberEditDialog({
       {open && member && (
         <ModalDialog onClose={onClose} testId="member-edit-dialog">
           <ModalHeader>
-            <ModalTitle>项目角色 · {member.name}</ModalTitle>
+            <ModalTitle>{t("editDialog.title", { name: member.name })}</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.100">
               {isOwner && (
                 <Inline space="space.050" alignBlock="center">
                   <Text size="small" color="color.text.subtlest">
-                    固定角色
+                    {t("editDialog.fixedRole")}
                   </Text>
                   <Lozenge appearance="inprogress">{roleLabel("project_owner")}</Lozenge>
                 </Inline>
@@ -186,9 +194,9 @@ export function MemberEditDialog({
               <Select
                 inputId="edit-member-roles"
                 isMulti
-                placeholder="选择项目角色"
-                options={PROJECT_ROLES}
-                value={rolesToOptions(roles)}
+                placeholder={t("editDialog.rolePlaceholder")}
+                options={roleOptions}
+                value={rolesToOptions(roles, roleOptions)}
                 onChange={(opts) =>
                   setRoles((opts as readonly { value: string }[]).map((o) => o.value))
                 }
@@ -196,14 +204,14 @@ export function MemberEditDialog({
               />
               <Text size="small" color="color.text.subtlest">
                 {isOwner
-                  ? "项目经理角色不可在此编辑；只能通过「转让项目经理」变更。"
-                  : "项目经理角色不在此处设置；请在项目设置页转让。"}
+                  ? t("editDialog.ownerHintLocked")
+                  : t("editDialog.ownerHintOther")}
               </Text>
             </Stack>
           </ModalBody>
           <ModalFooter>
             <Button appearance="subtle" onClick={onClose} testId="member-edit-cancel">
-              取消
+              {t("editDialog.cancel")}
             </Button>
             <Button
               appearance="primary"
@@ -211,7 +219,7 @@ export function MemberEditDialog({
               isLoading={saving}
               testId="member-edit-submit"
             >
-              保存
+              {t("editDialog.save")}
             </Button>
           </ModalFooter>
         </ModalDialog>

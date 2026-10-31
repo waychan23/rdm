@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
@@ -36,6 +37,7 @@ const styles = cssMap({
 });
 
 export default function LoginPage() {
+  const { t } = useTranslation("auth");
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const notify = useNotify();
@@ -79,7 +81,7 @@ export default function LoginPage() {
       }
       await beginLogin("/projects");
     } catch (e) {
-      notify.error("登录失败", errorCause(e)?.message);
+      notify.error(t("login.failed"), errorCause(e)?.message);
     } finally {
       setLoading(false);
     }
@@ -90,7 +92,7 @@ export default function LoginPage() {
       <Box xcss={styles.wrap} testId="login-redirecting">
         <Stack space="space.200" alignInline="center">
           <Spinner size="large" />
-          <Text color="color.text.subtlest">正在跳转到登录…</Text>
+          <Text color="color.text.subtlest">{t("login.redirecting")}</Text>
         </Stack>
       </Box>
     );
@@ -101,19 +103,19 @@ export default function LoginPage() {
       <Box xcss={styles.card} style={cardBorder}>
         <Box as="form" onSubmit={submit} testId="login-form">
           <Stack space="space.200">
-            <Heading size="large" as="h1">rd-manager 登录</Heading>
-            <FormField label="用户名" htmlFor="login-name">
+            <Heading size="large" as="h1">{t("login.title")}</Heading>
+            <FormField label={t("login.username")} htmlFor="login-name">
               <Textfield
                 id="login-name"
                 value={name}
-                placeholder="请输入用户名"
+                placeholder={t("login.usernamePlaceholder")}
                 autoComplete="username"
                 autoFocus
                 testId="login-username"
                 onChange={(e) => setName(e.currentTarget.value)}
               />
             </FormField>
-            <FormField label="密码" htmlFor="login-password">
+            <FormField label={t("login.password")} htmlFor="login-password">
               <Textfield
                 id="login-password"
                 type="password"
@@ -124,7 +126,7 @@ export default function LoginPage() {
               />
             </FormField>
             <Checkbox
-              label="记住我（7 天内免登录）"
+              label={t("login.remember")}
               isChecked={remember}
               testId="login-remember"
               onChange={(e) => setRemember(e.currentTarget.checked)}
@@ -135,11 +137,10 @@ export default function LoginPage() {
               isLoading={loading}
               testId="login-submit"
             >
-              登录
+              {t("login.submit")}
             </Button>
             <Text size="small" color="color.text.subtlest">
-              首次部署请使用服务启动日志中的 bootstrap-url 设置 Org Owner 密码；
-              忘记密码可由部署主机执行 rdm account recover-owner 重新生成。
+              {t("login.bootstrapHint")}
             </Text>
           </Stack>
         </Box>

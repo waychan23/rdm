@@ -14,6 +14,7 @@ from rdm.application.services import password_tickets
 from rdm.domain.constants import DEFAULT_ORG_ID
 from rdm.domain.enums import PasswordTicketKind
 from rdm.domain.errors import NotFound
+from rdm.i18n import tr
 from rdm.interfaces.http.container import Container, get_container
 
 router = APIRouter(prefix="/api/v1/local", tags=["local"])
@@ -38,7 +39,7 @@ async def owner_recovery(
         assert uow.users is not None
         owners = await uow.users.list_org_owners(DEFAULT_ORG_ID)
         if not owners:
-            raise NotFound("组织尚无启用状态的 Org Owner")
+            raise NotFound(tr("auth.org_owner_missing"))
         owner = owners[0]
         raw = await password_tickets.issue_ticket(
             uow,

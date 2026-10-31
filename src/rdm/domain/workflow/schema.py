@@ -108,6 +108,8 @@ class StepSpec(BaseModel):
 
     key: str
     name: str = Field(min_length=1, max_length=100)
+    # Optional English display name (§17.115); falls back to name.
+    name_en: str | None = Field(default=None, max_length=100)
     to: str
     mode: StepMode = "direct"
     actors: tuple[ActorSource, ...] = ("assignee",)
@@ -145,6 +147,7 @@ class CustomFieldSpec(BaseModel):
 
     key: str
     label: str = Field(min_length=1, max_length=100)
+    label_en: str | None = Field(default=None, max_length=100)
     type: CustomFieldType
     multiple: bool = False
 
@@ -208,6 +211,7 @@ class SubtypeWorkflow(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     label: str | None = None
+    label_en: str | None = None
     states: tuple[str, ...] | None = None
     initial: str | None = None
     terminal: tuple[str, ...] | None = None
@@ -247,6 +251,7 @@ class KindWorkflow(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     label: str | None = None
+    label_en: str | None = None
     states: tuple[str, ...]
     initial: str
     terminal: tuple[str, ...]
@@ -301,6 +306,7 @@ class ResolvedKindWorkflow:
     steps: dict[str, tuple[StepSpec, ...]]
     gates: dict[str, GateSpec]
     fields: FieldsSpec
+    label_en: str | None = None
 
     def steps_from(self, state: str) -> tuple[StepSpec, ...]:
         return tuple(self.steps[state])
@@ -369,12 +375,18 @@ class WorkflowSpec(BaseModel):
     # that matters for in-flight items (§17 M7). Distinct from schema version.
     revision: int = 1
     task_types: dict[str, str] = {}
+    # Optional English labels keyed by task-type code (§17.115); missing codes
+    # fall back to the zh label.
+    task_type_labels_en: dict[str, str] = {}
     kinds: dict[str, KindWorkflow]
 
     @model_validator(mode="after")
     def _validate(self) -> WorkflowSpec:
         if not self.kinds:
             raise ValueError("workflow must define at least one kind")
+        unknown_labels = sorted(set(self.task_type_labels_en) - set(self.task_types))
+        if unknown_labels:
+            raise ValueError(f"task_type_labels_en references unknown task types: {unknown_labels}")
         if "task" in self.kinds:
             subtypes = set(self.kinds["task"].subtypes)
             unknown = sorted(subtypes - set(self.task_types))
@@ -413,6 +425,7 @@ class WorkflowSpec(BaseModel):
                 kind=kind,
                 task_type=key[1],
                 label=base.label or kind,
+                label_en=base.label_en or base.label or kind,
                 states=base.states,
                 initial=base.initial,
                 terminal=base.terminal,
@@ -438,6 +451,7 @@ class WorkflowSpec(BaseModel):
             kind=kind,
             task_type=key[1],
             label=subtype.label or base.label or kind,
+            label_en=subtype.label_en or base.label_en or subtype.label or base.label or kind,
             states=tuple(states),
             initial=initial,
             terminal=tuple(terminal),

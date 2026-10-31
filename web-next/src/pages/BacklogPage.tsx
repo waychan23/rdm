@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -20,7 +21,7 @@ import { recall, remember } from "../lib/pageCache";
 import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
 import type { ProjectMemberRow, WorkItem, WorkflowDto } from "../types";
 import { flattenMembers } from "../lib/members";
-import { KIND_OPTIONS, PAGE_SIZE } from "../workitems/constants";
+import { kindOptions, PAGE_SIZE } from "../workitems/constants";
 import { buildWorkItemTree } from "../workitems/hierarchy";
 import WorkItemTable, { type WorkItemRowView } from "../workitems/WorkItemTable";
 import CreateWorkItemDialog from "../workitems/CreateWorkItemDialog";
@@ -118,6 +119,7 @@ export default function BacklogPage() {
 }
 
 function BacklogView({ projectKey }: { projectKey: string }) {
+  const { t } = useTranslation("projects");
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -174,14 +176,14 @@ function BacklogView({ projectKey }: { projectKey: string }) {
       );
     });
     return [...states].map((s) => ({ label: statusLabel(s), value: s }));
-  }, [workflowState.data]);
+  }, [workflowState.data, t]);
 
   const assigneeOptions = useMemo<Option[]>(() => {
     return [
-      { label: "我的", value: "me" },
+      { label: t("backlog.filter.mine"), value: "me" },
       ...flattenMembers(membersState.data ?? []).map((m) => ({ label: m.name, value: m.id })),
     ];
-  }, [membersState.data]);
+  }, [membersState.data, t]);
 
   const status = statusValue
     ? (statusOptions.find((o) => o.value === statusValue) ?? {
@@ -290,7 +292,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
   return (
     <Page fill testId="page-backlog">
       <PageHeader
-        title="工作项"
+        title={t("backlog.title")}
         testId="backlog-header"
         actions={
           <>
@@ -302,7 +304,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
                 testId="work-item-view-flat"
                 onClick={() => changeView("flat")}
               >
-                扁平
+                {t("backlog.view.flat")}
               </Button>
               <Button
                 spacing="compact"
@@ -311,7 +313,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
                 testId="work-item-view-tree"
                 onClick={() => changeView("tree")}
               >
-                层级
+                {t("backlog.view.tree")}
               </Button>
             </Inline>
             <Button
@@ -319,7 +321,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
               testId="work-item-create-button"
               onClick={() => setShowCreate(true)}
             >
-              新建
+              {t("backlog.create")}
             </Button>
           </>
         }
@@ -331,7 +333,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
         shouldWrap
         testId="work-item-filters"
       >
-        {KIND_OPTIONS.map((k) => (
+        {kindOptions().map((k) => (
           <Checkbox
             key={k.value}
             label={k.label}
@@ -348,7 +350,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
             onChange={(opt) => patchParams({ status: (opt as Option | null)?.value ?? null })}
             isClearable
             spacing="compact"
-            placeholder="状态"
+            placeholder={t("backlog.filter.status")}
           />
         </Box>
         <Box xcss={pageStyles.filterWidth} testId="work-item-filter-assignee">
@@ -358,7 +360,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
             onChange={(opt) => patchParams({ assignee: (opt as Option | null)?.value ?? null })}
             isClearable
             spacing="compact"
-            placeholder="负责人"
+            placeholder={t("backlog.filter.assignee")}
           />
         </Box>
         <Box xcss={pageStyles.filterWidth} testId="work-item-filter-reviewer">
@@ -368,12 +370,12 @@ function BacklogView({ projectKey }: { projectKey: string }) {
             onChange={(opt) => patchParams({ reviewer: (opt as Option | null)?.value ?? null })}
             isClearable
             spacing="compact"
-            placeholder="评审人"
+            placeholder={t("backlog.filter.reviewer")}
           />
         </Box>
         <Box xcss={pageStyles.searchWidth}>
           <Textfield
-            placeholder="搜索标题/评审意见"
+            placeholder={t("backlog.filter.search")}
             value={qInput}
             testId="work-item-search"
             onChange={(e) => setQInput(e.currentTarget.value)}
@@ -393,14 +395,14 @@ function BacklogView({ projectKey }: { projectKey: string }) {
             <Spinner size="large" />
           </Box>
         ) : itemsState.error ? (
-          <SectionMessage appearance="error" title="加载失败">
-            无法获取工作项列表，请调整筛选或刷新页面重试。
+          <SectionMessage appearance="error" title={t("backlog.loadFailed")}>
+            {t("backlog.loadFailedDescription")}
           </SectionMessage>
         ) : items.length === 0 ? (
           <Box testId="work-item-empty">
             <EmptyState
-              header="没有符合条件的工作项"
-              description="调整筛选，或点「新建」创建第一个。"
+              header={t("backlog.empty")}
+              description={t("backlog.emptyDescription")}
             />
           </Box>
         ) : (
@@ -408,7 +410,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
             {treeMode && itemsData?.truncated && (
               <Box paddingBlockEnd="space.150" testId="work-item-tree-truncated">
                 <SectionMessage appearance="warning">
-                  层级视图最多加载 {TREE_LIMIT} 条工作项；请缩小筛选范围以查看完整层级。
+                  {t("backlog.treeTruncated", { limit: TREE_LIMIT })}
                 </SectionMessage>
               </Box>
             )}
@@ -420,7 +422,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
               onOpen={openItem}
               onPageChange={(p) => patchParams({ page: String(p) }, false)}
               onToggle={treeMode ? toggleNode : undefined}
-              countNote={tree ? `${tree.rootCount} 个顶层` : undefined}
+              countNote={tree ? t("backlog.rootCount", { n: tree.rootCount }) : undefined}
             />
           </>
         )}

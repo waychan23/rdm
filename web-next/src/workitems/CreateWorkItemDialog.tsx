@@ -13,6 +13,7 @@ import { Stack, Text } from "@atlaskit/primitives/compiled";
 import { RadioGroup } from "@atlaskit/radio";
 import Select from "@atlaskit/select";
 import Textfield from "@atlaskit/textfield";
+import { useTranslation } from "react-i18next";
 
 import FormField from "../components/FormField";
 import MarkdownEditor from "../components/MarkdownEditor";
@@ -22,10 +23,10 @@ import { useCurrentUser } from "../lib/auth";
 import { useNotify } from "../lib/flags";
 import { portalMenuProps } from "../lib/portalMenu";
 import type { WorkflowDto, WorkflowFields, WorkItem } from "../types";
-import { KIND_OPTIONS, TASK_TYPE_OPTIONS } from "./constants";
+import { kindOptions, taskTypeOptions } from "./constants";
 import KindSpecificFields, { type IssueFields, type TaskFields } from "./KindSpecificFields";
 import { allowedParentKinds } from "./parentRules";
-import { DEFAULT_PRIORITY, PRIORITY_OPTIONS } from "./priority";
+import { DEFAULT_PRIORITY, priorityOptions } from "./priority";
 import WorkItemPeopleFields, {
   emptyOptionalValues,
   type OptionalFieldValues,
@@ -68,14 +69,15 @@ export default function CreateWorkItemDialog({
   initialParent = null,
   allowedKinds,
   parentLocked = false,
-  dialogTitle = "新建工作项",
+  dialogTitle,
   onClose,
   onCreated,
 }: Props) {
+  const { t } = useTranslation("workitems");
   const notify = useNotify();
   const me = useCurrentUser();
   const identityId = me?.identity.id ?? null;
-  const kinds = allowedKinds ?? KIND_OPTIONS.map((k) => k.value);
+  const kinds = allowedKinds ?? kindOptions().map((k) => k.value);
   const allowedKey = allowedKinds?.join(",") ?? "";
   const [kind, setKind] = useState(allowedKinds?.[0] ?? "task");
   const [title, setTitle] = useState("");
@@ -163,7 +165,7 @@ export default function CreateWorkItemDialog({
 
   const submit = async () => {
     if (!title.trim()) {
-      notify.error("请填写标题");
+      notify.error(t("create.requiredTitle"));
       return;
     }
     if (saving) return;
@@ -205,39 +207,42 @@ export default function CreateWorkItemDialog({
       const item = (
         await api.post<WorkItem>(`/projects/${projectKey}/work-items`, payload)
       ).data;
-      notify.success(`已创建 ${item.display_id}`);
+      notify.success(t("create.created", { id: item.display_id }));
       onCreated(item);
       onClose();
     } catch (e) {
-      notify.error("创建失败", errorCause(e)?.message);
+      notify.error(t("create.createFailed"), errorCause(e)?.message);
     } finally {
       setSaving(false);
     }
   };
 
   const parentKinds = parentLocked ? [] : allowedParentKinds(kind);
-  const kindOptions = KIND_OPTIONS.filter((option) => kinds.includes(option.value));
+  const kindChoices = kindOptions().filter((option) => kinds.includes(option.value));
 
   return (
     <ModalTransition>
       {open && (
         <ModalDialog onClose={onClose} width="680px" testId="work-item-create-dialog">
           <ModalHeader>
-            <ModalTitle>{dialogTitle}</ModalTitle>
+            <ModalTitle>{dialogTitle ?? t("create.title")}</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.150">
               {parentLocked && initialParent && (
                 <Text size="small" color="color.text.subtlest">
-                  父项：{initialParent.display_id} · {initialParent.title}
+                  {t("create.parentLine", {
+                    id: initialParent.display_id,
+                    title: initialParent.title,
+                  })}
                 </Text>
               )}
               <Stack space="space.050">
                 <Text size="small" weight="medium" color="color.text.subtle">
-                  类型
+                  {t("create.kind")}
                 </Text>
                 <RadioGroup
-                  options={kindOptions.map((k) => ({
+                  options={kindChoices.map((k) => ({
                     name: "kind",
                     value: k.value,
                     label: k.label,
@@ -247,12 +252,12 @@ export default function CreateWorkItemDialog({
                 />
               </Stack>
               {kind === "task" && (
-                <FormField label="任务类型" htmlFor="wi-create-task-type">
+                <FormField label={t("create.taskType")} htmlFor="wi-create-task-type">
                   <Select
                     {...portalMenuProps}
                     inputId="wi-create-task-type"
-                    options={TASK_TYPE_OPTIONS}
-                    value={TASK_TYPE_OPTIONS.find((option) => option.value === task.task_type)}
+                    options={taskTypeOptions()}
+                    value={taskTypeOptions().find((option) => option.value === task.task_type)}
                     testId="work-item-create-task-type"
                     onChange={(option) =>
                       option &&
@@ -264,17 +269,17 @@ export default function CreateWorkItemDialog({
                   />
                 </FormField>
               )}
-              <FormField label="标题" htmlFor="wi-title">
+              <FormField label={t("create.titleLabel")} htmlFor="wi-title">
                 <Textfield
                   id="wi-title"
                   value={title}
-                  placeholder="工作项标题"
+                  placeholder={t("create.titlePlaceholder")}
                   testId="work-item-create-title"
                   onChange={(e) => setTitle(e.currentTarget.value)}
                   onKeyDown={(e) => e.key === "Enter" && void submit()}
                 />
               </FormField>
-              <FormField label="描述（Markdown）">
+              <FormField label={t("create.description")}>
                 <MarkdownEditor
                   value={description}
                   onChange={setDescription}
@@ -283,12 +288,12 @@ export default function CreateWorkItemDialog({
                   testId="work-item-create-description"
                 />
               </FormField>
-              <FormField label="优先级" htmlFor="wi-priority">
+              <FormField label={t("create.priority")} htmlFor="wi-priority">
                 <Select
                   {...portalMenuProps}
                   inputId="wi-priority"
-                  options={PRIORITY_OPTIONS}
-                  value={PRIORITY_OPTIONS.find((option) => option.value === priority) ?? null}
+                  options={priorityOptions()}
+                  value={priorityOptions().find((option) => option.value === priority) ?? null}
                   isClearable={false}
                   testId="work-item-create-priority"
                   onChange={(option) =>
@@ -296,32 +301,32 @@ export default function CreateWorkItemDialog({
                   }
                 />
               </FormField>
-              <FormField label="计划开始日期" htmlFor="wi-planned-start">
+              <FormField label={t("create.plannedStart")} htmlFor="wi-planned-start">
                 <DatePicker
                   id="wi-planned-start"
                   value={plannedStart}
-                  placeholder="选择日期"
+                  placeholder={t("create.datePlaceholder")}
                   testId="work-item-create-planned-start"
                   onChange={setPlannedStart}
                 />
               </FormField>
-              <FormField label="计划完成日期" htmlFor="wi-planned-end">
+              <FormField label={t("create.plannedEnd")} htmlFor="wi-planned-end">
                 <DatePicker
                   id="wi-planned-end"
                   value={plannedEnd}
-                  placeholder="选择日期"
+                  placeholder={t("create.datePlaceholder")}
                   testId="work-item-create-planned-end"
                   onChange={setPlannedEnd}
                 />
               </FormField>
               {parentKinds.length > 0 && (
-                <FormField label="父项（可空）">
+                <FormField label={t("create.parent")}>
                   <WorkItemPicker
                     projectKey={projectKey}
                     allowedKinds={parentKinds}
                     value={parent}
                     onChange={setParent}
-                    placeholder="选择父项"
+                    placeholder={t("create.parentPlaceholder")}
                     testId="work-item-create-parent"
                   />
                 </FormField>
@@ -343,13 +348,13 @@ export default function CreateWorkItemDialog({
                 value={people}
                 onChange={setPeople}
                 showAssignee
-                assigneeLabel="负责人（默认当前创建人，可修改）"
+                assigneeLabel={t("create.assignee")}
               />
             </Stack>
           </ModalBody>
           <ModalFooter>
             <Button appearance="subtle" onClick={onClose} testId="work-item-create-cancel">
-              取消
+              {t("actions.cancel")}
             </Button>
             <Button
               appearance="primary"
@@ -357,7 +362,7 @@ export default function CreateWorkItemDialog({
               testId="work-item-create-submit"
               onClick={() => void submit()}
             >
-              创建
+              {t("actions.create")}
             </Button>
           </ModalFooter>
         </ModalDialog>

@@ -16,6 +16,7 @@ import SectionMessage from "@atlaskit/section-message";
 import Select from "@atlaskit/select";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
+import { useTranslation } from "react-i18next";
 import { portalMenuProps } from "../lib/portalMenu";
 
 import FormField from "../components/FormField";
@@ -24,6 +25,7 @@ import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { formatDate } from "../lib/format";
+import { kindLabel } from "../lib/labels";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
 import { beginLogin } from "../lib/oauth";
@@ -36,12 +38,13 @@ const styles = cssMap({
   },
 });
 
-const ACCEPT_KINDS = [
-  { label: "story", value: "story" },
-  { label: "issue", value: "issue" },
-  { label: "task", value: "task" },
-];
-const ALL_ACCEPT_KINDS = ACCEPT_KINDS.map((k) => k.value);
+const ACCEPT_KINDS = ["story", "issue", "task"] as const;
+const ALL_ACCEPT_KINDS: string[] = [...ACCEPT_KINDS];
+
+// Kind labels are resolved per render so they follow the active language.
+function acceptKindOptions() {
+  return ACCEPT_KINDS.map((value) => ({ label: kindLabel(value), value }));
+}
 
 function defaultAgentForm() {
   return {
@@ -53,19 +56,28 @@ function defaultAgentForm() {
     notify_webhook_format: "generic",
   };
 }
-const WEBHOOK_FORMATS = [
-  { label: "generic", value: "generic" },
-  { label: "dingtalk", value: "dingtalk" },
-  { label: "feishu", value: "feishu" },
-];
 
-const emptyHint = (
-  <Text size="small" color="color.text.subtlest">
-     暂无记录
-  </Text>
-);
+// Wire-format names are product identifiers and stay untranslated.
+function webhookFormatOptions() {
+  return [
+    { label: "generic", value: "generic" },
+    { label: "dingtalk", value: "dingtalk" },
+    { label: "feishu", value: "feishu" },
+  ];
+}
+
+const NOTIFICATION_PREFS = [
+  { type: "assignment", key: "personal.notifications.assignment" },
+  { type: "step", key: "personal.notifications.step" },
+  { type: "comment", key: "personal.notifications.comment" },
+  { type: "mention", key: "personal.notifications.mention" },
+  { type: "system", key: "personal.notifications.system" },
+] as const;
 
 export default function PersonalSettingsPage() {
+  const { t } = useTranslation("org");
+  const kindOptions = acceptKindOptions();
+  const webhookFormats = webhookFormatOptions();
   const notify = useNotify();
   const [nonce, setNonce] = useState(0);
   const reload = () => setNonce((n) => n + 1);
@@ -95,17 +107,9 @@ export default function PersonalSettingsPage() {
        await api.patch("/me/notification-prefs", { prefs: { [type]: enabled } });
      } catch (e) {
        setPrefs((prev) => ({ ...prev, [type]: !enabled }));
-       notify.error("保存通知设置失败", errorCause(e)?.message);
+       notify.error(t("personal.notifications.saveFailed"), errorCause(e)?.message);
      }
   };
-
-  const NOTIFICATION_LABELS: Array<[string, string]> = [
-     ["assignment", "工作项指派"],
-     ["step", "步骤分配/审批"],
-     ["comment", "评论"],
-     ["mention", "被 @ 提到"],
-     ["system", "系统通知"],
-  ];
 
   // --- password ---
   const [oldPw, setOldPw] = useState("");
@@ -115,10 +119,10 @@ export default function PersonalSettingsPage() {
        await api.post("/auth/password", { old_password: oldPw, new_password: newPw });
        setOldPw("");
        setNewPw("");
-       notify.success("密码已修改，请重新登录");
+       notify.success(t("personal.password.changed"));
        await beginLogin("/settings");
      } catch (e) {
-       notify.error("修改密码失败", errorCause(e)?.message);
+       notify.error(t("personal.password.failed"), errorCause(e)?.message);
      }
   };
 
@@ -141,7 +145,7 @@ export default function PersonalSettingsPage() {
        setIssued(res.data.token ?? "");
        reload();
      } catch (e) {
-       notify.error("签发失败", errorCause(e)?.message);
+       notify.error(t("personal.tokens.issueFailed"), errorCause(e)?.message);
      } finally {
        setSavingToken(false);
      }
@@ -156,9 +160,9 @@ export default function PersonalSettingsPage() {
     if (!issued) return;
     try {
       await navigator.clipboard.writeText(issued);
-      notify.success("令牌已复制");
+      notify.success(t("personal.tokens.copied"));
     } catch {
-      notify.error("复制失败", "请手动选中令牌文本复制");
+      notify.error(t("personal.tokens.copyFailed"), t("personal.tokens.copyHint"));
     }
   };
 
@@ -169,9 +173,9 @@ export default function PersonalSettingsPage() {
        await api.del(`/me/tokens/${revokeTarget.id}`);
        setRevokeTarget(null);
        reload();
-       notify.success("令牌已吊销");
+       notify.success(t("personal.tokens.revokedNotice"));
      } catch (e) {
-       notify.error("吊销失败", errorCause(e)?.message);
+       notify.error(t("personal.tokens.revokeFailed"), errorCause(e)?.message);
      } finally {
        setRevoking(false);
      }
@@ -202,7 +206,7 @@ export default function PersonalSettingsPage() {
        setAgentForm(defaultAgentForm());
        reload();
      } catch (e) {
-       notify.error("创建 agent 失败", errorCause(e)?.message);
+       notify.error(t("personal.agents.createFailed"), errorCause(e)?.message);
      } finally {
        setSavingAgent(false);
      }
@@ -213,7 +217,7 @@ export default function PersonalSettingsPage() {
        await api.patch(`/me/agents/${agent.id}`, { is_active: !agent.is_active });
        reload();
      } catch (e) {
-       notify.error("操作失败", errorCause(e)?.message);
+       notify.error(t("personal.actionFailed"), errorCause(e)?.message);
      }
   };
 
@@ -237,15 +241,15 @@ export default function PersonalSettingsPage() {
        });
        setEditAgent(null);
        reload();
-       notify.success("保存成功");
+       notify.success(t("personal.saved"));
      } catch (e) {
-       notify.error("保存失败", errorCause(e)?.message);
+       notify.error(t("personal.saveFailed"), errorCause(e)?.message);
      }
   };
 
   return (
      <Page testId="page-personal-settings">
-       <PageHeader title="我的设置" testId="personal-settings-header" />
+       <PageHeader title={t("personal.title")} testId="personal-settings-header" />
 
        {loadError ? (
          <ErrorState error={loadError} onRetry={reload} testId="personal-settings-error" />
@@ -253,8 +257,8 @@ export default function PersonalSettingsPage() {
 
        <Box testId="personal-password-section">
          <Stack space="space.150" xcss={styles.form}>
-           <Heading size="small">修改密码</Heading>
-           <FormField label="原密码" htmlFor="old-pw">
+           <Heading size="small">{t("personal.password.heading")}</Heading>
+           <FormField label={t("personal.password.old")} htmlFor="old-pw">
              <Textfield
                id="old-pw"
                type="password"
@@ -264,7 +268,7 @@ export default function PersonalSettingsPage() {
                onChange={(e) => setOldPw(e.currentTarget.value)}
              />
            </FormField>
-           <FormField label="新密码（8–128 位）" htmlFor="new-pw">
+           <FormField label={t("personal.password.new")} htmlFor="new-pw">
              <Textfield
                id="new-pw"
                type="password"
@@ -281,26 +285,26 @@ export default function PersonalSettingsPage() {
                onClick={changePassword}
                isDisabled={!oldPw || !newPw}
              >
-               修改密码
+               {t("personal.password.submit")}
              </Button>
            </Inline>
            <Text size="small" color="color.text.subtlest">
-             修改后浏览器会话需要重新登录；已签发的访问令牌（PAT）不受影响。
+             {t("personal.password.hint")}
            </Text>
          </Stack>
        </Box>
 
        <Box testId="personal-notification-section">
          <Stack space="space.150">
-           <Heading size="small">通知设置</Heading>
+           <Heading size="small">{t("personal.notifications.heading")}</Heading>
            <Text size="small" color="color.text.subtle">
-             控制站内通知；关闭后仍可在「通知/待办」查看历史。
+             {t("personal.notifications.hint")}
            </Text>
            <Inline space="space.200" shouldWrap>
-             {NOTIFICATION_LABELS.map(([type, label]) => (
+             {NOTIFICATION_PREFS.map(({ type, key }) => (
                <Checkbox
                  key={type}
-                 label={label}
+                 label={t(key)}
                  isChecked={prefs[type] ?? true}
                  testId={`personal-notification-${type}`}
                  onChange={(e) => void togglePref(type, e.currentTarget.checked)}
@@ -313,10 +317,10 @@ export default function PersonalSettingsPage() {
        <Box testId="personal-tokens-section">
          <Stack space="space.200">
            <Inline spread="space-between" alignBlock="center">
-             <Heading size="small">访问令牌（PAT）</Heading>
+             <Heading size="small">{t("personal.tokens.heading")}</Heading>
              <Inline space="space.100" alignBlock="center">
                <Checkbox
-                 label="隐藏已吊销"
+                 label={t("personal.tokens.hideRevoked")}
                  isChecked={hideRevoked}
                  testId="personal-token-hide-revoked"
                  onChange={(e) => setHideRevoked(e.currentTarget.checked)}
@@ -328,65 +332,74 @@ export default function PersonalSettingsPage() {
                    setTokenOpen(true);
                  }}
                >
-                 创建令牌
+                 {t("personal.tokens.createButton")}
                </Button>
              </Inline>
            </Inline>
            {visibleTokens.length === 0 ? (
              <Text size="small" color="color.text.subtlest">
-               {(tokens ?? []).length > 0 ? "没有有效令牌（已隐藏已吊销）" : "暂无记录"}
+               {(tokens ?? []).length > 0
+                 ? t("personal.tokens.emptyValid")
+                 : t("personal.tokens.emptyAll")}
              </Text>
            ) : (
-             <table className="rdm-table" aria-label="访问令牌" data-testid="personal-token-table">
+             <table className="rdm-table" aria-label={t("personal.tokens.tableAria")} data-testid="personal-token-table">
                <thead>
                  <tr>
                    <th scope="col" className="col-label">
-                     标签
+                     {t("personal.tokens.columns.label")}
                    </th>
                    <th scope="col" className="col-label">
-                     使用身份
+                     {t("personal.tokens.columns.identity")}
                    </th>
                    <th scope="col" className="col-created">
-                     创建
+                     {t("personal.tokens.columns.created")}
                    </th>
                    <th scope="col" className="col-expires">
-                     过期
+                     {t("personal.tokens.columns.expires")}
                    </th>
                    <th scope="col" className="col-active">
-                     状态
+                     {t("personal.tokens.columns.status")}
                    </th>
                    <th scope="col" className="col-active">
-                     操作
+                     {t("personal.tokens.columns.actions")}
                    </th>
                  </tr>
                </thead>
                <tbody>
-                 {visibleTokens.map((t) => (
-                   <tr key={t.id} data-testid={`personal-token-row-${t.id}`}>
-                     <td className="cell-meta">{t.label ?? "—"}</td>
+                 {visibleTokens.map((token) => (
+                   <tr key={token.id} data-testid={`personal-token-row-${token.id}`}>
+                     <td className="cell-meta">{token.label ?? "—"}</td>
                      <td className="cell-meta">
-                       {t.act_as_user_id
-                         ? `agent ${agents?.find((a) => a.id === t.act_as_user_id)?.name ?? ""}`
-                         : "本人"}
+                       {token.act_as_user_id
+                         ? t("personal.tokens.agentIdentity", {
+                             name:
+                               agents?.find((a) => a.id === token.act_as_user_id)?.name ?? "",
+                           })
+                         : t("personal.tokens.self")}
                      </td>
-                     <td className="cell-meta">{formatDate(t.created_at)}</td>
+                     <td className="cell-meta">{formatDate(token.created_at)}</td>
                      <td className="cell-meta">
-                       {t.expires_at ? formatDate(t.expires_at) : "永久"}
+                       {token.expires_at
+                         ? formatDate(token.expires_at)
+                         : t("personal.tokens.permanent")}
                      </td>
                      <td>
-                       <Lozenge appearance={t.is_valid ? "success" : "default"}>
-                         {t.is_valid ? "有效" : "已吊销"}
+                       <Lozenge appearance={token.is_valid ? "success" : "default"}>
+                         {token.is_valid
+                           ? t("personal.tokens.valid")
+                           : t("personal.tokens.revoked")}
                        </Lozenge>
                      </td>
                      <td>
-                       {t.is_valid && (
+                       {token.is_valid && (
                          <Button
                            spacing="compact"
                            appearance="danger"
-                           testId={`personal-token-revoke-${t.id}`}
-                           onClick={() => setRevokeTarget(t)}
+                           testId={`personal-token-revoke-${token.id}`}
+                           onClick={() => setRevokeTarget(token)}
                          >
-                           吊销
+                           {t("personal.tokens.revoke")}
                          </Button>
                        )}
                      </td>
@@ -402,31 +415,37 @@ export default function PersonalSettingsPage() {
          <Stack space="space.200">
            <Inline spread="space-between" alignBlock="center">
              <Stack space="space.050">
-               <Heading size="small">Agent 账号</Heading>
+               <Heading size="small">{t("personal.agents.heading")}</Heading>
                <Text size="small" color="color.text.subtlest">
-                 你创建的 agent 会自动加入你所在的项目；成员管理中它们折叠在你名下。
+                 {t("personal.agents.hint")}
                </Text>
              </Stack>
              <Button testId="personal-agent-create-button" onClick={() => setAgentOpen(true)}>
-               创建 Agent
+               {t("personal.agents.createButton")}
              </Button>
            </Inline>
            {(agents ?? []).length === 0 ? (
-             emptyHint
+             <Text size="small" color="color.text.subtlest">
+               {t("personal.agents.empty")}
+             </Text>
            ) : (
-             <table className="rdm-table" aria-label="Agent 账号" data-testid="personal-agent-table">
+             <table
+               className="rdm-table"
+               aria-label={t("personal.agents.tableAria")}
+               data-testid="personal-agent-table"
+             >
                <thead>
                  <tr>
                    <th scope="col" className="col-person">
-                     名称
+                     {t("personal.agents.columns.name")}
                    </th>
-                   <th scope="col">可接任务类型</th>
-                   <th scope="col">Webhook</th>
+                   <th scope="col">{t("personal.agents.columns.kinds")}</th>
+                   <th scope="col">{t("personal.agents.columns.webhook")}</th>
                    <th scope="col" className="col-active">
-                     状态
+                     {t("personal.agents.columns.status")}
                    </th>
                    <th scope="col" className="col-date">
-                     操作
+                     {t("personal.agents.columns.actions")}
                    </th>
                  </tr>
                </thead>
@@ -443,7 +462,9 @@ export default function PersonalSettingsPage() {
                      <td className="cell-meta">{a.notify_webhook ?? "—"}</td>
                      <td>
                        <Lozenge appearance={a.is_active ? "success" : "default"}>
-                         {a.is_active ? "启用" : "停用"}
+                         {a.is_active
+                           ? t("users.status.enabled")
+                           : t("users.status.disabled")}
                        </Lozenge>
                      </td>
                      <td>
@@ -453,7 +474,7 @@ export default function PersonalSettingsPage() {
                            testId={`personal-agent-notify-${a.id}`}
                            onClick={() => setEditAgent(a)}
                          >
-                           通知
+                           {t("personal.agents.notify")}
                          </Button>
                          <Button
                            spacing="compact"
@@ -461,7 +482,9 @@ export default function PersonalSettingsPage() {
                            testId={`personal-agent-toggle-${a.id}`}
                            onClick={() => void toggleAgent(a)}
                          >
-                           {a.is_active ? "停用" : "启用"}
+                           {a.is_active
+                             ? t("users.actions.disable")
+                             : t("users.actions.enable")}
                          </Button>
                        </Inline>
                      </td>
@@ -478,15 +501,15 @@ export default function PersonalSettingsPage() {
            <ModalDialog
              onClose={() => setTokenOpen(false)}
              width="520px"
-             label="创建访问令牌"
+             label={t("personal.tokenDialog.dialogLabel")}
              testId="personal-token-dialog"
            >
              <ModalHeader>
-               <ModalTitle>创建访问令牌</ModalTitle>
+               <ModalTitle>{t("personal.tokenDialog.title")}</ModalTitle>
              </ModalHeader>
              <ModalBody>
                {issued ? (
-                 <SectionMessage appearance="success" title="令牌只显示一次">
+                 <SectionMessage appearance="success" title={t("personal.tokenDialog.onceTitle")}>
                    <Stack space="space.100">
                      <code style={{ wordBreak: "break-all" }}>{issued}</code>
                      <Inline>
@@ -495,15 +518,15 @@ export default function PersonalSettingsPage() {
                          testId="personal-token-copy"
                          onClick={() => void copyIssuedToken()}
                        >
-                         复制令牌
+                         {t("personal.tokenDialog.copy")}
                        </Button>
                      </Inline>
-                     <Text size="small">请立即复制保存；关闭窗口后无法再次查看。</Text>
+                     <Text size="small">{t("personal.tokenDialog.onceHint")}</Text>
                    </Stack>
                  </SectionMessage>
                ) : (
                  <Stack space="space.150">
-                   <FormField label="标签" htmlFor="token-label">
+                   <FormField label={t("personal.tokenDialog.label")} htmlFor="token-label">
                      <Textfield
                        id="token-label"
                        value={tokenLabel}
@@ -511,7 +534,7 @@ export default function PersonalSettingsPage() {
                        onChange={(e) => setTokenLabel(e.currentTarget.value)}
                      />
                    </FormField>
-                   <FormField label="有效期（天，留空=永久）" htmlFor="token-days">
+                   <FormField label={t("personal.tokenDialog.days")} htmlFor="token-days">
                      <Textfield
                        id="token-days"
                        type="number"
@@ -520,12 +543,12 @@ export default function PersonalSettingsPage() {
                        onChange={(e) => setTokenDays(e.currentTarget.value)}
                      />
                    </FormField>
-                   <FormField label="使用身份">
+                   <FormField label={t("personal.tokenDialog.identity")}>
                      <Select {...portalMenuProps}
                        inputId="token-act-as"
-                       placeholder="本人"
+                       placeholder={t("personal.tokenDialog.identityPlaceholder")}
                        options={(agents ?? []).map((a) => ({
-                         label: `${a.name}（agent）`,
+                         label: t("personal.tokenDialog.agentOption", { name: a.name }),
                          value: a.id,
                        }))}
                        value={
@@ -552,7 +575,7 @@ export default function PersonalSettingsPage() {
                    testId="personal-token-dialog-close"
                    onClick={() => setTokenOpen(false)}
                  >
-                   关闭
+                   {t("personal.tokenDialog.close")}
                  </Button>
                ) : (
                  <>
@@ -561,7 +584,7 @@ export default function PersonalSettingsPage() {
                      testId="personal-token-dialog-close"
                      onClick={() => setTokenOpen(false)}
                    >
-                     关闭
+                     {t("personal.tokenDialog.close")}
                    </Button>
                    <Button
                      appearance="primary"
@@ -569,7 +592,7 @@ export default function PersonalSettingsPage() {
                      isLoading={savingToken}
                      testId="personal-token-submit"
                    >
-                     创建
+                     {t("personal.tokenDialog.create")}
                    </Button>
                  </>
                )}
@@ -583,15 +606,15 @@ export default function PersonalSettingsPage() {
            <ModalDialog
              onClose={() => setAgentOpen(false)}
              width="520px"
-             label="创建 Agent"
+             label={t("personal.agentDialog.dialogLabel")}
              testId="personal-agent-dialog"
            >
              <ModalHeader>
-               <ModalTitle>创建 Agent</ModalTitle>
+               <ModalTitle>{t("personal.agentDialog.title")}</ModalTitle>
              </ModalHeader>
              <ModalBody>
                <Stack space="space.150">
-                 <FormField label="名称" htmlFor="agent-name">
+                 <FormField label={t("personal.agentDialog.name")} htmlFor="agent-name">
                    <Textfield
                      id="agent-name"
                      value={agentForm.name}
@@ -599,12 +622,14 @@ export default function PersonalSettingsPage() {
                      onChange={(e) => setAgentForm({ ...agentForm, name: e.currentTarget.value })}
                    />
                  </FormField>
-                 <FormField label="可接任务类型">
+                 <FormField label={t("personal.agentDialog.kinds")}>
                    <Select {...portalMenuProps}
                      inputId="agent-kinds"
                      isMulti
-                     options={ACCEPT_KINDS}
-                     value={ACCEPT_KINDS.filter((k) => agentForm.accept_kinds.includes(k.value))}
+                     options={kindOptions}
+                     value={kindOptions.filter((k) =>
+                       agentForm.accept_kinds.includes(k.value),
+                     )}
                      onChange={(opts) =>
                        setAgentForm({
                          ...agentForm,
@@ -613,7 +638,7 @@ export default function PersonalSettingsPage() {
                      }
                    />
                  </FormField>
-                 <FormField label="Webhook URL（可选）" htmlFor="agent-hook">
+                 <FormField label={t("personal.agentDialog.webhook")} htmlFor="agent-hook">
                    <Textfield
                      id="agent-hook"
                      value={agentForm.notify_webhook}
@@ -623,11 +648,11 @@ export default function PersonalSettingsPage() {
                      }
                    />
                  </FormField>
-                 <FormField label="Webhook 格式">
+                 <FormField label={t("personal.agentDialog.format")}>
                    <Select {...portalMenuProps}
                      inputId="agent-fmt"
-                     options={WEBHOOK_FORMATS}
-                     value={WEBHOOK_FORMATS.find((f) => f.value === agentForm.notify_webhook_format)}
+                     options={webhookFormats}
+                     value={webhookFormats.find((f) => f.value === agentForm.notify_webhook_format)}
                      onChange={(opt) =>
                        setAgentForm({
                          ...agentForm,
@@ -645,7 +670,7 @@ export default function PersonalSettingsPage() {
                  testId="personal-agent-cancel"
                  onClick={() => setAgentOpen(false)}
                >
-                 取消
+                 {t("personal.agentDialog.cancel")}
                </Button>
                <Button
                  appearance="primary"
@@ -654,7 +679,7 @@ export default function PersonalSettingsPage() {
                  isDisabled={!agentForm.name.trim()}
                  testId="personal-agent-submit"
                >
-                 创建
+                 {t("personal.agentDialog.create")}
                </Button>
              </ModalFooter>
            </ModalDialog>
@@ -665,15 +690,15 @@ export default function PersonalSettingsPage() {
          {editAgent && (
            <ModalDialog
              onClose={() => setEditAgent(null)}
-             label={`通知设置 · ${editAgent.name}`}
+             label={t("personal.agentNotify.title", { name: editAgent.name })}
              testId="personal-agent-notify-dialog"
            >
              <ModalHeader>
-               <ModalTitle>通知设置 · {editAgent.name}</ModalTitle>
+               <ModalTitle>{t("personal.agentNotify.title", { name: editAgent.name })}</ModalTitle>
              </ModalHeader>
              <ModalBody>
                <Stack space="space.150">
-                 <FormField label="Webhook URL" htmlFor="edit-hook">
+                 <FormField label={t("personal.agentNotify.webhook")} htmlFor="edit-hook">
                    <Textfield
                      id="edit-hook"
                      value={editHook}
@@ -681,11 +706,11 @@ export default function PersonalSettingsPage() {
                      onChange={(e) => setEditHook(e.currentTarget.value)}
                    />
                  </FormField>
-                 <FormField label="格式">
+                 <FormField label={t("personal.agentNotify.format")}>
                    <Select {...portalMenuProps}
                      inputId="edit-fmt"
-                     options={WEBHOOK_FORMATS}
-                     value={WEBHOOK_FORMATS.find((f) => f.value === editFmt)}
+                     options={webhookFormats}
+                     value={webhookFormats.find((f) => f.value === editFmt)}
                      onChange={(opt) =>
                        setEditFmt((opt as { value: string } | null)?.value ?? "generic")
                      }
@@ -699,14 +724,14 @@ export default function PersonalSettingsPage() {
                  testId="personal-agent-notify-cancel"
                  onClick={() => setEditAgent(null)}
                >
-                 取消
+                 {t("personal.agentNotify.cancel")}
                </Button>
                <Button
                  appearance="primary"
                  testId="personal-agent-notify-save"
                  onClick={saveAgent}
                >
-                 保存
+                 {t("personal.agentNotify.save")}
                </Button>
              </ModalFooter>
            </ModalDialog>
@@ -715,8 +740,8 @@ export default function PersonalSettingsPage() {
 
        <ConfirmDialog
          open={revokeTarget !== null}
-         title="吊销访问令牌"
-         confirmLabel="吊销"
+         title={t("personal.revokeDialog.title")}
+         confirmLabel={t("personal.revokeDialog.confirm")}
          danger
          busy={revoking}
          testId="personal-token-revoke-dialog"
@@ -725,7 +750,7 @@ export default function PersonalSettingsPage() {
          }}
          onConfirm={() => void revokeToken()}
        >
-         确定吊销标签为「{revokeTarget?.label ?? "—"}」的访问令牌？使用该令牌的客户端会立即失效，且不可恢复。
+         {t("personal.revokeDialog.body", { label: revokeTarget?.label ?? "—" })}
        </ConfirmDialog>
      </Page>
   );

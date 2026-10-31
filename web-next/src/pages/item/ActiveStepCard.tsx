@@ -1,6 +1,7 @@
 import Button from "@atlaskit/button/default/button";
 import { Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import SectionMessage from "@atlaskit/section-message";
+import { useTranslation } from "react-i18next";
 
 import MarkdownText from "../../components/MarkdownText";
 import PersonCell from "../../components/PersonCell";
@@ -28,6 +29,7 @@ export default function ActiveStepCard({
   onReassign,
   onOpenItem,
 }: Props) {
+  const { t } = useTranslation("item");
   const done = step.executors.filter((executor) => executor.status === "DONE").length;
   const missing =
     (step.gate_details?.missing_fields as { key: string; label: string }[] | undefined) ?? [];
@@ -42,8 +44,8 @@ export default function ActiveStepCard({
         </Text>
       </Inline>
       <Text size="small" color="color.text.subtle">
-        执行进度 {done}/{step.required_count}
-        {step.mode === "task" ? "（任务式步骤）" : ""}
+        {t("activeStep.progress", { done, required: step.required_count })}
+        {step.mode === "task" ? t("activeStep.taskModeSuffix") : ""}
       </Text>
       {step.executors.map((executor) => (
         <div key={executor.id} className="rdm-step-executor">
@@ -52,7 +54,10 @@ export default function ActiveStepCard({
             <StatusLozenge status={executor.status} />
             {executor.task && executor.task_id && (
               <TextButton onClick={() => onOpenItem(executor.task_id as string)}>
-                子任务：{executor.task.title}（{statusLabel(executor.task.status)}）
+                {t("activeStep.subtask", {
+                  title: executor.task.title,
+                  status: statusLabel(executor.task.status),
+                })}
               </TextButton>
             )}
           </Inline>
@@ -65,33 +70,35 @@ export default function ActiveStepCard({
       ))}
       {missing.length > 0 && (
         <SectionMessage appearance="warning">
-          缺少必填字段：{missing.map((field) => field.label).join("、")}
+          {t("activeStep.missing", {
+            fields: missing.map((field) => field.label).join(t("listSeparator")),
+          })}
         </SectionMessage>
       )}
       <Inline space="space.100" shouldWrap>
         {step.can_execute && (
           <Button appearance="primary" spacing="compact" onClick={onExecute} testId="step-active-execute">
-            执行步骤
+            {t("activeStep.execute")}
           </Button>
         )}
         {step.can_reject && (
           <Button appearance="danger" spacing="compact" onClick={onReject} testId="step-active-reject">
-            拒绝
+            {t("activeStep.reject")}
           </Button>
         )}
         {step.can_retry && (
           <Button appearance="primary" spacing="compact" onClick={onRetry} testId="step-active-retry">
-            重试
+            {t("activeStep.retry")}
           </Button>
         )}
         {step.can_reassign && (
           <Button spacing="compact" onClick={onReassign} testId="step-active-reassign">
-            改派执行人
+            {t("activeStep.reassign")}
           </Button>
         )}
         {step.can_cancel && (
           <Button appearance="subtle" spacing="compact" onClick={onCancel} testId="step-active-cancel">
-            取消步骤
+            {t("activeStep.cancel")}
           </Button>
         )}
       </Inline>

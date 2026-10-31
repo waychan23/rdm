@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Select from "@atlaskit/select";
@@ -63,11 +64,13 @@ export default function WorkItemPicker(props: Props) {
     excludeIds = [],
     excludeStatuses = [],
     backlogOnly = false,
-    placeholder = "搜索工作项",
+    placeholder,
     isDisabled = false,
     testId,
     inputId,
   } = props;
+  const { t } = useTranslation("workitems");
+  const placeholderText = placeholder ?? t("picker.placeholder");
   const [options, setOptions] = useState<WorkItemOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
@@ -149,7 +152,7 @@ export default function WorkItemPicker(props: Props) {
         isLoading={loading}
         options={mergedOptions}
         value={props.value}
-        placeholder={placeholder}
+        placeholder={placeholderText}
         isDisabled={isDisabled}
         filterOption={null}
         inputValue={query}
@@ -170,7 +173,7 @@ export default function WorkItemPicker(props: Props) {
       isLoading={loading}
       options={mergedOptions}
       value={props.value}
-      placeholder={placeholder}
+      placeholder={placeholderText}
       isDisabled={isDisabled}
       filterOption={null}
       inputValue={query}

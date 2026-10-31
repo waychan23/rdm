@@ -15,19 +15,31 @@ from fastapi.responses import StreamingResponse
 
 from rdm.application.services.notification_service import NotificationService
 from rdm.domain.actor import Actor
+from rdm.i18n import current_locale, tr
 from rdm.infrastructure.events.bus import StreamEvent, get_bus
 from rdm.interfaces.http.container import Container, get_actor, get_container
+from rdm.interfaces.http.serializers import notification_title
 
 router = APIRouter(prefix="/api/v1", tags=["stream"])
 
 HEARTBEAT_SECONDS = 15
 
 
+def _localize_data(event: StreamEvent) -> dict:
+    data = event.data
+    if event.event != "notification.created" or not data.get("title_key"):
+        return data
+    params = dict(data.get("title_params") or {})
+    if current_locale() == "en" and params.get("step_name_en"):
+        params["step_name"] = params["step_name_en"]
+    return {**data, "title": tr(str(data["title_key"]), **params)}
+
+
 def _format(event: StreamEvent) -> str:
     lines = [f"event: {event.event}"]
     if event.id is not None:
         lines.append(f"id: {event.id}")
-    lines.append(f"data: {json.dumps(event.data, ensure_ascii=False)}")
+    lines.append(f"data: {json.dumps(_localize_data(event), ensure_ascii=False)}")
     return "\n".join(lines) + "\n\n"
 
 
@@ -52,7 +64,9 @@ async def stream(
                 data={
                     "id": n.id,
                     "type": n.type,
-                    "title": n.title,
+                    "title": notification_title(n),
+                    "title_key": n.title_key,
+                    "title_params": n.title_params,
                     "body": n.body,
                     "project_id": n.project_id,
                     "entity_ref": n.entity_ref,

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from rdm.application.services.membership_service import MembershipService
 from rdm.application.services.todo_service import TodoService
 from rdm.domain.actor import Actor
+from rdm.domain.workflow.names import step_display_name
 from rdm.interfaces.http.container import Container, get_actor, get_container
 from rdm.interfaces.http.serializers import notification_out, work_item_summary_out
 
@@ -38,7 +39,7 @@ async def list_todos(
                     "step": {
                         "id": entry.step.id,
                         "key": entry.step.step_key,
-                        "name": entry.step.step_name,
+                        "name": step_display_name(entry.step.step_name, entry.step.config),
                         "mode": entry.step.mode,
                         "status": entry.step.status,
                     },

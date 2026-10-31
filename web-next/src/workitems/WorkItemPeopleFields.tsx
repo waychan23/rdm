@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Stack } from "@atlaskit/primitives/compiled";
 import Select from "@atlaskit/select";
 import Textfield from "@atlaskit/textfield";
+import { useTranslation } from "react-i18next";
 
 import FormField from "../components/FormField";
 import MarkdownEditor from "../components/MarkdownEditor";
@@ -42,8 +43,9 @@ export default function WorkItemPeopleFields({
   value,
   onChange,
   showAssignee = false,
-  assigneeLabel = "负责人",
+  assigneeLabel,
 }: Props) {
+  const { t } = useTranslation("workitems");
   const [members, setMembers] = useState<OrgUser[]>([]);
 
   useEffect(() => {
@@ -62,7 +64,9 @@ export default function WorkItemPeopleFields({
   }, [projectKey]);
 
   const options = members.map((member) => ({
-    label: `${member.name}${member.type === "agent" ? "（agent）" : ""}`,
+    label: `${member.name}${
+      member.type === "agent" ? t("people.agentSuffix") : ""
+    }`,
     value: member.id,
   }));
   const patch = (next: Partial<OptionalFieldValues>) =>
@@ -74,13 +78,13 @@ export default function WorkItemPeopleFields({
   return (
     <Stack space="space.150">
       {showAssignee && (
-        <FormField label={assigneeLabel}>
+        <FormField label={assigneeLabel ?? t("people.assignee")}>
           <Select
             {...portalMenuProps}
             isClearable
             options={options}
             value={options.find((option) => option.value === value.assignee) ?? null}
-            placeholder="选择负责人"
+            placeholder={t("people.selectAssignee")}
             testId="wi-assignee"
             onChange={(option) =>
               patch({ assignee: (option as { value: string } | null)?.value ?? null })
@@ -88,13 +92,13 @@ export default function WorkItemPeopleFields({
           />
         </FormField>
       )}
-      <FormField label="参与人（可多选）">
+      <FormField label={t("people.participants")}>
         <Select
           {...portalMenuProps}
           isMulti
           options={options}
           value={options.filter((option) => value.participants.includes(option.value))}
-          placeholder="选择参与人"
+          placeholder={t("people.selectParticipants")}
           testId="wi-participants"
           onChange={(selected) =>
             patch({
@@ -104,13 +108,13 @@ export default function WorkItemPeopleFields({
         />
       </FormField>
       {fields.reviewer && (
-        <FormField label="评审人（可多选）">
+        <FormField label={t("people.reviewer")}>
           <Select
             {...portalMenuProps}
             isMulti
             options={options}
             value={options.filter((option) => value.reviewer.includes(option.value))}
-            placeholder="选择评审人"
+            placeholder={t("people.selectReviewer")}
             testId="wi-reviewer"
             onChange={(selected) =>
               patch({
@@ -121,7 +125,7 @@ export default function WorkItemPeopleFields({
         </FormField>
       )}
       {fields.review_content && (
-        <FormField label="评审意见（Markdown）">
+        <FormField label={t("people.reviewContent")}>
           <MarkdownEditor
             value={value.reviewContent}
             onChange={(reviewContent) => patch({ reviewContent })}
@@ -182,7 +186,7 @@ export default function WorkItemPeopleFields({
                   ? options.filter((option) => selected.includes(option.value))
                   : options.find((option) => option.value === selected[0]) ?? null
               }
-              placeholder="选择成员"
+              placeholder={t("people.selectMember")}
               testId={`wi-custom-${field.key}`}
               onChange={(choice) => {
                 if (field.multiple) {

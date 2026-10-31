@@ -14,6 +14,9 @@ export default defineConfig({
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
     ...devices["Desktop Chrome"],
+    // Existing specs assert Chinese UI text; keep the browser on zh-CN so the
+    // app's navigator.language detection does not switch to English.
+    locale: "zh-CN",
     viewport: { width: 1600, height: 900 },
     actionTimeout: 10_000,
     navigationTimeout: 20_000,

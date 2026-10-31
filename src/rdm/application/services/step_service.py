@@ -35,7 +35,9 @@ from rdm.domain.events import EventType
 from rdm.domain.timefmt import iso_utc
 from rdm.domain.workflow.engine import WorkflowEngine
 from rdm.domain.workflow.loader import load_engine
+from rdm.domain.workflow.names import localized_name, step_display_name
 from rdm.domain.workflow.schema import GateSpec, ResolvedKindWorkflow, StepSpec
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
@@ -81,21 +83,27 @@ class StepService:
         assert self.uow.projects is not None
         project = await self.uow.projects.get(item.project_id)
         if project is None:
-            raise NotFound("项目不存在", details={"project_id": item.project_id})
+            raise NotFound(
+                tr("step.project_not_found", default="项目不存在"),
+                details={"project_id": item.project_id},
+            )
         return project
 
     async def _item(self, work_item_id: str) -> WorkItem:
         assert self.uow.work_items is not None
         item = await self.uow.work_items.get(work_item_id)
         if item is None:
-            raise NotFound("工作项不存在或已删除", details={"work_item_id": work_item_id})
+            raise NotFound(
+                tr("step.work_item_not_found", default="工作项不存在或已删除"),
+                details={"work_item_id": work_item_id},
+            )
         return item
 
     async def _step(self, step_id: str) -> WorkItemStep:
         assert self.uow.work_item_steps is not None
         step = await self.uow.work_item_steps.get_step(step_id)
         if step is None:
-            raise NotFound("步骤不存在", details={"step_id": step_id})
+            raise NotFound(tr("step.not_found", default="步骤不存在"), details={"step_id": step_id})
         return step
 
     async def _executors(self, step_id: str) -> list[WorkItemStepExecutor]:
@@ -209,7 +217,12 @@ class StepService:
         )
 
     def _step_payload(self, step: WorkItemStep) -> dict[str, Any]:
-        return {"id": step.id, "key": step.step_key, "name": step.step_name}
+        return {
+            "id": step.id,
+            "key": step.step_key,
+            "name": step.step_name,
+            "name_en": (step.config or {}).get("name_en") or step.step_name,
+        }
 
     async def _member_users(self, project_id: str) -> dict[str, tuple[User, list[str]]]:
         assert self.uow.memberships is not None and self.uow.users is not None
@@ -270,8 +283,15 @@ class StepService:
     ) -> list[User]:
         if not candidates:
             raise WorkflowStepNoCandidates(
-                f"步骤「{step.name}」没有可用执行人：请先维护 reviewer/参与人，"
-                "或把工作项指派给合适的人。",
+                tr(
+                    "step.no_candidates",
+                    default=(
+                        "步骤「{name}」没有可用执行人："
+                        "请先维护 reviewer/参与人，或把"
+                        "工作项指派给合适的人。"
+                    ),
+                    name=localized_name(step.name, step.name_en),
+                ),
                 details={
                     "step_key": step.key,
                     "actor_sources": list(step.actors),
@@ -288,7 +308,12 @@ class StepService:
                 user = await WorkItemService(self.uow).resolve_person_ref(actor, project.id, ref)
                 if user.id not in by_id:
                     raise WorkflowStepForbidden(
-                        f"{user.name} 不是步骤「{step.name}」的候选执行人",
+                        tr(
+                            "step.not_candidate",
+                            default="{user} 不是步骤「{name}」的候选执行人",
+                            user=user.name,
+                            name=localized_name(step.name, step.name_en),
+                        ),
                         details={
                             "step_key": step.key,
                             "user_id": user.id,
@@ -301,8 +326,13 @@ class StepService:
             chosen = self._auto_executors(step, candidates)
             if not chosen:
                 raise WorkflowStepNoCandidates(
-                    f"步骤「{step.name}」需要指定执行人（{step.executors.min}"
-                    f"..{self._max_executors(step, len(candidates))} 人）",
+                    tr(
+                        "step.choose_executors",
+                        default="步骤「{name}」需要指定执行人（{min}..{max} 人）",
+                        name=localized_name(step.name, step.name_en),
+                        min=step.executors.min,
+                        max=self._max_executors(step, len(candidates)),
+                    ),
                     details={
                         "step_key": step.key,
                         "candidates": [_user_out(u) for u in candidates],
@@ -314,8 +344,14 @@ class StepService:
         upper = self._max_executors(step, len(candidates))
         if len(chosen) < step.executors.min or len(chosen) > upper:
             raise WorkflowStepInvalid(
-                f"步骤「{step.name}」需要 {step.executors.min}..{upper} 名执行人，"
-                f"当前选择了 {len(chosen)} 人",
+                tr(
+                    "step.executor_range",
+                    default="步骤「{name}」需要 {min}..{max} 名执行人，当前选择了 {selected} 人",
+                    name=localized_name(step.name, step.name_en),
+                    min=step.executors.min,
+                    max=upper,
+                    selected=len(chosen),
+                ),
                 details={
                     "step_key": step.key,
                     "min": step.executors.min,
@@ -332,6 +368,9 @@ class StepService:
         return {
             "key": step.key,
             "name": step.name,
+            # English snapshot for read-time localization of historical rows
+            # (§17.115). Old rows without it fall back to name.
+            "name_en": step.name_en,
             "to": step.to,
             "mode": step.mode,
             "actors": list(step.actors),
@@ -360,14 +399,19 @@ class StepService:
         ]
         if missing:
             raise WorkflowGateBlocked(
-                f"步骤「{step.name}」缺少必填字段：" + "、".join(item["label"] for item in missing),
+                tr(
+                    "step.missing_fields",
+                    default="步骤「{name}」缺少必填字段：{fields}",
+                    name=localized_name(step.name, step.name_en),
+                    fields="、".join(item["label"] for item in missing),
+                ),
                 details={
                     "item": item.id,
                     "target": step.to,
                     "step_key": step.key,
                     "step_name": step.name,
                     "missing_fields": missing,
-                    "hint": "先补齐这些字段，再发起步骤。",
+                    "hint": tr("step.hint_fill_fields", default="先补齐这些字段，再发起步骤。"),
                 },
             )
 
@@ -387,16 +431,24 @@ class StepService:
             gate = engine.effective_gate(item.kind, item.status, step, task_type=task_type)
             reasons: list[str] = []
             if active is not None:
-                reasons.append("已有进行中的步骤")
+                reasons.append(tr("step.reason_active_exists", default="已有进行中的步骤"))
             if step.mode != "direct" and not is_assignee:
-                reasons.append("仅负责人可以发起步骤")
+                reasons.append(tr("step.reason_assignee_only", default="仅负责人可以发起步骤"))
             if len(candidates) < step.executors.min:
-                reasons.append("可用候选执行人不足")
+                reasons.append(tr("step.reason_candidates_low", default="可用候选执行人不足"))
             if step.mode == "direct":
                 if len(candidates) != 1:
-                    reasons.append("direct 步骤需要唯一候选执行人")
+                    reasons.append(
+                        tr("step.reason_direct_needs_one", default="direct 步骤需要唯一候选执行人")
+                    )
                 elif not actor.can_act_for_user(candidates[0].id):
-                    reasons.append(f"该步骤只能由 {candidates[0].name} 执行")
+                    reasons.append(
+                        tr(
+                            "step.reason_only_user",
+                            default="该步骤只能由 {user} 执行",
+                            user=candidates[0].name,
+                        )
+                    )
             can_start = (
                 active is None
                 and is_assignee
@@ -412,7 +464,7 @@ class StepService:
             available.append(
                 {
                     "key": step.key,
-                    "name": step.name,
+                    "name": localized_name(step.name, step.name_en),
                     "to": step.to,
                     "mode": step.mode,
                     "note": step.note,
@@ -476,7 +528,7 @@ class StepService:
             active_dto = {
                 "id": active.id,
                 "key": active.step_key,
-                "name": active.step_name,
+                "name": step_display_name(active.step_name, active.config),
                 "from": active.from_status,
                 "to": active.to_status,
                 "mode": active.mode,
@@ -569,14 +621,24 @@ class StepService:
         display_id = service.display_id(project, item)
         if item.row_version != row_version:
             raise ConflictVersion(
-                f"{display_id} 已被他人修改（当前版本 {item.row_version}），请重读后再试。",
+                tr(
+                    "step.version_conflict",
+                    default="{display_id} 已被他人修改（当前版本 {version}），请重读后再试。",
+                    display_id=display_id,
+                    version=item.row_version,
+                ),
                 details={"id": item.id, "current_version": item.row_version},
             )
         assert self.uow.work_item_steps is not None
         active = await self.uow.work_item_steps.get_active_for_item(item.id)
         if active is not None:
             raise WorkflowStepInProgress(
-                f"{display_id} 已有进行中的步骤「{active.step_name}」",
+                tr(
+                    "step.active_exists",
+                    default="{display_id} 已有进行中的步骤「{name}」",
+                    display_id=display_id,
+                    name=step_display_name(active.step_name, active.config),
+                ),
                 details={
                     "item": display_id,
                     "step_id": active.id,
@@ -603,8 +665,16 @@ class StepService:
             )
         if not security.is_assignee(actor, item):
             raise WorkflowStepForbidden(
-                f"只有负责人（或其管理的 agent 的 human）可以发起 {display_id} 的步骤；"
-                "需要接管请先变更负责人。",
+                tr(
+                    "step.start_forbidden",
+                    default=(
+                        "只有负责人（或其管理的 agent "
+                        "的 human）可以发起 {display_id"
+                        "} 的步骤；需要接管请先变更负责"
+                        "人。"
+                    ),
+                    display_id=display_id,
+                ),
                 details={"item": display_id, "assignee_user_id": item.assignee_user_id},
             )
 
@@ -646,9 +716,16 @@ class StepService:
     ) -> tuple[Project, WorkItem, dict[str, Any]]:
         candidates = await self.resolve_candidates(item, step)
         if len(candidates) != 1 or not actor.can_act_for_user(candidates[0].id):
-            names = "、".join(user.name for user in candidates) or "（无）"
+            names = "、".join(user.name for user in candidates) or tr("step.none", default="（无）")
             raise WorkflowStepForbidden(
-                f"步骤「{step.name}」只能由指定执行人（或其 human）执行；当前候选：{names}",
+                tr(
+                    "step.direct_forbidden",
+                    default=(
+                        "步骤「{name}」只能由指定执行人（或其 human）执行；当前候选：{candidates}"
+                    ),
+                    name=localized_name(step.name, step.name_en),
+                    candidates=names,
+                ),
                 details={
                     "step_key": step.key,
                     "actor_id": actor.id,
@@ -657,7 +734,11 @@ class StepService:
             )
         if step.note == "required" and not (note_md or "").strip():
             raise WorkflowStepNoteRequired(
-                f"步骤「{step.name}」必须填写备注后才能执行。",
+                tr(
+                    "step.note_required",
+                    default="步骤「{name}」必须填写备注后才能执行。",
+                    name=localized_name(step.name, step.name_en),
+                ),
                 details={"step_key": step.key, "note": "required"},
             )
         assignee = candidates[0]
@@ -803,33 +884,57 @@ class StepService:
         project = await self._project(item)
         if step.status not in (StepStatus.PENDING, StepStatus.BLOCKED):
             raise WorkflowStepInvalid(
-                f"步骤「{step.step_name}」当前状态为 {step.status}，不能执行。",
+                tr(
+                    "step.status_cannot_execute",
+                    default="步骤「{name}」当前状态为 {status}，不能执行。",
+                    name=step_display_name(step.step_name, step.config),
+                    status=step.status,
+                ),
                 details={"step_id": step.id, "status": step.status},
             )
         if step.mode == "task":
             raise WorkflowStepInvalid(
-                "任务式步骤通过子任务完成推进，不能直接执行。",
+                tr("step.task_step_direct", default="任务式步骤通过子任务完成推进，不能直接执行。"),
                 details={"step_id": step.id, "mode": step.mode},
             )
         executor = await self._actor_executor(step.id, actor)
         if executor is None:
             raise WorkflowStepForbidden(
-                f"{actor.name} 不是步骤「{step.step_name}」的执行人"
-                "（也不是其管理的 agent 的 human）",
+                tr(
+                    "step.not_executor",
+                    default="{actor} 不是步骤「{name}」的执行人（也不是其管理的 agent 的 human）",
+                    actor=actor.name,
+                    name=step_display_name(step.step_name, step.config),
+                ),
                 details={"step_id": step.id, "user_id": actor.id},
             )
         if executor.status == StepExecutorStatus.DONE:
-            raise WorkflowStepAlreadyExecuted("你已经执行过该步骤。", details={"step_id": step.id})
+            raise WorkflowStepAlreadyExecuted(
+                tr("step.already_executed", default="你已经执行过该步骤。"),
+                details={"step_id": step.id},
+            )
         if executor.status == StepExecutorStatus.CANCELLED:
             raise WorkflowStepForbidden(
-                f"{actor.name} 已被移出步骤「{step.step_name}」的执行人列表",
+                tr(
+                    "step.removed_executor",
+                    default="{actor} 已被移出步骤「{name}」的执行人列表",
+                    actor=actor.name,
+                    name=step_display_name(step.step_name, step.config),
+                ),
                 details={"step_id": step.id, "user_id": actor.id},
             )
         if executor.status != StepExecutorStatus.PENDING:
-            raise WorkflowStepInvalid("该执行人已不在待执行状态。", details={"step_id": step.id})
+            raise WorkflowStepInvalid(
+                tr("step.executor_not_pending", default="该执行人已不在待执行状态。"),
+                details={"step_id": step.id},
+            )
         if step.config.get("note") == "required" and not (note_md or "").strip():
             raise WorkflowStepNoteRequired(
-                f"步骤「{step.step_name}」必须填写备注后才能执行。",
+                tr(
+                    "step.note_required",
+                    default="步骤「{name}」必须填写备注后才能执行。",
+                    name=step_display_name(step.step_name, step.config),
+                ),
                 details={"step_id": step.id, "step_key": step.step_key},
             )
 
@@ -949,7 +1054,7 @@ class StepService:
     ) -> str | None:
         body = (note_md or "").strip()
         if not body and attachment_ids:
-            body = "（步骤备注）"
+            body = tr("step.note_body", default="（步骤备注）")
         if not body:
             return None
         project = await self._project(item)
@@ -976,26 +1081,40 @@ class StepService:
         item = await self._item(step.work_item_id)
         project = await self._project(item)
         if step.row_version != row_version:
-            raise ConflictVersion("步骤已被修改，请重读后再试。", details={"step_id": step.id})
+            raise ConflictVersion(
+                tr("step.step_version_conflict", default="步骤已被修改，请重读后再试。"),
+                details={"step_id": step.id},
+            )
         if step.mode != "approval":
             raise WorkflowStepInvalid(
-                "只有审批（approval）步骤可以拒绝。",
+                tr("step.reject_approval_only", default="只有审批（approval）步骤可以拒绝。"),
                 details={"step_id": step.id, "mode": step.mode},
             )
         if step.status not in (StepStatus.PENDING, StepStatus.BLOCKED):
             raise WorkflowStepInvalid(
-                f"步骤「{step.step_name}」当前状态为 {step.status}，不能拒绝。",
+                tr(
+                    "step.status_cannot_reject",
+                    default="步骤「{name}」当前状态为 {status}，不能拒绝。",
+                    name=step_display_name(step.step_name, step.config),
+                    status=step.status,
+                ),
                 details={"step_id": step.id, "status": step.status},
             )
         reason = (reason or "").strip()
         if not reason:
             raise ValidationError(
-                "拒绝步骤必须填写理由。", details={"field": "reason", "step_id": step.id}
+                tr("step.reject_reason_required", default="拒绝步骤必须填写理由。"),
+                details={"field": "reason", "step_id": step.id},
             )
         executor = await self._actor_executor(step.id, actor)
         if executor is None or executor.status != StepExecutorStatus.PENDING:
             raise WorkflowStepForbidden(
-                f"{actor.name} 不是步骤「{step.step_name}」的待执行执行人。",
+                tr(
+                    "step.not_pending_executor",
+                    default="{actor} 不是步骤「{name}」的待执行执行人。",
+                    actor=actor.name,
+                    name=step_display_name(step.step_name, step.config),
+                ),
                 details={"step_id": step.id, "user_id": actor.id},
             )
         assert self.uow.work_item_steps is not None
@@ -1034,14 +1153,25 @@ class StepService:
         project = await self._project(item)
         if not security.is_assignee(actor, item):
             raise WorkflowStepForbidden(
-                "只有负责人（或其管理的 agent 的 human）可以取消步骤。",
+                tr(
+                    "step.cancel_forbidden",
+                    default="只有负责人（或其管理的 agent 的 human）可以取消步骤。",
+                ),
                 details={"step_id": step.id},
             )
         if step.row_version != row_version:
-            raise ConflictVersion("步骤已被修改，请重读后再试。", details={"step_id": step.id})
+            raise ConflictVersion(
+                tr("step.step_version_conflict", default="步骤已被修改，请重读后再试。"),
+                details={"step_id": step.id},
+            )
         if step.status not in (StepStatus.PENDING, StepStatus.BLOCKED):
             raise WorkflowStepInvalid(
-                f"步骤「{step.step_name}」当前状态为 {step.status}，不能取消。",
+                tr(
+                    "step.status_cannot_cancel",
+                    default="步骤「{name}」当前状态为 {status}，不能取消。",
+                    name=step_display_name(step.step_name, step.config),
+                    status=step.status,
+                ),
                 details={"step_id": step.id, "status": step.status},
             )
         assert self.uow.work_item_steps is not None
@@ -1076,21 +1206,30 @@ class StepService:
         project = await self._project(item)
         if not security.is_assignee(actor, item):
             raise WorkflowStepForbidden(
-                "只有负责人（或其管理的 agent 的 human）可以改派步骤执行人。",
+                tr(
+                    "step.reassign_forbidden",
+                    default="只有负责人（或其管理的 agent 的 human）可以改派步骤执行人。",
+                ),
                 details={"step_id": step.id},
             )
         if step.status != StepStatus.PENDING:
             raise WorkflowStepInvalid(
-                "只有待执行的步骤可以改派；已开始的步骤请取消后重开。",
+                tr(
+                    "step.reassign_pending_only",
+                    default="只有待执行的步骤可以改派；已开始的步骤请取消后重开。",
+                ),
                 details={"step_id": step.id, "status": step.status},
             )
         if step.row_version != row_version:
-            raise ConflictVersion("步骤已被修改，请重读后再试。", details={"step_id": step.id})
+            raise ConflictVersion(
+                tr("step.step_version_conflict", default="步骤已被修改，请重读后再试。"),
+                details={"step_id": step.id},
+            )
         assert self.uow.work_item_steps is not None
         current = await self._executors(step.id)
         if any(row.status == StepExecutorStatus.DONE for row in current):
             raise WorkflowStepInvalid(
-                "已有执行人完成，不能改派；请取消后重开。",
+                tr("step.reassign_after_done", default="已有执行人完成，不能改派；请取消后重开。"),
                 details={"step_id": step.id},
             )
         engine = self._engine()
@@ -1161,16 +1300,22 @@ class StepService:
         project = await self._project(item)
         if not security.is_assignee(actor, item):
             raise WorkflowStepForbidden(
-                "只有负责人（或其管理的 agent 的 human）可以重试步骤。",
+                tr(
+                    "step.retry_forbidden",
+                    default="只有负责人（或其管理的 agent 的 human）可以重试步骤。",
+                ),
                 details={"step_id": step.id},
             )
         if step.status != StepStatus.BLOCKED:
             raise WorkflowStepInvalid(
-                "只有 BLOCKED 步骤可以重试。",
+                tr("step.retry_blocked_only", default="只有 BLOCKED 步骤可以重试。"),
                 details={"step_id": step.id, "status": step.status},
             )
         if step.row_version != row_version:
-            raise ConflictVersion("步骤已被修改，请重读后再试。", details={"step_id": step.id})
+            raise ConflictVersion(
+                tr("step.step_version_conflict", default="步骤已被修改，请重读后再试。"),
+                details={"step_id": step.id},
+            )
         assert self.uow.work_item_steps is not None
         step.status = StepStatus.PENDING
         await self.uow.work_item_steps.save_step(step)
@@ -1209,6 +1354,8 @@ class StepService:
             ):
                 continue
             try:
-                await service.apply_system_transition(actor, task, "CANCELLED", reason="步骤取消")
+                await service.apply_system_transition(
+                    actor, task, "CANCELLED", reason=tr("step.cancel_reason", default="步骤取消")
+                )
             except (WorkflowIllegalTransition, WorkflowGateBlocked):
                 continue

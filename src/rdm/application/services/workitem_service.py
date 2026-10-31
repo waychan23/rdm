@@ -48,7 +48,9 @@ from rdm.domain.events import (
     updated_payload,
 )
 from rdm.domain.workflow.loader import load_engine
+from rdm.domain.workflow.names import localized_name, step_display_name
 from rdm.domain.workflow.schema import ResolvedKindWorkflow
+from rdm.i18n import current_locale, tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.events.bus import StreamEvent, get_bus
 from rdm.infrastructure.id import new_id
@@ -101,11 +103,15 @@ def _date_value(field: str, value: Any) -> dt.date | None:
             return dt.date.fromisoformat(value)
         except ValueError as exc:
             raise ValidationError(
-                f"{field} 必须是 YYYY-MM-DD 格式的日期",
+                tr(
+                    "work_item.date_format",
+                    default="{field} 必须是 YYYY-MM-DD 格式的日期",
+                    field=field,
+                ),
                 details={"field": field},
             ) from exc
     raise ValidationError(
-        f"{field} 必须是 YYYY-MM-DD 格式的日期",
+        tr("work_item.date_format", default="{field} 必须是 YYYY-MM-DD 格式的日期", field=field),
         details={"field": field},
     )
 
@@ -116,12 +122,15 @@ def _priority_value(value: Any) -> int:
         priority = int(value)
     except (TypeError, ValueError) as exc:
         raise ValidationError(
-            "priority 必须是 1（紧急）到 4（低）的整数",
+            tr("work_item.priority_int", default="priority 必须是 1（紧急）到 4（低）的整数"),
             details={"field": "priority", "allowed": PRIORITY_VALUES},
         ) from exc
     if priority not in PRIORITY_VALUES:
         raise ValidationError(
-            "priority 必须是 1（紧急）到 4（低）；不再支持未设置",
+            tr(
+                "work_item.priority_range",
+                default="priority 必须是 1（紧急）到 4（低）；不再支持未设置",
+            ),
             details={"field": "priority", "allowed": PRIORITY_VALUES},
         )
     return priority
@@ -172,7 +181,10 @@ class WorkItemService:
         if key is not None:
             project = await self.uow.projects.get_by_key(key, org_id=actor.org_id)
             if project is None:
-                raise NotFound(f"项目 {key} 不存在", details={"key": key})
+                raise NotFound(
+                    tr("work_item.project_not_found", default="项目 {key} 不存在", key=key),
+                    details={"key": key},
+                )
             security.assert_project_access(actor, project.id)
             return project
 
@@ -183,8 +195,14 @@ class WorkItemService:
                 return project
         if not ids:
             raise ValidationError(
-                "你还不属于任何项目；请联系项目 Owner 把你加入，"
-                "或让 Org Owner/project-director 创建项目。",
+                tr(
+                    "work_item.no_project",
+                    default=(
+                        "你还不属于任何项目；请联系项目"
+                        " Owner 把你加入，或让 Org Owne"
+                        "r/project-director 创建项目。"
+                    ),
+                ),
                 details={"code": "NO_PROJECT"},
             )
         options: list[dict[str, Any]] = []
@@ -195,8 +213,14 @@ class WorkItemService:
         options.sort(key=lambda item: item["key"])
         names = [item["key"] for item in options]
         raise ValidationError(
-            f"当前操作缺少项目上下文；你属于多个项目 {names}。"
-            "请显式传 project（MCP 可先调用 project_bind 选择；CLI 可用 RDM_PROJECT）。",
+            tr(
+                "work_item.project_required",
+                default=(
+                    "当前操作缺少项目上下文；你属于多个项目 {projects}。请显式传 project"
+                    "（MCP 可先调用 project_bind 选择；CLI 可用 RDM_PROJECT）。"
+                ),
+                projects=names,
+            ),
             details={"code": "PROJECT_REQUIRED", "projects": names, "options": options},
         )
 
@@ -211,7 +235,11 @@ class WorkItemService:
             )
         if user is None or await self.uow.memberships.get(project_id, user.id) is None:
             raise NotFound(
-                f"用户 {ref!r} 不存在或不在本项目；可用 member_list 查询，不要猜名字。",
+                tr(
+                    "work_item.member_not_found",
+                    default="用户 {ref!r} 不存在或不在本项目；可用 member_list 查询，不要猜名字。",
+                    ref=ref,
+                ),
                 details={"ref": ref},
             )
         return user
@@ -249,8 +277,15 @@ class WorkItemService:
                 item = raw
         if item is None:
             raise NotFound(
-                f"工作项 {ref!r} 不存在；id 接受 KEY-42 显示 ID 或 ULID，"
-                "先用 work_item_list 查询。",
+                tr(
+                    "work_item.not_found",
+                    default=(
+                        "工作项 {ref!r} 不存在；id 接受"
+                        " KEY-42 显示 ID 或 ULID，先用 "
+                        "work_item_list 查询。"
+                    ),
+                    ref=ref,
+                ),
                 details={"ref": ref},
             )
         security.assert_project_access(actor, item.project_id)
@@ -287,7 +322,10 @@ class WorkItemService:
             parsed = [part.strip() for part in kind.split(",") if part.strip()]
             for part in parsed:
                 if part not in VALID_KINDS:
-                    raise ValidationError(f"未知 kind {part!r}", details={"field": "kind"})
+                    raise ValidationError(
+                        tr("errors.unknown_kind", default="未知 kind {kind!r}", kind=part),
+                        details={"field": "kind"},
+                    )
             if len(parsed) > 1:
                 kinds = parsed
                 kind = None
@@ -399,7 +437,10 @@ class WorkItemService:
         )
         sprint = await self.uow.sprints.get(sprint_ref)
         if sprint is None or sprint.project_id != project.id:
-            raise NotFound(f"Sprint {sprint_ref} 不存在", details={"sprint_id": sprint_ref})
+            raise NotFound(
+                tr("work_item.sprint_not_found", default="Sprint {ref} 不存在", ref=sprint_ref),
+                details={"sprint_id": sprint_ref},
+            )
         security.assert_project_access(actor, project.id)
         links = await self.uow.sprint_items.list_for_sprint(sprint.id)
         items = (
@@ -442,7 +483,10 @@ class WorkItemService:
         project = await self.resolve_project(actor, project_key)
         assert self.uow.work_items is not None and self.uow.sprint_items is not None
         if kind is not None and kind not in VALID_KINDS:
-            raise ValidationError(f"未知 kind {kind!r}", details={"field": "kind"})
+            raise ValidationError(
+                tr("errors.unknown_kind", default="未知 kind {kind!r}", kind=kind),
+                details={"field": "kind"},
+            )
         in_sprint = set(await self.uow.sprint_items.active_work_item_ids(project.id))
         items = await self.uow.work_items.list(project.id, kind=kind, limit=200, expand=True)
         engine = load_engine()
@@ -520,7 +564,11 @@ class WorkItemService:
         spec = load_engine().spec
         if task_type not in spec.task_types:
             raise ValidationError(
-                f"未知 task_type {task_type!r}",
+                tr(
+                    "errors.unknown_task_type",
+                    default="未知 task_type {task_type!r}",
+                    task_type=task_type,
+                ),
                 details={
                     "field": "task_type",
                     "task_type": task_type,
@@ -547,16 +595,27 @@ class WorkItemService:
     ) -> None:
         if "reviewer" in data and not workflow.fields.reviewer:
             raise ValidationError(
-                f"kind={workflow.kind} 的当前工作流未开启 reviewer 字段",
+                tr(
+                    "work_item.reviewer_disabled",
+                    default="kind={kind} 的当前工作流未开启 reviewer 字段",
+                    kind=workflow.kind,
+                ),
                 details={"field": "reviewer", "kind": workflow.kind},
             )
         if "review_content_md" in data and not workflow.fields.review_content:
             raise ValidationError(
-                f"kind={workflow.kind} 的当前工作流未开启 review_content 字段",
+                tr(
+                    "work_item.review_content_disabled",
+                    default="kind={kind} 的当前工作流未开启 review_content 字段",
+                    kind=workflow.kind,
+                ),
                 details={"field": "review_content_md", "kind": workflow.kind},
             )
         if "custom_fields" in data and not isinstance(data["custom_fields"], dict):
-            raise ValidationError("custom_fields 必须是对象", details={"field": "custom_fields"})
+            raise ValidationError(
+                tr("work_item.custom_fields_object", default="custom_fields 必须是对象"),
+                details={"field": "custom_fields"},
+            )
 
     async def _validate_custom_fields(
         self,
@@ -571,7 +630,9 @@ class WorkItemService:
             spec = definitions.get(key)
             if spec is None:
                 raise ValidationError(
-                    f"未声明的自定义字段 {key!r}",
+                    tr(
+                        "work_item.custom_undeclared", default="未声明的自定义字段 {key!r}", key=key
+                    ),
                     details={
                         "field": "custom_fields",
                         "key": key,
@@ -581,7 +642,11 @@ class WorkItemService:
             if spec.type == "text":
                 if value is not None and not isinstance(value, str):
                     raise ValidationError(
-                        f"自定义字段 {key} 需要文本（Markdown）",
+                        tr(
+                            "work_item.custom_text",
+                            default="自定义字段 {key} 需要文本（Markdown）",
+                            key=key,
+                        ),
                         details={"field": key, "type": "text"},
                     )
                 result[key] = value
@@ -590,7 +655,7 @@ class WorkItemService:
                     isinstance(value, bool) or not isinstance(value, (int, float))
                 ):
                     raise ValidationError(
-                        f"自定义字段 {key} 需要数字",
+                        tr("work_item.custom_number", default="自定义字段 {key} 需要数字", key=key),
                         details={"field": key, "type": "number"},
                     )
                 result[key] = value
@@ -603,7 +668,11 @@ class WorkItemService:
                     refs = [str(value)]
                 if not spec.multiple and len(refs) > 1:
                     raise ValidationError(
-                        f"自定义人员字段 {key} 只允许 1 人",
+                        tr(
+                            "work_item.custom_user_one",
+                            default="自定义人员字段 {key} 只允许 1 人",
+                            key=key,
+                        ),
                         details={"field": key, "type": "user"},
                     )
                 result[key] = await self._resolve_people(actor, project_id, refs)
@@ -623,23 +692,28 @@ class WorkItemService:
             values.update(item.fields.__dict__)
         values.update(item.custom_fields or {})
         labels: dict[str, str] = {
-            "title": "标题",
-            "description_md": "描述",
-            "reviewer": "评审人",
-            "review_content": "评审意见",
-            "task_type": "任务类型",
-            "acceptance_criteria_md": "验收标准",
-            "severity": "严重度",
-            "environment": "环境",
-            "repro_steps_md": "复现步骤",
-            "expected_behavior_md": "期望行为",
-            "actual_behavior_md": "实际行为",
-            "est_work_hours": "预估工时",
-            "actual_work_hours": "实际工时",
-            "code_branch": "代码分支",
+            key: tr(f"field.{key}", default=default)
+            for key, default in (
+                ("title", "标题"),
+                ("description_md", "描述"),
+                ("reviewer", "评审人"),
+                ("review_content", "评审意见"),
+                ("task_type", "任务类型"),
+                ("acceptance_criteria_md", "验收标准"),
+                ("severity", "严重度"),
+                ("environment", "环境"),
+                ("repro_steps_md", "复现步骤"),
+                ("expected_behavior_md", "期望行为"),
+                ("actual_behavior_md", "实际行为"),
+                ("est_work_hours", "预估工时"),
+                ("actual_work_hours", "实际工时"),
+                ("code_branch", "代码分支"),
+            )
         }
         for field in workflow.fields.custom:
-            labels[field.key] = field.label
+            labels[field.key] = (
+                field.label_en if current_locale() == "en" and field.label_en else field.label
+            )
         return values, labels
 
     # --- writes -----------------------------------------------------------
@@ -651,19 +725,31 @@ class WorkItemService:
         kind = data.get("kind")
         if kind not in VALID_KINDS:
             raise ValidationError(
-                f"kind 必须是 epic/story/issue/task，收到 {kind!r}", details={"field": "kind"}
+                tr(
+                    "work_item.kind_invalid",
+                    default="kind 必须是 epic/story/issue/task，收到 {kind!r}",
+                    kind=kind,
+                ),
+                details={"field": "kind"},
             )
         title = (data.get("title") or "").strip()
         if not title:
-            raise ValidationError("title 必填", details={"field": "title"})
+            raise ValidationError(
+                tr("work_item.title_required", default="title 必填"), details={"field": "title"}
+            )
 
         parent = None
         if data.get("parent"):
             parent = await self.resolve_item(actor, data["parent"])
             if parent.kind not in _ALLOWED_PARENT[kind]:
                 raise ValidationError(
-                    f"{kind} 的父项只能是 {sorted(_ALLOWED_PARENT[kind]) or '无'}，"
-                    f"收到的父项是 {parent.kind}",
+                    tr(
+                        "work_item.parent_not_allowed",
+                        default="{kind} 的父项只能是 {allowed}，收到的父项是 {parent}",
+                        kind=kind,
+                        allowed=sorted(_ALLOWED_PARENT[kind]) or tr("work_item.none", default="无"),
+                        parent=parent.kind,
+                    ),
                     details={
                         "field": "parent",
                         "kind": kind,
@@ -755,7 +841,10 @@ class WorkItemService:
     ) -> tuple[Project, WorkItem]:
         row_version = payload.get("row_version")
         if not isinstance(row_version, int):
-            raise ValidationError("row_version 必填且必须是整数", details={"field": "row_version"})
+            raise ValidationError(
+                tr("work_item.row_version_required", default="row_version 必填且必须是整数"),
+                details={"field": "row_version"},
+            )
         project, item = await self.get_item(actor, ref)
         display_id = self.display_id(project, item)
         security.require_can_edit(actor, item, display_id, item.participant_user_ids)
@@ -763,8 +852,16 @@ class WorkItemService:
             from rdm.domain.errors import ConflictVersion
 
             raise ConflictVersion(
-                f"{display_id} 已被他人修改（当前版本 {item.row_version}），"
-                "请先 work_item_get 重读再修改。",
+                tr(
+                    "work_item.version_conflict_edit",
+                    default=(
+                        "{display_id} 已被他人修改（当"
+                        "前版本 {version}），请先 work_"
+                        "item_get 重读再修改。"
+                    ),
+                    display_id=display_id,
+                    version=item.row_version,
+                ),
                 details={"id": item.id, "current_version": item.row_version},
             )
 
@@ -773,7 +870,12 @@ class WorkItemService:
         unknown = keys - MASTER_UPDATABLE - KIND_FIELDS[item.kind] - OPTIONAL_FIELDS
         if unknown:
             raise ValidationError(
-                f"字段 {sorted(unknown)} 不可更新或不适用于 kind={item.kind}",
+                tr(
+                    "work_item.fields_not_updatable",
+                    default="字段 {fields} 不可更新或不适用于 kind={kind}",
+                    fields=sorted(unknown),
+                    kind=item.kind,
+                ),
                 details={"fields": sorted(unknown), "kind": item.kind},
             )
 
@@ -784,7 +886,10 @@ class WorkItemService:
             normalized = self._validate_task_type(payload["task_type"])
             if normalized != task_type:
                 raise ValidationError(
-                    "task_type 创建后不可修改（会使当前状态与新工作流不兼容）",
+                    tr(
+                        "work_item.task_type_immutable",
+                        default="task_type 创建后不可修改（会使当前状态与新工作流不兼容）",
+                    ),
                     details={"field": "task_type", "current": task_type},
                 )
             payload = {**payload, "task_type": normalized}
@@ -796,7 +901,10 @@ class WorkItemService:
             if key == "title":
                 new = (new or "").strip()
                 if not new:
-                    raise ValidationError("title 不能为空", details={"field": "title"})
+                    raise ValidationError(
+                        tr("work_item.title_not_empty", default="title 不能为空"),
+                        details={"field": "title"},
+                    )
             if key == "priority":
                 new = _priority_value(new)
             if key in PLANNED_DATE_FIELDS:
@@ -876,8 +984,12 @@ class WorkItemService:
             from rdm.domain.errors import ConflictVersion
 
             raise ConflictVersion(
-                f"{self.display_id(project, item)} 已被他人修改（当前版本 {item.row_version}），"
-                "请先重读再修改。",
+                tr(
+                    "work_item.version_conflict_generic",
+                    default="{display_id} 已被他人修改（当前版本 {version}），请先重读再修改。",
+                    display_id=self.display_id(project, item),
+                    version=item.row_version,
+                ),
                 details={"id": item.id, "current_version": item.row_version},
             )
 
@@ -886,10 +998,19 @@ class WorkItemService:
         if parent_ref is not None:
             new_parent = await self.resolve_item(actor, parent_ref)
             if new_parent.project_id != project.id:
-                raise ValidationError("父项必须属于同一项目", details={"field": "parent"})
+                raise ValidationError(
+                    tr("work_item.parent_same_project", default="父项必须属于同一项目"),
+                    details={"field": "parent"},
+                )
             if new_parent.kind not in _ALLOWED_PARENT[item.kind]:
                 raise ValidationError(
-                    f"{item.kind} 的父项只能是 {allowed_parent_kinds(item.kind) or '无'}",
+                    tr(
+                        "work_item.parent_kind_allowed",
+                        default="{kind} 的父项只能是 {allowed}",
+                        kind=item.kind,
+                        allowed=allowed_parent_kinds(item.kind)
+                        or tr("work_item.none", default="无"),
+                    ),
                     details={
                         "field": "parent",
                         "allowed_parent_kinds": allowed_parent_kinds(item.kind),
@@ -921,7 +1042,7 @@ class WorkItemService:
         while cursor is not None and cursor.id not in seen:
             if cursor.id == item.id:
                 raise ValidationError(
-                    "不能把工作项挂到它自己或其后代下面",
+                    tr("work_item.cycle", default="不能把工作项挂到它自己或其后代下面"),
                     details={"field": "parent", "work_item_id": item.id},
                 )
             seen.add(cursor.id)
@@ -949,8 +1070,15 @@ class WorkItemService:
                 fresh = await self.uow.work_items.get(item.id)
                 holder = fresh.assignee_user_id if fresh else None
                 raise AlreadyAssigned(
-                    f"{self.display_id(project, item)} 已被他人认领；"
-                    "如需协作请用 mailbox_send 联系其 accountable_human。",
+                    tr(
+                        "work_item.already_claimed",
+                        default=(
+                            "{display_id} 已被他人认领；如"
+                            "需协作请用 mailbox_send 联系其"
+                            " accountable_human。"
+                        ),
+                        display_id=self.display_id(project, item),
+                    ),
                     details={"id": item.id, "assignee_user_id": holder},
                 )
             claimed = await self.uow.work_items.get(item.id)
@@ -1013,7 +1141,12 @@ class WorkItemService:
             from rdm.domain.errors import WorkflowStepInProgress
 
             raise WorkflowStepInProgress(
-                f"{display_id} 已有进行中的步骤「{active.step_name}」",
+                tr(
+                    "work_item.active_step",
+                    default="{display_id} 已有进行中的步骤「{name}」",
+                    display_id=display_id,
+                    name=step_display_name(active.step_name, active.config),
+                ),
                 details={
                     "item": display_id,
                     "step_id": active.id,
@@ -1037,7 +1170,13 @@ class WorkItemService:
             raise AssertionError("unreachable")
         if len(matching) > 1:
             raise WorkflowStepRequired(
-                f"{display_id} 从 {item.status} 到 {to} 有多个步骤，必须显式指定步骤。",
+                tr(
+                    "work_item.multiple_steps",
+                    default="{display_id} 从 {status} 到 {to} 有多个步骤，必须显式指定步骤。",
+                    display_id=display_id,
+                    status=item.status,
+                    to=to,
+                ),
                 details={
                     "item": display_id,
                     "from": item.status,
@@ -1045,21 +1184,30 @@ class WorkItemService:
                     "available_steps": [
                         {
                             "key": step.key,
-                            "name": step.name,
+                            "name": localized_name(step.name, step.name_en),
                             "to": step.to,
                             "mode": step.mode,
                             "note": step.note,
                         }
                         for step in matching
                     ],
-                    "hint": "使用工作项步骤按钮或 work_item_step 指定 step_key。",
+                    "hint": tr(
+                        "work_item.hint_step_button",
+                        default="使用工作项步骤按钮或 work_item_step 指定 step_key。",
+                    ),
                 },
             )
         step = matching[0]
 
         if step.mode != "direct":
             raise WorkflowStepRequired(
-                f"{display_id} 的「{step.name}」是 {step.mode} 步骤，不能直接流转。",
+                tr(
+                    "work_item.non_direct_step",
+                    default="{display_id} 的「{name}」是 {mode} 步骤，不能直接流转。",
+                    display_id=display_id,
+                    name=localized_name(step.name, step.name_en),
+                    mode=step.mode,
+                ),
                 details={
                     "item": display_id,
                     "from": item.status,
@@ -1067,25 +1215,40 @@ class WorkItemService:
                     "available_steps": [
                         {
                             "key": step.key,
-                            "name": step.name,
+                            "name": localized_name(step.name, step.name_en),
                             "to": step.to,
                             "mode": step.mode,
                             "note": step.note,
                         }
                     ],
-                    "hint": "使用步骤 API / work_item_step 发起或执行该步骤。",
+                    "hint": tr(
+                        "work_item.hint_step_api",
+                        default="使用步骤 API / work_item_step 发起或执行该步骤。",
+                    ),
                 },
             )
 
         if item.row_version != row_version:
             raise ConflictVersion(
-                f"{display_id} 已被他人修改（当前版本 {item.row_version}），"
-                "请先 work_item_get 重读再流转。",
+                tr(
+                    "work_item.version_conflict_transition",
+                    default=(
+                        "{display_id} 已被他人修改（当"
+                        "前版本 {version}），请先 work_"
+                        "item_get 重读再流转。"
+                    ),
+                    display_id=display_id,
+                    version=item.row_version,
+                ),
                 details={"id": item.id, "current_version": item.row_version},
             )
         if step.note == "required" and not (reason or "").strip():
             raise WorkflowStepNoteRequired(
-                f"步骤「{step.name}」必须填写备注后才能执行。",
+                tr(
+                    "work_item.note_required",
+                    default="步骤「{name}」必须填写备注后才能执行。",
+                    name=localized_name(step.name, step.name_en),
+                ),
                 details={"item": display_id, "step_key": step.key, "note": "required"},
             )
         return await StepService(self.uow).start(
@@ -1109,14 +1272,27 @@ class WorkItemService:
         task_type: str | None = None,
     ) -> str:
         if engine.is_terminal(kind, status, task_type=task_type):
-            return f"{status} 是终态；如需回退请走显式 reopen/restore 路径。"
+            return tr(
+                "work_item.terminal_hint",
+                default="{status} 是终态；如需回退请走显式 reopen/restore 路径。",
+                status=status,
+            )
         if blocking:
-            return (
-                "存在未终态子项 "
-                f"{blocking}；先完成或取消它们，或用 comment_add/mailbox_send 通知负责人。"
+            return tr(
+                "work_item.blocking_hint",
+                default=(
+                    "存在未终态子项 {blocking}；先"
+                    "完成或取消它们，或用 comment_a"
+                    "dd/mailbox_send 通知负责人。"
+                ),
+                blocking=blocking,
             )
         next_states = engine.allowed(kind, status, task_type=task_type)
-        return f"当前可流转状态：{list(next_states)}。"
+        return tr(
+            "work_item.next_states_hint",
+            default="当前可流转状态：{states}。",
+            states=list(next_states),
+        )
 
     async def apply_system_transition(
         self,
@@ -1188,6 +1364,7 @@ class WorkItemService:
                 "id": step.id,
                 "key": step.step_key,
                 "name": step.step_name,
+                "name_en": (step.config or {}).get("name_en") or step.step_name,
             }
         if reason:
             payload["reason"] = reason
@@ -1213,7 +1390,9 @@ class WorkItemService:
 
     async def delete_item(self, actor: Actor, ref: str) -> tuple[Project, list[str]]:
         project, item = await self.get_item(actor, ref)
-        security.require_owner_or_manager(actor, project.id, "工作项")
+        security.require_owner_or_manager(
+            actor, project.id, tr("work_item.resource_label", default="工作项")
+        )
         descendants = await self._active_subtree(item.id)
         cascade = [n for n in descendants if n.id != item.id]
         assert self.uow.work_items is not None
@@ -1236,10 +1415,16 @@ class WorkItemService:
         assert self.uow.projects is not None
         project = await self.uow.projects.get(item.project_id)
         assert project is not None
-        security.require_owner_or_manager(actor, project.id, "工作项")
+        security.require_owner_or_manager(
+            actor, project.id, tr("work_item.resource_label", default="工作项")
+        )
         if item.deleted_at is None:
             raise ValidationError(
-                f"{self.display_id(project, item)} 未处于删除态，无需恢复。",
+                tr(
+                    "work_item.not_deleted",
+                    default="{display_id} 未处于删除态，无需恢复。",
+                    display_id=self.display_id(project, item),
+                ),
                 details={"id": item.id},
             )
         # Parent chain must be alive first.
@@ -1249,9 +1434,16 @@ class WorkItemService:
             if parent is not None and parent.deleted_at is not None:
                 parent_project = project
                 raise AlreadyDeleted(
-                    f"{self.display_id(project, item)} 的父项 "
-                    f"{self.display_id(parent_project, parent)} 仍处于删除态；"
-                    "请先恢复父项（或整棵子树的根）。",
+                    tr(
+                        "work_item.parent_deleted",
+                        default=(
+                            "{display_id} 的父项 {parent} "
+                            "仍处于删除态；请先恢复父项（或"
+                            "整棵子树的根）。"
+                        ),
+                        display_id=self.display_id(project, item),
+                        parent=self.display_id(parent_project, parent),
+                    ),
                     details={"id": item.id, "parent_id": parent.id},
                 )
 
@@ -1313,13 +1505,26 @@ class WorkItemService:
             field = sorted(other_owned)[0]
             owner = next(k for k, v in KIND_FIELDS.items() if field in v)
             raise ValidationError(
-                f"字段 {field} 仅适用于 kind={owner}，当前工作项是 {kind}；"
-                f"该 kind 的字段见 workflow_get / work_item_get。",
+                tr(
+                    "work_item.field_other_kind",
+                    default=(
+                        "字段 {field} 仅适用于 kind={owner}，当前工作项是 {kind}；"
+                        "该 kind 的字段见 workflow_get / work_item_get。"
+                    ),
+                    field=field,
+                    owner=owner,
+                    kind=kind,
+                ),
                 details={"field": field, "kind": kind, "applicable_kind": owner},
             )
         if stray:
             raise ValidationError(
-                f"未知/不允许的字段 {sorted(stray)}", details={"fields": sorted(stray)}
+                tr(
+                    "work_item.unknown_fields",
+                    default="未知/不允许的字段 {fields}",
+                    fields=sorted(stray),
+                ),
+                details={"fields": sorted(stray)},
             )
 
     async def _build_fields(
@@ -1338,7 +1543,10 @@ class WorkItemService:
                 story = await self.resolve_item(actor, data["source_story"])
                 if story.kind != "story" or story.project_id != project_id:
                     raise ValidationError(
-                        "source_story 必须是同项目的一个 story",
+                        tr(
+                            "work_item.source_story_same",
+                            default="source_story 必须是同项目的一个 story",
+                        ),
                         details={"field": "source_story"},
                     )
                 source_story_id = story.id
@@ -1391,7 +1599,10 @@ class WorkItemService:
                         or story.project_id != item.project_id
                     ):
                         raise ValidationError(
-                            "source_story 必须是同项目的另一个 story",
+                            tr(
+                                "work_item.source_story_other",
+                                default="source_story 必须是同项目的另一个 story",
+                            ),
                             details={"field": "source_story"},
                         )
                     source_story_id = story.id

@@ -3,6 +3,7 @@ import IconButton from "@atlaskit/button/icon/button";
 import ChevronDownIcon from "@atlaskit/icon/core/chevron-down";
 import ChevronRightIcon from "@atlaskit/icon/core/chevron-right";
 import { Text } from "@atlaskit/primitives/compiled";
+import { useTranslation } from "react-i18next";
 
 import PersonCell from "../components/PersonCell";
 import PriorityMark from "../components/PriorityMark";
@@ -42,28 +43,29 @@ export default function WorkItemTable({
   onToggle,
   countNote,
 }: Props) {
+  const { t } = useTranslation("workitems");
   return (
     <div
       style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
       data-testid="work-item-table-container"
     >
-      <table className="rdm-table" aria-label="工作项列表" data-testid="work-item-table">
+      <table className="rdm-table" aria-label={t("table.ariaLabel")} data-testid="work-item-table">
         <thead>
           <tr>
             <th scope="col" className="col-title">
-              标题
+              {t("table.colTitle")}
             </th>
             <th scope="col" className="col-status">
-              状态
+              {t("table.colStatus")}
             </th>
             <th scope="col" className="col-priority">
-              优先级
+              {t("table.colPriority")}
             </th>
             <th scope="col" className="col-person">
-              负责人
+              {t("table.colAssignee")}
             </th>
             <th scope="col" className="col-date">
-              创建时间
+              {t("table.colCreated")}
             </th>
           </tr>
         </thead>
@@ -101,7 +103,10 @@ export default function WorkItemTable({
                             <ChevronDownIcon {...iconProps} />
                           )
                         }
-                        label={`${collapsed ? "展开" : "折叠"} ${row.display_id} 的子项`}
+                        label={t(
+                          collapsed ? "table.expandChildren" : "table.collapseChildren",
+                          { id: row.display_id },
+                        )}
                         appearance="subtle"
                         spacing="compact"
                         testId={`work-item-toggle-${row.display_id}`}
@@ -137,7 +142,8 @@ export default function WorkItemTable({
       </table>
       <div className="rdm-pager" data-testid="work-item-pager">
         <Text size="small" color="color.text.subtlest" testId="work-item-total">
-          共 {total} 条{countNote ? ` · ${countNote}` : ""}
+          {t("table.total", { total })}
+          {countNote ? ` · ${countNote}` : ""}
         </Text>
         <Pagination
           pages={Array.from({ length: pageCount }, (_, i) => i + 1)}

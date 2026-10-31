@@ -11,6 +11,7 @@ from rdm.application.services.attachment_service import AttachmentService
 from rdm.application.services.membership_service import MembershipService
 from rdm.domain.actor import Actor
 from rdm.domain.errors import AuthInvalidToken
+from rdm.i18n import tr
 from rdm.interfaces.http.container import (
     Container,
     get_actor,
@@ -89,7 +90,7 @@ async def download_attachment(
                 or sig is None
                 or not container.attachment_signer.verify(attachment_id, exp, sig)
             ):
-                raise AuthInvalidToken("附件下载链接无效或已过期")
+                raise AuthInvalidToken(tr("auth.download_link_invalid"))
             attachment, path = await service.download_unchecked(attachment_id)
         else:
             attachment, path = await service.download(actor, attachment_id)

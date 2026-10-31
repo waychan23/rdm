@@ -84,6 +84,7 @@ function storageState(baseURL: string, session: Session) {
           { name: "rdm.access", value: session.accessToken },
           { name: "rdm.refresh", value: session.refreshToken },
           { name: "rdm.expires_at", value: String(Date.now() + 55 * 60 * 1000) },
+          { name: "rdm.locale", value: "zh-CN" },
         ],
       },
     ],

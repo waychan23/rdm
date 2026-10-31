@@ -583,6 +583,10 @@ class Notification:
     recipient_user_id: str
     type: str  # assignment | step | comment | mention | system
     title: str
+    # Structured title for read-time localization (§17.115). Old rows have no
+    # key and keep the persisted title verbatim.
+    title_key: str | None = None
+    title_params: dict[str, Any] = field(default_factory=dict)
     body: str | None = None
     project_id: str | None = None
     entity_type: str | None = None

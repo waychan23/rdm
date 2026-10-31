@@ -6,7 +6,9 @@ from rdm.application import security
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Project
 from rdm.domain.enums import WorkItemKind
+from rdm.domain.errors import NotFound
 from rdm.domain.workflow.loader import load_engine
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 
 
@@ -18,9 +20,10 @@ class OverviewService:
         assert self.uow.projects and self.uow.work_items
         project = await self.uow.projects.get_by_key(project_key)
         if project is None:
-            from rdm.domain.errors import NotFound
-
-            raise NotFound(f"项目 {project_key} 不存在", details={"key": project_key})
+            raise NotFound(
+                tr("work_item.project_not_found", default="项目 {key} 不存在", key=project_key),
+                details={"key": project_key},
+            )
         security.assert_project_access(actor, project.id)
 
         items = self.uow.work_items

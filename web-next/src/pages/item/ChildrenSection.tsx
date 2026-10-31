@@ -9,6 +9,7 @@ import ModalDialog, {
   ModalTransition,
 } from "@atlaskit/modal-dialog";
 import { Inline, Stack } from "@atlaskit/primitives/compiled";
+import { useTranslation } from "react-i18next";
 
 import FormField from "../../components/FormField";
 import PersonCell from "../../components/PersonCell";
@@ -41,6 +42,7 @@ function LinkChildDialog({
   onClose,
   onChanged,
 }: LinkChildDialogProps) {
+  const { t } = useTranslation("item");
   const notify = useNotify();
   const [existing, setExisting] = useState<WorkItemOption | null>(null);
   const [saving, setSaving] = useState(false);
@@ -54,7 +56,7 @@ function LinkChildDialog({
   const submit = async () => {
     if (saving) return;
     if (!existing) {
-      notify.error("请选择要关联的工作项");
+      notify.error(t("children.selectRequired"));
       return;
     }
     setSaving(true);
@@ -63,11 +65,16 @@ function LinkChildDialog({
         parent: parent.display_id,
         row_version: existing.row_version,
       });
-      notify.success(`已把 ${existing.display_id} 挂到 ${parent.display_id}`);
+      notify.success(
+        t("children.linked", {
+          child: existing.display_id,
+          parent: parent.display_id,
+        }),
+      );
       onChanged();
       onClose();
     } catch (e) {
-      notify.error("关联子项失败", errorCause(e)?.message);
+      notify.error(t("children.linkFailed"), errorCause(e)?.message);
     } finally {
       setSaving(false);
     }
@@ -78,18 +85,18 @@ function LinkChildDialog({
       {open && (
         <ModalDialog onClose={onClose} width="640px" testId="link-child-dialog">
           <ModalHeader>
-            <ModalTitle>关联已有工作项到 {parent.display_id}</ModalTitle>
+            <ModalTitle>{t("children.linkTitle", { id: parent.display_id })}</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.150">
-              <FormField label="已有工作项">
+              <FormField label={t("children.existing")}>
                 <WorkItemPicker
                   projectKey={projectKey}
                   allowedKinds={allowedKinds}
                   excludeIds={excludeIds}
                   value={existing}
                   onChange={setExisting}
-                  placeholder="搜索并选择工作项"
+                  placeholder={t("children.searchPlaceholder")}
                   testId="link-child-existing"
                 />
               </FormField>
@@ -97,7 +104,7 @@ function LinkChildDialog({
           </ModalBody>
           <ModalFooter>
             <Button appearance="subtle" onClick={onClose} testId="link-child-cancel">
-              取消
+              {t("children.cancel")}
             </Button>
             <Button
               appearance="primary"
@@ -106,7 +113,7 @@ function LinkChildDialog({
               onClick={() => void submit()}
               testId="link-child-submit"
             >
-              关联
+              {t("children.link")}
             </Button>
           </ModalFooter>
         </ModalDialog>
@@ -132,6 +139,7 @@ export default function ChildrenSection({
   onOpen,
   onChanged,
 }: ChildrenSectionProps) {
+  const { t } = useTranslation("item");
   const [showCreate, setShowCreate] = useState(false);
   const [showLink, setShowLink] = useState(false);
   const parentOption = useMemo(() => toWorkItemOption(parent), [parent]);
@@ -145,7 +153,9 @@ export default function ChildrenSection({
   return (
     <div data-testid="item-panel-children">
       <div className="rdm-item-section-head">
-        <div className="rdm-item-section-label">子项（{children.length}）</div>
+        <div className="rdm-item-section-label">
+          {t("children.sectionLabel", { total: children.length })}
+        </div>
         <Inline space="space.100">
           <Button
             spacing="compact"
@@ -153,7 +163,7 @@ export default function ChildrenSection({
             isDisabled={disabled}
             onClick={() => setShowCreate(true)}
           >
-            新建子项
+            {t("children.create")}
           </Button>
           <Button
             appearance="subtle"
@@ -162,15 +172,13 @@ export default function ChildrenSection({
             isDisabled={disabled}
             onClick={() => setShowLink(true)}
           >
-            关联已有
+            {t("children.linkExisting")}
           </Button>
         </Inline>
       </div>
       {children.length === 0 ? (
         <div className="rdm-item-empty" data-testid="item-children-empty">
-          {disabled
-            ? "该类型不能有子项"
-            : "还没有子项；点击「新建子项」或「关联已有」。"}
+          {disabled ? t("children.emptyDisabled") : t("children.empty")}
         </div>
       ) : (
         children.map((child) => (
@@ -205,7 +213,7 @@ export default function ChildrenSection({
         initialParent={parentOption}
         allowedKinds={allowedKinds}
         parentLocked
-        dialogTitle={`新建子项到 ${parent.display_id}`}
+        dialogTitle={t("children.createTitle", { id: parent.display_id })}
         onClose={() => setShowCreate(false)}
         onCreated={() => onChanged()}
       />

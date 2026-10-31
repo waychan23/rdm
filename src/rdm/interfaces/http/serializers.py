@@ -22,6 +22,7 @@ from rdm.domain.entities import (
     Workspace,
 )
 from rdm.domain.timefmt import iso_utc
+from rdm.i18n import current_locale, tr
 
 
 def _iso(value: dt.datetime | dt.date | None) -> str | None:
@@ -294,12 +295,22 @@ def sprint_out(s: Sprint) -> dict:
     }
 
 
+def notification_title(n: Notification) -> str:
+    """Render a stored notification title in the current request locale."""
+    if not n.title_key:
+        return n.title
+    params = dict(n.title_params or {})
+    if current_locale() == "en" and params.get("step_name_en"):
+        params["step_name"] = params["step_name_en"]
+    return tr(n.title_key, **params)
+
+
 def notification_out(n: Notification) -> dict:
     return {
         "id": n.id,
         "recipient_user_id": n.recipient_user_id,
         "type": n.type,
-        "title": n.title,
+        "title": notification_title(n),
         "body": n.body,
         "project_id": n.project_id,
         "entity_type": n.entity_type,

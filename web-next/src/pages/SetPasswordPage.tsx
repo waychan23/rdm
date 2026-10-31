@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
@@ -46,35 +48,41 @@ type TicketState =
   | { phase: "invalid"; reason: string; kind: string | null }
   | { phase: "error" };
 
-const INVALID_COPY: Record<string, { title: string; body: string }> = {
-  consumed: {
-    title: "该链接已失效",
-    body: "链接已被使用，或已因重新生成而失效。",
-  },
-  expired: {
-    title: "该链接已过期",
-    body: "设置密码链接已失效。",
-  },
-  user_missing: {
-    title: "链接无效",
-    body: "该链接对应的用户已不可用。",
-  },
-  not_found: {
-    title: "链接无效",
-    body: "链接不存在或已被替换。",
-  },
-};
-
-function invalidMessage(reason: string, kind: string | null): { title: string; body: string } {
-  const copy = INVALID_COPY[reason] ?? INVALID_COPY.not_found;
+function invalidMessage(
+  t: TFunction<"auth">,
+  reason: string,
+  kind: string | null,
+): { title: string; body: string } {
   const nextStep =
     kind === "bootstrap"
-      ? "请查看服务启动日志中的 bootstrap-url，或由管理员执行 rdm account recover-owner 重新生成。"
-      : "请向管理员重新索取设置密码链接后再试。";
-  return { title: copy.title, body: `${copy.body}${nextStep}` };
+      ? t("setPassword.invalid.nextStep.bootstrap")
+      : t("setPassword.invalid.nextStep.fallback");
+  switch (reason) {
+    case "consumed":
+      return {
+        title: t("setPassword.invalid.consumed.title"),
+        body: `${t("setPassword.invalid.consumed.body")}${nextStep}`,
+      };
+    case "expired":
+      return {
+        title: t("setPassword.invalid.expired.title"),
+        body: `${t("setPassword.invalid.expired.body")}${nextStep}`,
+      };
+    case "user_missing":
+      return {
+        title: t("setPassword.invalid.userMissing.title"),
+        body: `${t("setPassword.invalid.userMissing.body")}${nextStep}`,
+      };
+    default:
+      return {
+        title: t("setPassword.invalid.notFound.title"),
+        body: `${t("setPassword.invalid.notFound.body")}${nextStep}`,
+      };
+  }
 }
 
 export default function SetPasswordPage() {
+  const { t } = useTranslation("auth");
   const [params] = useSearchParams();
   const notify = useNotify();
   const ticket = params.get("ticket");
@@ -110,7 +118,7 @@ export default function SetPasswordPage() {
     e.preventDefault();
     if (!ticket || loading) return;
     if (password !== confirm) {
-      notify.error("两次输入的密码不一致");
+      notify.error(t("setPassword.errors.mismatch"));
       return;
     }
     setLoading(true);
@@ -118,7 +126,7 @@ export default function SetPasswordPage() {
       await api.post("/auth/set-password", { ticket, new_password: password });
       setDone(true);
     } catch (e) {
-      notify.error("设置密码失败", errorCause(e)?.message);
+      notify.error(t("setPassword.errors.failed"), errorCause(e)?.message);
     } finally {
       setLoading(false);
     }
@@ -127,8 +135,8 @@ export default function SetPasswordPage() {
   const renderBody = () => {
     if (!ticket) {
       return (
-        <SectionMessage appearance="error" title="链接无效">
-          缺少 ticket 参数，请向管理员重新索取设置密码链接。
+        <SectionMessage appearance="error" title={t("setPassword.missingTicket.title")}>
+          {t("setPassword.missingTicket.body")}
         </SectionMessage>
       );
     }
@@ -136,24 +144,24 @@ export default function SetPasswordPage() {
       return (
         <Stack space="space.200" alignInline="center">
           <Spinner size="large" />
-          <Text color="color.text.subtlest">正在校验链接…</Text>
+          <Text color="color.text.subtlest">{t("setPassword.checking")}</Text>
         </Stack>
       );
     }
     if (status.phase === "error") {
       return (
         <Stack space="space.200">
-          <SectionMessage appearance="warning" title="无法校验链接状态">
-            网络或服务异常，请稍后重试。
+          <SectionMessage appearance="warning" title={t("setPassword.checkFailed.title")}>
+            {t("setPassword.checkFailed.body")}
           </SectionMessage>
           <Button testId="set-password-recheck" onClick={() => void checkTicket()}>
-            重试
+            {t("setPassword.retry")}
           </Button>
         </Stack>
       );
     }
     if (status.phase === "invalid") {
-      const message = invalidMessage(status.reason, status.kind);
+      const message = invalidMessage(t, status.reason, status.kind);
       return (
         <SectionMessage appearance="error" title={message.title}>
           {message.body}
@@ -163,9 +171,9 @@ export default function SetPasswordPage() {
     if (done) {
       return (
         <Stack space="space.200">
-          <Heading size="large" as="h1">密码已设置</Heading>
-          <SectionMessage appearance="success" title="完成">
-            现在用新密码登录。
+          <Heading size="large" as="h1">{t("setPassword.done.title")}</Heading>
+          <SectionMessage appearance="success" title={t("setPassword.done.successTitle")}>
+            {t("setPassword.done.successBody")}
           </SectionMessage>
           <Button
             appearance="primary"
@@ -176,7 +184,7 @@ export default function SetPasswordPage() {
               );
             }}
           >
-            去登录
+            {t("setPassword.done.gotoLogin")}
           </Button>
         </Stack>
       );
@@ -184,9 +192,9 @@ export default function SetPasswordPage() {
     return (
       <Box as="form" onSubmit={submit} testId="set-password-form">
         <Stack space="space.200">
-          <Heading size="large" as="h1">设置密码</Heading>
-          <Text color="color.text.subtlest">密码长度 8–128 位，请妥善保管。</Text>
-          <FormField label="新密码" htmlFor="set-password">
+          <Heading size="large" as="h1">{t("setPassword.form.title")}</Heading>
+          <Text color="color.text.subtlest">{t("setPassword.form.hint")}</Text>
+          <FormField label={t("setPassword.form.newPassword")} htmlFor="set-password">
             <Textfield
               id="set-password"
               type="password"
@@ -197,7 +205,7 @@ export default function SetPasswordPage() {
               onChange={(e) => setPassword(e.currentTarget.value)}
             />
           </FormField>
-          <FormField label="确认新密码" htmlFor="set-password-confirm">
+          <FormField label={t("setPassword.form.confirmPassword")} htmlFor="set-password-confirm">
             <Textfield
               id="set-password-confirm"
               type="password"
@@ -213,7 +221,7 @@ export default function SetPasswordPage() {
             isLoading={loading}
             testId="set-password-submit"
           >
-            保存
+            {t("setPassword.form.submit")}
           </Button>
         </Stack>
       </Box>

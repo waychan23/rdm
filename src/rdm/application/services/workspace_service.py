@@ -23,6 +23,7 @@ from rdm.domain.events import (
     deleted_payload,
     updated_payload,
 )
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
@@ -33,7 +34,10 @@ def _normalize_location(value: Any) -> str:
     """Storage location: optional free-form text (http, git SSH, mount path…)."""
     location = (value or "").strip()
     if len(location) > 1000:
-        raise ValidationError("存储位置不能超过 1000 字符", details={"field": "url"})
+        raise ValidationError(
+            tr("workspace.url_too_long", default="存储位置不能超过 1000 字符"),
+            details={"field": "url"},
+        )
     return location
 
 
@@ -54,14 +58,24 @@ class WorkspaceService:
         self, actor: Actor, project_key: str | None, data: dict[str, Any]
     ) -> tuple[Project, Workspace]:
         project = await self.items.resolve_project(actor, project_key)
-        security.require_owner_or_manager(actor, project.id, "工作区")
+        security.require_owner_or_manager(
+            actor, project.id, tr("workspace.resource_label", default="工作区")
+        )
         name = (data.get("name") or "").strip()
         if not 1 <= len(name) <= 200:
-            raise ValidationError("name 必填且不超过 200 字符", details={"field": "name"})
+            raise ValidationError(
+                tr("workspace.name_invalid", default="name 必填且不超过 200 字符"),
+                details={"field": "name"},
+            )
         kind = data.get("kind") or WorkspaceKind.other
         if kind not in VALID_KINDS:
             raise ValidationError(
-                f"kind 必须是 {sorted(VALID_KINDS)}，收到 {kind!r}",
+                tr(
+                    "workspace.kind_invalid",
+                    default="kind 必须是 {allowed}，收到 {kind!r}",
+                    allowed=sorted(VALID_KINDS),
+                    kind=kind,
+                ),
                 details={"field": "kind", "value": kind},
             )
         url = _normalize_location(data.get("url"))
@@ -95,17 +109,25 @@ class WorkspaceService:
         assert self.uow.workspaces is not None and self.uow.projects is not None
         workspace = await self.uow.workspaces.get(workspace_id)
         if workspace is None:
-            raise NotFound(f"工作区 {workspace_id} 不存在", details={"workspace_id": workspace_id})
+            raise NotFound(
+                tr("workspace.not_found", default="工作区 {id} 不存在", id=workspace_id),
+                details={"workspace_id": workspace_id},
+            )
         security.assert_project_access(actor, workspace.project_id)
         project = await self.uow.projects.get(workspace.project_id)
         assert project is not None
-        security.require_owner_or_manager(actor, project.id, "工作区")
+        security.require_owner_or_manager(
+            actor, project.id, tr("workspace.resource_label", default="工作区")
+        )
 
         changes: dict[str, list[Any]] = {}
         if "name" in data:
             name = (data.get("name") or "").strip()
             if not 1 <= len(name) <= 200:
-                raise ValidationError("name 必填且不超过 200 字符", details={"field": "name"})
+                raise ValidationError(
+                    tr("workspace.name_invalid", default="name 必填且不超过 200 字符"),
+                    details={"field": "name"},
+                )
             if name != workspace.name:
                 changes["name"] = [workspace.name, name]
                 workspace.name = name
@@ -113,7 +135,12 @@ class WorkspaceService:
             kind = data["kind"]
             if kind not in VALID_KINDS:
                 raise ValidationError(
-                    f"kind 必须是 {sorted(VALID_KINDS)}", details={"field": "kind"}
+                    tr(
+                        "workspace.kind_invalid_allowed",
+                        default="kind 必须是 {allowed}",
+                        allowed=sorted(VALID_KINDS),
+                    ),
+                    details={"field": "kind"},
                 )
             if kind != workspace.kind:
                 changes["kind"] = [workspace.kind, kind]
@@ -149,15 +176,23 @@ class WorkspaceService:
         assert self.uow.workspaces is not None and self.uow.projects is not None
         workspace = await self.uow.workspaces.get(workspace_id)
         if workspace is None:
-            raise NotFound(f"工作区 {workspace_id} 不存在", details={"workspace_id": workspace_id})
+            raise NotFound(
+                tr("workspace.not_found", default="工作区 {id} 不存在", id=workspace_id),
+                details={"workspace_id": workspace_id},
+            )
         security.assert_project_access(actor, workspace.project_id)
         project = await self.uow.projects.get(workspace.project_id)
         assert project is not None
-        security.require_owner_or_manager(actor, project.id, "工作区")
+        security.require_owner_or_manager(
+            actor, project.id, tr("workspace.resource_label", default="工作区")
+        )
         now = dt.datetime.now(dt.UTC)
         deleted = await self.uow.workspaces.soft_delete(workspace_id, actor.id, now)
         if not deleted:
-            raise NotFound("工作区已删除", details={"workspace_id": workspace_id})
+            raise NotFound(
+                tr("workspace.deleted", default="工作区已删除"),
+                details={"workspace_id": workspace_id},
+            )
         workspace.deleted_at = now
         workspace.deleted_by = actor.id
         await self._event(

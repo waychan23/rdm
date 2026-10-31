@@ -517,6 +517,8 @@ def notification_to_domain(row: NotificationModel) -> Notification:
         recipient_user_id=row.recipient_user_id,
         type=row.type,
         title=row.title,
+        title_key=row.title_key,
+        title_params=dict(row.title_params or {}),
         body=row.body,
         project_id=row.project_id,
         entity_type=row.entity_type,

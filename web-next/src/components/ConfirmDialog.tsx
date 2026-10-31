@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import Button from "@atlaskit/button/default/button";
 import ModalDialog, {
@@ -27,14 +28,17 @@ export default function ConfirmDialog({
   open,
   title,
   children,
-  confirmLabel = "确认",
-  cancelLabel = "取消",
+  confirmLabel,
+  cancelLabel,
   danger = false,
   busy = false,
   onConfirm,
   onClose,
   testId = "confirm-dialog",
 }: Props) {
+  const { t } = useTranslation("common");
+  const confirmText = confirmLabel ?? t("actions.confirm");
+  const cancelText = cancelLabel ?? t("actions.cancel");
   return (
     <ModalTransition>
       {open && (
@@ -45,7 +49,7 @@ export default function ConfirmDialog({
           <ModalBody>{children}</ModalBody>
           <ModalFooter>
             <Button appearance="subtle" onClick={onClose} testId={`${testId}-cancel`}>
-              {cancelLabel}
+              {cancelText}
             </Button>
             <Button
               appearance={danger ? "danger" : "primary"}
@@ -53,7 +57,7 @@ export default function ConfirmDialog({
               isLoading={busy}
               testId={`${testId}-confirm`}
             >
-              {confirmLabel}
+              {confirmText}
             </Button>
           </ModalFooter>
         </ModalDialog>

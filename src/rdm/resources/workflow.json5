@@ -19,6 +19,19 @@
     product_design: "产品设计",
     release: "系统发布",
   },
+  task_type_labels_en: {
+    other: "Other",
+    frontend: "Frontend",
+    backend: "Backend",
+    fullstack: "Fullstack",
+    code_review: "Code review",
+    testing: "Testing",
+    test_case_design: "Test case design",
+    docs: "Documentation",
+    ui_design: "UI design",
+    product_design: "Product design",
+    release: "Release",
+  },
   // 各 kind 的状态机、步骤、字段与子类型。
   kinds: {
     epic: {
@@ -35,11 +48,13 @@
           {
             key: "START",
             name: "开始",
+            name_en: "Start",
             to: "IN_PROGRESS",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -47,11 +62,13 @@
           {
             key: "COMPLETE",
             name: "完成",
+            name_en: "Complete",
             to: "DONE",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -66,6 +83,7 @@
     },
     story: {
       label: "需求",
+      label_en: "Story",
       states: ["TODO", "IN_PROGRESS", "BLOCKED", "TO_TEST", "DONE", "PUBLISHED", "CANCELLED"],
       initial: "TODO",
       terminal: ["DONE", "PUBLISHED", "CANCELLED"],
@@ -78,11 +96,13 @@
           {
             key: "START",
             name: "开始",
+            name_en: "Start",
             to: "IN_PROGRESS",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -90,16 +110,19 @@
           {
             key: "SUBMIT_TEST",
             name: "提交测试",
+            name_en: "Submit for testing",
             to: "TO_TEST",
           },
           {
             key: "BLOCK",
             name: "标记阻塞",
+            name_en: "Mark blocked",
             to: "BLOCKED",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -107,16 +130,19 @@
           {
             key: "RESUME",
             name: "恢复",
+            name_en: "Resume",
             to: "IN_PROGRESS",
           },
           {
             key: "REQUEUE",
             name: "重新排队",
+            name_en: "Requeue",
             to: "TODO",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -124,16 +150,19 @@
           {
             key: "PASS",
             name: "验收通过",
+            name_en: "Accept",
             to: "DONE",
           },
           {
             key: "SEND_BACK",
             name: "打回",
+            name_en: "Send back",
             to: "IN_PROGRESS",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -141,6 +170,7 @@
           {
             key: "PUBLISH",
             name: "发布",
+            name_en: "Publish",
             to: "PUBLISHED",
           },
         ],
@@ -158,6 +188,7 @@
     },
     issue: {
       label: "缺陷",
+      label_en: "Bug",
       states: ["OPEN", "TO_CONFIRM", "TO_FIX", "FIXING", "BLOCKED", "CLOSED_DONE", "CLOSED_REJECTED", "REOPEN", "CANCELLED"],
       initial: "OPEN",
       terminal: ["CLOSED_DONE", "CLOSED_REJECTED", "CANCELLED"],
@@ -170,11 +201,13 @@
           {
             key: "CONFIRM",
             name: "提交确认",
+            name_en: "Submit for confirmation",
             to: "TO_CONFIRM",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -182,16 +215,19 @@
           {
             key: "ACCEPT",
             name: "确认修复",
+            name_en: "Confirm fix",
             to: "TO_FIX",
           },
           {
             key: "REJECT",
             name: "驳回",
+            name_en: "Reject",
             to: "CLOSED_REJECTED",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -199,16 +235,19 @@
           {
             key: "START_FIX",
             name: "开始修复",
+            name_en: "Start fixing",
             to: "FIXING",
           },
           {
             key: "BLOCK",
             name: "标记阻塞",
+            name_en: "Mark blocked",
             to: "BLOCKED",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -216,21 +255,25 @@
           {
             key: "RETURN_FIX",
             name: "退回待修",
+            name_en: "Return to fix",
             to: "TO_FIX",
           },
           {
             key: "BLOCK",
             name: "标记阻塞",
+            name_en: "Mark blocked",
             to: "BLOCKED",
           },
           {
             key: "CLOSE",
             name: "关闭（已修复）",
+            name_en: "Close (fixed)",
             to: "CLOSED_DONE",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -238,16 +281,19 @@
           {
             key: "RESUME_FIX",
             name: "恢复待修",
+            name_en: "Restore to fix",
             to: "TO_FIX",
           },
           {
             key: "RESUME_FIXING",
             name: "恢复修复",
+            name_en: "Resume fixing",
             to: "FIXING",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -255,21 +301,25 @@
           {
             key: "REOPEN_FIX",
             name: "重新修复",
+            name_en: "Fix again",
             to: "TO_FIX",
           },
           {
             key: "REOPEN_FIXING",
             name: "重新开始修复",
+            name_en: "Restart fixing",
             to: "FIXING",
           },
           {
             key: "REOPEN_CLOSE",
             name: "关闭（已修复）",
+            name_en: "Close (fixed)",
             to: "CLOSED_DONE",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -277,6 +327,7 @@
           {
             key: "REOPEN",
             name: "重新打开",
+            name_en: "Reopen",
             to: "REOPEN",
           },
         ],
@@ -284,6 +335,7 @@
           {
             key: "REOPEN",
             name: "重新打开",
+            name_en: "Reopen",
             to: "REOPEN",
           },
         ],
@@ -299,6 +351,7 @@
     // 普通任务：默认工作流；任务类型可通过 subtypes 覆盖。
     task: {
       label: "任务",
+      label_en: "Task",
       states: ["TODO", "IN_PROGRESS", "BLOCKED", "TO_REVIEW", "DONE", "PUBLISHED", "CANCELLED"],
       initial: "TODO",
       terminal: ["DONE", "PUBLISHED", "CANCELLED"],
@@ -314,11 +367,13 @@
           {
             key: "START",
             name: "开始",
+            name_en: "Start",
             to: "IN_PROGRESS",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -326,16 +381,19 @@
           {
             key: "SUBMIT_REVIEW",
             name: "提交评审",
+            name_en: "Submit for review",
             to: "TO_REVIEW",
           },
           {
             key: "BLOCK",
             name: "标记阻塞",
+            name_en: "Mark blocked",
             to: "BLOCKED",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -343,16 +401,19 @@
           {
             key: "RESUME",
             name: "恢复",
+            name_en: "Resume",
             to: "IN_PROGRESS",
           },
           {
             key: "REQUEUE",
             name: "重新排队",
+            name_en: "Requeue",
             to: "TODO",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -360,6 +421,7 @@
           {
             key: "CODE_REVIEW",
             name: "Code Review",
+            name_en: "Code Review",
             to: "DONE",
             mode: "approval", // direct | approval | task
             actors: ["assignee", "reviewers"],
@@ -376,6 +438,7 @@
           {
             key: "CODE_REVIEW_TASKS",
             name: "Code Review Task",
+            name_en: "Code Review Task",
             to: "DONE",
             mode: "task", // direct | approval | task
             actors: ["assignee", "reviewers"],
@@ -392,12 +455,14 @@
           {
             key: "SEND_BACK",
             name: "打回修改",
+            name_en: "Send back for changes",
             to: "IN_PROGRESS",
             note: "required",
           },
           {
             key: "CANCEL",
             name: "取消",
+            name_en: "Cancel",
             to: "CANCELLED",
           },
         ],
@@ -405,6 +470,7 @@
           {
             key: "PUBLISH",
             name: "发布",
+            name_en: "Publish",
             to: "PUBLISHED",
           },
         ],
@@ -415,6 +481,7 @@
       subtypes: {
         code_review: {
           label: "Code Review",
+          label_en: "Code Review",
           states: ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"],
           initial: "TODO",
           terminal: ["DONE", "CANCELLED"],
@@ -425,16 +492,19 @@
               {
                 key: "review_scope",
                 label: "评审范围",
+                label_en: "Review scope",
                 type: "text",
               },
               {
                 key: "risk_score",
                 label: "风险分",
+                label_en: "Risk score",
                 type: "number",
               },
               {
                 key: "observers",
                 label: "旁听人",
+                label_en: "Observers",
                 type: "user",
                 multiple: true,
               },
@@ -445,11 +515,13 @@
               {
                 key: "START",
                 name: "开始评审",
+                name_en: "Start review",
                 to: "IN_PROGRESS",
               },
               {
                 key: "CANCEL",
                 name: "取消",
+                name_en: "Cancel",
                 to: "CANCELLED",
               },
             ],
@@ -457,11 +529,13 @@
               {
                 key: "SUBMIT",
                 name: "提交评审结果",
+                name_en: "Submit review result",
                 to: "IN_REVIEW",
               },
               {
                 key: "CANCEL",
                 name: "取消",
+                name_en: "Cancel",
                 to: "CANCELLED",
               },
             ],
@@ -469,17 +543,20 @@
               {
                 key: "APPROVE",
                 name: "评审通过",
+                name_en: "Approve review",
                 to: "DONE",
                 note: "required",
               },
               {
                 key: "SEND_BACK",
                 name: "打回修改",
+                name_en: "Send back for changes",
                 to: "IN_PROGRESS",
               },
               {
                 key: "CANCEL",
                 name: "取消",
+                name_en: "Cancel",
                 to: "CANCELLED",
               },
             ],
@@ -503,6 +580,7 @@
           {
             key: "START_SPRINT",
             name: "启动 Sprint",
+            name_en: "Start Sprint",
             to: "ACTIVE",
           },
         ],
@@ -510,6 +588,7 @@
           {
             key: "CLOSE_SPRINT",
             name: "关闭 Sprint",
+            name_en: "Close Sprint",
             to: "CLOSED",
           },
         ],

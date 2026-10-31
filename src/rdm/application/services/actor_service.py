@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from rdm.domain.actor import Actor
 from rdm.domain.entities import User, UserToken
 from rdm.domain.errors import AuthInvalidToken, Forbidden
+from rdm.i18n import tr
 from rdm.infrastructure.db.repositories.membership import MembershipRepository
 from rdm.infrastructure.db.repositories.user import UserRepository
 
@@ -38,11 +39,14 @@ class ActorResolver:
     async def resolve(self, token: UserToken) -> Actor:
         human: User | None = await self.users.get(token.user_id)
         if human is None:
-            raise AuthInvalidToken("凭据对应的用户不存在")
+            raise AuthInvalidToken(tr("auth.user_missing", default="凭据对应的用户不存在"))
         if human.is_agent:
-            raise AuthInvalidToken("凭据主体必须是 human 用户")
+            raise AuthInvalidToken(tr("auth.human_required", default="凭据主体必须是 human 用户"))
         if not human.is_active:
-            raise Forbidden("用户已停用", details={"user_id": human.id})
+            raise Forbidden(
+                tr("auth.user_disabled", default="用户已停用"),
+                details={"user_id": human.id},
+            )
 
         identity: User = human
         if token.act_as_user_id is not None:
@@ -54,7 +58,10 @@ class ActorResolver:
                 or not agent.is_active
             ):
                 raise Forbidden(
-                    "该凭据指定的 agent 身份不可用（已停用或不属于你）",
+                    tr(
+                        "auth.agent_unavailable",
+                        default="该凭据指定的 agent 身份不可用（已停用或不属于你）",
+                    ),
                     details={"user_id": human.id, "act_as_user_id": token.act_as_user_id},
                 )
             identity = agent

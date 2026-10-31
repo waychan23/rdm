@@ -10,6 +10,7 @@ import ModalDialog, {
 } from "@atlaskit/modal-dialog";
 import { Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import Select from "@atlaskit/select";
+import { useTranslation } from "react-i18next";
 
 import { statusLabel } from "../../lib/labels";
 import { portalMenuProps } from "../../lib/portalMenu";
@@ -35,6 +36,7 @@ export default function StepStartDialog({
   onClose,
   onConfirm,
 }: Props) {
+  const { t } = useTranslation("item");
   const [selected, setSelected] = useState<Option[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -51,7 +53,7 @@ export default function StepStartDialog({
 
   if (!step) return null;
   const options: Option[] = step.candidates.map((user) => ({
-    label: `${user.name ?? user.id}${user.type === "agent" ? "（agent）" : ""}`,
+    label: `${user.name ?? user.id}${user.type === "agent" ? t("panel.agentSuffix") : ""}`,
     value: user.id,
   }));
   const max = step.executors.max ?? step.candidates.length;
@@ -64,51 +66,60 @@ export default function StepStartDialog({
         <ModalDialog onClose={onClose} width="560px" testId="step-start-dialog">
           <ModalHeader>
             <ModalTitle>
-              {mode === "reassign" ? "改派执行人" : "发起步骤"} · {step.name}
+              {mode === "reassign"
+                ? t("stepStart.reassignTitle", { name: step.name })
+                : t("stepStart.startTitle", { name: step.name })}
             </ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.150">
               <Text size="small" color="color.text.subtlest">
-                目标状态：{statusLabel(step.to)} ·{" "}
+                {t("stepStart.targetStatus", { status: statusLabel(step.to) })} ·{" "}
                 {step.mode === "task"
-                  ? "任务式步骤：将为每名执行人创建一个子任务"
-                  : "多人步骤：所有执行人都提交后才自动流转"}
+                  ? t("stepStart.taskMode")
+                  : t("stepStart.approvalMode")}
               </Text>
               <Text size="small" color="color.text.subtlest">
-                需要 {step.executors.min}–{max} 名执行人；候选人来自{" "}
-                {(step.actor_sources ?? []).join(" / ") || "（未配置）"}。
+                {t("stepStart.executorsHint", {
+                  min: step.executors.min,
+                  max,
+                  sources:
+                    (step.actor_sources ?? []).join(" / ") || t("stepStart.notConfigured"),
+                })}
                 {step.mode === "task" && step.tasks
-                  ? ` 子任务类型：${step.tasks.type}，完成条件：${step.tasks.complete_on}。`
+                  ? t("stepStart.taskLine", {
+                      type: step.tasks.type,
+                      condition: step.tasks.complete_on,
+                    })
                   : ""}
               </Text>
               <div>
                 <Text size="small" weight="medium" color="color.text.subtle">
-                  执行人
+                  {t("stepStart.executorsLabel")}
                 </Text>
                 <Select
                   {...portalMenuProps}
                   isMulti
                   options={options}
                   value={selected}
-                  placeholder="选择执行人"
+                  placeholder={t("stepStart.executorsPlaceholder")}
                   testId="step-start-executors"
                   onChange={(value) => setSelected([...(value ?? [])] as Option[])}
                 />
               </div>
               {options.length === 0 && (
                 <Text size="small" color="color.text.danger">
-                  没有候选执行人：请先维护 reviewer / 参与人，或指派负责人。
+                  {t("stepStart.noCandidates")}
                 </Text>
               )}
               {count > max && (
                 <Text size="small" color="color.text.danger">
-                  最多选择 {max} 人。
+                  {t("stepStart.maxSelect", { max })}
                 </Text>
               )}
               {count < step.executors.min && (
                 <Text size="small" color="color.text.danger">
-                  至少选择 {step.executors.min} 人。
+                  {t("stepStart.minSelect", { min: step.executors.min })}
                 </Text>
               )}
             </Stack>
@@ -116,7 +127,7 @@ export default function StepStartDialog({
           <ModalFooter>
             <Inline space="space.100">
               <Button appearance="subtle" onClick={onClose} testId="step-start-cancel">
-                取消
+                {t("stepStart.cancel")}
               </Button>
               <Button
                 appearance="primary"
@@ -132,7 +143,7 @@ export default function StepStartDialog({
                   }
                 }}
               >
-                {mode === "reassign" ? "保存" : "发起"}
+                {mode === "reassign" ? t("stepStart.save") : t("stepStart.start")}
               </Button>
             </Inline>
           </ModalFooter>

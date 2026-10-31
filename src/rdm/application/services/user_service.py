@@ -25,6 +25,7 @@ from rdm.domain.enums import (
 )
 from rdm.domain.errors import Forbidden, NotFound, ValidationError
 from rdm.domain.events import EventType, updated_payload
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
@@ -41,7 +42,11 @@ def _check_accept_kinds(kinds: list[str]) -> None:
     bad = [k for k in kinds if k not in VALID_ACCEPT_KINDS]
     if bad:
         raise ValidationError(
-            f"accept_kinds 只能是 story/issue/task，收到 {bad}",
+            tr(
+                "user.accept_kinds_invalid",
+                default="accept_kinds 只能是 story/issue/task，收到 {bad}",
+                bad=bad,
+            ),
             details={"field": "accept_kinds"},
         )
 
@@ -49,7 +54,10 @@ def _check_accept_kinds(kinds: list[str]) -> None:
 def _check_webhook_format(fmt: str) -> None:
     if fmt not in {"generic", "dingtalk", "feishu"}:
         raise ValidationError(
-            "notify_webhook_format 必须是 generic/dingtalk/feishu",
+            tr(
+                "user.webhook_format_invalid",
+                default="notify_webhook_format 必须是 generic/dingtalk/feishu",
+            ),
             details={"field": "notify_webhook_format", "value": fmt},
         )
 
@@ -77,10 +85,15 @@ class UserService:
         security.require_user_manager(actor)
         clean = (name or "").strip()
         if not clean:
-            raise ValidationError("name 必填", details={"field": "name"})
+            raise ValidationError(
+                tr("user.name_required", default="name 必填"), details={"field": "name"}
+            )
         assert self.uow.users is not None
         if await self.uow.users.get_by_name(actor.org_id, clean) is not None:
-            raise ValidationError(f"用户名 {clean} 已被占用", details={"field": "name"})
+            raise ValidationError(
+                tr("user.name_taken", default="用户名 {name} 已被占用", name=clean),
+                details={"field": "name"},
+            )
 
         user = User(
             id=new_id(),
@@ -112,11 +125,21 @@ class UserService:
         assert self.uow.users is not None
         user = await self.uow.users.get(user_id)
         if user is None:
-            raise NotFound(f"用户 {user_id} 不存在", details={"user_id": user_id})
+            raise NotFound(
+                tr("notification.user_not_found", default="用户不存在"),
+                details={"user_id": user_id},
+            )
         if user.is_agent:
-            raise ValidationError("agent 没有密码", details={"user_id": user_id})
+            raise ValidationError(
+                tr("user.agent_no_password", default="agent 没有密码"), details={"user_id": user_id}
+            )
         if not security.can_manage_user(user):
-            raise Forbidden("Org Owner 的密码必须通过部署端恢复流程重置")
+            raise Forbidden(
+                tr(
+                    "user.owner_password_recovery",
+                    default="Org Owner 的密码必须通过部署端恢复流程重置",
+                )
+            )
         raw = await password_tickets.issue_ticket(
             self.uow,
             user=user,
@@ -130,19 +153,31 @@ class UserService:
         assert self.uow.users is not None
         user = await self.uow.users.get(user_id)
         if user is None:
-            raise NotFound(f"用户 {user_id} 不存在", details={"user_id": user_id})
+            raise NotFound(
+                tr("notification.user_not_found", default="用户不存在"),
+                details={"user_id": user_id},
+            )
         if user.is_agent:
             raise ValidationError(
-                "agent 账号由管理它的 human 在个人设置中维护", details={"user_id": user_id}
+                tr(
+                    "user.agent_profile_managed",
+                    default="agent 账号由管理它的 human 在个人设置中维护",
+                ),
+                details={"user_id": user_id},
             )
         changes: dict[str, list[Any]] = {}
         if "name" in data:
             name = (data["name"] or "").strip()
             if not name:
-                raise ValidationError("name 必填", details={"field": "name"})
+                raise ValidationError(
+                    tr("user.name_required", default="name 必填"), details={"field": "name"}
+                )
             existing = await self.uow.users.get_by_name(actor.org_id, name)
             if existing is not None and existing.id != user.id:
-                raise ValidationError(f"用户名 {name} 已被占用", details={"field": "name"})
+                raise ValidationError(
+                    tr("user.name_taken", default="用户名 {name} 已被占用", name=name),
+                    details={"field": "name"},
+                )
             if name != user.name:
                 changes["name"] = [user.name, name]
                 user.name = name
@@ -162,14 +197,23 @@ class UserService:
         assert self.uow.users is not None
         user = await self.uow.users.get(user_id)
         if user is None:
-            raise NotFound(f"用户 {user_id} 不存在", details={"user_id": user_id})
+            raise NotFound(
+                tr("notification.user_not_found", default="用户不存在"),
+                details={"user_id": user_id},
+            )
         if user.is_agent:
             raise ValidationError(
-                "agent 账号由管理它的 human 停用/启用", details={"user_id": user_id}
+                tr("user.agent_active_managed", default="agent 账号由管理它的 human 停用/启用"),
+                details={"user_id": user_id},
             )
         if user.is_org_owner:
             # Org owners can only step down by transferring the role (§17).
-            raise Forbidden("不能停用 Org Owner，请先转让 Org Owner 角色")
+            raise Forbidden(
+                tr(
+                    "user.owner_cannot_disable",
+                    default="不能停用 Org Owner，请先转让 Org Owner 角色",
+                )
+            )
         user.is_active = active
         await self.uow.users.update(user)
         if not active:
@@ -187,17 +231,29 @@ class UserService:
         assert self.uow.users is not None
         user = await self.uow.users.get(user_id)
         if user is None:
-            raise NotFound(f"用户 {user_id} 不存在", details={"user_id": user_id})
+            raise NotFound(
+                tr("notification.user_not_found", default="用户不存在"),
+                details={"user_id": user_id},
+            )
         if user.is_agent:
-            raise ValidationError("agent 不能拥有组织角色", details={"user_id": user_id})
+            raise ValidationError(
+                tr("user.agent_no_org_role", default="agent 不能拥有组织角色"),
+                details={"user_id": user_id},
+            )
         bad = [r for r in roles if r not in ASSIGNABLE_ORG_ROLES]
         if bad:
             raise ValidationError(
-                f"可分配的组织角色只有 user_manager/project_director，收到 {bad}",
+                tr(
+                    "user.org_roles_invalid",
+                    default="可分配的组织角色只有 user_manager/project_director，收到 {bad}",
+                    bad=bad,
+                ),
                 details={"field": "roles"},
             )
         if user.is_org_owner:
-            raise Forbidden("Org Owner 角色只能通过转让端点变更")
+            raise Forbidden(
+                tr("user.owner_role_transfer_only", default="Org Owner 角色只能通过转让端点变更")
+            )
         user.org_roles = list(dict.fromkeys(roles))
         await self.uow.users.update(user)
         await self._append_user_event(
@@ -213,13 +269,20 @@ class UserService:
         assert self.uow.users is not None
         target = await self.uow.users.get(target_user_id)
         if target is None:
-            raise NotFound(f"用户 {target_user_id} 不存在", details={"user_id": target_user_id})
+            raise NotFound(
+                tr("notification.user_not_found", default="用户不存在"),
+                details={"user_id": target_user_id},
+            )
         if target.is_agent or not target.is_active:
             raise ValidationError(
-                "Org Owner 必须是启用状态的 human", details={"user_id": target.id}
+                tr("user.owner_must_be_human", default="Org Owner 必须是启用状态的 human"),
+                details={"user_id": target.id},
             )
         if target.id == actor.human_id:
-            raise ValidationError("你已经是 Org Owner", details={"user_id": target.id})
+            raise ValidationError(
+                tr("user.already_owner", default="你已经是 Org Owner"),
+                details={"user_id": target.id},
+            )
 
         current = await self.uow.users.get(actor.human_id)
         assert current is not None
@@ -240,9 +303,14 @@ class UserService:
         assert self.uow.users is not None
         user = await self.uow.users.get(user_id)
         if user is None:
-            raise NotFound(f"用户 {user_id} 不存在", details={"user_id": user_id})
+            raise NotFound(
+                tr("notification.user_not_found", default="用户不存在"),
+                details={"user_id": user_id},
+            )
         if user.is_org_owner and not actor.is_org_owner:
-            raise Forbidden("只有 Org Owner 能撤销 Org Owner 的令牌")
+            raise Forbidden(
+                tr("user.only_owner_revoke_owner", default="只有 Org Owner 能撤销 Org Owner 的令牌")
+            )
         return await self._revoke_tokens_for_user_tree(user.id)
 
     async def update_self(self, actor: Actor, *, data: dict[str, Any]) -> User:
@@ -250,7 +318,7 @@ class UserService:
         assert self.uow.users is not None
         user = await self.uow.users.get(actor.human_id)
         if user is None:
-            raise NotFound("当前用户不存在")
+            raise NotFound(tr("notification.user_not_found", default="用户不存在"))
         changes: dict[str, list[Any]] = {}
         for field in ("description_md", "email", "notify_webhook"):
             if field in data and data[field] != getattr(user, field):
@@ -279,9 +347,14 @@ class UserService:
         assert self.uow.users is not None and self.uow.memberships is not None
         name = (data.get("name") or "").strip()
         if not name:
-            raise ValidationError("name 必填", details={"field": "name"})
+            raise ValidationError(
+                tr("user.name_required", default="name 必填"), details={"field": "name"}
+            )
         if await self.uow.users.get_by_name(actor.org_id, name) is not None:
-            raise ValidationError(f"用户名 {name} 已被占用", details={"field": "name"})
+            raise ValidationError(
+                tr("user.name_taken", default="用户名 {name} 已被占用", name=name),
+                details={"field": "name"},
+            )
         accept_kinds = list(data.get("accept_kinds") or [])
         _check_accept_kinds(accept_kinds)
         fmt = data.get("notify_webhook_format") or "generic"
@@ -336,16 +409,24 @@ class UserService:
         assert self.uow.users is not None and self.uow.tokens is not None
         agent = await self.uow.users.get(agent_id)
         if agent is None or not agent.is_agent or agent.manager_user_id != actor.human_id:
-            raise NotFound(f"agent {agent_id} 不存在", details={"agent_id": agent_id})
+            raise NotFound(
+                tr("user.agent_not_found", default="agent {id} 不存在", id=agent_id),
+                details={"agent_id": agent_id},
+            )
 
         changes: dict[str, list[Any]] = {}
         if "name" in data:
             name = (data["name"] or "").strip()
             if not name:
-                raise ValidationError("name 必填", details={"field": "name"})
+                raise ValidationError(
+                    tr("user.name_required", default="name 必填"), details={"field": "name"}
+                )
             existing = await self.uow.users.get_by_name(actor.org_id, name)
             if existing is not None and existing.id != agent.id:
-                raise ValidationError(f"用户名 {name} 已被占用", details={"field": "name"})
+                raise ValidationError(
+                    tr("user.name_taken", default="用户名 {name} 已被占用", name=name),
+                    details={"field": "name"},
+                )
             if name != agent.name:
                 changes["name"] = [agent.name, name]
                 agent.name = name
@@ -403,7 +484,10 @@ class UserService:
                 or not agent.is_active
             ):
                 raise ValidationError(
-                    "只能以自己管理且启用的 agent 身份签发令牌",
+                    tr(
+                        "user.act_as_forbidden",
+                        default="只能以自己管理且启用的 agent 身份签发令牌",
+                    ),
                     details={"field": "act_as_user_id"},
                 )
         expires_at = _expiry(expires_in_days)
@@ -438,7 +522,10 @@ class UserService:
         assert self.uow.tokens is not None
         token = await self.uow.tokens.get(token_id)
         if token is None or token.user_id != actor.human_id or token.kind != TokenKind.pat.value:
-            raise NotFound(f"令牌 {token_id} 不存在", details={"token_id": token_id})
+            raise NotFound(
+                tr("user.token_not_found", default="令牌 {id} 不存在", id=token_id),
+                details={"token_id": token_id},
+            )
         await self.uow.tokens.revoke(token_id)
         assert self.uow.events is not None
         seq = await self.uow.allocate_event_seq(actor.org_id)
@@ -486,7 +573,11 @@ def _expiry(expires_in_days: int | None) -> dt.datetime | None:
         return None
     if not 1 <= expires_in_days <= MAX_TOKEN_DAYS:
         raise ValidationError(
-            f"expires_in_days 必须在 1–{MAX_TOKEN_DAYS} 之间",
+            tr(
+                "user.token_days_invalid",
+                default="expires_in_days 必须在 1–{max} 之间",
+                max=MAX_TOKEN_DAYS,
+            ),
             details={"field": "expires_in_days", "value": expires_in_days},
         )
     return dt.datetime.now(dt.UTC) + dt.timedelta(days=expires_in_days)

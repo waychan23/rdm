@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -32,7 +33,7 @@ import type { Workspace } from "../types";
 import "../styles/table.css";
 
 const KINDS = ["git_repo", "doc_repo", "design", "other"];
-const KIND_OPTIONS = KINDS.map((v) => ({ label: workspaceKindLabel(v), value: v }));
+const kindOptions = () => KINDS.map((v) => ({ label: workspaceKindLabel(v), value: v }));
 
 const styles = cssMap({
   centered: {
@@ -50,6 +51,7 @@ interface Option {
 const isHttpLocation = (value: string) => /^https?:\/\//i.test(value);
 
 export default function WorkspacesPage() {
+  const { t } = useTranslation("projects");
   const { key: projectKey = "" } = useParams();
   const notify = useNotify();
 
@@ -67,7 +69,7 @@ export default function WorkspacesPage() {
   }>({
     id: "",
     name: "",
-    kind: KIND_OPTIONS[0],
+    kind: kindOptions()[0],
     location: "",
     description_md: "",
   });
@@ -84,7 +86,7 @@ export default function WorkspacesPage() {
     setForm({
       id: "",
       name: "",
-      kind: KIND_OPTIONS[0],
+      kind: kindOptions()[0],
       location: "",
       description_md: "",
     });
@@ -96,7 +98,7 @@ export default function WorkspacesPage() {
     setForm({
       id: w.id,
       name: w.name,
-      kind: KIND_OPTIONS.find((k) => k.value === w.kind) ?? KIND_OPTIONS[0],
+      kind: kindOptions().find((k) => k.value === w.kind) ?? kindOptions()[0],
       location: w.url,
       description_md: w.description_md ?? "",
     });
@@ -118,9 +120,9 @@ export default function WorkspacesPage() {
       else await api.post(`/projects/${projectKey}/workspaces`, payload);
       setDialogOpen(false);
       reload();
-      notify.success("保存成功");
+      notify.success(t("workspaces.saveSuccess"));
     } catch (e) {
-      setSaveError(errorCause(e)?.message ?? "请稍后重试");
+      setSaveError(errorCause(e)?.message ?? t("workspaces.saveRetry"));
     } finally {
       setSaving(false);
     }
@@ -132,7 +134,7 @@ export default function WorkspacesPage() {
       await api.del(`/workspaces/${confirmId}`);
       reload();
     } catch (e) {
-      notify.error("删除失败", errorCause(e)?.message);
+      notify.error(t("workspaces.deleteFailed"), errorCause(e)?.message);
     } finally {
       setConfirmId(null);
     }
@@ -141,11 +143,11 @@ export default function WorkspacesPage() {
   return (
     <Page testId="page-workspaces">
       <PageHeader
-        title={`工作区 · ${projectKey}`}
+        title={t("workspaces.title", { key: projectKey })}
         testId="workspaces-header"
         actions={
           <Button appearance="primary" testId="workspace-create-button" onClick={openCreate}>
-            登记工作区
+            {t("workspaces.create")}
           </Button>
         }
       />
@@ -159,21 +161,25 @@ export default function WorkspacesPage() {
       ) : (workspaces ?? []).length === 0 ? (
         <Box testId="workspaces-empty">
           <EmptyState
-            header="还没有登记工作区"
-            description="登记仓库、文档或设计资源，方便团队成员快速跳转。"
+            header={t("workspaces.empty")}
+            description={t("workspaces.emptyDescription")}
           />
         </Box>
       ) : (
-        <table className="rdm-table" aria-label="工作区列表" data-testid="workspace-table">
+        <table
+          className="rdm-table"
+          aria-label={t("workspaces.tableLabel")}
+          data-testid="workspace-table"
+        >
           <thead>
             <tr>
-              <th scope="col">名称</th>
+              <th scope="col">{t("workspaces.col.name")}</th>
               <th scope="col" className="col-type">
-                类型
+                {t("workspaces.col.kind")}
               </th>
-              <th scope="col">存储位置</th>
+              <th scope="col">{t("workspaces.col.location")}</th>
               <th scope="col" className="col-actions">
-                操作
+                {t("workspaces.col.actions")}
               </th>
             </tr>
           </thead>
@@ -198,7 +204,7 @@ export default function WorkspacesPage() {
                       testId={`workspace-edit-${w.id}`}
                       onClick={() => openEdit(w)}
                     >
-                      编辑
+                      {t("workspaces.edit")}
                     </Button>
                     <Button
                       spacing="compact"
@@ -206,7 +212,7 @@ export default function WorkspacesPage() {
                       testId={`workspace-delete-${w.id}`}
                       onClick={() => setConfirmId(w.id)}
                     >
-                      删除
+                      {t("workspaces.delete")}
                     </Button>
                   </Inline>
                 </td>
@@ -224,14 +230,16 @@ export default function WorkspacesPage() {
             testId="workspace-form-dialog"
           >
             <ModalHeader>
-              <ModalTitle>{form.id ? "编辑工作区" : "登记工作区"}</ModalTitle>
+              <ModalTitle>
+                {form.id ? t("workspaces.form.editTitle") : t("workspaces.form.createTitle")}
+              </ModalTitle>
             </ModalHeader>
             <ModalBody>
               {saveError && (
                 <Box paddingBlockEnd="space.150">
                   <SectionMessage
                     appearance="error"
-                    title="保存失败"
+                    title={t("workspaces.saveFailed")}
                     testId="workspace-save-error"
                     isDismissible
                     onDismiss={() => setSaveError(null)}
@@ -241,7 +249,7 @@ export default function WorkspacesPage() {
                 </Box>
               )}
               <Stack space="space.150">
-                <FormField label="名称" htmlFor="ws-name">
+                <FormField label={t("workspaces.form.name")} htmlFor="ws-name">
                   <Textfield
                     id="ws-name"
                     value={form.name}
@@ -249,27 +257,27 @@ export default function WorkspacesPage() {
                     onChange={(e) => setForm({ ...form, name: e.currentTarget.value })}
                   />
                 </FormField>
-                <FormField label="类型">
+                <FormField label={t("workspaces.form.kind")}>
                   <Select {...portalMenuProps}
-                    options={KIND_OPTIONS}
+                    options={kindOptions()}
                     value={form.kind}
                     onChange={(o) => o && setForm({ ...form, kind: o as Option })}
                   />
                 </FormField>
                 <FormField
-                  label="存储位置"
+                  label={t("workspaces.form.location")}
                   htmlFor="ws-location"
-                  hint="可选；支持 http(s)、git SSH、挂载路径、s3:// 等任意格式。"
+                  hint={t("workspaces.form.locationHint")}
                 >
                   <Textfield
                     id="ws-location"
                     value={form.location}
-                    placeholder="可选，如 https://… / git@github.com:org/repo.git"
+                    placeholder={t("workspaces.form.locationPlaceholder")}
                     testId="workspace-form-location"
                     onChange={(e) => setForm({ ...form, location: e.currentTarget.value })}
                   />
                 </FormField>
-                <FormField label="描述">
+                <FormField label={t("workspaces.form.description")}>
                   <MarkdownEditor
                     value={form.description_md}
                     onChange={(value) => setForm({ ...form, description_md: value })}
@@ -286,7 +294,7 @@ export default function WorkspacesPage() {
                 testId="workspace-form-cancel"
                 onClick={() => setDialogOpen(false)}
               >
-                取消
+                {t("workspaces.form.cancel")}
               </Button>
               <Button
                 appearance="primary"
@@ -295,7 +303,7 @@ export default function WorkspacesPage() {
                 testId="workspace-form-submit"
                 onClick={() => void save()}
               >
-                保存
+                {t("workspaces.form.save")}
               </Button>
             </ModalFooter>
           </ModalDialog>
@@ -310,23 +318,23 @@ export default function WorkspacesPage() {
             testId="workspace-delete-dialog"
           >
             <ModalHeader>
-              <ModalTitle>确认删除</ModalTitle>
+              <ModalTitle>{t("workspaces.deleteConfirm.title")}</ModalTitle>
             </ModalHeader>
-            <ModalBody>删除该工作区？软删可恢复。</ModalBody>
+            <ModalBody>{t("workspaces.deleteConfirm.body")}</ModalBody>
             <ModalFooter>
               <Button
                 appearance="subtle"
                 testId="workspace-delete-cancel"
                 onClick={() => setConfirmId(null)}
               >
-                取消
+                {t("workspaces.deleteConfirm.cancel")}
               </Button>
               <Button
                 appearance="danger"
                 testId="workspace-delete-confirm"
                 onClick={() => void remove()}
               >
-                删除
+                {t("workspaces.deleteConfirm.confirm")}
               </Button>
             </ModalFooter>
           </ModalDialog>

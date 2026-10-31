@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ClipboardEvent, DragEvent, KeyboardEvent } from "react";
 
 import IconButton from "@atlaskit/button/icon/button";
@@ -62,6 +63,7 @@ export default function MarkdownEditor({
   onImageClick,
   onUploadingChange,
 }: Props) {
+  const { t } = useTranslation("components");
   const notify = useNotify();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -113,9 +115,9 @@ export default function MarkdownEditor({
     [onChange, value],
   );
 
-  const wrap = (before: string, after: string, placeholderText = "文本") => {
+  const wrap = (before: string, after: string, placeholderText: string | undefined = undefined) => {
     const { start, end } = selection();
-    const selected = value.slice(start, end) || placeholderText;
+    const selected = value.slice(start, end) || placeholderText || t("editor.textPlaceholder");
     insertAt(start, end, `${before}${selected}${after}`);
   };
 
@@ -150,7 +152,7 @@ export default function MarkdownEditor({
         insertAt(start, end, text);
       }
     } catch (e) {
-      notify.error("图片上传失败", errorCause(e)?.message);
+      notify.error(t("editor.uploadFailed"), errorCause(e)?.message);
     } finally {
       setUploading((n) => Math.max(0, n - images.length));
     }
@@ -196,7 +198,7 @@ export default function MarkdownEditor({
       <div className="rdm-md-editor-toolbar" data-testid={testId ? `${testId}-toolbar` : undefined}>
         <IconButton
           icon={(p) => <TextBoldIcon {...p} />}
-          label="粗体"
+          label={t("editor.bold")}
           appearance="subtle"
           spacing="compact"
           onClick={() => wrap("**", "**")}
@@ -204,7 +206,7 @@ export default function MarkdownEditor({
         />
         <IconButton
           icon={(p) => <TextItalicIcon {...p} />}
-          label="斜体"
+          label={t("editor.italic")}
           appearance="subtle"
           spacing="compact"
           onClick={() => wrap("_", "_")}
@@ -212,7 +214,7 @@ export default function MarkdownEditor({
         />
         <IconButton
           icon={(p) => <TextStrikethroughIcon {...p} />}
-          label="删除线"
+          label={t("editor.strikethrough")}
           appearance="subtle"
           spacing="compact"
           onClick={() => wrap("~~", "~~")}
@@ -220,7 +222,7 @@ export default function MarkdownEditor({
         />
         <IconButton
           icon={(p) => <TextHeadingIcon {...p} />}
-          label="标题"
+          label={t("editor.heading")}
           appearance="subtle"
           spacing="compact"
           onClick={() => prefix("## ")}
@@ -228,15 +230,15 @@ export default function MarkdownEditor({
         />
         <IconButton
           icon={(p) => <LinkIcon {...p} />}
-          label="链接"
+          label={t("editor.link")}
           appearance="subtle"
           spacing="compact"
-          onClick={() => wrap("[", "](https://)", "链接文字")}
+          onClick={() => wrap("[", "](https://)", t("editor.linkText"))}
           isDisabled={isDisabled}
         />
         <IconButton
           icon={(p) => <ListBulletedIcon {...p} />}
-          label="无序列表"
+          label={t("editor.bulletList")}
           appearance="subtle"
           spacing="compact"
           onClick={() => prefix("- ")}
@@ -244,7 +246,7 @@ export default function MarkdownEditor({
         />
         <IconButton
           icon={(p) => <ListNumberedIcon {...p} />}
-          label="有序列表"
+          label={t("editor.orderedList")}
           appearance="subtle"
           spacing="compact"
           onClick={() => prefix("1. ")}
@@ -252,7 +254,7 @@ export default function MarkdownEditor({
         />
         <IconButton
           icon={(p) => <TextStyleIcon {...p} />}
-          label="行内代码"
+          label={t("editor.inlineCode")}
           appearance="subtle"
           spacing="compact"
           onClick={() => wrap("`", "`", "code")}
@@ -260,7 +262,7 @@ export default function MarkdownEditor({
         />
         <IconButton
           icon={(p) => <AngleBracketsIcon {...p} />}
-          label="代码块"
+          label={t("editor.codeBlock")}
           appearance="subtle"
           spacing="compact"
           onClick={() => wrap("\n```\n", "\n```\n", "code")}
@@ -268,7 +270,7 @@ export default function MarkdownEditor({
         />
         <IconButton
           icon={(p) => <ImageIcon {...p} />}
-          label="插入图片"
+          label={t("editor.insertImage")}
           appearance="subtle"
           spacing="compact"
           onClick={() => fileInputRef.current?.click()}
@@ -276,7 +278,7 @@ export default function MarkdownEditor({
         />
         <IconButton
           icon={(p) => <MentionIcon {...p} />}
-          label="提及成员"
+          label={t("editor.mention")}
           appearance="subtle"
           spacing="compact"
           onClick={() => setMentionOpen((open) => !open)}
@@ -287,12 +289,12 @@ export default function MarkdownEditor({
           <Inline space="space.050" alignBlock="center">
             <Spinner size="small" />
             <Text size="small" color="color.text.subtlest">
-              上传图片中…
+              {t("editor.uploadingImage")}
             </Text>
           </Inline>
         )}
         <TextButton onClick={() => setMode(mode === "edit" ? "preview" : "edit")}>
-          {mode === "edit" ? "预览" : "编辑"}
+          {mode === "edit" ? t("editor.preview") : t("editor.edit")}
         </TextButton>
       </div>
 
@@ -313,7 +315,7 @@ export default function MarkdownEditor({
           <Select<MentionOption>
             {...portalMenuProps}
             spacing="compact"
-            placeholder="选择要 @ 的成员"
+            placeholder={t("editor.mentionPlaceholder")}
             options={members}
             value={null}
             autoFocus
@@ -333,7 +335,7 @@ export default function MarkdownEditor({
             <MarkdownText source={value} onImageClick={onImageClick} />
           ) : (
             <Text size="small" color="color.text.subtlest">
-              暂无内容
+              {t("editor.empty")}
             </Text>
           )}
         </div>
@@ -351,7 +353,7 @@ export default function MarkdownEditor({
           onKeyDown={onKeyDown}
         />
       )}
-      {dragging && <div className="rdm-md-editor-drop-hint">松开以上传图片</div>}
+      {dragging && <div className="rdm-md-editor-drop-hint">{t("editor.dropHint")}</div>}
     </div>
   );
 }

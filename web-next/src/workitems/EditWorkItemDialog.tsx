@@ -12,6 +12,7 @@ import ModalDialog, {
 import { Stack } from "@atlaskit/primitives/compiled";
 import Select from "@atlaskit/select";
 import Textfield from "@atlaskit/textfield";
+import { useTranslation } from "react-i18next";
 
 import FormField from "../components/FormField";
 import MarkdownEditor from "../components/MarkdownEditor";
@@ -21,7 +22,7 @@ import { useNotify } from "../lib/flags";
 import { portalMenuProps } from "../lib/portalMenu";
 import type { WorkflowDto, WorkflowFields, WorkItem } from "../types";
 import { allowedParentKinds } from "./parentRules";
-import { DEFAULT_PRIORITY, PRIORITY_OPTIONS, priorityOption } from "./priority";
+import { DEFAULT_PRIORITY, priorityOptions, priorityOption } from "./priority";
 import KindSpecificFields, { type IssueFields, type TaskFields } from "./KindSpecificFields";
 import WorkItemPeopleFields, {
   emptyOptionalValues,
@@ -65,6 +66,7 @@ export default function EditWorkItemDialog({
   onClose,
   onSaved,
 }: Props) {
+  const { t } = useTranslation("workitems");
   const notify = useNotify();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -208,11 +210,11 @@ export default function EditWorkItemDialog({
           })
         ).data;
       }
-      notify.success("保存成功");
+      notify.success(t("edit.saved"));
       onSaved(updated);
       onClose();
     } catch (e) {
-      notify.error("保存失败", errorCause(e)?.message);
+      notify.error(t("edit.saveFailed"), errorCause(e)?.message);
     } finally {
       setSaving(false);
     }
@@ -225,11 +227,11 @@ export default function EditWorkItemDialog({
       {open && item && (
         <ModalDialog onClose={onClose} width="680px" testId="work-item-edit-dialog">
           <ModalHeader>
-            <ModalTitle>编辑工作项</ModalTitle>
+            <ModalTitle>{t("edit.title")}</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.150">
-              <FormField label="标题" htmlFor="wi-edit-title">
+              <FormField label={t("edit.titleLabel")} htmlFor="wi-edit-title">
                 <Textfield
                   id="wi-edit-title"
                   value={title}
@@ -237,7 +239,7 @@ export default function EditWorkItemDialog({
                   onChange={(e) => setTitle(e.currentTarget.value)}
                 />
               </FormField>
-              <FormField label="描述（Markdown）">
+              <FormField label={t("edit.description")}>
                 <MarkdownEditor
                   value={description}
                   onChange={setDescription}
@@ -246,12 +248,12 @@ export default function EditWorkItemDialog({
                   testId="work-item-edit-description"
                 />
               </FormField>
-              <FormField label="优先级" htmlFor="wi-edit-priority">
+              <FormField label={t("edit.priority")} htmlFor="wi-edit-priority">
                 <Select
                   {...portalMenuProps}
                   inputId="wi-edit-priority"
-                  options={PRIORITY_OPTIONS}
-                  value={PRIORITY_OPTIONS.find((option) => option.value === priority) ?? null}
+                  options={priorityOptions()}
+                  value={priorityOptions().find((option) => option.value === priority) ?? null}
                   isClearable={false}
                   testId="work-item-edit-priority"
                   onChange={(option) =>
@@ -259,33 +261,33 @@ export default function EditWorkItemDialog({
                   }
                 />
               </FormField>
-              <FormField label="计划开始日期" htmlFor="wi-edit-planned-start">
+              <FormField label={t("edit.plannedStart")} htmlFor="wi-edit-planned-start">
                 <DatePicker
                   id="wi-edit-planned-start"
                   value={plannedStart}
-                  placeholder="选择日期"
+                  placeholder={t("edit.datePlaceholder")}
                   testId="work-item-edit-planned-start"
                   onChange={setPlannedStart}
                 />
               </FormField>
-              <FormField label="计划完成日期" htmlFor="wi-edit-planned-end">
+              <FormField label={t("edit.plannedEnd")} htmlFor="wi-edit-planned-end">
                 <DatePicker
                   id="wi-edit-planned-end"
                   value={plannedEnd}
-                  placeholder="选择日期"
+                  placeholder={t("edit.datePlaceholder")}
                   testId="work-item-edit-planned-end"
                   onChange={setPlannedEnd}
                 />
               </FormField>
               {parentKinds.length > 0 && (
-                <FormField label="父项">
+                <FormField label={t("edit.parent")}>
                   <WorkItemPicker
                     projectKey={projectKey}
                     allowedKinds={parentKinds}
                     excludeIds={[item.id]}
                     value={parent}
                     onChange={setParent}
-                    placeholder="选择父项（可清除）"
+                    placeholder={t("edit.parentPlaceholder")}
                     testId="work-item-edit-parent"
                   />
                 </FormField>
@@ -311,7 +313,7 @@ export default function EditWorkItemDialog({
           </ModalBody>
           <ModalFooter>
             <Button appearance="subtle" onClick={onClose} testId="work-item-edit-cancel">
-              取消
+              {t("actions.cancel")}
             </Button>
             <Button
               appearance="primary"
@@ -319,7 +321,7 @@ export default function EditWorkItemDialog({
               testId="work-item-edit-submit"
               onClick={() => void save()}
             >
-              保存
+              {t("actions.save")}
             </Button>
           </ModalFooter>
         </ModalDialog>

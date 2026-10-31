@@ -9,6 +9,7 @@ import ModalDialog, {
   ModalTransition,
 } from "@atlaskit/modal-dialog";
 import { Inline, Stack, Text } from "@atlaskit/primitives/compiled";
+import { useTranslation } from "react-i18next";
 
 import MarkdownEditor, { type MarkdownImageClick } from "../../components/MarkdownEditor";
 import { api, errorCause } from "../../lib/api";
@@ -36,6 +37,7 @@ export default function StepExecuteDialog({
   onConfirm,
   onImageClick,
 }: Props) {
+  const { t } = useTranslation("item");
   const notify = useNotify();
   const [note, setNote] = useState("");
   const [pending, setPending] = useState<{ name: string; id: string }[]>([]);
@@ -67,9 +69,9 @@ export default function StepExecuteDialog({
         pendingIds.current.push(res.data.id);
         setPending((current) => [...current, { name: file.name, id: res.data.id }]);
       }
-      notify.success("附件已上传");
+      notify.success(t("stepExecute.uploaded"));
     } catch (e) {
-      notify.error("上传失败", errorCause(e)?.message);
+      notify.error(t("stepExecute.uploadFailed"), errorCause(e)?.message);
     } finally {
       setUploading(false);
     }
@@ -83,13 +85,13 @@ export default function StepExecuteDialog({
       {open && (
         <ModalDialog onClose={onClose} width="640px" testId="step-execute-dialog">
           <ModalHeader>
-            <ModalTitle>执行步骤 · {stepName}</ModalTitle>
+            <ModalTitle>{t("stepExecute.title", { name: stepName })}</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.150">
               <Text size="small" color="color.text.subtlest">
-                {noteRequired ? "该步骤必须填写备注。" : "备注可留空。"} 备注支持 Markdown，
-                可上传附件或粘贴图片。
+                {noteRequired ? t("stepExecute.noteRequired") : t("stepExecute.noteOptional")}{" "}
+                {t("stepExecute.hint")}
               </Text>
               <MarkdownEditor
                 value={note}
@@ -115,7 +117,7 @@ export default function StepExecuteDialog({
                   testId="step-execute-attach"
                   onClick={() => fileInput.current?.click()}
                 >
-                  添加附件
+                  {t("stepExecute.attach")}
                 </Button>
                 {pending.map((file) => (
                   <Text key={file.id} size="small" color="color.text.subtlest">
@@ -127,7 +129,7 @@ export default function StepExecuteDialog({
           </ModalBody>
           <ModalFooter>
             <Button appearance="subtle" onClick={onClose} testId="step-execute-cancel">
-              取消
+              {t("stepExecute.cancel")}
             </Button>
             <Button
               appearance="primary"
@@ -138,7 +140,8 @@ export default function StepExecuteDialog({
                 setSaving(true);
                 try {
                   await onConfirm(
-                    note.trim() || (pendingIds.current.length ? "（步骤备注）" : ""),
+                    note.trim() ||
+                    (pendingIds.current.length ? t("stepExecute.defaultNote") : ""),
                     pendingIds.current,
                   );
                 } finally {
@@ -146,7 +149,7 @@ export default function StepExecuteDialog({
                 }
               }}
             >
-              提交
+              {t("stepExecute.submit")}
             </Button>
           </ModalFooter>
         </ModalDialog>

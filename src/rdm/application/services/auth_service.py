@@ -25,6 +25,7 @@ from rdm.application.services.tokens import hash_token
 from rdm.domain.entities import UserToken
 from rdm.domain.enums import TokenKind
 from rdm.domain.errors import AuthInvalidToken
+from rdm.i18n import tr
 from rdm.infrastructure.db.repositories.user import TokenRepository
 
 CACHE_TTL_SECONDS = 60
@@ -94,7 +95,7 @@ class Authenticator:
         cached = self._cache.get(token_hash)
         if cached is not None and cached.expires_at > now:
             if allowed is not None and cached.token.kind not in allowed:
-                raise AuthInvalidToken("凭据类型不适用于此入口")
+                raise AuthInvalidToken(tr("auth.kind_mismatch", default="凭据类型不适用于此入口"))
             return cached.token
 
         async with self._sf() as session:
@@ -102,10 +103,14 @@ class Authenticator:
                 tokens = TokenRepository(session)
                 token = await tokens.get_by_hash(token_hash)
                 if token is None or not token.is_valid:
-                    raise AuthInvalidToken("凭据无效或已撤销")
+                    raise AuthInvalidToken(
+                        tr("auth.invalid_or_revoked", default="凭据无效或已撤销")
+                    )
                 if allowed is not None and token.kind not in allowed:
                     # Do not reveal which credential types exist.
-                    raise AuthInvalidToken("凭据类型不适用于此入口")
+                    raise AuthInvalidToken(
+                        tr("auth.kind_mismatch", default="凭据类型不适用于此入口")
+                    )
                 last_used = token.last_used_at
                 if last_used is not None and last_used.tzinfo is None:
                     last_used = last_used.replace(tzinfo=dt.UTC)

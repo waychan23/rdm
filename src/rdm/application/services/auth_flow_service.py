@@ -19,9 +19,8 @@ from rdm.domain.enums import PasswordTicketKind, TokenKind
 from rdm.domain.errors import AuthInvalidCredentials, Forbidden, NotFound, ValidationError
 from rdm.domain.events import EventType
 from rdm.domain.timefmt import iso_utc
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
-
-_CREDENTIALS_ERROR = "用户名或密码错误"
 
 
 class AuthFlowService:
@@ -51,7 +50,7 @@ class AuthFlowService:
             or user.password_hash is None
             or not verify_password(user.password_hash, password)
         ):
-            raise AuthInvalidCredentials(_CREDENTIALS_ERROR)
+            raise AuthInvalidCredentials(tr("auth.invalid_credentials", default="用户名或密码错误"))
 
         if user.must_reset_password:
             # Keep the login ticket: after setting a password the browser can
@@ -121,7 +120,10 @@ class AuthFlowService:
         assert self.uow.users is not None
         user = await self.uow.users.get(row.user_id)
         if user is None or not user.is_human:
-            raise NotFound("用户不存在", details={"user_id": row.user_id})
+            raise NotFound(
+                tr("notification.user_not_found", default="用户不存在"),
+                details={"user_id": row.user_id},
+            )
         _validate(new_password)
 
         user.password_hash = hash_password(new_password)
@@ -149,9 +151,11 @@ class AuthFlowService:
         assert self.uow.users is not None
         user = await self.uow.users.get(user_id)
         if user is None or not user.is_human or user.password_hash is None:
-            raise Forbidden("当前用户不能通过密码登录，无法修改密码")
+            raise Forbidden(
+                tr("auth.password_login_disabled", default="当前用户不能通过密码登录，无法修改密码")
+            )
         if not verify_password(user.password_hash, old_password):
-            raise AuthInvalidCredentials("原密码错误")
+            raise AuthInvalidCredentials(tr("auth.old_password_wrong", default="原密码错误"))
         _validate(new_password)
         user.password_hash = hash_password(new_password)
         user.must_reset_password = False

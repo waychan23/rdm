@@ -19,6 +19,7 @@ from __future__ import annotations
 from rdm.domain.actor import Actor
 from rdm.domain.entities import User, WorkItem
 from rdm.domain.errors import Forbidden, NotFound
+from rdm.i18n import tr
 
 # DONE is no longer restricted by identity type (§17.102): an agent that is a
 # step actor (e.g. the assignee) may complete DONE, and so may its human
@@ -35,7 +36,11 @@ def is_org_owner(actor: Actor) -> bool:
 def require_org_owner(actor: Actor) -> None:
     if not actor.is_org_owner:
         raise Forbidden(
-            f"用户 {actor.name} 不是组织 Owner，该操作仅限 Org Owner。",
+            tr(
+                "security.org_owner_required",
+                default="用户 {user} 不是组织 Owner，该操作仅限 Org Owner。",
+                user=actor.name,
+            ),
             details={"user_id": actor.human_id, "org_roles": actor.org_roles},
         )
 
@@ -47,7 +52,11 @@ def can_manage_users(actor: Actor) -> bool:
 def require_user_manager(actor: Actor) -> None:
     if not can_manage_users(actor):
         raise Forbidden(
-            f"用户 {actor.name} 没有组织用户管理权限（需要 Org Owner 或 user-manager）。",
+            tr(
+                "security.user_manager_required",
+                default="用户 {user} 没有组织用户管理权限（需要 Org Owner 或 user-manager）。",
+                user=actor.name,
+            ),
             details={"user_id": actor.human_id, "org_roles": actor.org_roles},
         )
 
@@ -59,7 +68,11 @@ def can_create_project(actor: Actor) -> bool:
 def require_can_create_project(actor: Actor) -> None:
     if not can_create_project(actor):
         raise Forbidden(
-            f"用户 {actor.name} 不能创建项目（需要 Org Owner 或 project-director）。",
+            tr(
+                "security.project_create_forbidden",
+                default="用户 {user} 不能创建项目（需要 Org Owner 或 project-director）。",
+                user=actor.name,
+            ),
             details={"user_id": actor.human_id, "org_roles": actor.org_roles},
         )
 
@@ -78,7 +91,11 @@ def is_project_owner(actor: Actor, project_id: str) -> bool:
 def require_project_owner(actor: Actor, project_id: str) -> None:
     if not is_project_owner(actor, project_id):
         raise Forbidden(
-            f"用户 {actor.name} 不是该项目的 project_owner，项目成员管理仅限 Owner。",
+            tr(
+                "security.project_owner_required",
+                default="用户 {user} 不是该项目的 project_owner，项目成员管理仅限 Owner。",
+                user=actor.name,
+            ),
             details={"user_id": actor.human_id, "project_id": project_id},
         )
 
@@ -90,8 +107,15 @@ def can_manage_sprint(actor: Actor, project_id: str) -> bool:
 def require_sprint_manager(actor: Actor, project_id: str) -> None:
     if not can_manage_sprint(actor, project_id):
         raise Forbidden(
-            f"用户 {actor.name} 不能管理 Sprint（仅 Owner/Manager）；"
-            "如需操作请用 mailbox_send 联系负责人。",
+            tr(
+                "security.sprint_manage_forbidden",
+                default=(
+                    "用户 {user} 不能管理 Sprint（"
+                    "仅 Owner/Manager）；如需操作请"
+                    "用 mailbox_send 联系负责人。"
+                ),
+                user=actor.name,
+            ),
             details={
                 "user_id": actor.human_id,
                 "project_id": project_id,
@@ -100,12 +124,20 @@ def require_sprint_manager(actor: Actor, project_id: str) -> None:
         )
 
 
-def require_owner_or_manager(actor: Actor, project_id: str, resource: str = "该资源") -> None:
+def require_owner_or_manager(actor: Actor, project_id: str, resource: str | None = None) -> None:
     if can_manage_sprint(actor, project_id):
         return
     raise Forbidden(
-        f"用户 {actor.name} 不能管理{resource}（仅 Owner/Manager）；"
-        "如需操作请用 mailbox_send 联系负责人。",
+        tr(
+            "security.resource_manage_forbidden",
+            default=(
+                "用户 {user} 不能管理{resource}"
+                "（仅 Owner/Manager）；如需操作"
+                "请用 mailbox_send 联系负责人。"
+            ),
+            user=actor.name,
+            resource=resource or tr("security.this_resource", default="该资源"),
+        ),
         details={"user_id": actor.human_id, "project_id": project_id},
     )
 
@@ -114,7 +146,10 @@ def assert_project_access(actor: Actor, project_id: str) -> None:
     """Cross-project access for non-members surfaces as NOT_FOUND."""
     if actor.is_member(project_id):
         return
-    raise NotFound("项目不存在（或你无权访问）", details={"project_id": project_id})
+    raise NotFound(
+        tr("security.project_access_denied", default="项目不存在（或你无权访问）"),
+        details={"project_id": project_id},
+    )
 
 
 def is_assignee(actor: Actor, item: WorkItem) -> bool:
@@ -148,8 +183,15 @@ def require_can_edit(
     if can_edit(actor, item, participant_user_ids):
         return
     raise Forbidden(
-        f"用户 {actor.name} 不能编辑 {display_id}：仅负责人、参与人、"
-        "manager 或 project_owner 可编辑；如需接管请先让负责人把工作项指派给你。",
+        tr(
+            "security.edit_forbidden",
+            default=(
+                "用户 {user} 不能编辑 {display_id}：仅负责人、参与人、manager 或 project_owner"
+                " 可编辑；如需接管请先让负责人把工作项指派给你。"
+            ),
+            user=actor.name,
+            display_id=display_id,
+        ),
         details={
             "user_id": actor.id,
             "work_item_id": item.id,
@@ -176,8 +218,15 @@ def require_can_assign(
     if can_edit(actor, item, participant_user_ids):
         return
     raise Forbidden(
-        f"用户 {actor.name} 不能指派 {display_id}：未指派时只能自领，"
-        "其余情况仅负责人、参与人、manager 或 project_owner 可改派。",
+        tr(
+            "security.assign_forbidden",
+            default=(
+                "用户 {user} 不能指派 {display_id}：未指派时只能自领，其余情况仅负责人、参与人、"
+                "manager 或 project_owner 可改派。"
+            ),
+            user=actor.name,
+            display_id=display_id,
+        ),
         details={
             "user_id": actor.id,
             "work_item_id": item.id,

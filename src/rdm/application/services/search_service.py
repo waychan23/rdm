@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.actor import Actor
 from rdm.domain.errors import ValidationError
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 
 SEARCH_TYPES = ("work_item", "comment", "message", "artifact")
@@ -53,12 +54,14 @@ class SearchService:
     ) -> list[SearchHit]:
         query = (query or "").strip()
         if not query:
-            raise ValidationError("搜索词不能为空", details={"field": "q"})
+            raise ValidationError(
+                tr("search.query_required", default="搜索词不能为空"), details={"field": "q"}
+            )
         types = types or list(SEARCH_TYPES)
         unknown = sorted(set(types) - set(SEARCH_TYPES))
         if unknown:
             raise ValidationError(
-                f"未知搜索类型 {unknown!r}",
+                tr("search.unknown_type", default="未知搜索类型 {types!r}", types=unknown),
                 details={"field": "types", "allowed": list(SEARCH_TYPES)},
             )
         if project_key is not None:

@@ -35,7 +35,7 @@
 - JSON5 语法要点：
   - 支持 `//` 行注释、`/* */` 块注释、尾逗号；
   - 字符串建议双引号（也接受单引号）；键建议加双引号；
-  - 中文标签直接写 UTF-8；
+  - 中英文标签直接写 UTF-8；
   - 语法检查：
     ```bash
     uv run python -c "import pyjson5,pathlib; pyjson5.loads(pathlib.Path('src/rdm/resources/workflow.json5').read_text())"
@@ -91,6 +91,8 @@
 - `version`：当前为 `3`。
 - `task_types`：唯一标签来源；任务类型的合法值以它为准。后端仍接受 `qa → testing`、
   `ux_design → ui_design` 两个输入别名，但存储和输出使用规范值。
+- `task_type_labels_en`（可选）：与 `task_types` 同 key 的英文标签表；缺省时英文界面
+  回退中文标签。示例：`{"other": "Other", "frontend": "Frontend", …}`。
 - `kinds`：至少一个；通常包含 `epic/story/issue/task/sprint`。
 
 ---
@@ -135,6 +137,7 @@
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `label` | 否 | 展示名；缺省用 kind 名 |
+| `label_en` | 否 | 英文展示名；`Accept-Language: en` 时使用，缺省回退 `label` |
 | `states` | 是 | 状态全集；大写字符串，DB/API 原样存储 |
 | `initial` | 是 | 初始状态，必须在 `states` 中 |
 | `terminal` | 是 | 终态集合，必须在 `states` 中；可为空数组 |
@@ -179,6 +182,7 @@
 |---|---|---|
 | `key` | 必填 | `^[A-Z][A-Z0-9_]{1,49}$`；在**同一 `from_state` 内唯一**（不同状态可复用 `CANCEL`）。API/UI/MCP 用它与 `step_id` 定位步骤 |
 | `name` | 必填 | 展示名，如「Code Review」「打回修改」 |
+| `name_en` | 否 | 英文展示名；`Accept-Language: en` 时使用，缺省回退 `name` |
 | `to` | 必填 | 目标状态，必须在 `states` 中 |
 | `mode` | `"direct"` | `"direct"` / `"approval"` / `"task"`，见 §8 |
 | `actors` | `["assignee"]` | 执行人**类型**集合：`assignee`、`participants`、`managers`、`reviewers`；不可重复、不可为空 |
@@ -264,6 +268,7 @@
 | `reviewer` | 内置评审人字段；开启后工作项可维护 0-N 人，可作 `"actors": ["reviewers"]` 的候选池，可用于 gate |
 | `review_content` | 内置评审意见（Markdown）；开启后可用于 gate |
 | `custom[].key` | `^[a-z][a-z0-9_]{0,49}$`；不可与 `title/description_md/reviewer/review_content` 冲突 |
+| `custom[].label_en` | 否 | 英文标签；缺省回退 `label` |
 | `custom[].type` | `text`（Markdown）、`number`、`user`（项目成员） |
 | `custom[].multiple` | 仅 `type="user"` 可设；`true` 多选，`false` 单选 |
 

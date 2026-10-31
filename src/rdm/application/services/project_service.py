@@ -11,6 +11,7 @@ from rdm.domain.entities import Project
 from rdm.domain.enums import ProjectStatus
 from rdm.domain.errors import NotFound, ProjectKeyDuplicate, ValidationError
 from rdm.domain.events import EventType
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
@@ -30,7 +31,10 @@ class ProjectService:
         assert self.uow.projects is not None
         project = await self.uow.projects.get_by_key(key, org_id=actor.org_id)
         if project is None:
-            raise NotFound(f"项目 {key} 不存在", details={"key": key})
+            raise NotFound(
+                tr("work_item.project_not_found", default="项目 {key} 不存在", key=key),
+                details={"key": key},
+            )
         security.assert_project_access(actor, project.id)
         return project
 
@@ -47,12 +51,16 @@ class ProjectService:
         assert self.uow.projects is not None and self.uow.users is not None
         if await self.uow.projects.get_by_key(key, org_id=actor.org_id) is not None:
             raise ProjectKeyDuplicate(
-                f"项目 key {key} 已存在，换一个或先归档旧项目。",
+                tr(
+                    "project.key_duplicate",
+                    default="项目 key {key} 已存在，换一个或先归档旧项目。",
+                    key=key,
+                ),
                 details={"key": key},
             )
         creator = await self.uow.users.get(actor.human_id)
         if creator is None:
-            raise NotFound("当前用户不存在")
+            raise NotFound(tr("notification.user_not_found", default="用户不存在"))
 
         project = Project(
             id=new_id(),
@@ -126,7 +134,9 @@ class ProjectService:
         project = await self.get_by_key(actor, key)
         security.require_project_owner(actor, project.id)
         if project.status == ProjectStatus.archived:
-            raise ValidationError("项目已归档", details={"key": key})
+            raise ValidationError(
+                tr("project.archived", default="项目已归档"), details={"key": key}
+            )
         project.status = ProjectStatus.archived
         assert self.uow.projects is not None
         await self.uow.projects.update(project)

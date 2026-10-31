@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import Button from "@atlaskit/button/default/button";
 import Drawer from "@atlaskit/drawer";
@@ -32,6 +33,7 @@ function sprintLozenge(status: string) {
 const centeredRow = { display: "flex", justifyContent: "center" } as const;
 
 export default function SprintsPage() {
+  const { t } = useTranslation("sprints");
   const { key: projectKey = "" } = useParams();
   const notify = useNotify();
   const [showCreate, setShowCreate] = useState(false);
@@ -56,10 +58,10 @@ export default function SprintsPage() {
         const res = await api.get<SprintDetail>(`/sprints/${id}`);
         setDetail(res.data);
       } catch (e) {
-        notify.error("加载 Sprint 失败", errorCause(e)?.message);
+        notify.error(t("loadFailed"), errorCause(e)?.message);
       }
     },
-    [notify],
+    [notify, t],
   );
 
   const refreshDetail = useCallback(async () => {
@@ -75,7 +77,7 @@ export default function SprintsPage() {
       setShowCreate(false);
       await reload();
     } catch (e) {
-      notify.error("创建失败", errorCause(e)?.message);
+      notify.error(t("createFailed"), errorCause(e)?.message);
     }
   };
 
@@ -85,9 +87,9 @@ export default function SprintsPage() {
       await api.patch(`/sprints/${detail.id}`, v);
       setShowEdit(false);
       await Promise.all([refreshDetail(), reload()]);
-      notify.success("保存成功");
+      notify.success(t("saveSuccess"));
     } catch (e) {
-      notify.error("保存失败", errorCause(e)?.message);
+      notify.error(t("saveFailed"), errorCause(e)?.message);
     }
   };
 
@@ -101,7 +103,7 @@ export default function SprintsPage() {
       setItemRefs([]);
       await Promise.all([refreshDetail(), reload()]);
     } catch (e) {
-      notify.error("加入失败", errorCause(e)?.message);
+      notify.error(t("addFailed"), errorCause(e)?.message);
     } finally {
       setBusy(false);
     }
@@ -113,7 +115,7 @@ export default function SprintsPage() {
       await api.del(`/sprints/${detail.id}/items/${encodeURIComponent(displayId)}`);
       await refreshDetail();
     } catch (e) {
-      notify.error("移出失败", errorCause(e)?.message);
+      notify.error(t("removeFailed"), errorCause(e)?.message);
     }
   };
 
@@ -123,7 +125,7 @@ export default function SprintsPage() {
       await api.post(`/sprints/${detail.id}/start`, {});
       await Promise.all([refreshDetail(), reload()]);
     } catch (e) {
-      notify.error("启动失败", errorCause(e)?.message);
+      notify.error(t("startFailed"), errorCause(e)?.message);
     }
   };
 
@@ -134,14 +136,14 @@ export default function SprintsPage() {
       await api.post(`/sprints/${detail.id}/close`, {});
       await Promise.all([refreshDetail(), reload()]);
     } catch (e) {
-      notify.error("关闭失败", errorCause(e)?.message);
+      notify.error(t("closeFailed"), errorCause(e)?.message);
     }
   };
 
   return (
     <Page testId="page-sprints">
       <PageHeader
-        title={`Sprint · ${projectKey}`}
+        title={t("title", { key: projectKey })}
         testId="sprints-header"
         actions={
           <Button
@@ -149,7 +151,7 @@ export default function SprintsPage() {
             testId="sprint-create-button"
             onClick={() => setShowCreate(true)}
           >
-            新建 Sprint
+            {t("create")}
           </Button>
         }
       />
@@ -163,23 +165,27 @@ export default function SprintsPage() {
       ) : (sprints ?? []).length === 0 ? (
         <Box testId="sprints-empty">
           <EmptyState
-            header="还没有 Sprint"
-            description="点击右上角「新建 Sprint」规划第一个迭代。"
+            header={t("empty")}
+            description={t("emptyDescription")}
           />
         </Box>
       ) : (
-        <table className="rdm-table" aria-label="Sprint 列表" data-testid="sprint-table">
+        <table
+          className="rdm-table"
+          aria-label={t("tableLabel")}
+          data-testid="sprint-table"
+        >
           <thead>
             <tr>
-              <th scope="col">名称</th>
+              <th scope="col">{t("col.name")}</th>
               <th scope="col" className="col-status">
-                状态
+                {t("col.status")}
               </th>
               <th scope="col" className="col-start">
-                开始
+                {t("col.start")}
               </th>
               <th scope="col" className="col-end">
-                结束
+                {t("col.end")}
               </th>
             </tr>
           </thead>
@@ -218,14 +224,14 @@ export default function SprintsPage() {
 
       <SprintFormDialog
         open={showCreate}
-        title="新建 Sprint"
+        title={t("form.createTitle")}
         projectKey={projectKey}
         onClose={() => setShowCreate(false)}
         onSave={create}
       />
       <SprintFormDialog
         open={showEdit}
-        title="编辑 Sprint"
+        title={t("form.editTitle")}
         projectKey={projectKey}
         initial={
           detail
@@ -248,7 +254,7 @@ export default function SprintsPage() {
           setDetail(null);
         }}
         width="wide"
-        label="Sprint 详情"
+        label={t("drawerLabel")}
         testId="sprint-detail-drawer"
       >
         {detail && (
@@ -263,7 +269,7 @@ export default function SprintsPage() {
                     testId="sprint-detail-edit"
                     onClick={() => setShowEdit(true)}
                   >
-                    编辑
+                    {t("edit")}
                   </Button>
                 )}
               </Inline>
@@ -278,15 +284,15 @@ export default function SprintsPage() {
                 ))}
               </Inline>
 
-              <Heading size="small">工作项</Heading>
+              <Heading size="small">{t("itemsHeading")}</Heading>
               {detail.items.length === 0 ? (
                 <Text size="small" color="color.text.subtlest">
-                  该 Sprint 还没有工作项。
+                  {t("noItems")}
                 </Text>
               ) : (
                 <table
                   className="rdm-table"
-                  aria-label="Sprint 工作项"
+                  aria-label={t("itemsTableLabel")}
                   data-testid="sprint-detail-items"
                 >
                   <thead>
@@ -294,12 +300,12 @@ export default function SprintsPage() {
                       <th scope="col" className="col-id">
                         ID
                       </th>
-                      <th scope="col">标题</th>
+                      <th scope="col">{t("col.title")}</th>
                       <th scope="col" className="col-status">
-                        状态
+                        {t("col.status")}
                       </th>
                       <th scope="col" className="col-count">
-                        操作
+                        {t("col.actions")}
                       </th>
                     </tr>
                   </thead>
@@ -320,7 +326,7 @@ export default function SprintsPage() {
                               data-testid={`sprint-item-remove-${row.display_id}`}
                               onClick={() => void removeItem(row.display_id)}
                             >
-                              移出
+                              {t("remove")}
                             </TextButton>
                           )}
                         </td>
@@ -342,7 +348,7 @@ export default function SprintsPage() {
                         backlogOnly
                         value={itemRefs}
                         onChange={setItemRefs}
-                        placeholder="搜索待办工作项，可多选"
+                        placeholder={t("pickerPlaceholder")}
                         testId="sprint-item-input"
                       />
                     </div>
@@ -352,7 +358,7 @@ export default function SprintsPage() {
                       testId="sprint-item-add"
                       onClick={() => void addItem()}
                     >
-                      加入
+                      {t("add")}
                     </Button>
                   </Inline>
                   <Inline space="space.100">
@@ -362,7 +368,7 @@ export default function SprintsPage() {
                         testId="sprint-start"
                         onClick={() => void startSprint()}
                       >
-                        启动
+                        {t("start")}
                       </Button>
                     )}
                     {detail.status === "ACTIVE" && (
@@ -371,7 +377,7 @@ export default function SprintsPage() {
                         testId="sprint-close"
                         onClick={() => setConfirmClose(true)}
                       >
-                        关闭
+                        {t("close")}
                       </Button>
                     )}
                   </Inline>
@@ -384,13 +390,13 @@ export default function SprintsPage() {
 
       <ConfirmDialog
         open={confirmClose}
-        title="关闭 Sprint"
-        confirmLabel="确认关闭"
+        title={t("closeConfirm.title")}
+        confirmLabel={t("closeConfirm.confirmLabel")}
         testId="sprint-close-dialog"
         onClose={() => setConfirmClose(false)}
         onConfirm={() => void doClose()}
       >
-        关闭后不能再加项；未终态项需先移出。确认关闭？
+        {t("closeConfirm.body")}
       </ConfirmDialog>
       <ImagePreviewDialog
         open={preview !== null}

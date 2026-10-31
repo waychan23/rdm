@@ -10,6 +10,7 @@ import time
 from collections import defaultdict, deque
 
 from rdm.domain.errors import RateLimited
+from rdm.i18n import tr
 
 MAX_FAILURES = 5
 WINDOW_SECONDS = 300
@@ -32,7 +33,11 @@ class LoginThrottler:
             bucket.popleft()
         if len(bucket) >= self._max:
             raise RateLimited(
-                f"登录失败次数过多，请 {self._window // 60} 分钟后再试",
+                tr(
+                    "auth.rate_limited",
+                    default="登录失败次数过多，请 {minutes} 分钟后再试",
+                    minutes=self._window // 60,
+                ),
                 details={"retry_after_seconds": self._window},
             )
 

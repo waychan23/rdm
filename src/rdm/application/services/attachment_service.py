@@ -25,6 +25,7 @@ from rdm.domain.entities import Attachment, Project, WorkItem
 from rdm.domain.enums import AttachmentOwnerType, AttachmentState
 from rdm.domain.errors import Forbidden, NotFound, ValidationError
 from rdm.domain.events import EventType
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
@@ -50,35 +51,55 @@ class AttachmentService:
         """Validate the polymorphic owner; return (owner_id, display_id)."""
         if owner_type not in {t.value for t in AttachmentOwnerType}:
             raise ValidationError(
-                f"owner_type 必须是 project/work_item/comment/message，收到 {owner_type!r}",
+                tr(
+                    "attachment.owner_type_invalid",
+                    default="owner_type 必须是 project/work_item/comment/message，收到 {value!r}",
+                    value=owner_type,
+                ),
                 details={"field": "owner_type", "value": owner_type},
             )
         if owner_type == AttachmentOwnerType.project:
             # Project-scoped uploads (editor inline images) may omit owner_ref.
             if owner_ref and owner_ref not in {project.key, project.id}:
-                raise NotFound(f"项目 {owner_ref!r} 不存在", details={"owner_ref": owner_ref})
+                raise NotFound(
+                    tr("artifact.project_not_found", default="项目 {ref!r} 不存在", ref=owner_ref),
+                    details={"owner_ref": owner_ref},
+                )
             return project.id, project.key
         if owner_ref is None or not owner_ref.strip():
             raise ValidationError(
-                f"owner_type={owner_type} 时 owner_ref 必填",
+                tr(
+                    "attachment.owner_ref_required",
+                    default="owner_type={type} 时 owner_ref 必填",
+                    type=owner_type,
+                ),
                 details={"field": "owner_ref"},
             )
         assert self.uow.work_items is not None
         if owner_type == AttachmentOwnerType.work_item:
             item = await self.items.resolve_item(actor, owner_ref)
             if item.project_id != project.id:
-                raise NotFound("owner 不属于该项目", details={"owner_ref": owner_ref})
+                raise NotFound(
+                    tr("artifact.owner_mismatch", default="owner 不属于该项目"),
+                    details={"owner_ref": owner_ref},
+                )
             return item.id, WorkItemService.display_id(project, item)
         if owner_type == AttachmentOwnerType.comment:
             assert self.uow.comments is not None
             comment = await self.uow.comments.get(owner_ref)
             if comment is None or comment.project_id != project.id:
-                raise NotFound("评论不存在或不属于该项目", details={"comment_id": owner_ref})
+                raise NotFound(
+                    tr("artifact.comment_not_found", default="评论不存在或不属于该项目"),
+                    details={"comment_id": owner_ref},
+                )
             return comment.id, None
         assert self.uow.messages is not None
         message = await self.uow.messages.get_message(owner_ref)
         if message is None or message.project_id != project.id:
-            raise NotFound("信件不存在或不属于该项目", details={"message_id": owner_ref})
+            raise NotFound(
+                tr("artifact.message_not_found", default="信件不存在或不属于该项目"),
+                details={"message_id": owner_ref},
+            )
         return message.id, None
 
     # --- writes -----------------------------------------------------------
@@ -99,7 +120,11 @@ class AttachmentService:
         owner_id, display_id = await self.resolve_owner(actor, project, owner_type, owner_ref)
         if state not in {s.value for s in AttachmentState}:
             raise ValidationError(
-                f"state 必须是 temp/active，收到 {state!r}",
+                tr(
+                    "attachment.state_invalid",
+                    default="state 必须是 temp/active，收到 {state!r}",
+                    state=state,
+                ),
                 details={"field": "state", "value": state},
             )
         safe_name = sanitize_filename(filename)
@@ -151,13 +176,20 @@ class AttachmentService:
         assert self.uow.attachments is not None and self.uow.projects is not None
         attachment = await self.uow.attachments.get(attachment_id)
         if attachment is None:
-            raise NotFound(f"附件 {attachment_id} 不存在", details={"attachment_id": attachment_id})
+            raise NotFound(
+                tr("attachment.not_found", default="附件 {id} 不存在", id=attachment_id),
+                details={"attachment_id": attachment_id},
+            )
         security.assert_project_access(actor, attachment.project_id)
         if attachment.uploader_user_id != actor.id and not (
             security.can_manage_sprint(actor, attachment.project_id)
         ):
             raise Forbidden(
-                f"成员 {actor.name} 不能删除该附件：仅上传者或 Owner/Manager 可删除。",
+                tr(
+                    "attachment.delete_forbidden",
+                    default="成员 {user} 不能删除该附件：仅上传者或 Owner/Manager 可删除。",
+                    user=actor.name,
+                ),
                 details={
                     "attachment_id": attachment_id,
                     "uploader_user_id": attachment.uploader_user_id,
@@ -197,8 +229,13 @@ class AttachmentService:
         )
         if matched != len(set(attachment_ids)):
             raise ValidationError(
-                "attachment_ids 中含不合法附件：只能挂载同一工作项上、未绑定其他评论的附件；"
-                "请先用 /attachments 上传到该工作项。",
+                tr(
+                    "attachment.invalid_attachment_ids",
+                    default=(
+                        "attachment_ids 中含不合法附件：只能挂载同一工作项上、"
+                        "未绑定其他评论的附件；请先用 /attachments 上传到该工作项。"
+                    ),
+                ),
                 details={
                     "attachment_ids": attachment_ids,
                     "matched": matched,
@@ -235,7 +272,10 @@ class AttachmentService:
         assert self.uow.attachments is not None
         attachment = await self.uow.attachments.get(attachment_id)
         if attachment is None:
-            raise NotFound(f"附件 {attachment_id} 不存在", details={"attachment_id": attachment_id})
+            raise NotFound(
+                tr("attachment.not_found", default="附件 {id} 不存在", id=attachment_id),
+                details={"attachment_id": attachment_id},
+            )
         security.assert_project_access(actor, attachment.project_id)
         return attachment, self._resolve_file(attachment)
 
@@ -244,14 +284,21 @@ class AttachmentService:
         assert self.uow.attachments is not None
         attachment = await self.uow.attachments.get(attachment_id)
         if attachment is None:
-            raise NotFound(f"附件 {attachment_id} 不存在", details={"attachment_id": attachment_id})
+            raise NotFound(
+                tr("attachment.not_found", default="附件 {id} 不存在", id=attachment_id),
+                details={"attachment_id": attachment_id},
+            )
         return attachment, self._resolve_file(attachment)
 
     def _resolve_file(self, attachment: Attachment) -> Path:
         path = self.files.abspath(attachment.rel_path)
         if not path.is_file():
             raise NotFound(
-                f"附件 {attachment.filename} 的文件缺失（doctor 可报告此类孤儿记录）",
+                tr(
+                    "attachment.file_missing",
+                    default="附件 {filename} 的文件缺失（doctor 可报告此类孤儿记录）",
+                    filename=attachment.filename,
+                ),
                 details={"attachment_id": attachment.id},
             )
         return path

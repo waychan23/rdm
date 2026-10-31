@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -13,7 +14,7 @@ import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import TypeKindIcon from "../components/TypeKindIcon";
 import StatusLozenge from "../workitems/status";
-import { KIND_OPTIONS } from "../workitems/constants";
+import { kindOptions } from "../workitems/constants";
 
 interface Overview {
   total_items: number;
@@ -29,7 +30,7 @@ interface Overview {
   } | null;
 }
 
-const kindLabel = (k: string) => KIND_OPTIONS.find((o) => o.value === k)?.label ?? k;
+const kindLabel = (k: string) => kindOptions().find((o) => o.value === k)?.label ?? k;
 
 const styles = cssMap({
   card: {
@@ -56,6 +57,7 @@ const styles = cssMap({
 });
 
 export default function OverviewPage() {
+  const { t } = useTranslation("projects");
   const { key: projectKey = "" } = useParams();
   const navigate = useNavigate();
   const { data, loading, error, reload } = useAsync<Overview>(
@@ -84,30 +86,30 @@ export default function OverviewPage() {
   }
 
   const stats = [
-    { label: "全部工作项", value: data.total_items, testId: "overview-stat-total" },
-    { label: "未完成", value: data.open_items, testId: "overview-stat-open" },
-    { label: "我的待办", value: data.my_open_items, testId: "overview-stat-mine" },
-    { label: "成员", value: data.members, testId: "overview-stat-members" },
+    { label: t("overview.stats.total"), value: data.total_items, testId: "overview-stat-total" },
+    { label: t("overview.stats.open"), value: data.open_items, testId: "overview-stat-open" },
+    { label: t("overview.stats.mine"), value: data.my_open_items, testId: "overview-stat-mine" },
+    { label: t("overview.stats.members"), value: data.members, testId: "overview-stat-members" },
   ];
 
   return (
     <Page testId="page-project-overview">
       <PageHeader
-        title={`${projectKey} 概览`}
+        title={t("overview.title", { key: projectKey })}
         testId="overview-header"
         actions={
           <>
             <Button testId="overview-go-board" onClick={() => go("board")}>
-              看板
+              {t("overview.go.board")}
             </Button>
             <Button testId="overview-go-backlog" onClick={() => go("backlog")}>
-              工作项
+              {t("overview.go.backlog")}
             </Button>
             <Button testId="overview-go-sprints" onClick={() => go("sprints")}>
-              迭代
+              {t("overview.go.sprints")}
             </Button>
             <Button testId="overview-go-mailbox" onClick={() => go("mailbox")}>
-              信箱
+              {t("overview.go.mailbox")}
             </Button>
           </>
         }
@@ -131,7 +133,7 @@ export default function OverviewPage() {
       <Box xcss={styles.panelsGrid} testId="overview-panels">
         <Box xcss={styles.card} style={cardBorder} testId="overview-by-kind">
           <Stack space="space.150">
-            <Heading size="small">类型分布</Heading>
+            <Heading size="small">{t("overview.byKind")}</Heading>
             {Object.entries(data.by_kind).map(([kind, count]) => (
               <Inline key={kind} spread="space-between" alignBlock="center">
                 <Inline space="space.100" alignBlock="center">
@@ -146,7 +148,7 @@ export default function OverviewPage() {
 
         <Box xcss={styles.card} style={cardBorder} testId="overview-by-status">
           <Stack space="space.150">
-            <Heading size="small">状态分布</Heading>
+            <Heading size="small">{t("overview.byStatus")}</Heading>
             {Object.entries(data.by_status).map(([status, count]) => (
               <Inline key={status} spread="space-between" alignBlock="center">
                 <StatusLozenge status={status} />
@@ -159,9 +161,11 @@ export default function OverviewPage() {
         {data.active_sprint && (
           <Box xcss={styles.card} style={cardBorder} testId="overview-active-sprint">
             <Stack space="space.150">
-              <Heading size="small">进行中迭代 · {data.active_sprint.name}</Heading>
+              <Heading size="small">
+                {t("overview.activeSprint", { name: data.active_sprint.name })}
+              </Heading>
               <Text size="small" color="color.text.subtlest">
-                共 {data.active_sprint.total} 项
+                {t("overview.activeSprintTotal", { total: data.active_sprint.total })}
               </Text>
               {Object.entries(data.active_sprint.by_status).map(([status, count]) => (
                 <Inline key={status} spread="space-between" alignBlock="center">

@@ -18,6 +18,8 @@ import { cssMap } from "@atlaskit/css";
 import SectionMessage from "@atlaskit/section-message";
 import { Box } from "@atlaskit/primitives/compiled";
 
+import { i18n } from "../i18n";
+
 export interface Notify {
   success: (title: string, description?: string) => void;
   error: (title: string, description?: string) => void;
@@ -54,6 +56,16 @@ const NotifyContext = createContext<Notify | null>(null);
 export function NotifyProvider({ children }: { children: ReactNode }) {
   const [notices, setNotices] = useState<Notice[]>([]);
   const nextId = useRef(1);
+
+  // Notices hold already-rendered strings; drop them on a language switch
+  // instead of leaving stale text on screen (§17.115).
+  useEffect(() => {
+    const clear = () => setNotices([]);
+    i18n.on("languageChanged", clear);
+    return () => {
+      i18n.off("languageChanged", clear);
+    };
+  }, []);
 
   const dismiss = useCallback((id: number) => {
     setNotices((current) => current.filter((notice) => notice.id !== id));

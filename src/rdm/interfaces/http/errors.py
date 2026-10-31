@@ -9,6 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from rdm.domain.errors import ErrorCode, RdmError
+from rdm.i18n import tr
 
 logger = logging.getLogger("rdm.errors")
 
@@ -26,16 +27,29 @@ def install_exception_handlers(app: FastAPI) -> None:
         return _json_error(exc.http_status, str(exc.code), exc.message, exc.details)
 
     @app.exception_handler(RequestValidationError)
-    async def _handle_validation(_request: Request, exc: RequestValidationError) -> JSONResponse:
+    async def _handle_validation(request: Request, exc: RequestValidationError) -> JSONResponse:
         fields = [
             {"field": ".".join(str(p) for p in e["loc"] if p != "body"), "message": e["msg"]}
             for e in exc.errors()
         ]
         return _json_error(
-            422, str(ErrorCode.VALIDATION_ERROR), "请求参数校验失败", {"fields": fields}
+            422,
+            str(ErrorCode.VALIDATION_ERROR),
+            tr("errors.validation", locale=_request_locale(request)),
+            {"fields": fields},
         )
 
     @app.exception_handler(Exception)
-    async def _handle_unexpected(_request: Request, exc: Exception) -> JSONResponse:
+    async def _handle_unexpected(request: Request, exc: Exception) -> JSONResponse:
         logger.exception("unhandled error: %s", exc)
-        return _json_error(500, "INTERNAL_ERROR", "服务器内部错误")
+        return _json_error(
+            500,
+            "INTERNAL_ERROR",
+            tr("errors.internal", locale=_request_locale(request)),
+        )
+
+
+def _request_locale(request: Request) -> str | None:
+    # The middleware resets its ContextVar before Starlette's outermost
+    # ServerErrorMiddleware renders a 500, so read the scope copy.
+    return getattr(request.state, "locale", None)

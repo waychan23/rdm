@@ -11,8 +11,10 @@ import ModalDialog, {
 import { Stack } from "@atlaskit/primitives/compiled";
 import Select from "@atlaskit/select";
 import Textfield from "@atlaskit/textfield";
+import { useTranslation } from "react-i18next";
 
 import FormField from "../../components/FormField";
+import { artifactKindLabel } from "../../lib/labels";
 
 export const ARTIFACT_KINDS = ["link", "doc", "design", "api_doc", "repo", "other"];
 
@@ -23,23 +25,24 @@ interface Props {
 }
 
 export default function ArtifactDialog({ open, onClose, onSave }: Props) {
+  const { t } = useTranslation("item");
   const [kind, setKind] = useState("link");
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const options = ARTIFACT_KINDS.map((k) => ({ label: k, value: k }));
+  const options = ARTIFACT_KINDS.map((k) => ({ label: artifactKindLabel(k), value: k }));
 
   return (
     <ModalTransition>
       {open && (
         <ModalDialog onClose={onClose} width="440px" testId="artifact-dialog">
           <ModalHeader>
-            <ModalTitle>挂载产出物</ModalTitle>
+            <ModalTitle>{t("artifact.title")}</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.150">
-              <FormField label="类型" htmlFor="art-kind">
+              <FormField label={t("artifact.kind")} htmlFor="art-kind">
                 <Select
                   inputId="art-kind"
                   options={options}
@@ -47,7 +50,7 @@ export default function ArtifactDialog({ open, onClose, onSave }: Props) {
                   onChange={(opt) => opt && setKind((opt as { value: string }).value)}
                 />
               </FormField>
-              <FormField label="标题" htmlFor="art-label">
+              <FormField label={t("artifact.label")} htmlFor="art-label">
                 <Textfield
                   id="art-label"
                   value={label}
@@ -55,7 +58,7 @@ export default function ArtifactDialog({ open, onClose, onSave }: Props) {
                   onChange={(e) => setLabel(e.currentTarget.value)}
                 />
               </FormField>
-              <FormField label="URL" htmlFor="art-url">
+              <FormField label={t("artifact.url")} htmlFor="art-url">
                 <Textfield
                   id="art-url"
                   value={url}
@@ -68,7 +71,7 @@ export default function ArtifactDialog({ open, onClose, onSave }: Props) {
           </ModalBody>
           <ModalFooter>
             <Button appearance="subtle" onClick={onClose} testId="artifact-cancel">
-              取消
+              {t("artifact.cancel")}
             </Button>
             <Button
               appearance="primary"
@@ -86,7 +89,7 @@ export default function ArtifactDialog({ open, onClose, onSave }: Props) {
                 }
               }}
             >
-              保存
+              {t("artifact.save")}
             </Button>
           </ModalFooter>
         </ModalDialog>

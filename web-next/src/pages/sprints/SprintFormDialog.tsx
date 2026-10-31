@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import Button from "@atlaskit/button/default/button";
 import ModalDialog, {
@@ -39,6 +40,7 @@ export default function SprintFormDialog({
   onClose,
   onSave,
 }: Props) {
+  const { t } = useTranslation("sprints");
   const [name, setName] = useState(initial?.name ?? "");
   const [goal, setGoal] = useState(initial?.goal_md ?? "");
   const [start, setStart] = useState(initial?.start_date ?? "");
@@ -82,7 +84,7 @@ export default function SprintFormDialog({
           </ModalHeader>
           <ModalBody>
             <Stack space="space.150">
-              <FormField label="名称" htmlFor="sprint-name">
+              <FormField label={t("form.name")} htmlFor="sprint-name">
                 <Textfield
                   id="sprint-name"
                   value={name}
@@ -91,7 +93,7 @@ export default function SprintFormDialog({
                   onChange={(e) => setName(e.currentTarget.value)}
                 />
               </FormField>
-              <FormField label="目标（Markdown）">
+              <FormField label={t("form.goal")}>
                 <MarkdownEditor
                   value={goal}
                   onChange={setGoal}
@@ -101,16 +103,16 @@ export default function SprintFormDialog({
                   onSubmit={() => void submit()}
                 />
               </FormField>
-              <FormField label="起止日期">
+              <FormField label={t("form.dates")}>
                 <Inline space="space.100">
                   <DatePicker
-                    placeholder="开始"
+                    placeholder={t("form.startPlaceholder")}
                     value={start || ""}
                     testId="sprint-form-start"
                     onChange={(v) => setStart(v)}
                   />
                   <DatePicker
-                    placeholder="结束"
+                    placeholder={t("form.endPlaceholder")}
                     value={end || ""}
                     testId="sprint-form-end"
                     onChange={(v) => setEnd(v)}
@@ -121,7 +123,7 @@ export default function SprintFormDialog({
           </ModalBody>
           <ModalFooter>
             <Button appearance="subtle" onClick={onClose} testId="sprint-form-cancel">
-              取消
+              {t("form.cancel")}
             </Button>
             <Button
               appearance="primary"
@@ -129,7 +131,7 @@ export default function SprintFormDialog({
               onClick={() => void submit()}
               testId="sprint-form-submit"
             >
-              保存
+              {t("form.save")}
             </Button>
           </ModalFooter>
         </ModalDialog>

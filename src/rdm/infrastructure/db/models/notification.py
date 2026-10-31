@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from rdm.infrastructure.db.base import Base
@@ -26,6 +26,10 @@ class NotificationModel(Base):
     )
     type: Mapped[str] = mapped_column(String(20), nullable=False)
     title: Mapped[str] = mapped_column(String(300), nullable=False)
+    # Structured title for read-time localization (§17.115); nullable so rows
+    # written before 0021 keep rendering their persisted title.
+    title_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    title_params: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
     project_id: Mapped[str | None] = mapped_column(
         String(32),

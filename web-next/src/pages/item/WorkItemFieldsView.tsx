@@ -1,9 +1,10 @@
 import { Stack, Text } from "@atlaskit/primitives/compiled";
+import { useTranslation } from "react-i18next";
 
 import TextButton from "../../components/TextButton";
 import type { MarkdownImageClick } from "../../components/MarkdownText";
 import type { WorkItem } from "../../types";
-import { SEVERITY_OPTIONS } from "../../workitems/constants";
+import { severityOptions } from "../../workitems/constants";
 import {
   InlineChoiceField,
   InlineMarkdownField,
@@ -11,9 +12,10 @@ import {
 } from "./InlineFields";
 
 function Empty() {
+  const { t } = useTranslation("item");
   return (
     <Text size="small" color="color.text.subtlest">
-      未填写
+      {t("fieldsView.empty")}
     </Text>
   );
 }
@@ -48,12 +50,13 @@ export default function WorkItemFieldsView({
   onOpenItem,
   onImageClick,
 }: Props) {
+  const { t } = useTranslation("item");
   const fields = (item.fields ?? {}) as Record<string, unknown>;
   const isRequired = (key: string) => Boolean(requiredFields?.has(key));
   if (item.kind === "epic" || Object.keys(fields).length === 0) {
     return (
       <Text size="small" color="color.text.subtlest">
-        该类型没有额外字段
+        {t("fieldsView.noFields")}
       </Text>
     );
   }
@@ -62,15 +65,15 @@ export default function WorkItemFieldsView({
     return (
       <InlineMarkdownField
         testId="item-acceptance"
-        label="验收标准"
+        label={t("fieldsView.acceptance")}
         required={isRequired("acceptance_criteria_md")}
         value={fields.acceptance_criteria_md as string | undefined}
         canEdit={canEdit}
         projectKey={projectKey}
-        emptyText="未填写"
-        placeholder="填写验收标准（支持 Markdown）"
+        emptyText={t("fieldsView.empty")}
+        placeholder={t("fieldsView.acceptancePlaceholder")}
         minimumRows={3}
-        editLabel="编辑验收标准"
+        editLabel={t("fieldsView.editAcceptance")}
         onImageClick={onImageClick}
         onSave={(next) => onPatch({ acceptance_criteria_md: blankToNull(next) })}
       />
@@ -83,26 +86,26 @@ export default function WorkItemFieldsView({
       <Stack space="space.150">
         <InlineChoiceField
           testId="item-severity"
-          label="严重度"
+          label={t("fieldsView.severity")}
           required={isRequired("severity")}
           value={String(fields.severity ?? "major")}
-          options={SEVERITY_OPTIONS}
+          options={severityOptions()}
           canEdit={canEdit}
-          editLabel="编辑严重度"
+          editLabel={t("fieldsView.editSeverity")}
           onSave={(next) => onPatch({ severity: next })}
         />
         <InlineTextField
           testId="item-environment"
-          label="环境"
+          label={t("fieldsView.environment")}
           required={isRequired("environment")}
           value={String(fields.environment ?? "")}
           canEdit={canEdit}
-          emptyText="未填写"
-          editLabel="编辑环境"
+          emptyText={t("fieldsView.empty")}
+          editLabel={t("fieldsView.editEnvironment")}
           onSave={(next) => onPatch({ environment: blankToNull(next) })}
         />
         <div className="rdm-inline-field" data-testid="item-source-story">
-          <div className="rdm-item-section-label">来源 story</div>
+          <div className="rdm-item-section-label">{t("fieldsView.sourceStory")}</div>
           {sourceStoryId ? (
             <TextButton onClick={() => onOpenItem(sourceStoryId)}>
               {sourceStoryId}
@@ -113,9 +116,9 @@ export default function WorkItemFieldsView({
         </div>
         {(
           [
-            ["repro_steps_md", "复现步骤"],
-            ["expected_behavior_md", "期望行为"],
-            ["actual_behavior_md", "实际行为"],
+            ["repro_steps_md", t("fieldsView.repro")],
+            ["expected_behavior_md", t("fieldsView.expected")],
+            ["actual_behavior_md", t("fieldsView.actual")],
           ] as const
         ).map(([key, label]) => (
           <InlineMarkdownField
@@ -126,10 +129,10 @@ export default function WorkItemFieldsView({
             value={fields[key] as string | undefined}
             canEdit={canEdit}
             projectKey={projectKey}
-            emptyText="未填写"
-            placeholder={`填写${label}（支持 Markdown）`}
+            emptyText={t("fieldsView.empty")}
+            placeholder={t("fieldsView.fillPlaceholder", { label })}
             minimumRows={3}
-            editLabel={`编辑${label}`}
+            editLabel={t("fieldsView.editLabel", { label })}
             onImageClick={onImageClick}
             onSave={(next) => onPatch({ [key]: blankToNull(next) })}
           />
@@ -142,7 +145,7 @@ export default function WorkItemFieldsView({
     <Stack space="space.150">
       <InlineTextField
         testId="item-est-work-hours"
-        label="预估工时（小时）"
+        label={t("fieldsView.estHours")}
         required={isRequired("est_work_hours")}
         value={fields.est_work_hours === null || fields.est_work_hours === undefined
           ? ""
@@ -150,7 +153,7 @@ export default function WorkItemFieldsView({
         canEdit={canEdit}
         emptyText="—"
         inputType="number"
-        editLabel="编辑预估工时"
+        editLabel={t("fieldsView.editEstHours")}
         renderView={hoursText}
         onSave={(next) =>
           onPatch({ est_work_hours: next.trim() === "" ? null : Number(next) })
@@ -158,7 +161,7 @@ export default function WorkItemFieldsView({
       />
       <InlineTextField
         testId="item-actual-work-hours"
-        label="实际工时（小时）"
+        label={t("fieldsView.actualHours")}
         required={isRequired("actual_work_hours")}
         value={fields.actual_work_hours === null || fields.actual_work_hours === undefined
           ? ""
@@ -166,7 +169,7 @@ export default function WorkItemFieldsView({
         canEdit={canEdit}
         emptyText="—"
         inputType="number"
-        editLabel="编辑实际工时"
+        editLabel={t("fieldsView.editActualHours")}
         renderView={hoursText}
         onSave={(next) =>
           onPatch({ actual_work_hours: next.trim() === "" ? null : Number(next) })
@@ -174,12 +177,12 @@ export default function WorkItemFieldsView({
       />
       <InlineTextField
         testId="item-code-branch"
-        label="代码分支"
+        label={t("fieldsView.codeBranch")}
         required={isRequired("code_branch")}
         value={String(fields.code_branch ?? "")}
         canEdit={canEdit}
-        emptyText="未填写"
-        editLabel="编辑代码分支"
+        emptyText={t("fieldsView.empty")}
+        editLabel={t("fieldsView.editCodeBranch")}
         onSave={(next) => onPatch({ code_branch: blankToNull(next) })}
       />
     </Stack>

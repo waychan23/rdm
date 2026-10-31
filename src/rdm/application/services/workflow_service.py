@@ -17,6 +17,14 @@ from rdm.domain.workflow.schema import (
     StepSpec,
     WorkflowSpec,
 )
+from rdm.i18n import current_locale, tr
+
+
+def _label(name: str | None, name_en: str | None, fallback: str) -> str:
+    """Pick the display label for the request locale (§17.115)."""
+    if current_locale() == "en" and name_en:
+        return name_en
+    return name or name_en or fallback
 
 
 def _gate_dto(gate: GateSpec | None) -> dict[str, Any]:
@@ -32,7 +40,7 @@ def _fields_dto(fields: FieldsSpec) -> dict[str, Any]:
         "custom": [
             {
                 "key": field.key,
-                "label": field.label,
+                "label": _label(field.label, field.label_en, field.key),
                 "type": field.type,
                 "multiple": field.multiple,
             }
@@ -45,7 +53,7 @@ def _step_dto(engine: WorkflowEngine, kind: str, src: str, step: StepSpec) -> di
     gate = engine.effective_gate(kind, src, step)
     return {
         "key": step.key,
-        "name": step.name,
+        "name": _label(step.name, step.name_en, step.key),
         "to": step.to,
         "mode": step.mode,
         "actors": list(step.actors),
@@ -63,7 +71,7 @@ def _workflow_dto(
     include_subtypes: bool,
 ) -> dict[str, Any]:
     data: dict[str, Any] = {
-        "label": resolved.label,
+        "label": _label(resolved.label, resolved.label_en, resolved.kind),
         "states": list(resolved.states),
         "initial": resolved.initial,
         "terminal": list(resolved.terminal),
@@ -101,14 +109,14 @@ def build_workflow_dto(
         from rdm.domain.errors import ValidationError
 
         raise ValidationError(
-            f"未知 kind {kind!r}",
+            tr("errors.unknown_kind", kind=kind),
             details={"kind": kind, "allowed": sorted(spec.kinds)},
         )
     if task_type is not None and task_type not in spec.task_types:
         from rdm.domain.errors import ValidationError
 
         raise ValidationError(
-            f"未知 task_type {task_type!r}",
+            tr("errors.unknown_task_type", task_type=task_type),
             details={"task_type": task_type, "allowed": sorted(spec.task_types)},
         )
     engine = WorkflowEngine(spec)
@@ -124,6 +132,12 @@ def build_workflow_dto(
     return {
         "version": spec.version,
         "revision": spec.revision,
-        "task_types": [{"value": code, "label": label} for code, label in spec.task_types.items()],
+        "task_types": [
+            {
+                "value": code,
+                "label": _label(label, spec.task_type_labels_en.get(code), code),
+            }
+            for code, label in spec.task_types.items()
+        ],
         "kinds": kinds,
     }

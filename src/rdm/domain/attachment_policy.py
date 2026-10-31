@@ -11,6 +11,7 @@ import os
 import re
 
 from rdm.domain.errors import UnsupportedMime
+from rdm.i18n import tr
 
 # Executable / installer types rejected on a loopback single-user deployment.
 BLOCKED_EXTENSIONS: frozenset[str] = frozenset(
@@ -89,7 +90,11 @@ def ensure_allowed_type(filename: str, mime: str | None) -> None:
     ext = extension_of(filename)
     if ext in BLOCKED_EXTENSIONS:
         raise UnsupportedMime(
-            f"扩展名 .{ext} 属于可执行类型，v1 禁止上传；请打包为允许的归档格式。",
+            tr(
+                "attachment.blocked_extension",
+                default="扩展名 .{ext} 属于可执行类型，v1 禁止上传；请打包为允许的归档格式。",
+                ext=ext,
+            ),
             details={"filename": filename, "extension": ext},
         )
     if mime:
@@ -98,6 +103,10 @@ def ensure_allowed_type(filename: str, mime: str | None) -> None:
             marker in declared for marker in _BLOCKED_MIME_MARKERS
         ):
             raise UnsupportedMime(
-                f"声明的 MIME 类型 {mime} 属于可执行类型，禁止上传。",
+                tr(
+                    "attachment.blocked_mime",
+                    default="声明的 MIME 类型 {mime} 属于可执行类型，禁止上传。",
+                    mime=mime,
+                ),
                 details={"filename": filename, "mime": mime},
             )

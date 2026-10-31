@@ -4,6 +4,8 @@ import Button from "@atlaskit/button/default/button";
 import SectionMessage from "@atlaskit/section-message";
 import { Box } from "@atlaskit/primitives/compiled";
 
+import { i18n } from "../i18n";
+
 interface Props {
   children: ReactNode;
 }
@@ -31,14 +33,14 @@ export default class ErrorBoundary extends Component<Props, State> {
       <Box padding="space.600" testId="error-boundary">
         <SectionMessage
           appearance="error"
-          title="页面出错了"
+          title={i18n.t("error.pageError", { ns: "common" })}
           actions={
             <Button appearance="primary" onClick={() => window.location.reload()}>
-              刷新页面
+              {i18n.t("error.reloadPage", { ns: "common" })}
             </Button>
           }
         >
-          {this.state.error.message || "渲染时发生未知错误。"}
+          {this.state.error.message || i18n.t("error.renderError", { ns: "common" })}
         </SectionMessage>
       </Box>
     );

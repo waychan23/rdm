@@ -8,11 +8,13 @@ and honour per-identity type switches.
 from __future__ import annotations
 
 import datetime as dt
+from typing import Any
 
 from rdm.application.security import assert_project_access
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Notification, Project, User, WorkItem
 from rdm.domain.errors import NotFound, ValidationError
+from rdm.i18n import tr, translate
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.events.bus import StreamEvent, get_bus
 from rdm.infrastructure.id import new_id
@@ -38,7 +40,9 @@ class NotificationService:
         org_id: str,
         recipient_user_id: str,
         type: str,
-        title: str,
+        title_key: str | None = None,
+        title_params: dict[str, Any] | None = None,
+        title: str | None = None,
         body: str | None = None,
         project_id: str | None = None,
         entity_type: str | None = None,
@@ -49,7 +53,9 @@ class NotificationService:
     ) -> Notification | None:
         assert self.uow.users is not None and self.uow.notifications is not None
         if type not in NOTIFICATION_TYPES:
-            raise ValidationError(f"未知通知类型 {type!r}", details={"field": "type"})
+            raise ValidationError(
+                tr("notification.unknown_type", type=type), details={"field": "type"}
+            )
         recipient = await self.uow.users.get(recipient_user_id)
         if recipient is None or not recipient.is_active:
             return None
@@ -61,12 +67,19 @@ class NotificationService:
             return None
         if actor_id is not None and actor_id == recipient_user_id:
             return None
+        params = dict(title_params or {})
+        if title is None:
+            # Persist the zh-CN render for old rows/clients; reads re-render in
+            # the recipient's request locale from title_key + title_params.
+            title = translate("zh-CN", title_key, default=title_key, **params) if title_key else ""
         notification = Notification(
             id=new_id(),
             org_id=org_id,
             recipient_user_id=recipient_user_id,
             type=type,
             title=title,
+            title_key=title_key,
+            title_params=params,
             body=body,
             project_id=project_id,
             entity_type=entity_type,
@@ -84,6 +97,8 @@ class NotificationService:
                 "id": notification.id,
                 "type": notification.type,
                 "title": notification.title,
+                "title_key": notification.title_key,
+                "title_params": notification.title_params,
                 "body": notification.body,
                 "project_id": notification.project_id,
                 "entity_ref": notification.entity_ref,
@@ -106,7 +121,8 @@ class NotificationService:
             org_id=project.org_id,
             recipient_user_id=target.id,
             type="assignment",
-            title=f"你被指派了 {display_id}",
+            title_key="notification.assignment_title",
+            title_params={"display_id": display_id},
             body=item.title,
             project_id=project.id,
             entity_type="work_item",
@@ -128,29 +144,34 @@ class NotificationService:
         """Fan out step lifecycle notifications to executors / the assignee."""
         raw_step = payload.get("step")
         step: dict[str, object] = raw_step if isinstance(raw_step, dict) else {}
-        step_name = str(step.get("name") or step.get("key") or "步骤")
+        fallback_name = tr("notification.step_fallback_name", default="步骤")
+        step_name = str(step.get("name") or step.get("key") or fallback_name)
+        step_name_en = str(step.get("name_en") or step_name)
+        title_params = {
+            "step_name": step_name,
+            "step_name_en": step_name_en,
+            "display_id": display_id,
+        }
         raw_executors = payload.get("executors")
         executors = (
             {str(uid) for uid in raw_executors if uid} if isinstance(raw_executors, list) else set()
         )
-        recipients: set[str]
-        if event_type in {"work_item.step_started", "work_item.step_reassigned"}:
+        if event_type == "work_item.step_started":
             recipients = executors
-            title = (
-                f"步骤「{step_name}」待你执行：{display_id}"
-                if event_type == "work_item.step_started"
-                else f"你被指派执行步骤「{step_name}」：{display_id}"
-            )
+            title_key = "notification.step_started_title"
+        elif event_type == "work_item.step_reassigned":
+            recipients = executors
+            title_key = "notification.step_reassigned_title"
         elif event_type == "work_item.step_blocked":
             recipients = {item.assignee_user_id} if item.assignee_user_id else set()
-            title = f"步骤「{step_name}」被阻塞：{display_id}"
+            title_key = "notification.step_blocked_title"
         elif event_type == "work_item.step_completed":
             recipients = {item.assignee_user_id} if item.assignee_user_id else set()
             recipients -= executors
-            title = f"步骤「{step_name}」已完成：{display_id}"
+            title_key = "notification.step_completed_title"
         elif event_type == "work_item.step_rejected":
             recipients = {item.assignee_user_id} if item.assignee_user_id else set()
-            title = f"步骤「{step_name}」被拒绝：{display_id}"
+            title_key = "notification.step_rejected_title"
         else:
             return
         for recipient_id in recipients:
@@ -158,7 +179,8 @@ class NotificationService:
                 org_id=project.org_id,
                 recipient_user_id=recipient_id,
                 type="step",
-                title=title,
+                title_key=title_key,
+                title_params=title_params,
                 body=item.title,
                 project_id=project.id,
                 entity_type="work_item",
@@ -174,11 +196,11 @@ class NotificationService:
         if identity is None or identity in (actor.id, actor.human_id):
             return actor.id
         if not actor.can_act_for_user(identity):
-            raise NotFound("身份不存在", details={"identity": identity})
+            raise NotFound(tr("notification.identity_not_found"), details={"identity": identity})
         assert self.uow.users is not None
         user = await self.uow.users.get(identity)
         if user is None:
-            raise NotFound("身份不存在", details={"identity": identity})
+            raise NotFound(tr("notification.identity_not_found"), details={"identity": identity})
         return user.id
 
     async def _project_id(self, actor: Actor, project_key: str | None) -> str | None:
@@ -187,7 +209,10 @@ class NotificationService:
         assert self.uow.projects is not None
         project = await self.uow.projects.get_by_key(project_key)
         if project is None:
-            raise NotFound(f"项目 {project_key} 不存在", details={"project": project_key})
+            raise NotFound(
+                tr("notification.project_not_found", project_key=project_key),
+                details={"project": project_key},
+            )
         assert_project_access(actor, project.id)
         return project.id
 
@@ -258,11 +283,13 @@ class NotificationService:
     async def set_prefs(self, actor: Actor, prefs: dict[str, bool]) -> dict[str, bool]:
         unknown = set(prefs) - set(NOTIFICATION_TYPES)
         if unknown:
-            raise ValidationError(f"未知通知类型 {sorted(unknown)!r}", details={"field": "prefs"})
+            raise ValidationError(
+                tr("notification.unknown_type", type=sorted(unknown)), details={"field": "prefs"}
+            )
         assert self.uow.users is not None
         user = await self.uow.users.get(actor.id)
         if user is None:
-            raise NotFound("用户不存在", details={"user_id": actor.id})
+            raise NotFound(tr("notification.user_not_found"), details={"user_id": actor.id})
         user.notification_prefs = {**user.notification_prefs, **prefs}
         await self.uow.users.update(user)
         return {t: user.notification_prefs.get(t, True) for t in NOTIFICATION_TYPES}

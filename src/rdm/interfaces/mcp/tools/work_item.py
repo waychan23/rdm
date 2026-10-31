@@ -16,6 +16,7 @@ from rdm.application.services.workitem_service import (
     item_task_type,
 )
 from rdm.domain.errors import ValidationError
+from rdm.domain.workflow.names import step_display_name
 from rdm.interfaces.http.container import Container
 from rdm.interfaces.http.schemas import (
     TransitionIn,
@@ -129,7 +130,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                         "step": {
                             "id": step.id,
                             "key": step.step_key,
-                            "name": step.step_name,
+                            "name": step_display_name(step.step_name, step.config),
                             "mode": step.mode,
                             "status": step.status,
                         },

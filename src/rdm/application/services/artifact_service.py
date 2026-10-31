@@ -19,6 +19,7 @@ from rdm.domain.entities import Artifact, Project
 from rdm.domain.enums import ArtifactOwnerType
 from rdm.domain.errors import NotFound, ValidationError
 from rdm.domain.events import EventType, created_payload, deleted_payload
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
@@ -43,28 +44,44 @@ class ArtifactService:
     ) -> str:
         if owner_type not in VALID_OWNER_TYPES:
             raise ValidationError(
-                f"owner_type 必须是 project/work_item/comment/message，收到 {owner_type!r}",
+                tr(
+                    "artifact.owner_type_invalid",
+                    default="owner_type 必须是 project/work_item/comment/message，收到 {value!r}",
+                    value=owner_type,
+                ),
                 details={"field": "owner_type", "value": owner_type},
             )
         if owner_type == ArtifactOwnerType.project:
             if owner_ref != project.key and owner_ref != project.id:
-                raise NotFound(f"项目 {owner_ref!r} 不存在", details={"owner_ref": owner_ref})
+                raise NotFound(
+                    tr("artifact.project_not_found", default="项目 {ref!r} 不存在", ref=owner_ref),
+                    details={"owner_ref": owner_ref},
+                )
             return project.id
         if owner_type == ArtifactOwnerType.work_item:
             item = await self.items.resolve_item(actor, owner_ref)
             if item.project_id != project.id:
-                raise NotFound("owner 不属于该项目", details={"owner_ref": owner_ref})
+                raise NotFound(
+                    tr("artifact.owner_mismatch", default="owner 不属于该项目"),
+                    details={"owner_ref": owner_ref},
+                )
             return item.id
         if owner_type == ArtifactOwnerType.comment:
             assert self.uow.comments is not None
             comment = await self.uow.comments.get(owner_ref)
             if comment is None or comment.project_id != project.id:
-                raise NotFound("评论不存在或不属于该项目", details={"comment_id": owner_ref})
+                raise NotFound(
+                    tr("artifact.comment_not_found", default="评论不存在或不属于该项目"),
+                    details={"comment_id": owner_ref},
+                )
             return comment.id
         assert self.uow.messages is not None
         message = await self.uow.messages.get_message(owner_ref)
         if message is None or message.project_id != project.id:
-            raise NotFound("信件不存在或不属于该项目", details={"message_id": owner_ref})
+            raise NotFound(
+                tr("artifact.message_not_found", default="信件不存在或不属于该项目"),
+                details={"message_id": owner_ref},
+            )
         return message.id
 
     async def add(
@@ -74,20 +91,34 @@ class ArtifactService:
         owner_type = data.get("owner_type")
         owner_ref = data.get("owner_ref")
         if not owner_type:
-            raise ValidationError("owner_type 必填", details={"field": "owner_type"})
+            raise ValidationError(
+                tr("artifact.owner_type_required", default="owner_type 必填"),
+                details={"field": "owner_type"},
+            )
         if not owner_ref:
-            raise ValidationError("owner_ref 必填", details={"field": "owner_ref"})
+            raise ValidationError(
+                tr("artifact.owner_ref_required", default="owner_ref 必填"),
+                details={"field": "owner_ref"},
+            )
         owner_id = await self.resolve_owner(actor, project, owner_type, owner_ref)
 
         kind = data.get("kind") or "link"
         if kind not in VALID_KINDS:
             raise ValidationError(
-                f"kind 必须是 {sorted(VALID_KINDS)}，收到 {kind!r}",
+                tr(
+                    "artifact.kind_invalid",
+                    default="kind 必须是 {allowed}，收到 {kind!r}",
+                    allowed=sorted(VALID_KINDS),
+                    kind=kind,
+                ),
                 details={"field": "kind", "value": kind},
             )
         label = (data.get("label") or "").strip()
         if not 1 <= len(label) <= 200:
-            raise ValidationError("label 必填且不超过 200 字符", details={"field": "label"})
+            raise ValidationError(
+                tr("artifact.label_invalid", default="label 必填且不超过 200 字符"),
+                details={"field": "label"},
+            )
         url = ensure_http_url(data.get("url") or "")
 
         artifact = Artifact(
@@ -136,14 +167,20 @@ class ArtifactService:
         assert self.uow.artifacts is not None and self.uow.projects is not None
         artifact = await self.uow.artifacts.get(artifact_id)
         if artifact is None:
-            raise NotFound(f"产出物 {artifact_id} 不存在", details={"artifact_id": artifact_id})
+            raise NotFound(
+                tr("artifact.not_found", default="产出物 {id} 不存在", id=artifact_id),
+                details={"artifact_id": artifact_id},
+            )
         security.assert_project_access(actor, artifact.project_id)
         project = await self.uow.projects.get(artifact.project_id)
         assert project is not None
         now = dt.datetime.now(dt.UTC)
         deleted = await self.uow.artifacts.soft_delete(artifact_id, actor.id, now)
         if not deleted:
-            raise NotFound(f"产出物 {artifact_id} 已删除", details={"artifact_id": artifact_id})
+            raise NotFound(
+                tr("artifact.deleted", default="产出物 {id} 已删除", id=artifact_id),
+                details={"artifact_id": artifact_id},
+            )
         artifact.deleted_at = now
         artifact.deleted_by = actor.id
         await self._event(

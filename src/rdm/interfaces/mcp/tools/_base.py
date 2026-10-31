@@ -25,6 +25,7 @@ from rdm.application.services.actor_service import ActorResolver
 from rdm.domain.actor import Actor
 from rdm.domain.entities import UserToken
 from rdm.domain.errors import RdmError, ValidationError
+from rdm.i18n import tr
 from rdm.interfaces.http.container import Container
 
 logger = logging.getLogger("rdm.mcp.tools")
@@ -105,7 +106,8 @@ def _pydantic_envelope(exc: PydanticValidationError) -> dict[str, Any]:
         for err in exc.errors()
     ]
     return ValidationError(
-        "入参校验失败；请按工具 schema 修正后重试。", details={"fields": fields}
+        tr("mcp.validation", default="入参校验失败；请按工具 schema 修正后重试。"),
+        details={"fields": fields},
     ).to_envelope()
 
 
@@ -124,7 +126,7 @@ async def run_tool(container: Container, fn: Callable[[Any, Actor], Awaitable[An
             structured_content={
                 "error": {
                     "code": "INTERNAL_ERROR",
-                    "message": "服务器内部错误",
+                    "message": tr("errors.internal", default="服务器内部错误"),
                     "details": {},
                 }
             },

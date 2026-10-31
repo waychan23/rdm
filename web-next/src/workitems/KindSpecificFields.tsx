@@ -1,12 +1,13 @@
 import { Box, Stack } from "@atlaskit/primitives/compiled";
 import Select from "@atlaskit/select";
 import Textfield from "@atlaskit/textfield";
+import { useTranslation } from "react-i18next";
 
 import FormField from "../components/FormField";
 import MarkdownEditor from "../components/MarkdownEditor";
 import WorkItemPicker, { type WorkItemOption } from "../components/WorkItemPicker";
 import { portalMenuProps } from "../lib/portalMenu";
-import { SEVERITY_OPTIONS, TASK_TYPE_OPTIONS } from "./constants";
+import { severityOptions, taskTypeOptions } from "./constants";
 
 export interface IssueFields {
   severity: string;
@@ -49,9 +50,10 @@ export default function KindSpecificFields({
   taskTypeLocked = false,
   hideTaskType = false,
 }: Props) {
+  const { t } = useTranslation("workitems");
   if (kind === "story") {
     return (
-      <FormField label="验收标准（Markdown）">
+      <FormField label={t("kind.acceptance")}>
         <MarkdownEditor
           value={acceptance}
           onChange={onAcceptance}
@@ -65,18 +67,18 @@ export default function KindSpecificFields({
   if (kind === "issue") {
     return (
       <Stack space="space.150">
-        <FormField label="严重度" htmlFor="wi-severity">
+        <FormField label={t("kind.severity")} htmlFor="wi-severity">
           <Select
             {...portalMenuProps}
             inputId="wi-severity"
-            options={SEVERITY_OPTIONS}
-            value={SEVERITY_OPTIONS.find((o) => o.value === issue.severity)}
+            options={severityOptions()}
+            value={severityOptions().find((o) => o.value === issue.severity)}
             onChange={(opt) =>
               opt && onIssue({ ...issue, severity: (opt as { value: string }).value })
             }
           />
         </FormField>
-        <FormField label="环境" htmlFor="wi-environment">
+        <FormField label={t("kind.environment")} htmlFor="wi-environment">
           <Textfield
             id="wi-environment"
             value={issue.environment}
@@ -84,17 +86,17 @@ export default function KindSpecificFields({
             onChange={(e) => onIssue({ ...issue, environment: e.currentTarget.value })}
           />
         </FormField>
-        <FormField label="来源 story">
+        <FormField label={t("kind.sourceStory")}>
           <WorkItemPicker
             projectKey={projectKey}
             allowedKinds={["story"]}
             value={issue.sourceStory}
             onChange={(option) => onIssue({ ...issue, sourceStory: option })}
-            placeholder="选择来源 story（可清除）"
+            placeholder={t("kind.sourceStoryPlaceholder")}
             testId="wi-source-story"
           />
         </FormField>
-        <FormField label="复现步骤（Markdown）">
+        <FormField label={t("kind.repro")}>
           <MarkdownEditor
             value={issue.repro}
             onChange={(v) => onIssue({ ...issue, repro: v })}
@@ -103,7 +105,7 @@ export default function KindSpecificFields({
             testId="wi-repro"
           />
         </FormField>
-        <FormField label="期望行为（Markdown）">
+        <FormField label={t("kind.expected")}>
           <MarkdownEditor
             value={issue.expected}
             onChange={(v) => onIssue({ ...issue, expected: v })}
@@ -112,7 +114,7 @@ export default function KindSpecificFields({
             testId="wi-expected"
           />
         </FormField>
-        <FormField label="实际行为（Markdown）">
+        <FormField label={t("kind.actual")}>
           <MarkdownEditor
             value={issue.actual}
             onChange={(v) => onIssue({ ...issue, actual: v })}
@@ -128,12 +130,12 @@ export default function KindSpecificFields({
     return (
       <Stack space="space.150">
         {!hideTaskType && (
-          <FormField label="任务类型" htmlFor="wi-task-type">
+          <FormField label={t("kind.taskType")} htmlFor="wi-task-type">
             <Select
               {...portalMenuProps}
               inputId="wi-task-type"
-              options={TASK_TYPE_OPTIONS}
-              value={TASK_TYPE_OPTIONS.find((o) => o.value === task.task_type)}
+              options={taskTypeOptions()}
+              value={taskTypeOptions().find((o) => o.value === task.task_type)}
               isDisabled={taskTypeLocked}
               onChange={(opt) =>
                 opt && onTask({ ...task, task_type: (opt as { value: string }).value })
@@ -141,7 +143,7 @@ export default function KindSpecificFields({
             />
           </FormField>
         )}
-        <FormField label="预估工时（h）" htmlFor="wi-est-hours">
+        <FormField label={t("kind.estHours")} htmlFor="wi-est-hours">
           <Textfield
             id="wi-est-hours"
             type="number"

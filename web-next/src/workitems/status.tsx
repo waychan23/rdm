@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import Lozenge from "@atlaskit/lozenge";
+import { useTranslation } from "react-i18next";
 import type { NewLozengeProps } from "@atlaskit/lozenge";
 
 import { statusLabel } from "../lib/labels";
@@ -34,6 +35,7 @@ export default function StatusLozenge({
   status: string;
   children?: ReactNode;
 }) {
+  useTranslation("labels");
   return (
     <Lozenge
       appearance={APPEARANCE[statusTone(status)]}

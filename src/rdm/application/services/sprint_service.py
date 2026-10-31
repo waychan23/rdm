@@ -23,6 +23,7 @@ from rdm.domain.errors import NotFound, SprintActiveExists, ValidationError
 from rdm.domain.events import EventType
 from rdm.domain.workflow.engine import GateContext, GateSprintItem
 from rdm.domain.workflow.loader import load_engine
+from rdm.i18n import tr
 from rdm.infrastructure.db.errors import translate_integrity
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
@@ -39,7 +40,10 @@ class SprintService:
         assert self.uow.sprints is not None and self.uow.projects is not None
         sprint = await self.uow.sprints.get(sprint_id)
         if sprint is None:
-            raise NotFound(f"Sprint {sprint_id} 不存在", details={"sprint_id": sprint_id})
+            raise NotFound(
+                tr("sprint.not_found", default="Sprint {id} 不存在", id=sprint_id),
+                details={"sprint_id": sprint_id},
+            )
         security.assert_project_access(actor, sprint.project_id)
         project = await self.uow.projects.get(sprint.project_id)
         assert project is not None
@@ -54,7 +58,11 @@ class SprintService:
             status = status.upper()
             if status not in {s.value for s in SprintStatus}:
                 raise ValidationError(
-                    f"sprint status 必须是 PLANNED/ACTIVE/CLOSED，收到 {status!r}",
+                    tr(
+                        "sprint.status_invalid",
+                        default="sprint status 必须是 PLANNED/ACTIVE/CLOSED，收到 {status!r}",
+                        status=status,
+                    ),
                     details={"field": "status"},
                 )
         sprints = await self.uow.sprints.list(project.id, status=status)
@@ -67,7 +75,9 @@ class SprintService:
         security.require_sprint_manager(actor, project.id)
         name = (data.get("name") or "").strip()
         if not name:
-            raise ValidationError("name 必填", details={"field": "name"})
+            raise ValidationError(
+                tr("sprint.name_required", default="name 必填"), details={"field": "name"}
+            )
         manager_id = None
         if data.get("manager_user_id"):
             manager_id = (await self.items.resolve_member(project.id, data["manager_user_id"])).id
@@ -104,7 +114,11 @@ class SprintService:
         security.require_sprint_manager(actor, project.id)
         if sprint.status == SprintStatus.CLOSED:
             raise ValidationError(
-                f"Sprint {sprint.name} 已关闭，不能修改字段",
+                tr(
+                    "sprint.closed_no_edit",
+                    default="Sprint {name} 已关闭，不能修改字段",
+                    name=sprint.name,
+                ),
                 details={"sprint_id": sprint.id, "status": str(sprint.status)},
             )
         changes: dict[str, list[Any]] = {}
@@ -118,7 +132,9 @@ class SprintService:
         if "name" in data:
             name = (data["name"] or "").strip()
             if not name:
-                raise ValidationError("name 不能为空", details={"field": "name"})
+                raise ValidationError(
+                    tr("sprint.name_empty", default="name 不能为空"), details={"field": "name"}
+                )
             track("name", name)
         if "goal_md" in data:
             track("goal_md", data["goal_md"])
@@ -162,7 +178,11 @@ class SprintService:
         )
         if sprint.status == SprintStatus.CLOSED:
             raise ValidationError(
-                f"Sprint {sprint.name} 已关闭，不能再加入工作项",
+                tr(
+                    "sprint.closed_no_add",
+                    default="Sprint {name} 已关闭，不能再加入工作项",
+                    name=sprint.name,
+                ),
                 details={"sprint_id": sprint.id, "status": str(sprint.status)},
             )
         added: list[WorkItem] = []
@@ -172,27 +192,49 @@ class SprintService:
             item = await self.items.resolve_item(actor, ref)
             if item.kind not in _SPRINT_ITEM_KINDS:
                 raise ValidationError(
-                    f"只有 story/issue/task 可入 Sprint，"
-                    f"{project.key}-{item.display_no} 是 {item.kind}",
+                    tr(
+                        "sprint.kind_invalid",
+                        default="只有 story/issue/task 可入 Sprint，{display_id} 是 {kind}",
+                        display_id=f"{project.key}-{item.display_no}",
+                        kind=item.kind,
+                    ),
                     details={"work_item_id": item.id, "kind": item.kind},
                 )
             if engine.is_terminal(item.kind, item.status):
                 raise ValidationError(
-                    f"{project.key}-{item.display_no} 已终态（{item.status}），不能加入 Sprint",
+                    tr(
+                        "sprint.item_terminal",
+                        default="{display_id} 已终态（{status}），不能加入 Sprint",
+                        display_id=f"{project.key}-{item.display_no}",
+                        status=item.status,
+                    ),
                     details={"work_item_id": item.id, "status": item.status},
                 )
             existing = await self.uow.sprint_items.active_link_for_item(item.id)
             if existing is not None:
                 if existing.sprint_id == sprint.id:
                     raise ValidationError(
-                        f"{project.key}-{item.display_no} 已在 Sprint {sprint.name} 中",
+                        tr(
+                            "sprint.item_already_in_this",
+                            default="{display_id} 已在 Sprint {name} 中",
+                            display_id=f"{project.key}-{item.display_no}",
+                            name=sprint.name,
+                        ),
                         details={"work_item_id": item.id, "sprint_id": sprint.id},
                     )
                 other = await self.uow.sprints.get(existing.sprint_id)
                 other_name = other.name if other is not None else existing.sprint_id
                 raise ValidationError(
-                    f"{project.key}-{item.display_no} 已在 Sprint「{other_name}」中，"
-                    "一个工作项同一时间只能属于一个 Sprint；请先从原 Sprint 移除",
+                    tr(
+                        "sprint.item_in_other",
+                        default=(
+                            "{display_id} 已在 Sprint「{name}」中，"
+                            "一个工作项同一时间只能属于一个 Sprint；"
+                            "请先从原 Sprint 移除"
+                        ),
+                        display_id=f"{project.key}-{item.display_no}",
+                        name=other_name,
+                    ),
                     details={
                         "work_item_id": item.id,
                         "sprint_id": existing.sprint_id,
@@ -230,7 +272,12 @@ class SprintService:
         removed = await self.uow.sprint_items.remove(sprint.id, item.id, actor.id)
         if not removed:
             raise NotFound(
-                f"{project.key}-{item.display_no} 不在 Sprint {sprint.name} 中",
+                tr(
+                    "sprint.item_not_in",
+                    default="{display_id} 不在 Sprint {name} 中",
+                    display_id=f"{project.key}-{item.display_no}",
+                    name=sprint.name,
+                ),
                 details={"sprint_id": sprint.id, "work_item_id": item.id},
             )
         await self._event(
@@ -252,7 +299,12 @@ class SprintService:
         active = await self.uow.sprints.active_for_project(project.id)
         if active is not None and active.id != sprint.id:
             raise SprintActiveExists(
-                f"项目 {project.key} 已有 ACTIVE Sprint「{active.name}」，请先关闭它。",
+                tr(
+                    "sprint.active_exists",
+                    default="项目 {project} 已有 ACTIVE Sprint「{name}」，请先关闭它。",
+                    project=project.key,
+                    name=active.name,
+                ),
                 details={"active_sprint_id": active.id, "active_sprint_name": active.name},
             )
         sprint.status = SprintStatus.ACTIVE

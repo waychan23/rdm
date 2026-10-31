@@ -17,6 +17,7 @@ import SectionMessage from "@atlaskit/section-message";
 import Spinner from "@atlaskit/spinner";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
+import { useTranslation } from "react-i18next";
 
 import ErrorState from "../components/ErrorState";
 
@@ -48,6 +49,7 @@ const styles = cssMap({
 });
 
 export default function OrgUsersPage() {
+  const { t } = useTranslation("org");
   const notify = useNotify();
   const navigate = useNavigate();
   const me = useCurrentUser();
@@ -92,14 +94,14 @@ export default function OrgUsersPage() {
       setEmail("");
       reload();
     } catch (e) {
-      notify.error("创建失败", errorCause(e)?.message);
+      notify.error(t("users.errors.createFailed"), errorCause(e)?.message);
     }
   };
 
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      notify.success("链接已复制");
+      notify.success(t("users.notices.linkCopied"));
     } catch {
       // clipboard may be unavailable; the link stays visible in the dialog
     }
@@ -116,7 +118,7 @@ export default function OrgUsersPage() {
       setResetUrl(url);
       void copy(url);
     } catch (e) {
-      notify.error("生成链接失败", errorCause(e)?.message);
+      notify.error(t("users.errors.resetLinkFailed"), errorCause(e)?.message);
     }
   };
 
@@ -125,7 +127,7 @@ export default function OrgUsersPage() {
       await api.post(`/users/${user.id}/${active ? "enable" : "disable"}`);
       reload();
     } catch (e) {
-      notify.error("操作失败", errorCause(e)?.message);
+      notify.error(t("users.errors.actionFailed"), errorCause(e)?.message);
     }
   };
 
@@ -143,9 +145,9 @@ export default function OrgUsersPage() {
     try {
       await api.post(`/users/${confirmRevoke.id}/tokens/revoke-all`);
       setConfirmRevoke(null);
-      notify.success("令牌已撤销");
+      notify.success(t("users.notices.tokensRevoked"));
     } catch (e) {
-      notify.error("撤销失败", errorCause(e)?.message);
+      notify.error(t("users.errors.revokeFailed"), errorCause(e)?.message);
     }
   };
 
@@ -161,9 +163,9 @@ export default function OrgUsersPage() {
       await api.put(`/users/${rolesTarget.id}/org-roles`, { roles });
       setRolesTarget(null);
       reload();
-      notify.success("保存成功");
+      notify.success(t("users.notices.saved"));
     } catch (e) {
-      notify.error("保存失败", errorCause(e)?.message);
+      notify.error(t("users.errors.saveFailed"), errorCause(e)?.message);
     }
   };
 
@@ -173,20 +175,20 @@ export default function OrgUsersPage() {
     try {
       await api.post("/org/transfer-owner", { user_id: confirmTransfer.id });
       setConfirmTransfer(null);
-      notify.success("已转让 Org Owner");
+      notify.success(t("users.notices.ownerTransferred"));
       // The caller just lost org_owner; refresh the identity store and leave
       // the org-admin page instead of waiting for the next request to 403.
       await refreshSession();
       navigate("/projects");
     } catch (e) {
-      notify.error("转让失败", errorCause(e)?.message);
+      notify.error(t("users.errors.transferFailed"), errorCause(e)?.message);
     }
   };
 
   return (
     <Page testId="page-org-users">
       <PageHeader
-        title="组织用户"
+        title={t("users.title")}
         testId="org-users-header"
         actions={
           <Button
@@ -194,7 +196,7 @@ export default function OrgUsersPage() {
             testId="org-user-create-button"
             onClick={() => setCreateOpen(true)}
           >
-            创建用户
+            {t("users.createButton")}
           </Button>
         }
       />
@@ -208,27 +210,27 @@ export default function OrgUsersPage() {
       ) : humans.length === 0 ? (
         <Box testId="org-users-empty">
           <EmptyState
-            header="还没有人类用户"
-            description="点击右上角「创建用户」添加组织成员。"
+            header={t("users.emptyHeader")}
+            description={t("users.emptyDescription")}
           />
         </Box>
       ) : (
-        <table className="rdm-table" aria-label="组织用户" data-testid="org-user-table">
+        <table className="rdm-table" aria-label={t("users.tableAria")} data-testid="org-user-table">
           <thead>
             <tr>
               <th scope="col" className="col-name">
-                名称
+                {t("users.columns.name")}
               </th>
               <th scope="col" className="col-type">
-                类型
+                {t("users.columns.type")}
               </th>
-              <th scope="col">组织角色</th>
-              <th scope="col">Email</th>
+              <th scope="col">{t("users.columns.roles")}</th>
+              <th scope="col">{t("users.columns.email")}</th>
               <th scope="col" className="col-active">
-                状态
+                {t("users.columns.status")}
               </th>
               <th scope="col" className="col-actions-wide">
-                操作
+                {t("users.columns.actions")}
               </th>
             </tr>
           </thead>
@@ -258,15 +260,15 @@ export default function OrgUsersPage() {
           <ModalDialog
             onClose={() => setCreateOpen(false)}
             width="520px"
-            label="创建用户"
+            label={t("createUser.dialogLabel")}
             testId="org-user-create-dialog"
           >
             <ModalHeader>
-              <ModalTitle>创建人类用户</ModalTitle>
+              <ModalTitle>{t("createUser.title")}</ModalTitle>
             </ModalHeader>
             <ModalBody>
               <Stack space="space.150">
-                <FormField label="用户名（登录名，组织内唯一）" htmlFor="new-user-name">
+                <FormField label={t("createUser.nameLabel")} htmlFor="new-user-name">
                   <Textfield
                     id="new-user-name"
                     value={name}
@@ -274,7 +276,7 @@ export default function OrgUsersPage() {
                     onChange={(e) => setName(e.currentTarget.value)}
                   />
                 </FormField>
-                <FormField label="Email（可选，仅通知）" htmlFor="new-user-email">
+                <FormField label={t("createUser.emailLabel")} htmlFor="new-user-email">
                   <Textfield
                     id="new-user-email"
                     value={email}
@@ -283,7 +285,7 @@ export default function OrgUsersPage() {
                   />
                 </FormField>
                 {createdUrl && (
-                  <SectionMessage appearance="success" title="一次性设置密码链接（24 小时）">
+                  <SectionMessage appearance="success" title={t("createUser.linkTitle")}>
                     <Stack space="space.100">
                       <code style={{ wordBreak: "break-all" }}>{createdUrl}</code>
                       <Inline>
@@ -292,11 +294,11 @@ export default function OrgUsersPage() {
                           testId="org-user-created-url-copy"
                           onClick={() => void copy(createdUrl)}
                         >
-                          复制
+                          {t("createUser.copy")}
                         </Button>
                       </Inline>
                       <Text size="small">
-                        请通过可信渠道发给该用户；链接只能使用一次。
+                        {t("createUser.linkHint")}
                       </Text>
                     </Stack>
                   </SectionMessage>
@@ -309,7 +311,7 @@ export default function OrgUsersPage() {
                 testId="org-user-create-cancel"
                 onClick={() => setCreateOpen(false)}
               >
-                关闭
+                {t("createUser.close")}
               </Button>
               <Button
                 appearance="primary"
@@ -317,7 +319,7 @@ export default function OrgUsersPage() {
                 onClick={createHuman}
                 isDisabled={!name.trim()}
               >
-                创建
+                {t("createUser.create")}
               </Button>
             </ModalFooter>
           </ModalDialog>
@@ -328,16 +330,16 @@ export default function OrgUsersPage() {
         {rolesTarget && (
           <ModalDialog
             onClose={() => setRolesTarget(null)}
-            label="组织角色"
+            label={t("rolesDialog.dialogLabel")}
             testId="org-user-roles-dialog"
           >
             <ModalHeader>
-              <ModalTitle>组织角色 · {rolesTarget.name}</ModalTitle>
+              <ModalTitle>{t("rolesDialog.title", { name: rolesTarget.name })}</ModalTitle>
             </ModalHeader>
             <ModalBody>
               <Stack space="space.100">
                 <Checkbox
-                  label={`${roleLabel("user_manager")}（管理用户）`}
+                  label={t("rolesDialog.userManager", { role: roleLabel("user_manager") })}
                   isChecked={roles.includes("user_manager")}
                   testId="org-user-role-user-manager"
                   onChange={(e) =>
@@ -349,7 +351,9 @@ export default function OrgUsersPage() {
                   }
                 />
                 <Checkbox
-                  label={`${roleLabel("project_director")}（创建项目、改派项目经理）`}
+                  label={t("rolesDialog.projectDirector", {
+                    role: roleLabel("project_director"),
+                  })}
                   isChecked={roles.includes("project_director")}
                   testId="org-user-role-project-director"
                   onChange={(e) =>
@@ -368,14 +372,14 @@ export default function OrgUsersPage() {
                 testId="org-user-roles-cancel"
                 onClick={() => setRolesTarget(null)}
               >
-                取消
+                {t("rolesDialog.cancel")}
               </Button>
               <Button
                 appearance="primary"
                 testId="org-user-roles-save"
                 onClick={saveRoles}
               >
-                保存
+                {t("rolesDialog.save")}
               </Button>
             </ModalFooter>
           </ModalDialog>
@@ -386,14 +390,14 @@ export default function OrgUsersPage() {
         {resetUrl && (
           <ModalDialog
             onClose={() => setResetUrl("")}
-            label="密码重置链接"
+            label={t("resetDialog.dialogLabel")}
             testId="org-user-reset-dialog"
           >
             <ModalHeader>
-              <ModalTitle>密码重置链接</ModalTitle>
+              <ModalTitle>{t("resetDialog.title")}</ModalTitle>
             </ModalHeader>
             <ModalBody>
-              <SectionMessage appearance="information" title="一次性链接（24 小时）">
+              <SectionMessage appearance="information" title={t("resetDialog.linkTitle")}>
                 <code style={{ wordBreak: "break-all" }}>{resetUrl}</code>
               </SectionMessage>
             </ModalBody>
@@ -403,14 +407,14 @@ export default function OrgUsersPage() {
                 testId="org-user-reset-copy"
                 onClick={() => void copy(resetUrl)}
               >
-                复制链接
+                {t("resetDialog.copy")}
               </Button>
               <Button
                 appearance="primary"
                 testId="org-user-reset-close"
                 onClick={() => setResetUrl("")}
               >
-                关闭
+                {t("resetDialog.close")}
               </Button>
             </ModalFooter>
           </ModalDialog>
@@ -419,38 +423,38 @@ export default function OrgUsersPage() {
 
       <ConfirmDialog
         open={confirmRevoke !== null}
-        title="撤销访问令牌"
+        title={t("revokeDialog.title")}
         danger
-        confirmLabel="撤销"
+        confirmLabel={t("revokeDialog.confirm")}
         testId="org-user-revoke-dialog"
         onClose={() => setConfirmRevoke(null)}
         onConfirm={() => void revokeAll()}
       >
-        撤销 {confirmRevoke?.name} 及其 agent 的全部访问令牌？该操作不可恢复。
+        {t("revokeDialog.body", { name: confirmRevoke?.name ?? "—" })}
       </ConfirmDialog>
 
       <ConfirmDialog
         open={disableTarget !== null}
-        title="停用用户"
-        confirmLabel="停用"
+        title={t("disableDialog.title")}
+        confirmLabel={t("disableDialog.confirm")}
         danger
         testId="org-user-disable-dialog"
         onClose={() => setDisableTarget(null)}
         onConfirm={() => void disableUser()}
       >
-        停用 {disableTarget?.name}？该用户将无法登录，现有令牌会被撤销。若其担任项目经理，项目需要由 Org Owner 或 project-director 另行转让。
+        {t("disableDialog.body", { name: disableTarget?.name ?? "—" })}
       </ConfirmDialog>
 
       <ConfirmDialog
         open={confirmTransfer !== null}
-        title="转让 Org Owner"
+        title={t("transferDialog.title")}
         danger
-        confirmLabel="转让"
+        confirmLabel={t("transferDialog.confirm")}
         testId="org-user-transfer-dialog"
         onClose={() => setConfirmTransfer(null)}
         onConfirm={() => void transferOwner()}
       >
-        把 Org Owner 转让给 {confirmTransfer?.name}？你将失去超级管理员权限。
+        {t("transferDialog.body", { name: confirmTransfer?.name ?? "—" })}
       </ConfirmDialog>
     </Page>
   );
@@ -475,6 +479,7 @@ function HumanGroup({
   onRoles: () => void;
   onTransferOwner: () => void;
 }) {
+  const { t } = useTranslation("org");
   const orgOwner = human.org_roles.includes("org_owner");
   return (
     <>
@@ -503,7 +508,7 @@ function HumanGroup({
         <td className="cell-meta">{human.email ?? "—"}</td>
         <td>
           <Lozenge appearance={human.is_active ? "success" : "default"}>
-            {human.is_active ? "启用" : "停用"}
+            {human.is_active ? t("users.status.enabled") : t("users.status.disabled")}
           </Lozenge>
         </td>
         <td>
@@ -515,7 +520,7 @@ function HumanGroup({
                   testId={`org-user-reset-${human.id}`}
                   onClick={onReset}
                 >
-                  重置链接
+                  {t("users.actions.resetLink")}
                 </Button>
                 <Button
                   spacing="compact"
@@ -523,7 +528,7 @@ function HumanGroup({
                   testId={`org-user-toggle-${human.id}`}
                   onClick={onToggle}
                 >
-                  {human.is_active ? "停用" : "启用"}
+                  {human.is_active ? t("users.actions.disable") : t("users.actions.enable")}
                 </Button>
                 <Button
                   spacing="compact"
@@ -531,7 +536,7 @@ function HumanGroup({
                   testId={`org-user-revoke-${human.id}`}
                   onClick={onRevoke}
                 >
-                  撤销令牌
+                  {t("users.actions.revoke")}
                 </Button>
               </>
             )}
@@ -543,7 +548,7 @@ function HumanGroup({
                   testId={`org-user-roles-${human.id}`}
                   onClick={onRoles}
                 >
-                  组织角色
+                  {t("users.actions.roles")}
                 </Button>
                 <Button
                   spacing="compact"
@@ -551,7 +556,7 @@ function HumanGroup({
                   testId={`org-user-transfer-${human.id}`}
                   onClick={onTransferOwner}
                 >
-                  设为 Owner
+                  {t("users.actions.makeOwner")}
                 </Button>
               </>
             )}
@@ -573,12 +578,12 @@ function HumanGroup({
           </td>
           <td colSpan={2}>
             <Text size="small" color="color.text.subtlest">
-              由其 human 在「我的设置」中管理
+              {t("users.agentHint")}
             </Text>
           </td>
           <td>
             <Lozenge appearance={a.effective_active ? "success" : "default"}>
-              {a.effective_active ? "生效" : "停用"}
+              {a.effective_active ? t("users.status.effective") : t("users.status.disabled")}
             </Lozenge>
           </td>
           <td />

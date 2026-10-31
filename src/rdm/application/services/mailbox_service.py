@@ -37,6 +37,7 @@ from rdm.domain.enums import MailboxKind, RecipientType
 from rdm.domain.errors import NotFound, ValidationError
 from rdm.domain.events import EventType
 from rdm.domain.timefmt import iso_utc
+from rdm.i18n import tr
 from rdm.infrastructure.db.errors import translate_integrity
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
@@ -92,10 +93,15 @@ class MailboxService:
         project = await self.items.resolve_project(actor, project_key)
         name = (name or "").strip()
         if not name:
-            raise ValidationError("name 必填", details={"field": "name"})
+            raise ValidationError(
+                tr("mailbox.name_required", default="name 必填"), details={"field": "name"}
+            )
         assert self.uow.mailboxes is not None
         if await self.uow.mailboxes.get_group_by_name(project.id, name) is not None:
-            raise ValidationError(f"group 信箱 {name!r} 已存在", details={"field": "name"})
+            raise ValidationError(
+                tr("mailbox.group_exists", default="group 信箱 {name!r} 已存在", name=name),
+                details={"field": "name"},
+            )
         memberships = MembershipService(self.uow)
         users = [await memberships.resolve_user(project.id, ref) for ref in member_refs]
         mailbox = Mailbox(
@@ -151,13 +157,20 @@ class MailboxService:
         subject = (subject or "").strip()
         body_md = (body_md or "").strip()
         if not subject:
-            raise ValidationError("subject 必填", details={"field": "subject"})
+            raise ValidationError(
+                tr("mailbox.subject_required", default="subject 必填"), details={"field": "subject"}
+            )
         if not body_md:
-            raise ValidationError("body_md 必填", details={"field": "body_md"})
+            raise ValidationError(
+                tr("comment.body_required", default="body_md 必填"), details={"field": "body_md"}
+            )
 
         recipients = await self._resolve_recipients(project.id, to, cc)
         if not recipients:
-            raise ValidationError("至少需要一个收件人", details={"field": "to"})
+            raise ValidationError(
+                tr("mailbox.recipient_required", default="至少需要一个收件人"),
+                details={"field": "to"},
+            )
 
         ref_items = [await self.items.resolve_item(actor, ref) for ref in refs] if refs else []
         thread_id: str | None = None
@@ -165,7 +178,10 @@ class MailboxService:
             assert self.uow.messages is not None
             parent = await self.uow.messages.get_message(reply_to)
             if parent is None or parent.project_id != project.id:
-                raise NotFound(f"reply_to 消息 {reply_to} 不存在", details={"message_id": reply_to})
+                raise NotFound(
+                    tr("mailbox.reply_not_found", default="reply_to 消息 {id} 不存在", id=reply_to),
+                    details={"message_id": reply_to},
+                )
             thread_id = parent.thread_id or parent.id
 
         message, deliveries = await self._fan_out(
@@ -257,7 +273,15 @@ class MailboxService:
             group = await self.uow.mailboxes.get_group_by_name(project_id, token)
             if group is None:
                 raise NotFound(
-                    f"收件人 {token!r} 既不是项目成员也不是 group 信箱；请先确认名字，不要猜。",
+                    tr(
+                        "mailbox.recipient_not_found",
+                        default=(
+                            "收件人 {token!r} 既不是项目成"
+                            "员也不是 group 信箱；请先确认"
+                            "名字，不要猜。"
+                        ),
+                        token=token,
+                    ),
                     details={"ref": token},
                 )
             for link in await self.uow.mailboxes.list_members(group.id):
@@ -268,7 +292,10 @@ class MailboxService:
         assert self.uow.users is not None and self.uow.memberships is not None
         user = await self.uow.users.get(user_id)
         if user is None or await self.uow.memberships.get(project_id, user_id) is None:
-            raise NotFound(f"用户 {user_id} 不在项目内", details={"user_id": user_id})
+            raise NotFound(
+                tr("mailbox.user_not_in_project", default="用户 {id} 不在项目内", id=user_id),
+                details={"user_id": user_id},
+            )
         return user
 
     # --- inbox ------------------------------------------------------------
@@ -303,12 +330,21 @@ class MailboxService:
         identity_ids = await self._mailbox_identity_ids(actor, include_agents=include_agents)
         if identity is not None:
             if identity not in identity_ids:
-                raise NotFound("信箱身份不存在或无权查看", details={"user_id": identity})
+                raise NotFound(
+                    tr("mailbox.identity_not_found", default="信箱身份不存在或无权查看"),
+                    details={"user_id": identity},
+                )
             identity_ids = [identity]
         if folder not in {"inbox", "archived", "sent"}:
-            raise ValidationError(f"未知信箱分类 {folder!r}", details={"field": "folder"})
+            raise ValidationError(
+                tr("mailbox.unknown_folder", default="未知信箱分类 {folder!r}", folder=folder),
+                details={"field": "folder"},
+            )
         if order not in {"asc", "desc"}:
-            raise ValidationError(f"未知排序 {order!r}", details={"field": "order"})
+            raise ValidationError(
+                tr("mailbox.unknown_order", default="未知排序 {order!r}", order=order),
+                details={"field": "order"},
+            )
         if folder == "sent":
             return await self._check_sent(
                 project_ids,

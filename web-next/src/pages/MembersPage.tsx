@@ -7,6 +7,7 @@ import EmptyState from "@atlaskit/empty-state";
 import Lozenge from "@atlaskit/lozenge";
 import Spinner from "@atlaskit/spinner";
 import { Box, Inline, Text } from "@atlaskit/primitives/compiled";
+import { useTranslation } from "react-i18next";
 
 import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
@@ -28,6 +29,7 @@ const styles = cssMap({
 });
 
 function AgentRow({ agent }: { agent: NonNullable<ProjectMemberRow["agents"]>[number] }) {
+  const { t } = useTranslation("members");
   return (
     <tr className="rdm-table-child" data-testid={`member-agent-row-${agent.user.id}`}>
       <td>
@@ -36,9 +38,9 @@ function AgentRow({ agent }: { agent: NonNullable<ProjectMemberRow["agents"]>[nu
             ↳
           </span>
           <Text size="small">{agent.user.name}</Text>
-          <Lozenge appearance="default">自动</Lozenge>
+          <Lozenge appearance="default">{t("agent.auto")}</Lozenge>
           {!agent.user.effective_active && (
-            <Lozenge appearance="default">已停用</Lozenge>
+            <Lozenge appearance="default">{t("agent.disabled")}</Lozenge>
           )}
         </Inline>
       </td>
@@ -47,7 +49,7 @@ function AgentRow({ agent }: { agent: NonNullable<ProjectMemberRow["agents"]>[nu
       </td>
       <td>
         <Text size="small" color="color.text.subtlest">
-          继承其 human 的项目权限
+          {t("agent.inherited")}
         </Text>
       </td>
       <td>
@@ -57,7 +59,7 @@ function AgentRow({ agent }: { agent: NonNullable<ProjectMemberRow["agents"]>[nu
       </td>
       <td>
         <Lozenge appearance={agent.user.effective_active ? "success" : "default"}>
-          {agent.user.effective_active ? "启用" : "停用"}
+          {agent.user.effective_active ? t("agent.status.enabled") : t("agent.status.disabled")}
         </Lozenge>
       </td>
       <td />
@@ -66,6 +68,7 @@ function AgentRow({ agent }: { agent: NonNullable<ProjectMemberRow["agents"]>[nu
 }
 
 export default function MembersPage() {
+  const { t } = useTranslation("members");
   const { key: projectKey = "" } = useParams();
   const notify = useNotify();
 
@@ -102,7 +105,7 @@ export default function MembersPage() {
       setShowAdd(false);
       reload();
     } catch (e) {
-      notify.error("添加失败", errorCause(e)?.message);
+      notify.error(t("errors.addFailed"), errorCause(e)?.message);
     }
   };
 
@@ -111,9 +114,9 @@ export default function MembersPage() {
       await api.patch(`/projects/${projectKey}/members/${userId}`, { roles });
       setEditMember(null);
       reload();
-      notify.success("保存成功");
+      notify.success(t("notices.saved"));
     } catch (e) {
-      notify.error("保存失败", errorCause(e)?.message);
+      notify.error(t("errors.saveFailed"), errorCause(e)?.message);
     }
   };
 
@@ -124,23 +127,23 @@ export default function MembersPage() {
       setRemoveTarget(null);
       reload();
     } catch (e) {
-      notify.error("移除失败", errorCause(e)?.message);
+      notify.error(t("errors.removeFailed"), errorCause(e)?.message);
     }
   };
 
   const removeExtra =
     removeTarget?.agents && removeTarget.agents.length > 0
-      ? `其 ${removeTarget.agents.length} 个 agent 也会随同移出项目。`
+      ? t("removeDialog.extra", { count: removeTarget.agents.length })
       : "";
 
   return (
     <Page testId="page-members">
       <PageHeader
-        title={`成员 · ${projectKey}`}
+        title={t("page.title", { projectKey })}
         testId="members-header"
         actions={
           <Button appearance="primary" testId="member-add-button" onClick={() => setShowAdd(true)}>
-            添加成员
+            {t("page.addMember")}
           </Button>
         }
       />
@@ -154,27 +157,27 @@ export default function MembersPage() {
       ) : (members ?? []).length === 0 ? (
         <Box testId="members-empty">
           <EmptyState
-            header="项目还没有成员"
-            description="点击右上角「添加成员」把组织内的用户加入项目。"
+            header={t("empty.header")}
+            description={t("empty.description")}
           />
         </Box>
       ) : (
-        <table className="rdm-table" aria-label="项目成员" data-testid="member-table">
+        <table className="rdm-table" aria-label={t("table.aria")} data-testid="member-table">
           <thead>
             <tr>
               <th scope="col" className="col-name">
-                名称
+                {t("table.name")}
               </th>
               <th scope="col" className="col-type">
-                类型
+                {t("table.type")}
               </th>
-              <th scope="col">项目角色</th>
-              <th scope="col">Webhook</th>
+              <th scope="col">{t("table.roles")}</th>
+              <th scope="col">{t("table.webhook")}</th>
               <th scope="col" className="col-active">
-                活跃
+                {t("table.active")}
               </th>
               <th scope="col" className="col-actions">
-                操作
+                {t("table.actions")}
               </th>
             </tr>
           </thead>
@@ -207,14 +210,17 @@ export default function MembersPage() {
       />
       <ConfirmDialog
         open={removeTarget !== null}
-        title="移出项目"
+        title={t("removeDialog.title")}
         danger
-        confirmLabel="移出"
+        confirmLabel={t("removeDialog.confirm")}
         testId="member-remove-dialog"
         onClose={() => setRemoveTarget(null)}
         onConfirm={() => void remove()}
       >
-        确定把 {removeTarget?.name} 移出项目？{removeExtra}
+        {t("removeDialog.body", {
+          name: removeTarget?.name ?? "—",
+          extra: removeExtra,
+        })}
       </ConfirmDialog>
     </Page>
   );
@@ -231,14 +237,15 @@ function MemberGroup({
   onEdit: () => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation("members");
   return (
     <>
       <tr data-testid={`member-row-${member.id}`}>
         <td>
           <Inline space="space.100" alignBlock="center">
             <Text weight="medium">{member.name}</Text>
-            {isOwner && <Lozenge appearance="inprogress">项目经理</Lozenge>}
-            {!member.is_active && <Lozenge appearance="default">已停用</Lozenge>}
+            {isOwner && <Lozenge appearance="inprogress">{t("ownerBadge")}</Lozenge>}
+            {!member.is_active && <Lozenge appearance="default">{t("agent.disabled")}</Lozenge>}
           </Inline>
         </td>
         <td>
@@ -267,13 +274,13 @@ function MemberGroup({
         </td>
         <td>
           <Lozenge appearance={member.is_active ? "success" : "default"}>
-            {member.is_active ? "启用" : "停用"}
+            {member.is_active ? t("member.status.enabled") : t("member.status.disabled")}
           </Lozenge>
         </td>
         <td>
           <Inline space="space.100">
             <Button spacing="compact" testId={`member-edit-${member.id}`} onClick={onEdit}>
-              角色
+              {t("member.roles")}
             </Button>
             <Button
               spacing="compact"
@@ -281,7 +288,7 @@ function MemberGroup({
               testId={`member-remove-${member.id}`}
               onClick={onRemove}
             >
-              移出
+              {t("member.remove")}
             </Button>
           </Inline>
         </td>

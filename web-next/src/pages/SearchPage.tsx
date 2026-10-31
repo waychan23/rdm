@@ -1,5 +1,6 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -13,6 +14,7 @@ import { cardBorder } from "../components/cardBorder";
 import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
 import { api } from "../lib/api";
+import { searchTypeLabel } from "../lib/labels";
 import { useAsync } from "../hooks/useAsync";
 import type { SearchHit } from "../types";
 
@@ -32,14 +34,8 @@ const styles = cssMap({
   },
 });
 
-const TYPE_LABEL: Record<string, string> = {
-  work_item: "工作项",
-  comment: "评论",
-  message: "信件",
-  artifact: "产出物",
-};
-
 export default function SearchPage() {
+  const { t } = useTranslation("projects");
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
@@ -59,11 +55,11 @@ export default function SearchPage() {
 
   return (
     <Page testId="page-search">
-      <PageHeader title="搜索" testId="search-header" />
+      <PageHeader title={t("search.title")} testId="search-header" />
       <Inline space="space.100" alignBlock="center" testId="search-bar">
         <Box style={{ width: 420 }}>
           <Textfield
-            placeholder="搜索工作项、评论、信件、产出物"
+            placeholder={t("search.placeholder")}
             value={draft}
             testId="search-input"
             autoFocus
@@ -74,13 +70,16 @@ export default function SearchPage() {
           />
         </Box>
         <Button appearance="primary" testId="search-submit" onClick={submit}>
-          搜索
+          {t("search.submit")}
         </Button>
       </Inline>
 
       {!q.trim() ? (
         <Box testId="search-hint">
-          <EmptyState header="输入关键词开始搜索" description="支持中文子串与多关键词。" />
+          <EmptyState
+            header={t("search.hint")}
+            description={t("search.hintDescription")}
+          />
         </Box>
       ) : state.error ? (
         <ErrorState error={state.error} onRetry={state.reload} testId="search-error" />
@@ -90,7 +89,10 @@ export default function SearchPage() {
         </Box>
       ) : (state.data?.length ?? 0) === 0 ? (
         <Box testId="search-empty">
-          <EmptyState header="没有匹配结果" description={`没有找到与「${q}」相关的内容。`} />
+          <EmptyState
+            header={t("search.empty")}
+            description={t("search.emptyDescription", { query: q })}
+          />
         </Box>
       ) : (
         <Stack space="space.100" testId="search-results">
@@ -112,7 +114,9 @@ export default function SearchPage() {
               }}
             >
               <Inline space="space.100" alignBlock="center" shouldWrap>
-                <Lozenge appearance="default">{TYPE_LABEL[hit.entity_type] ?? hit.entity_type}</Lozenge>
+                <Lozenge appearance="default">
+                  {searchTypeLabel(hit.entity_type)}
+                </Lozenge>
                 <Text weight="medium">{hit.title}</Text>
                 <Text color="color.text.subtlest" size="small">
                   {hit.project_key}

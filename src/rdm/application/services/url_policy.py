@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from rdm.domain.errors import ValidationError
+from rdm.i18n import tr
 
 _URL_RE = re.compile(r"^https?://\S{1,980}$", re.IGNORECASE)
 
@@ -13,7 +14,11 @@ def ensure_http_url(url: str, *, field: str = "url") -> str:
     url = (url or "").strip()
     if not _URL_RE.match(url):
         raise ValidationError(
-            f"{field} 必须是 http:// 或 https:// 开头的合法 URL",
+            tr(
+                "errors.invalid_url",
+                default="{field} 必须是 http:// 或 https:// 开头的合法 URL",
+                field=field,
+            ),
             details={"field": field, "url": url},
         )
     return url

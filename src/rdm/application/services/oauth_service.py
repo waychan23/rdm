@@ -32,6 +32,7 @@ from rdm.domain.entities import (
 )
 from rdm.domain.enums import TokenKind
 from rdm.domain.errors import Forbidden, NotFound, ValidationError
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
@@ -167,7 +168,10 @@ class OAuthService:
         assert self.uow.oauth_login_tickets is not None
         ticket = await self.uow.oauth_login_tickets.get_by_hash(hash_token(raw_key))
         if ticket is None or not ticket.is_usable:
-            raise ValidationError("登录会话已过期，请重新登录", details={"field": "auth_key"})
+            raise ValidationError(
+                tr("oauth.login_expired", default="登录会话已过期，请重新登录"),
+                details={"field": "auth_key"},
+            )
         return ticket
 
     async def consume_login_ticket(self, ticket: OAuthLoginTicket) -> None:
@@ -218,16 +222,25 @@ class OAuthService:
         assert self.uow.oauth_consents is not None
         consent = await self.uow.oauth_consents.get(consent_id)
         if consent is None:
-            raise NotFound("授权请求不存在或已过期", details={"consent_id": consent_id})
+            raise NotFound(
+                tr("oauth.request_not_found", default="授权请求不存在或已过期"),
+                details={"consent_id": consent_id},
+            )
         if consent.consent_key_hash != hash_token(raw_key):
             # The capability key is the only credential here (§17).
-            raise Forbidden("授权密钥无效", details={"consent_id": consent_id})
+            raise Forbidden(
+                tr("oauth.key_invalid", default="授权密钥无效"),
+                details={"consent_id": consent_id},
+            )
         if (
             consent.consumed_at is not None
             or consent.decided_at is not None
             or _as_utc(consent.expires_at) <= dt.datetime.now(dt.UTC)
         ):
-            raise ValidationError("授权请求已处理或已过期", details={"consent_id": consent_id})
+            raise ValidationError(
+                tr("oauth.request_handled", default="授权请求已处理或已过期"),
+                details={"consent_id": consent_id},
+            )
         return consent
 
     async def decide_consent(
@@ -246,10 +259,16 @@ class OAuthService:
 
         user_id = act_as_user_id or consent.authenticating_user_id
         if user_id not in consent.selectable_user_ids:
-            raise ValidationError("请选择可用的授权身份", details={"field": "act_as_user_id"})
+            raise ValidationError(
+                tr("oauth.identity_required", default="请选择可用的授权身份"),
+                details={"field": "act_as_user_id"},
+            )
         user = await self.uow.users.get(user_id)
         if user is None or not user.is_active:
-            raise ValidationError("授权身份不可用", details={"field": "act_as_user_id"})
+            raise ValidationError(
+                tr("oauth.identity_unavailable", default="授权身份不可用"),
+                details={"field": "act_as_user_id"},
+            )
 
         raw_code = await self._issue_code(
             client_id=consent.client_id,
@@ -392,11 +411,11 @@ class OAuthService:
         code = await self.uow.oauth_codes.get_by_hash(hash_token(raw_code))
         now = dt.datetime.now(dt.UTC)
         if code is None or code.client_id != client_id:
-            raise OAuthGrantError("invalid_grant", "授权码无效")
+            raise OAuthGrantError("invalid_grant", tr("oauth.code_invalid", default="授权码无效"))
         if code.consumed_at is not None:
-            raise OAuthGrantError("invalid_grant", "授权码已使用")
+            raise OAuthGrantError("invalid_grant", tr("oauth.code_used", default="授权码已使用"))
         if _as_utc(code.expires_at) <= now:
-            raise OAuthGrantError("invalid_grant", "授权码已过期")
+            raise OAuthGrantError("invalid_grant", tr("oauth.code_expired", default="授权码已过期"))
         await self.uow.oauth_codes.mark_consumed(code.id, now)
         issued = await self._issue_pair(
             client_id=client_id,
@@ -452,7 +471,10 @@ class OAuthService:
             return None, False
 
         if set(requested_scopes) - set(token.scopes):
-            raise OAuthGrantError("invalid_scope", "请求的 scope 超出授权范围")
+            raise OAuthGrantError(
+                "invalid_scope",
+                tr("oauth.scope_exceeded", default="请求的 scope 超出授权范围"),
+            )
 
         await self.uow.tokens.consume(token.id, now)
         if token.family_id:

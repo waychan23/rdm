@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -61,6 +62,7 @@ const styles = cssMap({
 const FORM_INITIAL = { key: "", name: "", description_md: "" };
 
 export default function ProjectsPage() {
+  const { t } = useTranslation("projects");
   const navigate = useNavigate();
   const notify = useNotify();
   const me = useCurrentUser();
@@ -85,7 +87,7 @@ export default function ProjectsPage() {
       setForm(FORM_INITIAL);
       reload();
     } catch (e) {
-      notify.error("创建失败", errorCause(e)?.message);
+      notify.error(t("list.createFailed"), errorCause(e)?.message);
     } finally {
       setSaving(false);
     }
@@ -94,7 +96,7 @@ export default function ProjectsPage() {
   return (
     <Page testId="page-projects">
       <PageHeader
-        title="项目"
+        title={t("list.title")}
         testId="projects-header"
         actions={
           canCreate ? (
@@ -103,7 +105,7 @@ export default function ProjectsPage() {
               testId="projects-create-button"
               onClick={() => setDialogOpen(true)}
             >
-              新建项目
+              {t("list.create")}
             </Button>
           ) : null
         }
@@ -114,17 +116,17 @@ export default function ProjectsPage() {
           <Spinner size="large" />
         </Box>
       ) : error ? (
-        <SectionMessage appearance="error" title="加载失败">
-          无法获取项目列表，请刷新页面重试。
+        <SectionMessage appearance="error" title={t("list.loadFailed")}>
+          {t("list.loadFailedDescription")}
         </SectionMessage>
       ) : (projects ?? []).length === 0 ? (
         <Box testId="projects-empty">
           <EmptyState
-            header="还没有可访问的项目"
+            header={t("list.empty")}
             description={
               canCreate
-                ? "点击右上角「新建项目」创建第一个项目；你会自动成为项目经理。"
-                : "请联系 Org Owner 或 project-director 创建项目，并把你加入成员。"
+                ? t("list.emptyCanCreate")
+                : t("list.emptyNoPermission")
             }
           />
         </Box>
@@ -153,10 +155,10 @@ export default function ProjectsPage() {
                     {p.key}
                   </Text>
                   <Lozenge appearance={p.status === "archived" ? "default" : "success"}>
-                    {p.status === "archived" ? "已归档" : "进行中"}
+                    {p.status === "archived" ? t("status.archived") : t("status.active")}
                   </Lozenge>
                   {p.owner_user_id === me?.user.id && (
-                    <Lozenge appearance="inprogress">项目经理</Lozenge>
+                    <Lozenge appearance="inprogress">{t("badge.projectManager")}</Lozenge>
                   )}
                 </Inline>
               </Stack>
@@ -169,12 +171,12 @@ export default function ProjectsPage() {
         {dialogOpen && (
           <ModalDialog onClose={() => setDialogOpen(false)} testId="project-create-dialog">
             <ModalHeader>
-              <ModalTitle>新建项目</ModalTitle>
+              <ModalTitle>{t("create.title")}</ModalTitle>
             </ModalHeader>
             <form onSubmit={create}>
               <ModalBody>
                 <Stack space="space.150">
-                  <FormField label="Key" htmlFor="project-key">
+                  <FormField label={t("create.key")} htmlFor="project-key">
                     <Textfield
                       id="project-key"
                       value={form.key}
@@ -183,7 +185,7 @@ export default function ProjectsPage() {
                       onChange={(e) => setForm({ ...form, key: e.currentTarget.value })}
                     />
                   </FormField>
-                  <FormField label="名称" htmlFor="project-name">
+                  <FormField label={t("create.name")} htmlFor="project-name">
                     <Textfield
                       id="project-name"
                       value={form.name}
@@ -191,7 +193,7 @@ export default function ProjectsPage() {
                       onChange={(e) => setForm({ ...form, name: e.currentTarget.value })}
                     />
                   </FormField>
-                  <FormField label="描述" htmlFor="project-desc">
+                  <FormField label={t("create.description")} htmlFor="project-desc">
                     <TextArea
                       id="project-desc"
                       value={form.description_md}
@@ -210,7 +212,7 @@ export default function ProjectsPage() {
                   testId="project-create-cancel"
                   onClick={() => setDialogOpen(false)}
                 >
-                  取消
+                  {t("create.cancel")}
                 </Button>
                 <Button
                   type="submit"
@@ -218,7 +220,7 @@ export default function ProjectsPage() {
                   isLoading={saving}
                   testId="project-create-submit"
                 >
-                  创建
+                  {t("create.submit")}
                 </Button>
               </ModalFooter>
             </form>

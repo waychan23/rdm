@@ -2,6 +2,7 @@
 // 401 triggers one silent refresh through the OAuth refresh token, then a
 // full-page login redirect if that fails (§17).
 
+import { apiLocale, i18n } from "../i18n";
 import { beginLogin, clearTokens, getAccessToken, refreshTokens } from "./oauth";
 
 export interface ApiError {
@@ -35,14 +36,14 @@ function errorFrom(payload: unknown, status: number): ApiError {
   return (
     (payload as { error?: ApiError })?.error ?? {
       code: "ERROR",
-      message: `HTTP ${status}`,
+      message: i18n.t("error.httpStatus", { status }),
       details: {},
     }
   );
 }
 
 function requestHeaders(body: unknown, token: string | null): HeadersInit {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { "Accept-Language": apiLocale() };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (token) headers["Authorization"] = `Bearer ${token}`;
   return headers;
@@ -63,7 +64,7 @@ async function fetchWithTimeout(input: string, init: RequestInit): Promise<Respo
       throw new Error("API_ERROR", {
         cause: {
           code: "TIMEOUT",
-          message: `请求超时（${TIMEOUT_MS / 1000} 秒），请稍后重试。`,
+          message: i18n.t("error.timeout", { seconds: TIMEOUT_MS / 1000 }),
           details: {},
         } satisfies ApiError,
       });
@@ -109,7 +110,10 @@ export const api = {
     const send = (token: string | null) =>
       fetchWithTimeout(`/api/v1${path}`, {
         method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        headers: {
+          "Accept-Language": apiLocale(),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: form,
       });
     let res = await send(getAccessToken());
@@ -131,6 +135,7 @@ export const api = {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `/api/v1${path}`);
+      xhr.setRequestHeader("Accept-Language", apiLocale());
       const token = getAccessToken();
       if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
       xhr.upload.onprogress = (event) => {
@@ -138,7 +143,7 @@ export const api = {
           onProgress(Math.round((event.loaded / event.total) * 100));
         }
       };
-      xhr.onerror = () => reject(new Error("上传失败：网络错误"));
+      xhr.onerror = () => reject(new Error(i18n.t("error.uploadNetwork")));
       xhr.onload = () => {
         let payload: unknown = {};
         try {
@@ -177,7 +182,10 @@ export const api = {
       : downloadUrl;
     const send = (token: string | null) =>
       fetchWithTimeout(`/api/v1${path}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        headers: {
+          "Accept-Language": apiLocale(),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
     let res = await send(getAccessToken());
     if (res.status === 401) {

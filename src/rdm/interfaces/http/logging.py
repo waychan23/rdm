@@ -10,6 +10,8 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 
+from rdm.i18n import parse_accept_language, reset_locale, set_locale
+
 request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
 
 REQUEST_ID_HEADER = "x-request-id"
@@ -54,7 +56,12 @@ class RequestContextMiddleware:
         headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
         request_id = headers.get(REQUEST_ID_HEADER) or uuid.uuid4().hex
         token = request_id_var.set(request_id)
-        scope.setdefault("state", {})["request_id"] = request_id
+        locale = parse_accept_language(headers.get("accept-language"))
+        # The 500 handler runs outside this middleware's finally block (Starlette
+        # ServerErrorMiddleware), so also expose the negotiated locale on scope.
+        scope.setdefault("state", {})["locale"] = locale
+        scope["state"]["request_id"] = request_id
+        locale_token = set_locale(locale)
         start = time.monotonic()
         status_code = 500
 
@@ -78,3 +85,4 @@ class RequestContextMiddleware:
                 elapsed_ms,
             )
             request_id_var.reset(token)
+            reset_locale(locale_token)

@@ -17,6 +17,7 @@ from rdm.domain.entities import Project, ProjectMember, User
 from rdm.domain.enums import ProjectRole
 from rdm.domain.errors import Forbidden, NotFound, ValidationError
 from rdm.domain.events import EventType
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
@@ -76,12 +77,18 @@ class MembershipService:
         """Resolve "me" / id / name to an active project member."""
         users = await self.users_index(project_id)
         if ref == "me":
-            raise ValidationError("me 需要在调用处解析", details={"field": "user"})
+            raise ValidationError(
+                tr("member.me_at_callsite", default="me 需要在调用处解析"),
+                details={"field": "user"},
+            )
         user = users.get(ref)
         if user is None:
             user = next((u for u in users.values() if u.name == ref), None)
         if user is None:
-            raise NotFound(f"用户 {ref} 不是该项目成员", details={"project_id": project_id})
+            raise NotFound(
+                tr("member.not_a_member", default="用户 {ref} 不是该项目成员", ref=ref),
+                details={"project_id": project_id},
+            )
         return user
 
     # --- writes -------------------------------------------------------
@@ -98,14 +105,23 @@ class MembershipService:
         assert self.uow.users is not None and self.uow.memberships is not None
         user = await self.uow.users.get(user_id)
         if user is None or not user.is_human:
-            raise ValidationError("只能把组织内的 human 用户加入项目", details={"field": "user_id"})
+            raise ValidationError(
+                tr("member.human_only", default="只能把组织内的 human 用户加入项目"),
+                details={"field": "user_id"},
+            )
         if not user.is_active:
-            raise ValidationError("不能把已停用的用户加入项目", details={"field": "user_id"})
+            raise ValidationError(
+                tr("member.user_inactive", default="不能把已停用的用户加入项目"),
+                details={"field": "user_id"},
+            )
         _check_roles(roles)
 
         existing = await self.uow.memberships.get(project.id, user.id, include_deleted=True)
         if existing is not None and existing.deleted_at is None:
-            raise ValidationError("该用户已经是项目成员", details={"field": "user_id"})
+            raise ValidationError(
+                tr("member.already_member", default="该用户已经是项目成员"),
+                details={"field": "user_id"},
+            )
         if existing is not None:
             existing.roles = list(roles)
             existing.auto_added = False
@@ -145,11 +161,14 @@ class MembershipService:
         user = await self.uow.users.get(user_id)
         if user is None or user.is_agent:
             raise ValidationError(
-                "agent 的项目成员关系随其 human 自动维护", details={"field": "user_id"}
+                tr("member.agent_auto", default="agent 的项目成员关系随其 human 自动维护"),
+                details={"field": "user_id"},
             )
         membership = await self.uow.memberships.get(project.id, user_id)
         if membership is None:
-            raise NotFound("用户不是该项目成员", details={"user_id": user_id})
+            raise NotFound(
+                tr("member.not_member", default="用户不是该项目成员"), details={"user_id": user_id}
+            )
 
         # `project.owner_user_id` is the single source of truth. Its mirrored
         # project_owner role cannot be granted or revoked here — only
@@ -157,7 +176,10 @@ class MembershipService:
         is_owner = project.owner_user_id == user_id
         if PROJECT_OWNER_ROLE in roles and not is_owner:
             raise ValidationError(
-                "project_owner 只能通过「转让项目经理」变更",
+                tr(
+                    "member.owner_role_transfer_only",
+                    default="project_owner 只能通过「转让项目经理」变更",
+                ),
                 details={"field": "roles", "project_id": project.id},
             )
         remaining = [r for r in roles if r != PROJECT_OWNER_ROLE]
@@ -180,18 +202,29 @@ class MembershipService:
         assert self.uow.users is not None and self.uow.memberships is not None
         user = await self.uow.users.get(user_id)
         if user is None:
-            raise NotFound(f"用户 {user_id} 不存在", details={"user_id": user_id})
+            raise NotFound(
+                tr("notification.user_not_found", default="用户不存在"),
+                details={"user_id": user_id},
+            )
         if user.is_agent:
             raise ValidationError(
-                "agent 不能单独移出项目；移除其 human 即可连带移除",
+                tr(
+                    "member.agent_cannot_remove",
+                    default="agent 不能单独移出项目；移除其 human 即可连带移除",
+                ),
                 details={"user_id": user_id},
             )
         membership = await self.uow.memberships.get(project.id, user_id)
         if membership is None:
-            raise NotFound("用户不是该项目成员", details={"user_id": user_id})
+            raise NotFound(
+                tr("member.not_member", default="用户不是该项目成员"), details={"user_id": user_id}
+            )
         if project.owner_user_id == user_id:
             raise ValidationError(
-                "项目经理不能直接移出项目；请先转让项目经理",
+                tr(
+                    "member.owner_cannot_remove",
+                    default="项目经理不能直接移出项目；请先转让项目经理",
+                ),
                 details={"user_id": user_id, "project_id": project.id},
             )
 
@@ -217,16 +250,29 @@ class MembershipService:
             security.can_assign_project_owner(actor) or security.is_project_owner(actor, project.id)
         ):
             raise Forbidden(
-                f"用户 {actor.name} 不能改派项目经理"
-                "（需要 project-director/Org Owner 或现任项目 Owner）"
+                tr(
+                    "member.transfer_forbidden",
+                    default=(
+                        "用户 {user} 不能改派项目经理（"
+                        "需要 project-director/Org Owne"
+                        "r 或现任项目 Owner）"
+                    ),
+                    user=actor.name,
+                )
             )
         assert self.uow.users is not None and self.uow.memberships is not None
         target = await self.uow.users.get(target_user_id)
         if target is None or not target.is_human or not target.is_active:
-            raise ValidationError("目标必须是启用状态的 human 用户", details={"field": "user_id"})
+            raise ValidationError(
+                tr("member.target_invalid", default="目标必须是启用状态的 human 用户"),
+                details={"field": "user_id"},
+            )
         target_membership = await self.uow.memberships.get(project.id, target.id)
         if target_membership is None:
-            raise ValidationError("目标用户还不是项目成员", details={"field": "user_id"})
+            raise ValidationError(
+                tr("member.target_not_member", default="目标用户还不是项目成员"),
+                details={"field": "user_id"},
+            )
 
         old_owner_id = project.owner_user_id
         # Heal any drift: remove the owner role from every other membership.
@@ -357,9 +403,15 @@ class MembershipService:
 def _check_roles(roles: list[str]) -> None:
     bad = [r for r in roles if r not in VALID_ROLES]
     if bad:
-        raise ValidationError(f"未知项目角色 {bad}", details={"field": "roles"})
+        raise ValidationError(
+            tr("member.unknown_roles", default="未知项目角色 {roles}", roles=bad),
+            details={"field": "roles"},
+        )
     if PROJECT_OWNER_ROLE in roles:
         raise ValidationError(
-            "project_owner 只能通过「转让项目经理」变更",
+            tr(
+                "member.owner_role_transfer_only",
+                default="project_owner 只能通过「转让项目经理」变更",
+            ),
             details={"field": "roles"},
         )

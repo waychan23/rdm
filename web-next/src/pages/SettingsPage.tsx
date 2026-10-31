@@ -9,6 +9,7 @@ import Select from "@atlaskit/select";
 import Spinner from "@atlaskit/spinner";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
+import { useTranslation } from "react-i18next";
 
 import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
@@ -44,6 +45,7 @@ const styles = cssMap({
 });
 
 export default function SettingsPage() {
+  const { t } = useTranslation("org");
   const { key: projectKey = "" } = useParams();
   const notify = useNotify();
 
@@ -87,9 +89,9 @@ export default function SettingsPage() {
          description_md: description,
        });
        reload();
-       notify.success("项目已保存");
+       notify.success(t("projectSettings.notices.saved"));
      } catch (e) {
-       notify.error("保存失败", errorCause(e)?.message);
+       notify.error(t("projectSettings.errors.saveFailed"), errorCause(e)?.message);
      } finally {
        setSaving(false);
      }
@@ -109,9 +111,9 @@ export default function SettingsPage() {
       setOwnerId(pendingOwnerId);
       setPendingOwnerId(null);
       reload();
-      notify.success("项目经理已改派");
+      notify.success(t("projectSettings.notices.ownerReassigned"));
     } catch (e) {
-      notify.error("改派失败", errorCause(e)?.message);
+      notify.error(t("projectSettings.errors.reassignFailed"), errorCause(e)?.message);
     } finally {
       setReassigning(false);
     }
@@ -123,7 +125,7 @@ export default function SettingsPage() {
        await api.post(`/projects/${projectKey}/archive`);
        reload();
      } catch (e) {
-       notify.error("归档失败", errorCause(e)?.message);
+       notify.error(t("projectSettings.errors.archiveFailed"), errorCause(e)?.message);
      }
   };
 
@@ -154,18 +156,18 @@ export default function SettingsPage() {
 
   return (
      <Page testId="page-project-settings">
-       <PageHeader title={`项目设置 · ${projectKey}`} testId="project-settings-header" />
+       <PageHeader title={t("projectSettings.title", { projectKey })} testId="project-settings-header" />
 
        <Box xcss={styles.infoBlock} style={cardBorder} testId="project-settings-info">
          <Stack space="space.050">
            <Text size="small" color="color.text.subtlest">
-             项目 ID
+             {t("projectSettings.info.projectId")}
            </Text>
            <Text>{data.project.id}</Text>
          </Stack>
          <Stack space="space.050">
            <Text size="small" color="color.text.subtlest">
-             状态
+             {t("projectSettings.info.status")}
            </Text>
            <Lozenge appearance={data.project.status === "archived" ? "default" : "success"}>
              {statusLabel(data.project.status)}
@@ -173,7 +175,7 @@ export default function SettingsPage() {
          </Stack>
          <Stack space="space.050" xcss={styles.nameCell}>
            <Text size="small" color="color.text.subtlest">
-             项目经理
+             {t("projectSettings.info.owner")}
            </Text>
            <Text>{owner?.user.name ?? "—"}</Text>
          </Stack>
@@ -181,8 +183,8 @@ export default function SettingsPage() {
 
        <Box as="form" onSubmit={saveProject} xcss={styles.form} testId="project-settings-form">
          <Stack space="space.150">
-           <Heading size="small">基本信息</Heading>
-           <FormField label="名称" htmlFor="project-name">
+           <Heading size="small">{t("projectSettings.basic.heading")}</Heading>
+           <FormField label={t("projectSettings.form.name")} htmlFor="project-name">
              <Textfield
                id="project-name"
                value={name}
@@ -190,7 +192,7 @@ export default function SettingsPage() {
                onChange={(e) => setName(e.currentTarget.value)}
              />
            </FormField>
-           <FormField label="描述">
+           <FormField label={t("projectSettings.form.description")}>
              <MarkdownEditor
                value={description}
                onChange={setDescription}
@@ -206,7 +208,7 @@ export default function SettingsPage() {
                isLoading={saving}
                testId="project-settings-save"
              >
-               保存
+               {t("projectSettings.form.save")}
              </Button>
              <Button
                appearance="danger"
@@ -214,7 +216,7 @@ export default function SettingsPage() {
                onClick={() => setConfirmArchive(true)}
                isDisabled={data.project.status === "archived"}
              >
-               归档项目
+               {t("projectSettings.form.archive")}
              </Button>
            </Inline>
          </Stack>
@@ -222,15 +224,17 @@ export default function SettingsPage() {
 
        <Box xcss={styles.form} testId="project-owner-section">
          <Stack space="space.150">
-           <Heading size="small">项目经理（Project Owner）</Heading>
+           <Heading size="small">{t("projectSettings.owner.heading")}</Heading>
            <Text size="small" color="color.text.subtlest">
-             project-director / Org Owner 或现任项目经理可以改派；目标必须是项目内启用的 human。
+             {t("projectSettings.owner.hint")}
            </Text>
            <Select
              inputId="project-owner"
              options={humans.map((h) => ({
                label: `${h.user.name}${
-                 h.user.id === data.project.owner_user_id ? "（当前项目经理）" : ""
+                 h.user.id === data.project.owner_user_id
+                   ? t("projectSettings.owner.currentSuffix")
+                   : ""
                }`,
                value: h.user.id,
              }))}
@@ -252,8 +256,8 @@ export default function SettingsPage() {
 
        <ConfirmDialog
          open={pendingOwnerId !== null}
-         title="改派项目经理"
-         confirmLabel="改派"
+         title={t("projectSettings.owner.transferTitle")}
+         confirmLabel={t("projectSettings.owner.transferConfirm")}
          busy={reassigning}
          testId="project-owner-transfer-dialog"
          onClose={() => {
@@ -261,20 +265,22 @@ export default function SettingsPage() {
          }}
          onConfirm={() => void reassignOwner()}
        >
-         确定把项目经理从 {owner?.user.name ?? "—"} 改派给{" "}
-         {pendingOwner?.user.name ?? "—"}？改派后原项目经理会失去项目 owner 权限。
+         {t("projectSettings.owner.transferBody", {
+           from: owner?.user.name ?? "—",
+           to: pendingOwner?.user.name ?? "—",
+         })}
        </ConfirmDialog>
 
        <ConfirmDialog
          open={confirmArchive}
-         title="归档项目"
-         confirmLabel="归档"
+         title={t("projectSettings.archive.title")}
+         confirmLabel={t("projectSettings.archive.confirm")}
          danger
          testId="project-archive-dialog"
          onClose={() => setConfirmArchive(false)}
          onConfirm={() => void archive()}
        >
-         归档项目 {projectKey}？归档后仍可只读访问。
+         {t("projectSettings.archive.body", { projectKey })}
        </ConfirmDialog>
      </Page>
   );

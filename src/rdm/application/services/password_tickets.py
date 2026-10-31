@@ -14,6 +14,7 @@ from rdm.application.services.tokens import generate_token, hash_token
 from rdm.domain.entities import PasswordTicket, User
 from rdm.domain.enums import PasswordTicketKind
 from rdm.domain.errors import ValidationError
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
 
@@ -63,9 +64,13 @@ async def resolve_ticket(
     assert uow.password_tickets is not None
     ticket = await uow.password_tickets.get_by_hash(hash_token(raw))
     if ticket is None or not ticket.is_usable:
-        raise ValidationError("链接无效或已过期", details={"field": "ticket"})
+        raise ValidationError(
+            tr("auth.ticket_invalid", default="链接无效或已过期"), details={"field": "ticket"}
+        )
     if kinds is not None and ticket.kind not in kinds:
-        raise ValidationError("链接类型不匹配", details={"field": "ticket"})
+        raise ValidationError(
+            tr("auth.ticket_kind_mismatch", default="链接类型不匹配"), details={"field": "ticket"}
+        )
     return ticket
 
 

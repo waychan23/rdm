@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from rdm.domain.errors import ValidationError, WorkflowGateBlocked, WorkflowIllegalTransition
+from rdm.domain.workflow.names import localized_name
 from rdm.domain.workflow.schema import (
     GateSpec,
     ResolvedKindWorkflow,
@@ -19,6 +20,7 @@ from rdm.domain.workflow.schema import (
     WorkflowSpec,
     merge_gates,
 )
+from rdm.i18n import tr
 
 
 @dataclass(frozen=True)
@@ -77,14 +79,14 @@ class WorkflowEngine:
             return resolved
         if not self._spec.has_kind(kind):
             raise ValidationError(
-                f"未知工作项类型 {kind!r}",
+                tr("workflow.unknown_kind", default="未知工作项类型 {kind!r}", kind=kind),
                 details={"kind": kind, "allowed": sorted(self._spec.kinds)},
             )
         try:
             resolved = self._spec.resolve(kind, key[1])
         except ValueError as exc:
             raise ValidationError(
-                f"工作流定义无效：{exc}",
+                tr("workflow.invalid_definition", default="工作流定义无效：{detail}", detail=exc),
                 details={"kind": kind, "task_type": key[1]},
             ) from exc
         self._resolved[key] = resolved
@@ -123,7 +125,12 @@ class WorkflowEngine:
         resolved = self.resolve(kind, task_type)
         if status not in resolved.states:
             raise ValidationError(
-                f"状态 {status!r} 不属于 kind={kind}",
+                tr(
+                    "workflow.status_not_in_kind",
+                    default="状态 {status!r} 不属于 kind={kind}",
+                    status=status,
+                    kind=kind,
+                ),
                 details={"kind": kind, "status": status, "allowed": list(resolved.states)},
             )
         return resolved.steps_from(status)
@@ -132,7 +139,12 @@ class WorkflowEngine:
         resolved = self.resolve(kind, task_type)
         if status not in resolved.states:
             raise ValidationError(
-                f"状态 {status!r} 不属于 kind={kind}",
+                tr(
+                    "workflow.status_not_in_kind",
+                    default="状态 {status!r} 不属于 kind={kind}",
+                    status=status,
+                    kind=kind,
+                ),
                 details={"kind": kind, "status": status, "allowed": list(resolved.states)},
             )
         return resolved.allowed(status)
@@ -150,12 +162,22 @@ class WorkflowEngine:
         resolved = self.resolve(kind, task_type)
         if src not in resolved.states:
             raise ValidationError(
-                f"当前状态 {src!r} 不属于 kind={kind}",
+                tr(
+                    "workflow.current_status_not_in_kind",
+                    default="当前状态 {status!r} 不属于 kind={kind}",
+                    status=src,
+                    kind=kind,
+                ),
                 details={"kind": kind, "status": src, "allowed": list(resolved.states)},
             )
         if dst is not None and dst not in resolved.states:
             raise ValidationError(
-                f"目标状态 {dst!r} 不属于 kind={kind}",
+                tr(
+                    "workflow.target_status_not_in_kind",
+                    default="目标状态 {status!r} 不属于 kind={kind}",
+                    status=dst,
+                    kind=kind,
+                ),
                 details={"kind": kind, "status": dst, "allowed": list(resolved.states)},
             )
         steps = resolved.steps_from(src)
@@ -164,7 +186,13 @@ class WorkflowEngine:
             matches = [step for step in steps if step.key == key]
             if not matches:
                 raise WorkflowIllegalTransition(
-                    f"{label}当前状态 {src} 没有步骤 {key!r}",
+                    tr(
+                        "workflow.no_step",
+                        default="{label}当前状态 {status} 没有步骤 {key!r}",
+                        label=label,
+                        status=src,
+                        key=key,
+                    ),
                     details={
                         "kind": kind,
                         "from": src,
@@ -176,7 +204,14 @@ class WorkflowEngine:
             step = matches[0]
             if dst is not None and step.to != dst:
                 raise WorkflowIllegalTransition(
-                    f"{label}步骤 {key!r} 的目标是 {step.to}，不是 {dst}",
+                    tr(
+                        "workflow.step_wrong_target",
+                        default="{label}步骤 {key!r} 的目标是 {to}，不是 {target}",
+                        label=label,
+                        key=key,
+                        to=step.to,
+                        target=dst,
+                    ),
                     details={
                         "kind": kind,
                         "from": src,
@@ -191,7 +226,14 @@ class WorkflowEngine:
         matches = [step for step in steps if step.to == dst]
         if not matches:
             raise WorkflowIllegalTransition(
-                f"{label}不能从 {src} 转到 {dst}。允许：{list(resolved.allowed(src))}。",
+                tr(
+                    "workflow.illegal_transition",
+                    default="{label}不能从 {status} 转到 {target}。允许：{allowed}。",
+                    label=label,
+                    status=src,
+                    target=dst,
+                    allowed=list(resolved.allowed(src)),
+                ),
                 details={
                     "kind": kind,
                     "from": src,
@@ -202,13 +244,21 @@ class WorkflowEngine:
             )
         if len(matches) > 1:
             raise WorkflowIllegalTransition(
-                f"{label}从 {src} 到 {dst} 有多个步骤，必须显式指定 step。",
+                tr(
+                    "workflow.multiple_steps",
+                    default="{label}从 {status} 到 {target} 有多个步骤，必须显式指定 step。",
+                    label=label,
+                    status=src,
+                    target=dst,
+                ),
                 details={
                     "kind": kind,
                     "from": src,
                     "to": dst,
                     "available_steps": _steps_details(matches),
-                    "hint": "使用 steps 中的 key 指定具体步骤。",
+                    "hint": tr(
+                        "workflow.hint_use_key", default="使用 steps 中的 key 指定具体步骤。"
+                    ),
                 },
             )
         return matches[0]
@@ -243,12 +293,22 @@ class WorkflowEngine:
         resolved = self.resolve(kind, task_type)
         if src not in resolved.states:
             raise ValidationError(
-                f"当前状态 {src!r} 不属于 kind={kind}",
+                tr(
+                    "workflow.current_status_not_in_kind",
+                    default="当前状态 {status!r} 不属于 kind={kind}",
+                    status=src,
+                    kind=kind,
+                ),
                 details={"kind": kind, "status": src, "allowed": list(resolved.states)},
             )
         if dst not in resolved.states:
             raise ValidationError(
-                f"目标状态 {dst!r} 不属于 kind={kind}",
+                tr(
+                    "workflow.target_status_not_in_kind",
+                    default="目标状态 {status!r} 不属于 kind={kind}",
+                    status=dst,
+                    kind=kind,
+                ),
                 details={"kind": kind, "status": dst, "allowed": list(resolved.states)},
             )
 
@@ -294,12 +354,25 @@ class WorkflowEngine:
             ]
             if blocking_children:
                 blocking.extend(blocking_children)
-                reasons.append(f"{len(blocking_children)} 个子项未终态")
+                reasons.append(
+                    tr(
+                        "workflow.gate_children",
+                        default="{count} 个子项未终态",
+                        count=len(blocking_children),
+                    )
+                )
 
         if gate.min_children is not None and len(ctx.children) < gate.min_children:
             extra["min_children"] = gate.min_children
             extra["child_count"] = len(ctx.children)
-            reasons.append(f"至少需要 {gate.min_children} 个子项，当前 {len(ctx.children)} 个")
+            reasons.append(
+                tr(
+                    "workflow.gate_min_children",
+                    default="至少需要 {min} 个子项，当前 {count} 个",
+                    min=gate.min_children,
+                    count=len(ctx.children),
+                )
+            )
 
         if gate.no_nonterminal_sprint_items:
             blocking_items = [
@@ -307,7 +380,13 @@ class WorkflowEngine:
             ]
             if blocking_items:
                 blocking.extend(blocking_items)
-                reasons.append(f"{len(blocking_items)} 个 Sprint 内工作项未终态")
+                reasons.append(
+                    tr(
+                        "workflow.gate_sprint_items",
+                        default="{count} 个 Sprint 内工作项未终态",
+                        count=len(blocking_items),
+                    )
+                )
 
         if gate.required_fields:
             missing: list[dict[str, str]] = []
@@ -316,8 +395,16 @@ class WorkflowEngine:
                     missing.append({"key": key, "label": ctx.field_labels.get(key, key)})
             if missing:
                 extra["missing_fields"] = missing
-                labels = "、".join(item["label"] for item in missing)
-                reasons.append(f"必填字段未填写：{labels}")
+                labels = tr("workflow.list_separator", default="、").join(
+                    item["label"] for item in missing
+                )
+                reasons.append(
+                    tr(
+                        "workflow.gate_required_fields",
+                        default="必填字段未填写：{labels}",
+                        labels=labels,
+                    )
+                )
 
         if not reasons:
             return
@@ -327,14 +414,24 @@ class WorkflowEngine:
             "from": src,
             "target": dst,
             "step_key": step.key,
-            "step_name": step.name,
+            "step_name": localized_name(step.name, step.name_en),
             "blocking_children": blocking,
             "allowed_transitions": list(allowed_next),
-            "hint": "先完成阻塞项或补齐必填字段，再重试；必要时用 comment_add 通知负责人。",
+            "hint": tr(
+                "workflow.gate_hint",
+                default="先完成阻塞项或补齐必填字段，再重试；必要时用 comment_add 通知负责人。",
+            ),
             **extra,
         }
         raise WorkflowGateBlocked(
-            f"{label} 不能执行步骤「{step.name}」进入 {dst}：{'；'.join(reasons)}",
+            tr(
+                "workflow.gate_blocked",
+                default="{label} 不能执行步骤「{name}」进入 {target}：{reasons}",
+                label=label,
+                name=localized_name(step.name, step.name_en),
+                target=dst,
+                reasons=tr("workflow.reason_separator", default="；").join(reasons),
+            ),
             details=details,
         )
 
@@ -343,7 +440,7 @@ def _steps_details(steps: Sequence[StepSpec]) -> list[dict[str, Any]]:
     return [
         {
             "key": step.key,
-            "name": step.name,
+            "name": localized_name(step.name, step.name_en),
             "to": step.to,
             "mode": step.mode,
             "note": step.note,

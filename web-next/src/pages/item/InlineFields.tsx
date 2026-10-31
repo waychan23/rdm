@@ -6,6 +6,7 @@ import InlineEdit from "@atlaskit/inline-edit";
 import { Inline, Text } from "@atlaskit/primitives/compiled";
 import Select from "@atlaskit/select";
 import Textfield from "@atlaskit/textfield";
+import { useTranslation } from "react-i18next";
 
 import MarkdownEditor from "../../components/MarkdownEditor";
 import MarkdownText, { type MarkdownImageClick } from "../../components/MarkdownText";
@@ -47,13 +48,14 @@ function FieldShell({
   required?: boolean;
   children: ReactNode;
 }) {
+  const { t } = useTranslation("item");
   return (
     <div className="rdm-inline-field" data-testid={testId}>
       {label ? (
         <div className="rdm-item-section-label">
           {label}
           {required ? (
-            <span className="rdm-required-mark" title="必填" aria-hidden="true">
+            <span className="rdm-required-mark" title={t("inlineField.required")} aria-hidden="true">
               *
             </span>
           ) : null}
@@ -90,6 +92,7 @@ function EditorFooter({
   testId: string;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation("item");
   return (
     <div className="rdm-inline-foot">
       {errorMessage ? (
@@ -105,7 +108,7 @@ function EditorFooter({
           isLoading={saving}
           testId={`${testId}-save`}
         >
-          保存
+          {t("inlineField.save")}
         </Button>
         <Button
           type="button"
@@ -115,7 +118,7 @@ function EditorFooter({
           testId={`${testId}-cancel`}
           onClick={onCancel}
         >
-          取消
+          {t("inlineField.cancel")}
         </Button>
       </div>
     </div>
@@ -178,7 +181,7 @@ export function InlineMarkdownField({
   value,
   canEdit,
   projectKey,
-  emptyText = "未填写",
+  emptyText,
   placeholder,
   minimumRows = 3,
   editLabel,
@@ -186,6 +189,8 @@ export function InlineMarkdownField({
   onSave,
   onImageClick,
 }: InlineMarkdownFieldProps) {
+  const { t } = useTranslation("item");
+  const resolvedEmptyText = emptyText ?? t("inlineField.empty");
   const [editing, setEditing] = useState(false);
   const { saving, confirm, cancel } = useInlineSave(onSave, () => setEditing(false));
   const committed = value ?? "";
@@ -199,7 +204,7 @@ export function InlineMarkdownField({
         <MarkdownText source={committed} onImageClick={onImageClick} />
       ) : (
         <Text size="small" color="color.text.subtlest">
-          {emptyText}
+          {resolvedEmptyText}
         </Text>
       )}
     </div>
@@ -275,7 +280,7 @@ export function InlineTextField({
   required,
   value,
   canEdit,
-  emptyText = "未填写",
+  emptyText,
   placeholder,
   editLabel,
   inputType = "text",
@@ -285,6 +290,8 @@ export function InlineTextField({
   renderView,
   onSave,
 }: InlineTextFieldProps) {
+  const { t } = useTranslation("item");
+  const resolvedEmptyText = emptyText ?? t("inlineField.empty");
   const [editing, setEditing] = useState(false);
   const { saving, confirm, cancel } = useInlineSave(onSave, () => setEditing(false));
 
@@ -298,7 +305,7 @@ export function InlineTextField({
         <Text size="small">{value}</Text>
       ) : (
         <Text size="small" color="color.text.subtlest">
-          {emptyText}
+          {resolvedEmptyText}
         </Text>
       )}
     </div>
@@ -307,7 +314,7 @@ export function InlineTextField({
   const check = (raw: unknown) => {
     const text = String(raw ?? "");
     if (inputType === "number" && text.trim() !== "" && Number.isNaN(Number(text))) {
-      return "请输入数字";
+      return t("inlineField.numberInvalid");
     }
     return validate?.(text);
   };
@@ -385,6 +392,7 @@ export function InlineMemberField({
   editLabel,
   onSave,
 }: InlineMemberFieldProps) {
+  const { t } = useTranslation("item");
   const [editing, setEditing] = useState(false);
   const { saving, confirm, cancel } = useInlineSave(onSave, () => setEditing(false));
   const nameById = new Map(options.map((option) => [option.value, option.name]));
@@ -418,7 +426,9 @@ export function InlineMemberField({
           readViewFitContainerWidth
           validate={(raw) => {
             const selected = Array.isArray(raw) ? raw : [];
-            return !multiple && selected.length === 0 ? "请选择成员" : undefined;
+            return !multiple && selected.length === 0
+              ? t("inlineField.selectMember")
+              : undefined;
           }}
           onEdit={() => setEditing(true)}
           onCancel={cancel}
@@ -497,13 +507,14 @@ export function InlineChoiceField({
   editLabel,
   onSave,
 }: InlineChoiceFieldProps) {
+  const { t } = useTranslation("item");
   const [editing, setEditing] = useState(false);
   const { saving, confirm, cancel } = useInlineSave(onSave, () => setEditing(false));
   const current = options.find((option) => option.value === value);
 
   const view = (
     <div className="rdm-inline-read">
-      <Text size="small">{current?.label ?? value ?? "未设置"}</Text>
+      <Text size="small">{current?.label ?? value ?? t("inlineField.unset")}</Text>
     </div>
   );
 

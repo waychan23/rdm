@@ -20,6 +20,7 @@ from rdm.domain.constants import SCOPE_WEB
 from rdm.domain.entities import UserToken
 from rdm.domain.enums import BEARER_KINDS, TokenKind
 from rdm.domain.errors import AuthInvalidToken
+from rdm.i18n import tr
 from rdm.infrastructure.db.session import make_engine, make_session_factory
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.files.local_store import LocalFileStore
@@ -75,13 +76,13 @@ async def resolve_request_actor(request: Request) -> tuple[Actor, UserToken]:
     container: Container = request.app.state.container
     auth = request.headers.get("authorization", "")
     if not auth.lower().startswith("bearer "):
-        raise AuthInvalidToken("未认证：请先登录或提供 Authorization: Bearer <token>")
+        raise AuthInvalidToken(tr("auth.unauthenticated"))
     token = await container.authenticator.authenticate_with_token(
         auth[7:].strip(), allow_kinds=BEARER_KINDS
     )
     # PATs carry no scope (permanent automation path); OAuth access tokens are
     # audience-bound to REST, so an MCP token cannot read the Web API (§17.79).
     if token.kind == TokenKind.oauth_access.value and SCOPE_WEB not in token.scopes:
-        raise AuthInvalidToken("该凭据不能访问 Web API（scope 不匹配）")
+        raise AuthInvalidToken(tr("auth.scope_mismatch"))
     actor = await container.resolve_actor(token)
     return actor, token

@@ -24,6 +24,8 @@ class NotificationRepository:
                 recipient_user_id=notification.recipient_user_id,
                 type=notification.type,
                 title=notification.title,
+                title_key=notification.title_key,
+                title_params=notification.title_params,
                 body=notification.body,
                 project_id=notification.project_id,
                 entity_type=notification.entity_type,

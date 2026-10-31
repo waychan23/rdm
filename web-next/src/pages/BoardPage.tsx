@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { cssMap } from "@atlaskit/css";
 import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
@@ -18,7 +19,7 @@ import { useRestoreScroll } from "../hooks/useRestoreScroll";
 import { recall, remember } from "../lib/pageCache";
 import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
 import type { WorkItem, WorkflowDto } from "../types";
-import { KIND_OPTIONS } from "../workitems/constants";
+import { kindOptions } from "../workitems/constants";
 import BoardCard from "./board/BoardCard";
 import BoardColumn from "./board/BoardColumn";
 
@@ -47,6 +48,7 @@ const styles = cssMap({
 });
 
 export default function BoardPage() {
+  const { t } = useTranslation("projects");
   const { key: projectKey = "" } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -139,8 +141,12 @@ export default function BoardPage() {
         Object.keys(step.gates ?? {}).length === 0;
       if (!direct) {
         notify.error(
-          "请在工作项详情中执行步骤",
-          `${item.display_id} 从 ${statusLabel(item.status)} 到 ${statusLabel(target)} 需要选择命名步骤或填写备注。`,
+          t("board.stepRequiredTitle"),
+          t("board.stepRequiredBody", {
+            id: item.display_id,
+            from: statusLabel(item.status),
+            to: statusLabel(target),
+          }),
         );
         return;
       }
@@ -167,12 +173,14 @@ export default function BoardPage() {
           ?.filter(Boolean)
           .join(", ");
         notify.error(
-          "流转失败",
-          blocking ? `${cause?.message}（阻塞: ${blocking}）` : cause?.message,
+          t("board.transitionFailed"),
+          blocking
+            ? t("board.transitionFailedBlocking", { message: cause?.message, blocking })
+            : cause?.message,
         );
       }
     },
-    [load, notify],
+    [load, notify, t],
   );
 
   useEffect(() => {
@@ -220,12 +228,12 @@ export default function BoardPage() {
   return (
     <Page fill testId="page-board">
       <PageHeader
-        title="看板"
+        title={t("board.title")}
         testId="board-header"
         actions={
           <Inline space="space.100" alignBlock="center">
             <Inline space="space.050" alignBlock="center" testId="board-kind-filter">
-              {KIND_OPTIONS.map((k) => (
+              {kindOptions().map((k) => (
                 <Button
                   key={k.value}
                   appearance={kind === k.value ? "primary" : "default"}
@@ -238,7 +246,7 @@ export default function BoardPage() {
               ))}
             </Inline>
             <Checkbox
-              label="显示终态列"
+              label={t("board.showTerminal")}
               isChecked={showTerminal}
               testId="board-show-terminal"
               onChange={(e) => setShowTerminal(e.currentTarget.checked)}
@@ -255,7 +263,7 @@ export default function BoardPage() {
             <Spinner size="large" />
           </Box>
         ) : columns.length === 0 ? (
-          <EmptyState header="该类型暂无工作流列" />
+          <EmptyState header={t("board.empty")} />
         ) : (
           columns.map((col) => (
             <BoardColumn key={col.status} status={col.status} count={col.items.length}>

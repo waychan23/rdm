@@ -1,12 +1,8 @@
 import { token } from "@atlaskit/tokens";
 import type { CSSProperties } from "react";
+import { useTranslation } from "react-i18next";
 
-const LABELS: Record<string, string> = {
-  epic: "E",
-  story: "需",
-  issue: "缺",
-  task: "任",
-};
+import { kindLabel, kindShortLabel } from "../lib/labels";
 
 // Subtle accent fill + the matching *bolder* accent text keeps AA contrast
 // (white text on subtle backgrounds does not pass).
@@ -44,6 +40,7 @@ const chipStyle: CSSProperties = {
 };
 
 export default function TypeKindIcon({ kind }: { kind: string }) {
+  const { t } = useTranslation("common");
   const colors = COLORS[kind] ?? FALLBACK;
   return (
     <span
@@ -52,11 +49,11 @@ export default function TypeKindIcon({ kind }: { kind: string }) {
         backgroundColor: colors.background,
         color: colors.foreground,
       }}
-      aria-label={`类型 ${kind}`}
+      aria-label={t("typeKindLabel", { kind: kindLabel(kind), defaultValue: kindLabel(kind) })}
       role="img"
       data-testid={`type-icon-${kind}`}
     >
-      {LABELS[kind] ?? kind}
+      {kindShortLabel(kind)}
     </span>
   );
 }

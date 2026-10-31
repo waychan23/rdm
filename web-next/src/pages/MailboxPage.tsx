@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
@@ -54,6 +55,7 @@ interface Option {
 }
 
 export default function MailboxPage() {
+  const { t } = useTranslation("mailbox");
   const { key: routeProjectKey } = useParams<{ key?: string }>();
   const location = useLocation();
   const notify = useNotify();
@@ -189,7 +191,7 @@ export default function MailboxPage() {
       setSelected(remaining);
       await fetchPage(null, true);
     } catch (e) {
-      notify.error("标记失败", errorCause(e)?.message);
+      notify.error(t("notify.markFailed"), errorCause(e)?.message);
     }
   };
 
@@ -197,10 +199,10 @@ export default function MailboxPage() {
     try {
       await api.post("/messages/archive", { delivery_ids: ids, archived });
       setSelected(new Set());
-      notify.success(archived ? "已归档" : "已移回收件箱");
+      notify.success(archived ? t("notify.archived") : t("notify.unarchived"));
       await fetchPage(null, true);
     } catch (e) {
-      notify.error("归档失败", errorCause(e)?.message);
+      notify.error(t("notify.archiveFailed"), errorCause(e)?.message);
     }
   };
 
@@ -208,10 +210,10 @@ export default function MailboxPage() {
     try {
       await api.post("/messages/delete", { delivery_ids: ids });
       setSelected(new Set());
-      notify.success("已删除");
+      notify.success(t("notify.deleted"));
       await fetchPage(null, true);
     } catch (e) {
-      notify.error("删除失败", errorCause(e)?.message);
+      notify.error(t("notify.deleteFailed"), errorCause(e)?.message);
     }
   };
 
@@ -224,9 +226,9 @@ export default function MailboxPage() {
       const res = await api.get<MailGroup[]>(`/projects/${projectFilter}/mailboxes`);
       setGroups(res.data);
     } catch (e) {
-      notify.error("加载群信箱失败", errorCause(e)?.message);
+      notify.error(t("notify.loadGroupsFailed"), errorCause(e)?.message);
     }
-  }, [projectFilter, notify]);
+  }, [projectFilter, notify, t]);
 
   useEffect(() => {
     void loadGroups();
@@ -234,7 +236,7 @@ export default function MailboxPage() {
 
   const openGroups = async () => {
     if (!projectFilter) {
-      notify.error("请先在顶部选择项目");
+      notify.error(t("notify.selectProject"));
       return;
     }
     setShowGroups(true);
@@ -245,11 +247,11 @@ export default function MailboxPage() {
 
   const createGroup = async () => {
     if (!projectFilter) {
-      notify.error("请先在顶部选择项目");
+      notify.error(t("notify.selectProject"));
       return;
     }
     if (!groupName.trim()) {
-      notify.error("群信箱名称必填");
+      notify.error(t("notify.groupNameRequired"));
       return;
     }
     try {
@@ -257,22 +259,22 @@ export default function MailboxPage() {
         name: groupName.trim(),
         members: groupMembers.map((m) => m.value),
       });
-      notify.success("已创建群信箱");
+      notify.success(t("notify.groupCreated"));
       setGroupName("");
       setGroupMembers([]);
       await loadGroups();
     } catch (e) {
-      notify.error("创建失败", errorCause(e)?.message);
+      notify.error(t("notify.createFailed"), errorCause(e)?.message);
     }
   };
 
   const send = async () => {
     if (!projectFilter) {
-      notify.error("请先在顶部选择项目后再发信");
+      notify.error(t("notify.selectProjectToSend"));
       return;
     }
     if (!compose.to.length || !compose.subject.trim() || !compose.body.trim()) {
-      notify.error("收件人、主题、正文均必填");
+      notify.error(t("notify.recipientsRequired"));
       return;
     }
     setSending(true);
@@ -285,11 +287,11 @@ export default function MailboxPage() {
         refs: compose.refs,
         reply_to: compose.replyTo,
       });
-      notify.success(compose.replyTo ? "已回复" : "已发送");
+      notify.success(compose.replyTo ? t("notify.replied") : t("notify.sent"));
       setShowCompose(false);
       await fetchPage(null, true);
     } catch (e) {
-      notify.error("发送失败", errorCause(e)?.message);
+      notify.error(t("notify.sendFailed"), errorCause(e)?.message);
     } finally {
       setSending(false);
     }
@@ -316,19 +318,19 @@ export default function MailboxPage() {
   const memberOptions: Option[] = members.map((m) => ({ label: m.name, value: m.id }));
   const recipientOptions: Option[] = [
     ...memberOptions,
-    ...groups.map((g) => ({ label: `${g.name}（群信箱）`, value: g.name })),
+    ...groups.map((g) => ({ label: t("group.option", { name: g.name }), value: g.name })),
   ];
   const projectOptions: Option[] = (me?.projects ?? []).map((p) => ({
     label: `${p.key} · ${p.name}`,
     value: p.key,
   }));
   const sortOptions: Option[] = [
-    { label: "最新在前", value: "desc" },
-    { label: "最早在前", value: "asc" },
+    { label: t("sort.newest"), value: "desc" },
+    { label: t("sort.oldest"), value: "asc" },
   ];
   const identityOptions: Option[] = [
-    ...(me ? [{ label: `我（${me.user.name}）`, value: me.user.id }] : []),
-    ...agents.map((a) => ({ label: `${a.name}（agent）`, value: a.id })),
+    ...(me ? [{ label: t("identity.me", { name: me.user.name }), value: me.user.id }] : []),
+    ...agents.map((a) => ({ label: t("identity.agent", { name: a.name }), value: a.id })),
   ];
 
   const threadGroups = useMemo(() => {
@@ -392,17 +394,19 @@ export default function MailboxPage() {
                 testId={`mailbox-owner-${m.delivery_id}`}
               >
                 {m.mailbox_owner.id === me?.user.id
-                  ? "我的信箱"
-                  : `${m.mailbox_owner.name ?? "未知身份"}${
-                      m.mailbox_owner.type === "agent" ? "（agent）" : ""
-                    }`}
+                  ? t("owner.mine")
+                  : m.mailbox_owner.type === "agent"
+                    ? t("owner.agent", { name: m.mailbox_owner.name ?? t("owner.unknown") })
+                    : (m.mailbox_owner.name ?? t("owner.unknown"))}
               </Lozenge>
             )}
             <Text weight="semibold">{m.subject}</Text>
             <Lozenge appearance="default">{m.from.name ?? m.from.id}</Lozenge>
             {folder === "sent" && m.recipients?.length ? (
               <Text size="small" color="color.text.subtlest">
-                收件人：{m.recipients.map((r) => r.name ?? r.id).join("、")}
+                {t("message.recipients", {
+                  names: m.recipients.map((r) => r.name ?? r.id).join(t("listSeparator")),
+                })}
               </Text>
             ) : null}
             <Text size="small" color="color.text.subtlest">
@@ -413,7 +417,7 @@ export default function MailboxPage() {
                 data-testid={`mailbox-item-mark-read-${m.delivery_id}`}
                 onClick={() => void markRead([m.delivery_id])}
               >
-                标已读
+                {t("actions.markRead")}
               </TextButton>
             )}
             {folder !== "sent" && (
@@ -422,13 +426,13 @@ export default function MailboxPage() {
                   data-testid={`mailbox-item-archive-${m.delivery_id}`}
                   onClick={() => void archive([m.delivery_id], folder === "inbox")}
                 >
-                  {folder === "inbox" ? "归档" : "移回收件箱"}
+                  {folder === "inbox" ? t("actions.archive") : t("actions.unarchive")}
                 </TextButton>
                 <TextButton
                   data-testid={`mailbox-item-delete-${m.delivery_id}`}
                   onClick={() => void remove([m.delivery_id])}
                 >
-                  删除
+                  {t("actions.delete")}
                 </TextButton>
               </>
             )}
@@ -436,7 +440,7 @@ export default function MailboxPage() {
               data-testid={`mailbox-item-reply-${m.delivery_id}`}
               onClick={() => openReply(m)}
             >
-              回复
+              {t("actions.reply")}
             </TextButton>
           </Inline>
           <Box paddingInlineStart="space.300">
@@ -445,7 +449,7 @@ export default function MailboxPage() {
           {m.refs.length > 0 && (
             <Inline space="space.100">
               <Text size="small" color="color.text.subtlest">
-                关联：
+                {t("message.refs")}
               </Text>
               {m.refs.map((r) => (
                 <Link
@@ -468,7 +472,11 @@ export default function MailboxPage() {
   return (
     <Page testId="page-mailbox">
       <PageHeader
-        title={projectFilter ? `信箱 · ${projectFilter}` : "信箱"}
+        title={
+          projectFilter
+            ? t("title.withProject", { project: projectFilter })
+            : t("title.default")
+        }
         testId="mailbox-header"
         actions={
           <Inline space="space.100" alignBlock="center" shouldWrap>
@@ -481,7 +489,11 @@ export default function MailboxPage() {
                   testId={`mailbox-folder-${f}`}
                   onClick={() => setFolder(f)}
                 >
-                  {f === "inbox" ? "收件箱" : f === "archived" ? "已归档" : "已发送"}
+                  {f === "inbox"
+                    ? t("folder.inbox")
+                    : f === "archived"
+                      ? t("folder.archived")
+                      : t("folder.sent")}
                 </Button>
               ))}
             </Inline>
@@ -489,7 +501,7 @@ export default function MailboxPage() {
               <Select<Option>
                 isClearable
                 spacing="compact"
-                placeholder="全部项目"
+                placeholder={t("placeholders.allProjects")}
                 inputId="mailbox-project-filter"
                 options={projectOptions}
                 value={projectOptions.find((o) => o.value === projectFilter) ?? null}
@@ -501,7 +513,7 @@ export default function MailboxPage() {
               <Select<Option>
                 isClearable
                 spacing="compact"
-                placeholder="全部身份"
+                placeholder={t("placeholders.allIdentities")}
                 options={identityOptions}
                 value={identityOptions.find((o) => o.value === identity) ?? null}
                 onChange={(opt) => setIdentity((opt as Option | null)?.value ?? null)}
@@ -509,7 +521,7 @@ export default function MailboxPage() {
             </Box>
             <Box style={{ width: 200 }}>
               <Textfield
-                placeholder="搜索主题/正文"
+                placeholder={t("placeholders.search")}
                 value={searchDraft}
                 testId="mailbox-search"
                 onChange={(e) => setSearchDraft(e.currentTarget.value)}
@@ -538,7 +550,7 @@ export default function MailboxPage() {
                 testId="mailbox-view-flat"
                 onClick={() => setView("flat")}
               >
-                平铺
+                {t("view.flat")}
               </Button>
               <Button
                 appearance={view === "thread" ? "primary" : "default"}
@@ -546,22 +558,22 @@ export default function MailboxPage() {
                 testId="mailbox-view-thread"
                 onClick={() => setView("thread")}
               >
-                会话
+                {t("view.thread")}
               </Button>
             </Inline>
             {folder === "inbox" && (
               <Checkbox
-                label="仅未读"
+                label={t("filters.unreadOnly")}
                 isChecked={unreadOnly}
                 testId="mailbox-unread-only"
                 onChange={(e) => setUnreadOnly(e.currentTarget.checked)}
               />
             )}
             <Button appearance="primary" testId="mailbox-compose-button" onClick={openCompose}>
-              发信
+              {t("actions.compose")}
             </Button>
             <Button testId="mailbox-groups-button" onClick={() => void openGroups()}>
-              群信箱
+              {t("actions.groups")}
             </Button>
             {folder !== "sent" && (
               <Button
@@ -569,7 +581,7 @@ export default function MailboxPage() {
                 testId="mailbox-mark-read"
                 onClick={() => void markRead([...selected])}
               >
-                标记已读
+                {t("actions.markSelectedRead")}
               </Button>
             )}
           </Inline>
@@ -588,7 +600,7 @@ export default function MailboxPage() {
         </Box>
       ) : messages.length === 0 ? (
         <Box testId="mailbox-empty">
-          <EmptyState header="没有信件" description="有新站内信时会出现在这里。" />
+          <EmptyState header={t("empty.header")} description={t("empty.description")} />
         </Box>
       ) : (
         <Box testId="mailbox-list">
@@ -632,7 +644,9 @@ export default function MailboxPage() {
                     >
                       <Inline space="space.100" alignBlock="center" shouldWrap>
                         <Text weight="semibold">{thread.root.subject}</Text>
-                        <Lozenge appearance="default">{thread.messages.length} 封</Lozenge>
+                        <Lozenge appearance="default">
+                          {t("thread.count", { count: thread.messages.length })}
+                        </Lozenge>
                         {!projectFilter && thread.root.project ? (
                           <Lozenge appearance="default">{thread.root.project.name}</Lozenge>
                         ) : null}
@@ -640,7 +654,7 @@ export default function MailboxPage() {
                           {formatDate(thread.latest.created_at)}
                         </Text>
                         <Text size="small" color="color.text.subtlest">
-                          {collapsed ? "展开" : "折叠"}
+                          {collapsed ? t("thread.expand") : t("thread.collapse")}
                         </Text>
                       </Inline>
                     </Box>
@@ -662,7 +676,7 @@ export default function MailboxPage() {
       {nextCursor && (
         <Box paddingBlock="space.200" style={{ textAlign: "center" }}>
           <Button testId="mailbox-load-more" onClick={() => void fetchPage(nextCursor, false)}>
-            加载更多
+            {t("actions.loadMore")}
           </Button>
         </Box>
       )}
@@ -672,25 +686,27 @@ export default function MailboxPage() {
           <ModalDialog
             onClose={() => setShowCompose(false)}
             width="520px"
-            label={compose.replyTo ? "回复信件" : "发站内信"}
+            label={compose.replyTo ? t("compose.replyTitle") : t("compose.newTitle")}
             testId="mailbox-compose-dialog"
           >
             <ModalHeader>
-              <ModalTitle>{compose.replyTo ? "回复信件" : "发站内信"}</ModalTitle>
+              <ModalTitle>
+                {compose.replyTo ? t("compose.replyTitle") : t("compose.newTitle")}
+              </ModalTitle>
             </ModalHeader>
             <ModalBody>
               <Stack space="space.150">
-                <FormField label="收件人" htmlFor="mail-to">
+                <FormField label={t("fields.recipients")} htmlFor="mail-to">
                   <Select<Option, true> {...portalMenuProps}
                     inputId="mail-to"
                     isMulti
                     options={recipientOptions}
                     value={compose.to}
                     onChange={(opts) => setCompose({ ...compose, to: opts as Option[] })}
-                    placeholder="选择成员或群信箱"
+                    placeholder={t("placeholders.selectRecipients")}
                   />
                 </FormField>
-                <FormField label="主题" htmlFor="mail-subject">
+                <FormField label={t("fields.subject")} htmlFor="mail-subject">
                   <Textfield
                     id="mail-subject"
                     value={compose.subject}
@@ -698,7 +714,7 @@ export default function MailboxPage() {
                     onChange={(e) => setCompose({ ...compose, subject: e.currentTarget.value })}
                   />
                 </FormField>
-                <FormField label="正文（Markdown）">
+                <FormField label={t("fields.body")}>
                   <MarkdownEditor
                     value={compose.body}
                     onChange={(body) => setCompose({ ...compose, body })}
@@ -716,7 +732,7 @@ export default function MailboxPage() {
                 testId="mailbox-compose-cancel"
                 onClick={() => setShowCompose(false)}
               >
-                取消
+                {t("actions.cancel")}
               </Button>
               <Button
                 appearance="primary"
@@ -724,7 +740,7 @@ export default function MailboxPage() {
                 testId="mailbox-compose-submit"
                 onClick={() => void send()}
               >
-                发送
+                {t("actions.send")}
               </Button>
             </ModalFooter>
           </ModalDialog>
@@ -735,18 +751,18 @@ export default function MailboxPage() {
           <ModalDialog
             onClose={() => setShowGroups(false)}
             width="560px"
-            label="群信箱"
+            label={t("group.title")}
             testId="mailbox-groups-dialog"
           >
             <ModalHeader>
-              <ModalTitle>群信箱</ModalTitle>
+              <ModalTitle>{t("group.title")}</ModalTitle>
             </ModalHeader>
             <ModalBody>
               <Stack space="space.150">
                 <Text size="small" color="color.text.subtlest">
-                  群信箱用于一次投递给多个成员；成员仍会各自收到一份站内信。
+                  {t("group.description")}
                 </Text>
-                <FormField label="名称" htmlFor="group-name">
+                <FormField label={t("fields.groupName")} htmlFor="group-name">
                   <Textfield
                     id="group-name"
                     value={groupName}
@@ -754,19 +770,19 @@ export default function MailboxPage() {
                     onChange={(e) => setGroupName(e.currentTarget.value)}
                   />
                 </FormField>
-                <FormField label="成员" htmlFor="group-members">
+                <FormField label={t("fields.members")} htmlFor="group-members">
                   <Select<Option, true> {...portalMenuProps}
                     inputId="group-members"
                     isMulti
                     options={memberOptions}
                     value={groupMembers}
                     onChange={(opts) => setGroupMembers(opts as Option[])}
-                    placeholder="选择成员"
+                    placeholder={t("placeholders.selectMembers")}
                     testId="mailbox-group-members"
                   />
                 </FormField>
                 <Button appearance="primary" onClick={() => void createGroup()} testId="mailbox-group-create">
-                  创建群信箱
+                  {t("actions.createGroup")}
                 </Button>
                 <Stack space="space.050" testId="mailbox-group-list">
                   {groups.map((g) => (
@@ -774,14 +790,15 @@ export default function MailboxPage() {
                       <Inline space="space.100" alignBlock="center" shouldWrap>
                         <Text weight="medium">{g.name}</Text>
                         <Text size="small" color="color.text.subtlest">
-                          {g.members.map((m) => m.name).join("、") || "无成员"}
+                          {g.members.map((m) => m.name).join(t("listSeparator")) ||
+                            t("group.noMembers")}
                         </Text>
                       </Inline>
                     </Box>
                   ))}
                   {groups.length === 0 ? (
                     <Text size="small" color="color.text.subtlest">
-                      还没有群信箱
+                      {t("group.none")}
                     </Text>
                   ) : null}
                 </Stack>
@@ -789,7 +806,7 @@ export default function MailboxPage() {
             </ModalBody>
             <ModalFooter>
               <Button appearance="subtle" onClick={() => setShowGroups(false)}>
-                关闭
+                {t("actions.close")}
               </Button>
             </ModalFooter>
           </ModalDialog>

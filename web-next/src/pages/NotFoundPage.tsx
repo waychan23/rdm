@@ -1,14 +1,16 @@
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import Button from "@atlaskit/button/default/button";
 import EmptyState from "@atlaskit/empty-state";
 
 export default function NotFoundPage() {
+  const { t } = useTranslation("nav");
   const navigate = useNavigate();
   return (
     <EmptyState
-      header="页面不存在（404）"
-      description="链接可能已失效，或工作项已被删除。"
+      header={t("notFound.header")}
+      description={t("notFound.description")}
       testId="page-not-found"
       primaryAction={
         <Button
@@ -16,7 +18,7 @@ export default function NotFoundPage() {
           testId="not-found-home"
           onClick={() => navigate("/projects")}
         >
-          回到项目
+          {t("notFound.back")}
         </Button>
       }
     />

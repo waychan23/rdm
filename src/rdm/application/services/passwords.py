@@ -12,6 +12,8 @@ import secrets
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 
+from rdm.i18n import tr
+
 # argon2id default parameters are tuned for interactive login; the encoded
 # hash string is self-describing, so parameters can evolve without migration.
 _hasher = PasswordHasher()
@@ -23,9 +25,13 @@ MAX_PASSWORD_LENGTH = 128
 def validate_password(password: str) -> str:
     """Return the password or raise ValueError with a user-facing reason."""
     if not isinstance(password, str) or len(password) < MIN_PASSWORD_LENGTH:
-        raise ValueError(f"密码长度至少 {MIN_PASSWORD_LENGTH} 位")
+        raise ValueError(
+            tr("auth.password_too_short", default="密码长度至少 {n} 位", n=MIN_PASSWORD_LENGTH)
+        )
     if len(password) > MAX_PASSWORD_LENGTH:
-        raise ValueError(f"密码长度不能超过 {MAX_PASSWORD_LENGTH} 位")
+        raise ValueError(
+            tr("auth.password_too_long", default="密码长度不能超过 {n} 位", n=MAX_PASSWORD_LENGTH)
+        )
     return password
 
 
