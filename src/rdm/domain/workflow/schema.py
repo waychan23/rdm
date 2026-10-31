@@ -12,7 +12,15 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    model_validator,
+)
+from pydantic import (
+    ValidationError as PydanticValidationError,
+)
 
 StepMode = Literal["direct", "approval", "task"]
 ActorSource = Literal["assignee", "participants", "managers", "reviewers"]
@@ -21,6 +29,7 @@ CustomFieldType = Literal["text", "number", "user"]
 
 STEP_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,49}$")
 FIELD_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,49}$")
+DEF_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,49}$")
 
 # Fields that every kind can reference in a required_fields gate. Built-in
 # reviewer/review_content still have to be enabled on the effective workflow.
@@ -205,6 +214,40 @@ def _normalize_steps_input(data: Any) -> Any:
     return data
 
 
+def _validate_graph(
+    *,
+    states: tuple[str, ...],
+    initial: str,
+    terminal: tuple[str, ...],
+    steps: dict[str, tuple[StepSpec, ...]],
+    gates: dict[str, GateSpec],
+) -> None:
+    """Structural checks shared by inline kind workflows and named definitions."""
+    state_set = set(states)
+    if len(states) != len(state_set):
+        raise ValueError("states must be unique")
+    if initial not in state_set:
+        raise ValueError(f"initial {initial!r} not in states")
+    if unknown_terminal := [s for s in terminal if s not in state_set]:
+        raise ValueError(f"terminal states not in states: {unknown_terminal}")
+    if set(steps) != state_set:
+        raise ValueError("steps must define an entry for every state")
+    for src, src_steps in steps.items():
+        keys: set[str] = set()
+        for step in src_steps:
+            if step.key in keys:
+                raise ValueError(f"duplicate step key {step.key!r} in state {src}")
+            keys.add(step.key)
+            if step.to not in state_set:
+                raise ValueError(f"step {src}/{step.key} targets unknown state {step.to}")
+    unknown_gate_targets = [s for s in gates if s not in state_set]
+    if unknown_gate_targets:
+        raise ValueError(f"gates attached to unknown states: {unknown_gate_targets}")
+    for target, gate in gates.items():
+        if gate.is_empty():
+            raise ValueError(f"gate for {target} must declare at least one condition")
+
+
 class SubtypeWorkflow(BaseModel):
     """Partial workflow override for a task type; resolved against its parent."""
 
@@ -267,30 +310,112 @@ class KindWorkflow(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self) -> KindWorkflow:
-        state_set = set(self.states)
-        if len(self.states) != len(state_set):
-            raise ValueError("states must be unique")
-        if self.initial not in state_set:
-            raise ValueError(f"initial {self.initial!r} not in states")
-        if unknown_terminal := [s for s in self.terminal if s not in state_set]:
-            raise ValueError(f"terminal states not in states: {unknown_terminal}")
-        if set(self.steps) != state_set:
-            raise ValueError("steps must define an entry for every state")
-        for src, steps in self.steps.items():
-            keys: set[str] = set()
-            for step in steps:
-                if step.key in keys:
-                    raise ValueError(f"duplicate step key {step.key!r} in state {src}")
-                keys.add(step.key)
-                if step.to not in state_set:
-                    raise ValueError(f"step {src}/{step.key} targets unknown state {step.to}")
-        unknown_gate_targets = [s for s in self.gates if s not in state_set]
-        if unknown_gate_targets:
-            raise ValueError(f"gates attached to unknown states: {unknown_gate_targets}")
-        for target, gate in self.gates.items():
-            if gate.is_empty():
-                raise ValueError(f"gate for {target} must declare at least one condition")
+        _validate_graph(
+            states=self.states,
+            initial=self.initial,
+            terminal=self.terminal,
+            steps=self.steps,
+            gates=self.gates,
+        )
         return self
+
+
+class NamedWorkflow(BaseModel):
+    """A reusable workflow graph declared under top-level ``workflow_defs``.
+
+    Kinds and task subtypes reference one by name with ``use``; the loader
+    expands it into an inline definition before validation, so downstream code
+    only ever sees resolved graphs.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    states: tuple[str, ...]
+    initial: str
+    terminal: tuple[str, ...]
+    steps: dict[str, tuple[StepSpec, ...]]
+    gates: dict[str, GateSpec] = {}
+    fields: FieldsSpec = Field(default_factory=FieldsSpec)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize(cls, data: Any) -> Any:
+        return _normalize_steps_input(data)
+
+    @model_validator(mode="after")
+    def _validate(self) -> NamedWorkflow:
+        _validate_graph(
+            states=self.states,
+            initial=self.initial,
+            terminal=self.terminal,
+            steps=self.steps,
+            gates=self.gates,
+        )
+        return self
+
+
+def _expand_ref(
+    raw: Any,
+    defs: dict[str, dict[str, Any]],
+    *,
+    where: str,
+    is_kind: bool,
+) -> Any:
+    """Replace ``use: name`` with the referenced definition plus local overrides."""
+    if not isinstance(raw, dict):
+        return raw
+    body = dict(raw)
+    use = body.pop("use", None)
+    if use is not None:
+        if not isinstance(use, str) or use not in defs:
+            raise ValueError(f"{where}: unknown workflow_defs reference {use!r}")
+        conflict = sorted(set(body).intersection({"states", "initial", "terminal", "steps"}))
+        if conflict:
+            raise ValueError(
+                f"{where}: cannot declare {', '.join(conflict)} alongside use; "
+                f"override them in workflow_defs.{use}"
+            )
+        # Definition body first; local keys (label/gates/fields/subtypes) win.
+        body = {**defs[use], **body}
+    if is_kind and isinstance(body.get("subtypes"), dict):
+        body["subtypes"] = {
+            name: _expand_ref(sub, defs, where=f"{where}.subtypes.{name}", is_kind=False)
+            for name, sub in body["subtypes"].items()
+        }
+    return body
+
+
+def _expand_workflow_defs(raw: Any) -> Any:
+    """Expand named-definition references across all kinds and subtypes."""
+    if not isinstance(raw, dict):
+        return raw
+    defs_raw = raw.get("workflow_defs") or {}
+    if not isinstance(defs_raw, dict):
+        raise ValueError("workflow_defs must be an object")
+    defs: dict[str, dict[str, Any]] = {}
+    for name, body in defs_raw.items():
+        if not isinstance(name, str) or not DEF_NAME_RE.fullmatch(name):
+            raise ValueError(f"workflow_defs key {name!r} must match {DEF_NAME_RE.pattern}")
+        normalized = _normalize_steps_input(body)
+        if not isinstance(normalized, dict):
+            raise ValueError(f"workflow_defs.{name} must be an object")
+        if "use" in normalized:
+            raise ValueError(
+                f"workflow_defs.{name}: definitions cannot reference other definitions"
+            )
+        try:
+            definition = NamedWorkflow.model_validate(normalized)
+        except PydanticValidationError as exc:
+            raise ValueError(f"workflow_defs.{name} is invalid: {exc}") from exc
+        defs[name] = definition.model_dump()
+    data = dict(raw)
+    kinds = data.get("kinds")
+    if isinstance(kinds, dict):
+        data["kinds"] = {
+            kind_name: _expand_ref(kind_raw, defs, where=f"kinds.{kind_name}", is_kind=True)
+            for kind_name, kind_raw in kinds.items()
+        }
+    return data
 
 
 @dataclass(frozen=True)
@@ -378,7 +503,14 @@ class WorkflowSpec(BaseModel):
     # Optional English labels keyed by task-type code (§17.115); missing codes
     # fall back to the zh label.
     task_type_labels_en: dict[str, str] = {}
+    # Named workflow graphs reusable via ``use`` on kinds/subtypes (§17.119).
+    workflow_defs: dict[str, NamedWorkflow] = Field(default_factory=dict)
     kinds: dict[str, KindWorkflow]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _expand_refs(cls, data: Any) -> Any:
+        return _expand_workflow_defs(data)
 
     @model_validator(mode="after")
     def _validate(self) -> WorkflowSpec:
@@ -392,11 +524,33 @@ class WorkflowSpec(BaseModel):
             unknown = sorted(subtypes - set(self.task_types))
             if unknown:
                 raise ValueError(f"task subtypes missing from task_types: {unknown}")
+        for name, definition in self.workflow_defs.items():
+            self._validate_definition(name, definition)
         for kind in self.kinds:
             self.resolve(kind)
             for subtype in self.kinds[kind].subtypes:
                 self.resolve(kind, subtype)
         return self
+
+    def _validate_definition(self, name: str, definition: NamedWorkflow) -> None:
+        """Check task steps even when a definition is not referenced yet."""
+        for src, steps in definition.steps.items():
+            for step in steps:
+                if step.mode != "task":
+                    continue
+                assert step.tasks is not None
+                if step.tasks.type not in self.task_types:
+                    raise ValueError(
+                        f"workflow_defs.{name}/{src}/{step.key}: unknown task type "
+                        f"{step.tasks.type!r}"
+                    )
+                child = self.resolve("task", step.tasks.type)
+                if step.tasks.complete_on not in child.terminal:
+                    raise ValueError(
+                        f"workflow_defs.{name}/{src}/{step.key}: complete_on "
+                        f"{step.tasks.complete_on!r} is not terminal for task type "
+                        f"{step.tasks.type!r}"
+                    )
 
     def kind(self, kind: str) -> KindWorkflow:
         return self.kinds[kind]

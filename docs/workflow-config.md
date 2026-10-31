@@ -12,6 +12,7 @@
 
 1. [文件位置与加载方式](#1-文件位置与加载方式)
 2. [顶层结构](#2-顶层结构)
+   - [2.1 命名工作流定义（workflow_defs + use）](#21-命名工作流定义workflow_defs--use)
 3. [kind 字段](#3-kind-字段)
 4. [step 字段](#4-step-字段)
 5. [gate 字段](#5-gate-字段)
@@ -94,6 +95,78 @@
 - `task_type_labels_en`（可选）：与 `task_types` 同 key 的英文标签表；缺省时英文界面
   回退中文标签。示例：`{"other": "Other", "frontend": "Frontend", …}`。
 - `kinds`：至少一个；通常包含 `epic/story/issue/task/sprint`。
+- `workflow_defs`（可选）：命名工作流定义，供 kind/subtype 用 `use` 引用，见 2.1。
+
+### 2.1 命名工作流定义（workflow_defs + use）
+
+当多种 kind 或 task subtype 需要**同一套状态机与步骤**时，不必逐条复制配置：
+在顶层 `workflow_defs` 里定义一次，然后用 `use: "<name>"` 引用。
+
+```json5
+{
+  "workflow_defs": {
+    // 名称：小写字母开头，仅 a-z0-9_，最长 50 字符
+    "dev_flow": {
+      "states": ["TODO", "IN_PROGRESS", "TO_REVIEW", "DONE"],
+      "initial": "TODO",
+      "terminal": ["DONE"],
+      "fields": {"reviewer": true, "review_content": true},
+      "steps": {
+        "TODO": [{"key": "START", "name": "开始", "to": "IN_PROGRESS"}],
+        "IN_PROGRESS": [{"key": "SUBMIT", "name": "提交评审", "to": "TO_REVIEW"}],
+        "TO_REVIEW": [
+          {
+            "key": "APPROVE",
+            "name": "评审通过",
+            "to": "DONE",
+            "mode": "approval",
+            "actors": ["reviewers"],
+            "executors": {"min": 1, "max": 2}
+          }
+        ],
+        "DONE": []
+      }
+    },
+    "qa_flow": {
+      "states": ["TODO", "TESTING", "DONE"],
+      "initial": "TODO",
+      "terminal": ["DONE"],
+      "steps": {
+        "TODO": [{"key": "START", "name": "开始", "to": "TESTING"}],
+        "TESTING": [{"key": "PASS", "name": "通过", "to": "DONE"}],
+        "DONE": []
+      }
+    }
+  },
+  "kinds": {
+    "task": {
+      "label": "任务",
+      "use": "dev_flow",          // states/initial/terminal/steps/gates/fields 全部来自定义
+      "subtypes": {
+        "frontend": {"use": "dev_flow"},   // 前端/后端/全栈共用同一套流程
+        "backend": {"use": "dev_flow"},
+        "fullstack": {"use": "dev_flow"},
+        "testing": {"use": "qa_flow"}      // 测试任务走另一套流程
+      }
+    }
+  }
+}
+```
+
+规则：
+
+- 定义体与 kind 的图定义同构：`states/initial/terminal/steps` 必填，`gates/fields` 可选。
+- `use` 只能与 `label`、`label_en`、`gates`、`fields`（kind 还可加 `subtypes`）同时出现；
+  `gates`/`fields` 写了就**整体覆盖**定义里的同名键，不按字段合并。
+- 用 `use` 时不能再写 `states/initial/terminal/steps`——要改流程请改定义本身，
+  或改用内联配置。错误信息会指明冲突键与引用的定义名。
+- 定义内**不允许**再写 `use`（不做链式引用），避免解析顺序与循环引用问题。
+- 引用不存在的定义、定义名不合法、定义体非法都会在加载/启动时报错，并带上
+  `workflow_defs.<name>` 前缀。
+- 引用在加载时即展开为普通图：REST/MCP 的 `GET /api/v1/workflow`、`workflow_get`、
+  `meta.available_steps`、`rdm workflow validate` 看到的都是**解析后的**状态与步骤，
+  不暴露 `use` 结构，因此前端无需感知。
+- `revision` 仍按“对在途工作项有影响”的标准递增；纯重构为 `use`（解析结果不变）不必递增。
 
 ---
 
@@ -145,10 +218,14 @@
 | `gates` | 否 | `{"目标状态": GateSpec}`，作为所有进入该状态步骤的默认 gate |
 | `fields` | 否 | 开启 reviewer/review_content 与自定义字段 |
 | `subtypes` | 否 | 子类型覆盖；目前用于 `task` |
+| `use` | 否 | 引用 `workflow_defs` 中的命名定义；见 2.1 |
 
 兼容输入：也可以用旧式 `"transitions": {"TODO": ["IN_PROGRESS"]}` 代替 `steps`。
 加载时会转换为 `key=TO_<TARGET>`、`name=<TARGET>`、`mode=direct`、`actors=["assignee"]`
 的步骤。同一 kind 不能同时声明 `steps` 和 `transitions`。
+
+声明 `use` 时，上表标为必填的 `states/initial/terminal/steps` 由命名定义提供，
+本层不能重复声明（见 2.1）。
 
 ---
 
@@ -447,6 +524,8 @@ Owner/Manager **不能越权执行**未指派给自己的步骤。接管方式�
 - `label`：子类型优先，否则父级。
 - 子类型 key 必须在 `task_types` 中。
 - `task_type` 创建后不可修改。
+- 子类型也可以 `use` 一个命名定义（见 2.1）；此时视同声明了该定义的
+  `states/initial/terminal/steps`，`gates/fields` 可整体覆盖，其余合并规则同上。
 
 解析：`(kind, task_type)` → 有子类型用子类型，否则用 base kind。API/引擎在创建、流转、
 列表终态判断、步骤候选都会使用解析后的有效工作流。
@@ -650,6 +729,10 @@ uv run python -c "import json,pyjson5; from rdm.domain.workflow.loader import lo
 | `task steps require a parent kind that can contain tasks` | 在 sprint 配 task 步骤 | 改用 epic/story/issue/task |
 | `workflow resolution cycle` | task 步骤创建同类型 task 导致递归 | 给该类型定义独立子类型或换 type |
 | `declaring states must declare steps for every state` | 子类型声明了 states 但 steps 不全 | 补齐或删掉 `states` 走继承 |
+| `unknown workflow_defs reference '…'` | `use` 指向不存在的定义 | 在 `workflow_defs` 补定义或改引用名 |
+| `cannot declare ... alongside use` | `use` 与内联 `states/…/steps` 同时出现 | 二选一：改定义本身或改成内联配置 |
+| `definitions cannot reference other definitions` | 定义内又写了 `use` | 把公共部分合并进同一份定义 |
+| `workflow_defs.<name> is invalid: …` | 定义体不合法 | 按冒号后的具体错误修正定义 |
 
 ---
 

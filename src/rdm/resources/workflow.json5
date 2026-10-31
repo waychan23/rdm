@@ -32,6 +32,139 @@
     product_design: "Product design",
     release: "Release",
   },
+  // 命名工作流定义：同一套 states/steps/gates/fields 可被任意多个
+  // kind 或 task subtype 通过 `use: "<name>"` 引用（§17.119）。
+  // 定义内不允许再写 use（不做链式引用）。
+  workflow_defs: {
+    // 标准任务流程：任务及其未单独定义流程的子类型共用。
+    task_standard: {
+      states: ["TODO", "IN_PROGRESS", "BLOCKED", "TO_REVIEW", "DONE", "PUBLISHED", "CANCELLED"],
+      initial: "TODO",
+      terminal: ["DONE", "PUBLISHED", "CANCELLED"],
+      // 可选字段：reviewer/review_content 可检索；custom 不检索。
+      fields: {
+        reviewer: true,
+        review_content: true,
+        custom: [],
+      },
+      // 命名步骤：mode=direct|approval|task；actors 是执行人类型，具体执行人由负责人指派。
+      steps: {
+        TODO: [
+          {
+            key: "START",
+            name: "开始",
+            name_en: "Start",
+            to: "IN_PROGRESS",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            name_en: "Cancel",
+            to: "CANCELLED",
+          },
+        ],
+        IN_PROGRESS: [
+          {
+            key: "SUBMIT_REVIEW",
+            name: "提交评审",
+            name_en: "Submit for review",
+            to: "TO_REVIEW",
+          },
+          {
+            key: "BLOCK",
+            name: "标记阻塞",
+            name_en: "Mark blocked",
+            to: "BLOCKED",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            name_en: "Cancel",
+            to: "CANCELLED",
+          },
+        ],
+        BLOCKED: [
+          {
+            key: "RESUME",
+            name: "恢复",
+            name_en: "Resume",
+            to: "IN_PROGRESS",
+          },
+          {
+            key: "REQUEUE",
+            name: "重新排队",
+            name_en: "Requeue",
+            to: "TODO",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            name_en: "Cancel",
+            to: "CANCELLED",
+          },
+        ],
+        TO_REVIEW: [
+          {
+            key: "CODE_REVIEW",
+            name: "Code Review",
+            name_en: "Code Review",
+            to: "DONE",
+            mode: "approval", // direct | approval | task
+            actors: ["assignee", "reviewers"],
+            executors: {
+              min: 1,
+              max: 3,
+            },
+            note: "required", // optional | required
+            // 按目标状态的默认 gate；step.gates 按字段覆盖。
+            gates: {
+              required_fields: ["review_content"],
+            },
+          },
+          {
+            key: "CODE_REVIEW_TASKS",
+            name: "Code Review Task",
+            name_en: "Code Review Task",
+            to: "DONE",
+            mode: "task", // direct | approval | task
+            actors: ["assignee", "reviewers"],
+            executors: {
+              min: 1,
+              max: 3,
+            },
+            tasks: {
+              type: "code_review",
+              title: "Code Review: {display_id} {title}",
+              complete_on: "DONE", // 必须是该 task type 工作流的终态
+            },
+          },
+          {
+            key: "SEND_BACK",
+            name: "打回修改",
+            name_en: "Send back for changes",
+            to: "IN_PROGRESS",
+            note: "required",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            name_en: "Cancel",
+            to: "CANCELLED",
+          },
+        ],
+        DONE: [
+          {
+            key: "PUBLISH",
+            name: "发布",
+            name_en: "Publish",
+            to: "PUBLISHED",
+          },
+        ],
+        PUBLISHED: [],
+        CANCELLED: [],
+      },
+    },
+  },
   // 各 kind 的状态机、步骤、字段与子类型。
   kinds: {
     epic: {
@@ -348,135 +481,12 @@
         },
       },
     },
-    // 普通任务：默认工作流；任务类型可通过 subtypes 覆盖。
+    // 普通任务：引用标准任务流程；任务类型可通过 subtypes 覆盖。
     task: {
       label: "任务",
       label_en: "Task",
-      states: ["TODO", "IN_PROGRESS", "BLOCKED", "TO_REVIEW", "DONE", "PUBLISHED", "CANCELLED"],
-      initial: "TODO",
-      terminal: ["DONE", "PUBLISHED", "CANCELLED"],
-      // 可选字段：reviewer/review_content 可检索；custom 不检索。
-      fields: {
-        reviewer: true,
-        review_content: true,
-        custom: [],
-      },
-      // 命名步骤：mode=direct|approval|task；actors 是执行人类型，具体执行人由负责人指派。
-      steps: {
-        TODO: [
-          {
-            key: "START",
-            name: "开始",
-            name_en: "Start",
-            to: "IN_PROGRESS",
-          },
-          {
-            key: "CANCEL",
-            name: "取消",
-            name_en: "Cancel",
-            to: "CANCELLED",
-          },
-        ],
-        IN_PROGRESS: [
-          {
-            key: "SUBMIT_REVIEW",
-            name: "提交评审",
-            name_en: "Submit for review",
-            to: "TO_REVIEW",
-          },
-          {
-            key: "BLOCK",
-            name: "标记阻塞",
-            name_en: "Mark blocked",
-            to: "BLOCKED",
-          },
-          {
-            key: "CANCEL",
-            name: "取消",
-            name_en: "Cancel",
-            to: "CANCELLED",
-          },
-        ],
-        BLOCKED: [
-          {
-            key: "RESUME",
-            name: "恢复",
-            name_en: "Resume",
-            to: "IN_PROGRESS",
-          },
-          {
-            key: "REQUEUE",
-            name: "重新排队",
-            name_en: "Requeue",
-            to: "TODO",
-          },
-          {
-            key: "CANCEL",
-            name: "取消",
-            name_en: "Cancel",
-            to: "CANCELLED",
-          },
-        ],
-        TO_REVIEW: [
-          {
-            key: "CODE_REVIEW",
-            name: "Code Review",
-            name_en: "Code Review",
-            to: "DONE",
-            mode: "approval", // direct | approval | task
-            actors: ["assignee", "reviewers"],
-            executors: {
-              min: 1,
-              max: 3,
-            },
-            note: "required", // optional | required
-            // 按目标状态的默认 gate；step.gates 按字段覆盖。
-            gates: {
-              required_fields: ["review_content"],
-            },
-          },
-          {
-            key: "CODE_REVIEW_TASKS",
-            name: "Code Review Task",
-            name_en: "Code Review Task",
-            to: "DONE",
-            mode: "task", // direct | approval | task
-            actors: ["assignee", "reviewers"],
-            executors: {
-              min: 1,
-              max: 3,
-            },
-            tasks: {
-              type: "code_review",
-              title: "Code Review: {display_id} {title}",
-              complete_on: "DONE", // 必须是该 task type 工作流的终态
-            },
-          },
-          {
-            key: "SEND_BACK",
-            name: "打回修改",
-            name_en: "Send back for changes",
-            to: "IN_PROGRESS",
-            note: "required",
-          },
-          {
-            key: "CANCEL",
-            name: "取消",
-            name_en: "Cancel",
-            to: "CANCELLED",
-          },
-        ],
-        DONE: [
-          {
-            key: "PUBLISH",
-            name: "发布",
-            name_en: "Publish",
-            to: "PUBLISHED",
-          },
-        ],
-        PUBLISHED: [],
-        CANCELLED: [],
-      },
+      // states/initial/terminal/steps/gates/fields 全部取自命名定义。
+      use: "task_standard",
       // 任务子类型：可定义自己的 states/steps/fields；未声明 states 时继承 task。
       subtypes: {
         code_review: {

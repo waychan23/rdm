@@ -17,7 +17,10 @@ def validate(data_dir: Path, database_url: str | None = None) -> int:
     except Exception as exc:  # noqa: BLE001
         typer.secho(f"FAIL workflow.json5 校验失败：{exc}", fg=typer.colors.RED, err=True)
         return 1
-    typer.echo(f"version {spec.version} revision {spec.revision}；{len(spec.kinds)} 个 kind")
+    summary = f"version {spec.version} revision {spec.revision}；{len(spec.kinds)} 个 kind"
+    if spec.workflow_defs:
+        summary += f"，{len(spec.workflow_defs)} 个命名定义"
+    typer.echo(summary)
     settings = (
         Settings(data_dir=data_dir, database_url=database_url)
         if database_url

@@ -205,7 +205,8 @@ async def test_task_mode_step_agent_executor_operated_by_manager(
     parent step advances with the human as the event actor.
     """
     raw = pyjson5.loads(load_spec_text())
-    raw["kinds"]["task"]["steps"]["IN_PROGRESS"].append(
+    # task uses the named task_standard definition, so mutate the definition.
+    raw["workflow_defs"]["task_standard"]["steps"]["IN_PROGRESS"].append(
         {
             "key": "AGENT_TASK",
             "name": "Agent 任务",
