@@ -7,6 +7,7 @@ import MarkdownText from "../../components/MarkdownText";
 import PersonCell from "../../components/PersonCell";
 import TextButton from "../../components/TextButton";
 import { statusLabel } from "../../lib/labels";
+import { userLabel } from "../../lib/users";
 import StatusLozenge from "../../workitems/status";
 import type { ActiveStep } from "../../types";
 
@@ -50,7 +51,7 @@ export default function ActiveStepCard({
       {step.executors.map((executor) => (
         <div key={executor.id} className="rdm-step-executor">
           <Inline space="space.100" alignBlock="center" shouldWrap>
-            <PersonCell name={executor.user.name ?? executor.user.id} />
+            <PersonCell name={userLabel(executor.user) || executor.user.id} />
             <StatusLozenge status={executor.status} />
             {executor.task && executor.task_id && (
               <TextButton onClick={() => onOpenItem(executor.task_id as string)}>

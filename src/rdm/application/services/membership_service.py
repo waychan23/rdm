@@ -257,7 +257,7 @@ class MembershipService:
                         "需要 project-director/Org Owne"
                         "r 或现任项目 Owner）"
                     ),
-                    user=actor.name,
+                    user=actor.label,
                 )
             )
         assert self.uow.users is not None and self.uow.memberships is not None

@@ -15,6 +15,7 @@ import ModalDialog, {
 } from "@atlaskit/modal-dialog";
 import SectionMessage from "@atlaskit/section-message";
 import Spinner from "@atlaskit/spinner";
+import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { useTranslation } from "react-i18next";
@@ -29,6 +30,7 @@ import { useAsync } from "../hooks/useAsync";
 import { refreshSession, useCurrentUser } from "../lib/auth";
 import { roleLabel } from "../lib/labels";
 import { useNotify } from "../lib/flags";
+import { userLabel } from "../lib/users";
 import type { OrgUser } from "../types";
 import "../styles/table.css";
 
@@ -80,6 +82,7 @@ export default function OrgUsersPage() {
   // --- create human ---
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [createdUrl, setCreatedUrl] = useState("");
 
@@ -87,10 +90,12 @@ export default function OrgUsersPage() {
     try {
       const res = await api.post<{ user: OrgUser; password_reset_url: string }>("/users", {
         name: name.trim(),
+        display_name: displayName.trim() || null,
         email: email || null,
       });
       setCreatedUrl(absoluteUrl(res.data.password_reset_url));
       setName("");
+      setDisplayName("");
       setEmail("");
       reload();
     } catch (e) {
@@ -148,6 +153,33 @@ export default function OrgUsersPage() {
       notify.success(t("users.notices.tokensRevoked"));
     } catch (e) {
       notify.error(t("users.errors.revokeFailed"), errorCause(e)?.message);
+    }
+  };
+
+  // --- edit profile ---
+  const [editTarget, setEditTarget] = useState<OrgUser | null>(null);
+  const [editDisplayName, setEditDisplayName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const openEdit = (user: OrgUser) => {
+    setEditTarget(user);
+    setEditDisplayName(user.display_name ?? "");
+    setEditEmail(user.email ?? "");
+    setEditDescription(user.description_md ?? "");
+  };
+  const saveUser = async () => {
+    if (!editTarget) return;
+    try {
+      await api.patch(`/users/${editTarget.id}`, {
+        display_name: editDisplayName.trim() || null,
+        email: editEmail.trim() || null,
+        description_md: editDescription.trim() || null,
+      });
+      setEditTarget(null);
+      reload();
+      notify.success(t("users.notices.saved"));
+    } catch (e) {
+      notify.error(t("users.errors.saveFailed"), errorCause(e)?.message);
     }
   };
 
@@ -247,6 +279,7 @@ export default function OrgUsersPage() {
                   else void setActive(h, true);
                 }}
                 onRevoke={() => setConfirmRevoke(h)}
+                onEdit={() => openEdit(h)}
                 onRoles={() => openRoles(h)}
                 onTransferOwner={() => setConfirmTransfer(h)}
               />
@@ -254,6 +287,68 @@ export default function OrgUsersPage() {
           </tbody>
         </table>
       )}
+
+      <ModalTransition>
+        {editTarget && (
+          <ModalDialog
+            onClose={() => setEditTarget(null)}
+            width="520px"
+            label={t("editUser.dialogLabel")}
+            testId="org-user-edit-dialog"
+          >
+            <ModalHeader>
+              <ModalTitle>{t("editUser.title", { name: userLabel(editTarget) })}</ModalTitle>
+            </ModalHeader>
+            <ModalBody>
+              <Stack space="space.150">
+                <FormField label={t("editUser.displayNameLabel")} htmlFor="edit-user-display-name">
+                  <Textfield
+                    id="edit-user-display-name"
+                    value={editDisplayName}
+                    testId="org-user-edit-display-name"
+                    onChange={(e) => setEditDisplayName(e.currentTarget.value)}
+                  />
+                </FormField>
+                <FormField label={t("editUser.emailLabel")} htmlFor="edit-user-email">
+                  <Textfield
+                    id="edit-user-email"
+                    value={editEmail}
+                    testId="org-user-edit-email"
+                    onChange={(e) => setEditEmail(e.currentTarget.value)}
+                  />
+                </FormField>
+                <FormField
+                  label={t("editUser.descriptionLabel")}
+                  htmlFor="edit-user-description"
+                >
+                  <TextArea
+                    id="edit-user-description"
+                    value={editDescription}
+                    testId="org-user-edit-description"
+                    onChange={(e) => setEditDescription(e.currentTarget.value)}
+                  />
+                </FormField>
+              </Stack>
+            </ModalBody>
+            <ModalFooter>
+              <Button
+                appearance="subtle"
+                testId="org-user-edit-cancel"
+                onClick={() => setEditTarget(null)}
+              >
+                {t("editUser.cancel")}
+              </Button>
+              <Button
+                appearance="primary"
+                testId="org-user-edit-save"
+                onClick={saveUser}
+              >
+                {t("editUser.save")}
+              </Button>
+            </ModalFooter>
+          </ModalDialog>
+        )}
+      </ModalTransition>
 
       <ModalTransition>
         {createOpen && (
@@ -274,6 +369,17 @@ export default function OrgUsersPage() {
                     value={name}
                     testId="org-user-create-name"
                     onChange={(e) => setName(e.currentTarget.value)}
+                  />
+                </FormField>
+                <FormField
+                  label={t("createUser.displayNameLabel")}
+                  htmlFor="new-user-display-name"
+                >
+                  <Textfield
+                    id="new-user-display-name"
+                    value={displayName}
+                    testId="org-user-create-display-name"
+                    onChange={(e) => setDisplayName(e.currentTarget.value)}
                   />
                 </FormField>
                 <FormField label={t("createUser.emailLabel")} htmlFor="new-user-email">
@@ -334,7 +440,7 @@ export default function OrgUsersPage() {
             testId="org-user-roles-dialog"
           >
             <ModalHeader>
-              <ModalTitle>{t("rolesDialog.title", { name: rolesTarget.name })}</ModalTitle>
+              <ModalTitle>{t("rolesDialog.title", { name: userLabel(rolesTarget) })}</ModalTitle>
             </ModalHeader>
             <ModalBody>
               <Stack space="space.100">
@@ -430,7 +536,9 @@ export default function OrgUsersPage() {
         onClose={() => setConfirmRevoke(null)}
         onConfirm={() => void revokeAll()}
       >
-        {t("revokeDialog.body", { name: confirmRevoke?.name ?? "—" })}
+        {t("revokeDialog.body", {
+          name: confirmRevoke ? userLabel(confirmRevoke) : "—",
+        })}
       </ConfirmDialog>
 
       <ConfirmDialog
@@ -442,7 +550,9 @@ export default function OrgUsersPage() {
         onClose={() => setDisableTarget(null)}
         onConfirm={() => void disableUser()}
       >
-        {t("disableDialog.body", { name: disableTarget?.name ?? "—" })}
+        {t("disableDialog.body", {
+          name: disableTarget ? userLabel(disableTarget) : "—",
+        })}
       </ConfirmDialog>
 
       <ConfirmDialog
@@ -454,7 +564,9 @@ export default function OrgUsersPage() {
         onClose={() => setConfirmTransfer(null)}
         onConfirm={() => void transferOwner()}
       >
-        {t("transferDialog.body", { name: confirmTransfer?.name ?? "—" })}
+        {t("transferDialog.body", {
+          name: confirmTransfer ? userLabel(confirmTransfer) : "—",
+        })}
       </ConfirmDialog>
     </Page>
   );
@@ -467,6 +579,7 @@ function HumanGroup({
   onReset,
   onToggle,
   onRevoke,
+  onEdit,
   onRoles,
   onTransferOwner,
 }: {
@@ -476,6 +589,7 @@ function HumanGroup({
   onReset: () => void;
   onToggle: () => void;
   onRevoke: () => void;
+  onEdit: () => void;
   onRoles: () => void;
   onTransferOwner: () => void;
 }) {
@@ -485,7 +599,14 @@ function HumanGroup({
     <>
       <tr data-testid={`org-user-row-${human.id}`}>
         <td>
-          <Text weight="medium">{human.name}</Text>
+          <Stack space="space.025">
+            <Text weight="medium">{userLabel(human)}</Text>
+            {human.display_name && (
+              <Text size="small" color="color.text.subtlest">
+                @{human.name}
+              </Text>
+            )}
+          </Stack>
         </td>
         <td>
           <Lozenge appearance="default">human</Lozenge>
@@ -513,6 +634,14 @@ function HumanGroup({
         </td>
         <td>
           <Inline space="space.050">
+            <Button
+              spacing="compact"
+              appearance="subtle"
+              testId={`org-user-edit-${human.id}`}
+              onClick={onEdit}
+            >
+              {t("users.actions.edit")}
+            </Button>
             {!orgOwner && (
               <>
                 <Button
@@ -570,7 +699,7 @@ function HumanGroup({
               <span className="rdm-indent" aria-hidden>
                 ↳
               </span>
-              <Text size="small">{a.name}</Text>
+              <Text size="small">{userLabel(a)}</Text>
             </Inline>
           </td>
           <td>

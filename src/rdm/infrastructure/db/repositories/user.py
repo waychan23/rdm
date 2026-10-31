@@ -105,6 +105,7 @@ class UserRepository:
                 org_id=user.org_id,
                 type=user.type,
                 name=user.name,
+                display_name=user.display_name,
                 description_md=user.description_md,
                 manager_user_id=user.manager_user_id,
                 org_roles=user.org_roles,
@@ -128,6 +129,7 @@ class UserRepository:
             .where(UserModel.id == user.id)
             .values(
                 name=user.name,
+                display_name=user.display_name,
                 description_md=user.description_md,
                 manager_user_id=user.manager_user_id,
                 org_roles=user.org_roles,

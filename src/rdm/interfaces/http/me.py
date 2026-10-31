@@ -20,6 +20,7 @@ router = APIRouter(prefix="/api/v1/me", tags=["me"])
 class MeUpdateIn(BaseModel):
     model_config = {"extra": "forbid"}
 
+    display_name: str | None = Field(default=None, max_length=100)
     description_md: str | None = None
     email: str | None = None
     notify_webhook: str | None = None
@@ -34,6 +35,7 @@ class TokenCreateIn(BaseModel):
 
 class AgentCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
+    display_name: str | None = Field(default=None, max_length=100)
     description_md: str | None = None
     accept_kinds: list[str] = Field(default_factory=list)
     email: str | None = None
@@ -45,6 +47,7 @@ class AgentUpdateIn(BaseModel):
     model_config = {"extra": "forbid"}
 
     name: str | None = Field(default=None, min_length=1, max_length=100)
+    display_name: str | None = Field(default=None, max_length=100)
     description_md: str | None = None
     accept_kinds: list[str] | None = None
     email: str | None = None

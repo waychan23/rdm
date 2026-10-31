@@ -142,6 +142,7 @@ async def test_human_can_read_own_and_agent_mailboxes(server, owner_token: str) 
     assert by_subject["给人类"]["mailbox_owner"] == {
         "id": alice_id,
         "name": "alice",
+        "display_name": None,
         "type": "human",
     }
     assert by_subject["给 agent"]["mailbox_owner"]["id"] == agent_id

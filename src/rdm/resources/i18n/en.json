@@ -244,6 +244,7 @@
     "webhook_format_invalid": "notify_webhook_format must be generic/dingtalk/feishu",
     "name_required": "name is required",
     "name_taken": "Username {name} is already taken",
+    "display_name_too_long": "Display name must be at most 100 characters",
     "agent_no_password": "Agents do not have passwords",
     "owner_password_recovery": "The Org Owner password must be reset through the deployment-side recovery flow",
     "agent_profile_managed": "Agent accounts are maintained by their managing human in personal settings",

@@ -102,6 +102,7 @@ def user_to_domain(row: UserModel) -> User:
         org_id=row.org_id,
         type=row.type,
         name=row.name,
+        display_name=row.display_name,
         description_md=row.description_md,
         manager_user_id=row.manager_user_id,
         org_roles=list(row.org_roles or []),

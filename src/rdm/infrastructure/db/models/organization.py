@@ -49,6 +49,8 @@ class UserModel(AuditMixin, SoftDeleteMixin, Base):
     )
     type: Mapped[str] = mapped_column(String(10), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Presentation-only; NULL means "fall back to name" (§17.116).
+    display_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     description_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Self FK: humans have NULL; agents must point at their human manager.
     manager_user_id: Mapped[str | None] = mapped_column(

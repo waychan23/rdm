@@ -348,3 +348,76 @@ async def test_org_owner_transfer_is_unique(server, owner_token) -> None:
         "/api/v1/org/transfer-owner", headers=auth(owner_token), json={"user_id": owner_id}
     )
     assert r.status_code == 403
+
+
+async def test_user_display_name(server, owner_token) -> None:
+    """§17.116: display_name is presentation-only; name stays the address handle."""
+    client, _settings, app = server
+    await ensure_owner_access(client, app)
+
+    r = await client.post(
+        "/api/v1/users",
+        headers=auth(owner_token),
+        json={"name": "dn-one", "display_name": "  张三  "},
+    )
+    assert r.status_code == 201, r.text
+    user = r.json()["data"]["user"]
+    assert user["name"] == "dn-one"
+    assert user["display_name"] == "张三"
+    uid = user["id"]
+
+    # Omitted display names stay NULL and readers fall back to the login name.
+    other_id = await create_human(client, owner_token, "dn-two")
+    users = (await client.get("/api/v1/users", headers=auth(owner_token))).json()["data"]
+    by_name = {u["name"]: u for u in users}
+    assert by_name["dn-two"]["display_name"] is None
+
+    # user_manager can set and clear it; blank means "unset".
+    r = await client.patch(
+        f"/api/v1/users/{uid}", headers=auth(owner_token), json={"display_name": "李四"}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["display_name"] == "李四"
+    r = await client.patch(
+        f"/api/v1/users/{uid}", headers=auth(owner_token), json={"display_name": "   "}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["display_name"] is None
+
+    # Length is enforced by the schema.
+    r = await client.patch(
+        f"/api/v1/users/{uid}",
+        headers=auth(owner_token),
+        json={"display_name": "x" * 101},
+    )
+    assert r.status_code == 422
+
+    # Self-service edit; whoami reflects the new display name.
+    token = await login_pat(client, "dn-two")
+    r = await client.patch(
+        f"/api/v1/users/{other_id}", headers=auth(token), json={"display_name": "nope"}
+    )
+    assert r.status_code == 403
+    r = await client.patch("/api/v1/me", headers=auth(token), json={"display_name": "王五"})
+    assert r.status_code == 200, r.text
+    me = (await client.get("/api/v1/whoami", headers=auth(token))).json()["data"]
+    assert me["user"]["name"] == "dn-two"
+    assert me["user"]["display_name"] == "王五"
+
+    # Agents get one too, maintained by their manager...
+    agent_id = await create_agent(client, owner_token, "dn-agent")
+    r = await client.patch(
+        f"/api/v1/me/agents/{agent_id}",
+        headers=auth(owner_token),
+        json={"display_name": "小助手"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["name"] == "dn-agent"
+    assert r.json()["data"]["display_name"] == "小助手"
+    # ...but org user administration refuses agent profiles.
+    r = await client.patch(
+        f"/api/v1/users/{agent_id}",
+        headers=auth(owner_token),
+        json={"display_name": "nope"},
+    )
+    assert r.status_code == 422

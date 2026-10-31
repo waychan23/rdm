@@ -21,6 +21,7 @@ import { api, errorCause } from "../lib/api";
 import { statusLabel } from "../lib/labels";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
+import { userLabel } from "../lib/users";
 import type { OrgUser, Project, ProjectMemberRow } from "../types";
 
 const styles = cssMap({
@@ -177,7 +178,7 @@ export default function SettingsPage() {
            <Text size="small" color="color.text.subtlest">
              {t("projectSettings.info.owner")}
            </Text>
-           <Text>{owner?.user.name ?? "—"}</Text>
+           <Text>{owner ? userLabel(owner.user) : "—"}</Text>
          </Stack>
        </Box>
 
@@ -231,7 +232,7 @@ export default function SettingsPage() {
            <Select
              inputId="project-owner"
              options={humans.map((h) => ({
-               label: `${h.user.name}${
+               label: `${userLabel(h.user)}${
                  h.user.id === data.project.owner_user_id
                    ? t("projectSettings.owner.currentSuffix")
                    : ""
@@ -240,7 +241,7 @@ export default function SettingsPage() {
              }))}
              value={
                ownerId
-                 ? { label: owner?.user.name ?? "", value: ownerId }
+                 ? { label: owner ? userLabel(owner.user) : "", value: ownerId }
                  : null
              }
              onChange={(opt) => {
@@ -266,8 +267,8 @@ export default function SettingsPage() {
          onConfirm={() => void reassignOwner()}
        >
          {t("projectSettings.owner.transferBody", {
-           from: owner?.user.name ?? "—",
-           to: pendingOwner?.user.name ?? "—",
+           from: owner ? userLabel(owner.user) : "—",
+           to: pendingOwner ? userLabel(pendingOwner.user) : "—",
          })}
        </ConfirmDialog>
 

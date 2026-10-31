@@ -9,6 +9,7 @@ import PersonCell from "../components/PersonCell";
 import PriorityMark from "../components/PriorityMark";
 import TypeKindIcon from "../components/TypeKindIcon";
 import { formatDate } from "../lib/format";
+import { userLabel } from "../lib/users";
 import type { WorkItem } from "../types";
 import StatusLozenge from "./status";
 import "../styles/table.css";
@@ -131,7 +132,7 @@ export default function WorkItemTable({
                 <PriorityMark priority={row.priority} />
               </td>
               <td>
-                <PersonCell name={row.assignee?.name} />
+                <PersonCell name={row.assignee ? userLabel(row.assignee) : undefined} />
               </td>
               <td>
                 <span className="cell-meta">{formatDate(row.created_at)}</span>

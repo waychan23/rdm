@@ -25,6 +25,7 @@ import { api, errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 import { flattenMembers } from "../lib/members";
 import { portalMenuProps } from "../lib/portalMenu";
+import { userLabel } from "../lib/users";
 import type { Attachment, OrgUser, ProjectMemberRow } from "../types";
 import "../styles/markdown-editor.css";
 
@@ -84,7 +85,10 @@ export default function MarkdownEditor({
       .then((res) => {
         if (!alive) return;
         setMembers(
-          flattenMembers(res.data).map((m: OrgUser) => ({ label: m.name, value: m.name })),
+          flattenMembers(res.data).map((m: OrgUser) => ({
+            label: userLabel(m),
+            value: m.name,
+          })),
         );
       })
       .catch(() => {});

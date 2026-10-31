@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from rdm.application import security
+from rdm.application.dto import user_brief
 from rdm.application.ports import FileStore
 from rdm.application.services.comment_service import CommentService
 from rdm.application.services.notification_service import NotificationService
@@ -49,8 +50,8 @@ class _SafeFormat(dict[str, str]):
         return "{" + key + "}"
 
 
-def _user_out(user: User) -> dict[str, str]:
-    return {"id": user.id, "name": user.name, "type": user.type}
+def _user_out(user: User) -> dict[str, str | None]:
+    return user_brief(user)
 
 
 def _field_present(value: Any) -> bool:
@@ -311,7 +312,7 @@ class StepService:
                         tr(
                             "step.not_candidate",
                             default="{user} 不是步骤「{name}」的候选执行人",
-                            user=user.name,
+                            user=user.label,
                             name=localized_name(step.name, step.name_en),
                         ),
                         details={
@@ -446,7 +447,7 @@ class StepService:
                         tr(
                             "step.reason_only_user",
                             default="该步骤只能由 {user} 执行",
-                            user=candidates[0].name,
+                            user=candidates[0].label,
                         )
                     )
             can_start = (
@@ -716,7 +717,9 @@ class StepService:
     ) -> tuple[Project, WorkItem, dict[str, Any]]:
         candidates = await self.resolve_candidates(item, step)
         if len(candidates) != 1 or not actor.can_act_for_user(candidates[0].id):
-            names = "、".join(user.name for user in candidates) or tr("step.none", default="（无）")
+            names = "、".join(user.label for user in candidates) or tr(
+                "step.none", default="（无）"
+            )
             raise WorkflowStepForbidden(
                 tr(
                     "step.direct_forbidden",
@@ -846,7 +849,7 @@ class StepService:
         assert self.uow.work_item_steps is not None and self.uow.users is not None
         for executor_row in executor_rows:
             user = await self.uow.users.get(executor_row.user_id)
-            executor_name = user.name if user is not None else executor_row.user_id
+            executor_name = user.label if user is not None else executor_row.user_id
             title = step.tasks.title.format_map(
                 _SafeFormat(
                     display_id=f"{project.key}-{item.display_no}",
@@ -903,7 +906,7 @@ class StepService:
                 tr(
                     "step.not_executor",
                     default="{actor} 不是步骤「{name}」的执行人（也不是其管理的 agent 的 human）",
-                    actor=actor.name,
+                    actor=actor.label,
                     name=step_display_name(step.step_name, step.config),
                 ),
                 details={"step_id": step.id, "user_id": actor.id},
@@ -918,7 +921,7 @@ class StepService:
                 tr(
                     "step.removed_executor",
                     default="{actor} 已被移出步骤「{name}」的执行人列表",
-                    actor=actor.name,
+                    actor=actor.label,
                     name=step_display_name(step.step_name, step.config),
                 ),
                 details={"step_id": step.id, "user_id": actor.id},
@@ -1112,7 +1115,7 @@ class StepService:
                 tr(
                     "step.not_pending_executor",
                     default="{actor} 不是步骤「{name}」的待执行执行人。",
-                    actor=actor.name,
+                    actor=actor.label,
                     name=step_display_name(step.step_name, step.config),
                 ),
                 details={"step_id": step.id, "user_id": actor.id},

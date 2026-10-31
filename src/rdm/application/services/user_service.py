@@ -51,6 +51,21 @@ def _check_accept_kinds(kinds: list[str]) -> None:
         )
 
 
+def _clean_display_name(value: Any) -> str | None:
+    """Trim and validate an optional display name (blank means unset)."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if len(text) > 100:
+        raise ValidationError(
+            tr("user.display_name_too_long", default="展示名称最多 100 个字符"),
+            details={"field": "display_name"},
+        )
+    return text
+
+
 def _check_webhook_format(fmt: str) -> None:
     if fmt not in {"generic", "dingtalk", "feishu"}:
         raise ValidationError(
@@ -78,6 +93,7 @@ class UserService:
         actor: Actor,
         *,
         name: str,
+        display_name: str | None = None,
         email: str | None = None,
         description_md: str | None = None,
     ) -> tuple[User, str]:
@@ -100,6 +116,7 @@ class UserService:
             org_id=actor.org_id,
             type=UserType.human.value,
             name=clean,
+            display_name=_clean_display_name(display_name),
             description_md=description_md,
             email=email,
             password_hash=None,
@@ -181,6 +198,11 @@ class UserService:
             if name != user.name:
                 changes["name"] = [user.name, name]
                 user.name = name
+        if "display_name" in data:
+            display_name = _clean_display_name(data["display_name"])
+            if display_name != user.display_name:
+                changes["display_name"] = [user.display_name, display_name]
+                user.display_name = display_name
         for field in ("email", "description_md"):
             if field in data and data[field] != getattr(user, field):
                 changes[field] = [getattr(user, field), data[field]]
@@ -320,6 +342,11 @@ class UserService:
         if user is None:
             raise NotFound(tr("notification.user_not_found", default="用户不存在"))
         changes: dict[str, list[Any]] = {}
+        if "display_name" in data:
+            display_name = _clean_display_name(data["display_name"])
+            if display_name != user.display_name:
+                changes["display_name"] = [user.display_name, display_name]
+                user.display_name = display_name
         for field in ("description_md", "email", "notify_webhook"):
             if field in data and data[field] != getattr(user, field):
                 changes[field] = [getattr(user, field), data[field]]
@@ -365,6 +392,7 @@ class UserService:
             org_id=actor.org_id,
             type=UserType.agent.value,
             name=name,
+            display_name=_clean_display_name(data.get("display_name")),
             description_md=data.get("description_md"),
             manager_user_id=actor.human_id,
             org_roles=[],
@@ -436,6 +464,11 @@ class UserService:
             if kinds != agent.accept_kinds:
                 changes["accept_kinds"] = [agent.accept_kinds, kinds]
                 agent.accept_kinds = kinds
+        if "display_name" in data:
+            display_name = _clean_display_name(data["display_name"])
+            if display_name != agent.display_name:
+                changes["display_name"] = [agent.display_name, display_name]
+                agent.display_name = display_name
         for field in ("description_md", "email", "notify_webhook"):
             if field in data and data[field] != getattr(agent, field):
                 changes[field] = [getattr(agent, field), data[field]]

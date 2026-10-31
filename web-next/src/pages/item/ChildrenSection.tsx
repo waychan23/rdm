@@ -19,6 +19,7 @@ import WorkItemPicker, {
 } from "../../components/WorkItemPicker";
 import { api, errorCause } from "../../lib/api";
 import { useNotify } from "../../lib/flags";
+import { userLabel } from "../../lib/users";
 import type { WorkItem } from "../../types";
 import CreateWorkItemDialog from "../../workitems/CreateWorkItemDialog";
 import StatusLozenge from "../../workitems/status";
@@ -201,7 +202,7 @@ export default function ChildrenSection({
                 <StatusLozenge status={child.status} />
               </span>
               <span className="rdm-item-child-assignee">
-                <PersonCell name={child.assignee?.name} />
+                <PersonCell name={child.assignee ? userLabel(child.assignee) : undefined} />
               </span>
             </span>
           </div>

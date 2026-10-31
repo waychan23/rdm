@@ -7,6 +7,7 @@ import { token } from "@atlaskit/tokens";
 import PersonCell from "../../components/PersonCell";
 import PriorityMark from "../../components/PriorityMark";
 import TypeKindIcon from "../../components/TypeKindIcon";
+import { userLabel } from "../../lib/users";
 import type { WorkItem } from "../../types";
 
 interface Props {
@@ -71,7 +72,7 @@ export default function BoardCard({ item, onOpen }: Props) {
         <Text size="small" color="color.text">
           {item.title}
         </Text>
-        <PersonCell name={item.assignee?.name} />
+        <PersonCell name={item.assignee ? userLabel(item.assignee) : undefined} />
       </Stack>
     </div>
   );

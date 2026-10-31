@@ -12,6 +12,7 @@ import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
 import { cardBorder } from "../components/cardBorder";
 import { apiLocale } from "../i18n";
+import { userLabel } from "../lib/users";
 import type { OrgUser } from "../types";
 
 interface ConsentInfo {
@@ -147,7 +148,7 @@ export default function ConsentPage() {
                      value: u.id,
                      label: (
                        <Inline space="space.100" alignBlock="center">
-                         <span>{u.name}</span>
+                         <span>{userLabel(u)}</span>
                          <Lozenge appearance={u.type === "agent" ? "warning" : "default"}>
                            {u.type}
                          </Lozenge>

@@ -19,6 +19,7 @@ from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 
+from rdm.application.dto import user_brief
 from rdm.application.services.attachment_commit import commit_inline_images
 from rdm.application.services.membership_service import MembershipService
 from rdm.application.services.workitem_service import WorkItemService
@@ -415,12 +416,12 @@ class MailboxService:
                         "name": row_project.name,
                     },
                     "from": (
-                        {"id": sender.id, "name": sender.name, "type": sender.type}
+                        user_brief(sender)
                         if sender is not None
                         else {"id": row_message.from_user_id}
                     ),
                     "mailbox_owner": (
-                        {"id": owner.id, "name": owner.name, "type": owner.type}
+                        user_brief(owner)
                         if owner is not None
                         else {"id": delivery.recipient_user_id}
                     ),
@@ -479,6 +480,7 @@ class MailboxService:
                 {
                     "id": delivery.recipient_user_id,
                     "name": user.name if user is not None else delivery.recipient_user_id,
+                    "display_name": user.display_name if user is not None else None,
                     "type": user.type if user is not None else "human",
                     "recipient_type": delivery.recipient_type,
                 }
@@ -519,14 +521,10 @@ class MailboxService:
                         "name": row_project.name,
                     },
                     "from": (
-                        {"id": sender.id, "name": sender.name, "type": sender.type}
-                        if sender is not None
-                        else {"id": message.from_user_id}
+                        user_brief(sender) if sender is not None else {"id": message.from_user_id}
                     ),
                     "mailbox_owner": (
-                        {"id": sender.id, "name": sender.name, "type": sender.type}
-                        if sender is not None
-                        else {"id": message.from_user_id}
+                        user_brief(sender) if sender is not None else {"id": message.from_user_id}
                     ),
                     "subject": message.subject,
                     "body_md": message.body_md,
@@ -618,7 +616,7 @@ class MailboxService:
             for link in members:
                 user = await self.uow.users.get(link.user_id)
                 if user is not None:
-                    users.append({"id": user.id, "name": user.name, "type": user.type})
+                    users.append(user_brief(user))
             out.append(
                 {
                     "id": group.id,
@@ -656,7 +654,7 @@ class MailboxService:
             project,
             actor,
             recipients,
-            subject=f"{actor.name} 在 {display_id} 的讨论中 @了你",
+            subject=f"{actor.label} 在 {display_id} 的讨论中 @了你",
             body_md=body_md,
             ref_items=[item],
             reply_to=None,

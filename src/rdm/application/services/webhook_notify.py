@@ -71,7 +71,14 @@ def build_view(
         "project": {"id": project.id, "key": project.key},
         "occurred_at": iso_utc(dt.datetime.now(dt.UTC)),
         "actor": (
-            None if actor is None else {"id": actor.id, "name": actor.name, "type": actor.type}
+            None
+            if actor is None
+            else {
+                "id": actor.id,
+                "name": actor.name,
+                "display_name": actor.display_name,
+                "type": actor.type,
+            }
         ),
         "data": data,
     }
@@ -279,7 +286,7 @@ async def notify_work_item(
         "kind": item.kind,
         "status": item.status,
         "assignee_id": assignee.id,
-        "assignee_name": assignee.name,
+        "assignee_name": assignee.label,
     }
     if extra:
         data.update(extra)
@@ -338,7 +345,7 @@ async def notify_message(
         "message_id": message.id,
         "subject": message.subject,
         "from_id": sender.id,
-        "from_name": sender.name,
+        "from_name": sender.label,
         "body_excerpt": _excerpt(message.body_md),
         "refs": [f"{project.key}-{i.display_no}" for i in ref_items],
     }

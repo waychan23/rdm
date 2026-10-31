@@ -19,6 +19,7 @@ const org = {
       effective: "Active",
     },
     actions: {
+      edit: "Edit",
       resetLink: "Reset link",
       disable: "Disable",
       enable: "Enable",
@@ -46,12 +47,22 @@ const org = {
     dialogLabel: "Create user",
     title: "Create human user",
     nameLabel: "Username (login name, unique in the organization)",
+    displayNameLabel: "Display name (optional, falls back to the login name)",
     emailLabel: "Email (optional, notifications only)",
     linkTitle: "One-time password setup link (24 hours)",
     copy: "Copy",
     linkHint: "Send it to the user through a trusted channel; the link can only be used once.",
     close: "Close",
     create: "Create",
+  },
+  editUser: {
+    dialogLabel: "Edit user",
+    title: "Edit user · {name}",
+    displayNameLabel: "Display name (leave blank to use the login name)",
+    emailLabel: "Email (optional, notifications only)",
+    descriptionLabel: "Description (optional)",
+    cancel: "Cancel",
+    save: "Save",
   },
   rolesDialog: {
     dialogLabel: "Organization roles",
@@ -124,6 +135,11 @@ const org = {
   },
   personal: {
     title: "My settings",
+    profile: {
+      heading: "Profile",
+      displayName: "Display name (optional, falls back to the login name)",
+      save: "Save",
+    },
     password: {
       heading: "Change password",
       old: "Current password",
@@ -206,6 +222,7 @@ const org = {
       dialogLabel: "Create agent",
       title: "Create agent",
       name: "Name",
+      displayName: "Display name (optional)",
       kinds: "Accepted work item kinds",
       webhook: "Webhook URL (optional)",
       format: "Webhook format",
@@ -214,6 +231,7 @@ const org = {
     },
     agentNotify: {
       title: "Notification settings · {name}",
+      displayName: "Display name (optional)",
       webhook: "Webhook URL",
       format: "Format",
       cancel: "Cancel",

@@ -261,7 +261,7 @@ class CommentService:
                 tr(
                     "comment.delete_forbidden",
                     default="成员 {user} 不能删除该评论：仅作者本人或 Owner/Manager 可删除。",
-                    user=actor.name,
+                    user=actor.label,
                 ),
                 details={"comment_id": comment_id, "author_user_id": comment.author_user_id},
             )

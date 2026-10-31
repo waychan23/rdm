@@ -7,6 +7,7 @@ import datetime as dt
 from decimal import Decimal
 from typing import Any
 
+from rdm.application.dto import user_brief
 from rdm.domain.entities import (
     Artifact,
     Attachment,
@@ -51,6 +52,7 @@ def user_out(u: User, *, effective_active: bool | None = None) -> dict:
         "id": u.id,
         "type": u.type,
         "name": u.name,
+        "display_name": u.display_name,
         "description_md": u.description_md,
         "manager_user_id": u.manager_user_id,
         "org_roles": list(u.org_roles),
@@ -123,18 +125,14 @@ def _assignee_out(item: WorkItem, users: dict[str, User]) -> dict | None:
     user = users.get(item.assignee_user_id) if item.assignee_user_id else None
     if user is None:
         return None
-    return {"id": user.id, "name": user.name, "type": user.type}
+    return user_brief(user)
 
 
 def _people_out(user_ids: list[str], users: dict[str, User]) -> list[dict]:
     out: list[dict] = []
     for user_id in user_ids:
         user = users.get(user_id)
-        out.append(
-            {"id": user.id, "name": user.name, "type": user.type}
-            if user is not None
-            else {"id": user_id}
-        )
+        out.append(user_brief(user) if user is not None else {"id": user_id})
     return out
 
 
@@ -210,9 +208,7 @@ def comment_out(
         "work_item_id": c.work_item_id,
         "body_md": c.body_md,
         "reply_to_id": c.reply_to_id,
-        "author": {"id": author.id, "name": author.name, "type": author.type}
-        if author
-        else {"id": c.author_user_id},
+        "author": user_brief(author) if author else {"id": c.author_user_id},
         "attachments": attachments or [],
         "created_at": _iso(c.created_at),
         "updated_at": _iso(c.updated_at),
@@ -234,9 +230,7 @@ def attachment_out(a: Attachment, users: dict[str, User] | None = None) -> dict:
         "download_url": f"/api/v1/attachments/{a.id}/download",
         "state": a.state,
         "committed_at": _iso(a.committed_at),
-        "uploader": {"id": uploader.id, "name": uploader.name, "type": uploader.type}
-        if uploader
-        else {"id": a.uploader_user_id},
+        "uploader": user_brief(uploader) if uploader else {"id": a.uploader_user_id},
         "created_at": _iso(a.created_at),
     }
 

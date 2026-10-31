@@ -19,6 +19,7 @@ const org = {
       effective: "生效",
     },
     actions: {
+      edit: "编辑",
       resetLink: "重置链接",
       disable: "停用",
       enable: "启用",
@@ -46,12 +47,22 @@ const org = {
     dialogLabel: "创建用户",
     title: "创建人类用户",
     nameLabel: "用户名（登录名，组织内唯一）",
+    displayNameLabel: "展示名称（可选，未填时显示登录名）",
     emailLabel: "Email（可选，仅通知）",
     linkTitle: "一次性设置密码链接（24 小时）",
     copy: "复制",
     linkHint: "请通过可信渠道发给该用户；链接只能使用一次。",
     close: "关闭",
     create: "创建",
+  },
+  editUser: {
+    dialogLabel: "编辑用户",
+    title: "编辑用户 · {name}",
+    displayNameLabel: "展示名称（留空则显示登录名）",
+    emailLabel: "Email（可选，仅通知）",
+    descriptionLabel: "描述（可选）",
+    cancel: "取消",
+    save: "保存",
   },
   rolesDialog: {
     dialogLabel: "组织角色",
@@ -124,6 +135,11 @@ const org = {
   },
   personal: {
     title: "我的设置",
+    profile: {
+      heading: "个人资料",
+      displayName: "展示名称（可选，留空则显示登录名）",
+      save: "保存",
+    },
     password: {
       heading: "修改密码",
       old: "原密码",
@@ -206,6 +222,7 @@ const org = {
       dialogLabel: "创建 Agent",
       title: "创建 Agent",
       name: "名称",
+      displayName: "展示名称（可选）",
       kinds: "可接任务类型",
       webhook: "Webhook URL（可选）",
       format: "Webhook 格式",
@@ -214,6 +231,7 @@ const org = {
     },
     agentNotify: {
       title: "通知设置 · {name}",
+      displayName: "展示名称（可选）",
       webhook: "Webhook URL",
       format: "格式",
       cancel: "取消",

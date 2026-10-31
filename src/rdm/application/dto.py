@@ -3,6 +3,7 @@
 import re
 from typing import Any
 
+from rdm.domain.entities import User
 from rdm.domain.errors import ValidationError
 from rdm.i18n import tr
 
@@ -24,3 +25,17 @@ def validate_project_key(key: str) -> str:
 
 def error_body(code: str, message: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
     return {"error": {"code": code, "message": message, "details": details or {}}}
+
+
+def user_brief(user: User) -> dict[str, Any]:
+    """Compact user payload shared by REST and MCP (§17.116).
+
+    ``name`` stays the address handle; ``display_name`` is presentation-only
+    and may be ``None``, in which case clients render ``name``.
+    """
+    return {
+        "id": user.id,
+        "name": user.name,
+        "display_name": user.display_name,
+        "type": user.type,
+    }

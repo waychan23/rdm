@@ -44,6 +44,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                     "identity": {
                         "id": actor.id,
                         "name": actor.name,
+                        "display_name": actor.display_name,
                         "type": actor.type,
                         "act_as": actor.is_act_as,
                     },

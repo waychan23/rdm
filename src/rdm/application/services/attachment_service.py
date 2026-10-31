@@ -188,7 +188,7 @@ class AttachmentService:
                 tr(
                     "attachment.delete_forbidden",
                     default="成员 {user} 不能删除该附件：仅上传者或 Owner/Manager 可删除。",
-                    user=actor.name,
+                    user=actor.label,
                 ),
                 details={
                     "attachment_id": attachment_id,

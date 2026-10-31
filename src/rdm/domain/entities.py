@@ -71,6 +71,8 @@ class User:
     org_id: str
     type: str  # UserType value
     name: str
+    # Presentation-only name; ``name`` stays the login/address handle (§17.116).
+    display_name: str | None = None
     description_md: str | None = None
     manager_user_id: str | None = None
     org_roles: list[str] = field(default_factory=list)
@@ -90,6 +92,11 @@ class User:
     updated_at: dt.datetime | None = None
     deleted_at: dt.datetime | None = None
     deleted_by: str | None = None
+
+    @property
+    def label(self) -> str:
+        """Reader-facing name: display_name when set, else the login name."""
+        return self.display_name or self.name
 
     @property
     def is_agent(self) -> bool:

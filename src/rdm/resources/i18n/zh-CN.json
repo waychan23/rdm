@@ -244,6 +244,7 @@
     "webhook_format_invalid": "notify_webhook_format 必须是 generic/dingtalk/feishu",
     "name_required": "name 必填",
     "name_taken": "用户名 {name} 已被占用",
+    "display_name_too_long": "展示名称最多 100 个字符",
     "agent_no_password": "agent 没有密码",
     "owner_password_recovery": "Org Owner 的密码必须通过部署端恢复流程重置",
     "agent_profile_managed": "agent 账号由管理它的 human 在个人设置中维护",

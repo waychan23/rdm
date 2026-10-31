@@ -176,7 +176,12 @@ async def test_update_optimistic_lock_and_assign(server, owner_token: str) -> No
         headers=auth(owner_token),
     )
     assert r.status_code == 200, r.text
-    assert r.json()["data"]["assignee"] == {"id": member_id, "name": "dev", "type": "human"}
+    assert r.json()["data"]["assignee"] == {
+        "id": member_id,
+        "name": "dev",
+        "display_name": None,
+        "type": "human",
+    }
 
     # unknown assignee -> NOT_FOUND
     r = await client.post(

@@ -14,6 +14,7 @@ import StatusLozenge from "../../workitems/status";
 import { api, errorCause } from "../../lib/api";
 import { formatDate } from "../../lib/format";
 import { useNotify } from "../../lib/flags";
+import { userLabel } from "../../lib/users";
 import type { HistoryEntry } from "../../types";
 
 function fieldLabel(key: string, t: TFunction<"item">): string {
@@ -177,7 +178,13 @@ export default function HistorySection({ itemId, refreshKey }: Props) {
                   data-testid={`item-history-entry-${entry.id}`}
                 >
                   <div className="rdm-history-head">
-                    <PersonCell name={entry.actor?.name ?? entry.actor?.id ?? t("history.system")} />
+                    <PersonCell
+                      name={
+                        entry.actor
+                          ? userLabel(entry.actor) || entry.actor.id
+                          : t("history.system")
+                      }
+                    />
                     <Text size="small" color="color.text.subtlest">
                       {formatDate(entry.occurred_at)}
                     </Text>

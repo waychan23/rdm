@@ -42,6 +42,14 @@ class Actor:
         return self.identity.name
 
     @property
+    def display_name(self) -> str | None:
+        return self.identity.display_name
+
+    @property
+    def label(self) -> str:
+        return self.identity.label
+
+    @property
     def type(self) -> str:
         return self.identity.type
 

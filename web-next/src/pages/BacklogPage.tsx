@@ -21,6 +21,7 @@ import { recall, remember } from "../lib/pageCache";
 import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
 import type { ProjectMemberRow, WorkItem, WorkflowDto } from "../types";
 import { flattenMembers } from "../lib/members";
+import { userLabel } from "../lib/users";
 import { kindOptions, PAGE_SIZE } from "../workitems/constants";
 import { buildWorkItemTree } from "../workitems/hierarchy";
 import WorkItemTable, { type WorkItemRowView } from "../workitems/WorkItemTable";
@@ -181,7 +182,10 @@ function BacklogView({ projectKey }: { projectKey: string }) {
   const assigneeOptions = useMemo<Option[]>(() => {
     return [
       { label: t("backlog.filter.mine"), value: "me" },
-      ...flattenMembers(membersState.data ?? []).map((m) => ({ label: m.name, value: m.id })),
+      ...flattenMembers(membersState.data ?? []).map((m) => ({
+        label: userLabel(m),
+        value: m.id,
+      })),
     ];
   }, [membersState.data, t]);
 

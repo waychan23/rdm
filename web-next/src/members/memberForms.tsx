@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import FormField from "../components/FormField";
 import { roleLabel } from "../lib/labels";
 import { portalMenuProps } from "../lib/portalMenu";
+import { userLabel } from "../lib/users";
 import type { OrgUser, ProjectMemberRow } from "../types";
 
 // Resolved per render so role labels follow the active language.
@@ -83,11 +84,11 @@ export function AddMemberDialog({
                 <Select
                   inputId="add-member-user"
                   placeholder={t("addDialog.userPlaceholder")}
-                  options={candidates.map((u) => ({ label: u.name, value: u.id }))}
+                  options={candidates.map((u) => ({ label: userLabel(u), value: u.id }))}
                   value={
                     userId
                       ? {
-                          label: candidates.find((u) => u.id === userId)?.name ?? "",
+                          label: userLabel(candidates.find((u) => u.id === userId)),
                           value: userId,
                         }
                       : null
@@ -179,7 +180,7 @@ export function MemberEditDialog({
       {open && member && (
         <ModalDialog onClose={onClose} testId="member-edit-dialog">
           <ModalHeader>
-            <ModalTitle>{t("editDialog.title", { name: member.name })}</ModalTitle>
+            <ModalTitle>{t("editDialog.title", { name: userLabel(member) })}</ModalTitle>
           </ModalHeader>
           <ModalBody>
             <Stack space="space.100">

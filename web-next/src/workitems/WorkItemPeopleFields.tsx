@@ -10,6 +10,7 @@ import MarkdownEditor from "../components/MarkdownEditor";
 import { api } from "../lib/api";
 import { flattenMembers } from "../lib/members";
 import { portalMenuProps } from "../lib/portalMenu";
+import { userLabel } from "../lib/users";
 import type { OrgUser, ProjectMemberRow, WorkflowFields } from "../types";
 
 export interface OptionalFieldValues {
@@ -64,7 +65,7 @@ export default function WorkItemPeopleFields({
   }, [projectKey]);
 
   const options = members.map((member) => ({
-    label: `${member.name}${
+    label: `${userLabel(member)}${
       member.type === "agent" ? t("people.agentSuffix") : ""
     }`,
     value: member.id,

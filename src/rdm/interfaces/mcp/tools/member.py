@@ -22,6 +22,7 @@ async def project_members_payload(uow, project_id: str) -> list[dict[str, Any]]:
             {
                 "id": row.user.id,
                 "name": row.user.name,
+                "display_name": row.user.display_name,
                 "type": row.user.type,
                 "manager_user_id": None,
                 "roles": list(row.membership.roles),
@@ -38,6 +39,7 @@ async def project_members_payload(uow, project_id: str) -> list[dict[str, Any]]:
                 {
                     "id": agent.id,
                     "name": agent.name,
+                    "display_name": agent.display_name,
                     "type": agent.type,
                     "manager_user_id": agent.manager_user_id,
                     "roles": [],

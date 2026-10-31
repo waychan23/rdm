@@ -28,7 +28,9 @@ import { formatDate } from "../lib/format";
 import { kindLabel } from "../lib/labels";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
+import { refreshSession, useCurrentUser } from "../lib/auth";
 import { beginLogin } from "../lib/oauth";
+import { userLabel } from "../lib/users";
 import type { OrgUser, Token } from "../types";
 import "../styles/table.css";
 
@@ -49,6 +51,7 @@ function acceptKindOptions() {
 function defaultAgentForm() {
   return {
     name: "",
+    display_name: "",
     // New agents can take every kind unless the user narrows it.
     accept_kinds: [...ALL_ACCEPT_KINDS],
     email: "",
@@ -79,6 +82,7 @@ export default function PersonalSettingsPage() {
   const kindOptions = acceptKindOptions();
   const webhookFormats = webhookFormatOptions();
   const notify = useNotify();
+  const me = useCurrentUser();
   const [nonce, setNonce] = useState(0);
   const reload = () => setNonce((n) => n + 1);
 
@@ -108,6 +112,26 @@ export default function PersonalSettingsPage() {
      } catch (e) {
        setPrefs((prev) => ({ ...prev, [type]: !enabled }));
        notify.error(t("personal.notifications.saveFailed"), errorCause(e)?.message);
+     }
+  };
+
+  // --- profile ---
+  const [profileDisplayName, setProfileDisplayName] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  useEffect(() => {
+     setProfileDisplayName(me?.user.display_name ?? "");
+  }, [me?.user.id, me?.user.display_name]);
+  const saveProfile = async () => {
+     if (savingProfile) return;
+     setSavingProfile(true);
+     try {
+       await api.patch("/me", { display_name: profileDisplayName.trim() || null });
+       await refreshSession();
+       notify.success(t("personal.saved"));
+     } catch (e) {
+       notify.error(t("personal.saveFailed"), errorCause(e)?.message);
+     } finally {
+       setSavingProfile(false);
      }
   };
 
@@ -196,6 +220,7 @@ export default function PersonalSettingsPage() {
      try {
        const body = {
          name: agentForm.name.trim(),
+         display_name: agentForm.display_name.trim() || null,
          accept_kinds: agentForm.accept_kinds,
          email: agentForm.email || null,
          notify_webhook: agentForm.notify_webhook || null,
@@ -222,11 +247,13 @@ export default function PersonalSettingsPage() {
   };
 
   const [editAgent, setEditAgent] = useState<OrgUser | null>(null);
+  const [editDisplayName, setEditDisplayName] = useState("");
   const [editHook, setEditHook] = useState("");
   const [editFmt, setEditFmt] = useState("generic");
 
   useEffect(() => {
      if (editAgent) {
+       setEditDisplayName(editAgent.display_name ?? "");
        setEditHook(editAgent.notify_webhook ?? "");
        setEditFmt(editAgent.notify_webhook_format ?? "generic");
      }
@@ -236,6 +263,7 @@ export default function PersonalSettingsPage() {
      if (!editAgent) return;
      try {
        await api.patch(`/me/agents/${editAgent.id}`, {
+         display_name: editDisplayName.trim() || null,
          notify_webhook: editHook || null,
          notify_webhook_format: editFmt,
        });
@@ -255,7 +283,34 @@ export default function PersonalSettingsPage() {
          <ErrorState error={loadError} onRetry={reload} testId="personal-settings-error" />
        ) : null}
 
-       <Box testId="personal-password-section">
+       <Box testId="personal-profile-section">
+        <Stack space="space.150" xcss={styles.form}>
+          <Heading size="small">{t("personal.profile.heading")}</Heading>
+          <FormField
+            label={t("personal.profile.displayName")}
+            htmlFor="profile-display-name"
+          >
+            <Textfield
+              id="profile-display-name"
+              value={profileDisplayName}
+              testId="personal-display-name"
+              onChange={(e) => setProfileDisplayName(e.currentTarget.value)}
+            />
+          </FormField>
+          <Inline>
+            <Button
+              appearance="primary"
+              onClick={saveProfile}
+              isLoading={savingProfile}
+              testId="personal-display-name-save"
+            >
+              {t("personal.profile.save")}
+            </Button>
+          </Inline>
+        </Stack>
+      </Box>
+
+      <Box testId="personal-password-section">
          <Stack space="space.150" xcss={styles.form}>
            <Heading size="small">{t("personal.password.heading")}</Heading>
            <FormField label={t("personal.password.old")} htmlFor="old-pw">
@@ -373,8 +428,9 @@ export default function PersonalSettingsPage() {
                      <td className="cell-meta">
                        {token.act_as_user_id
                          ? t("personal.tokens.agentIdentity", {
-                             name:
-                               agents?.find((a) => a.id === token.act_as_user_id)?.name ?? "",
+                             name: userLabel(
+                               agents?.find((a) => a.id === token.act_as_user_id),
+                             ),
                            })
                          : t("personal.tokens.self")}
                      </td>
@@ -454,7 +510,7 @@ export default function PersonalSettingsPage() {
                    <tr key={a.id} data-testid={`personal-agent-row-${a.id}`}>
                      <td>
                        <Inline space="space.100" alignBlock="center">
-                         <Text>{a.name}</Text>
+                         <Text>{userLabel(a)}</Text>
                          <Lozenge appearance="warning">agent</Lozenge>
                        </Inline>
                      </td>
@@ -548,13 +604,13 @@ export default function PersonalSettingsPage() {
                        inputId="token-act-as"
                        placeholder={t("personal.tokenDialog.identityPlaceholder")}
                        options={(agents ?? []).map((a) => ({
-                         label: t("personal.tokenDialog.agentOption", { name: a.name }),
+                         label: t("personal.tokenDialog.agentOption", { name: userLabel(a) }),
                          value: a.id,
                        }))}
                        value={
                          actAs
                            ? {
-                               label: agents?.find((a) => a.id === actAs)?.name ?? "",
+                               label: userLabel(agents?.find((a) => a.id === actAs)),
                                value: actAs,
                              }
                            : null
@@ -620,6 +676,19 @@ export default function PersonalSettingsPage() {
                      value={agentForm.name}
                      testId="personal-agent-name"
                      onChange={(e) => setAgentForm({ ...agentForm, name: e.currentTarget.value })}
+                   />
+                 </FormField>
+                 <FormField
+                   label={t("personal.agentDialog.displayName")}
+                   htmlFor="agent-display-name"
+                 >
+                   <Textfield
+                     id="agent-display-name"
+                     value={agentForm.display_name}
+                     testId="personal-agent-display-name"
+                     onChange={(e) =>
+                       setAgentForm({ ...agentForm, display_name: e.currentTarget.value })
+                     }
                    />
                  </FormField>
                  <FormField label={t("personal.agentDialog.kinds")}>
@@ -690,14 +759,25 @@ export default function PersonalSettingsPage() {
          {editAgent && (
            <ModalDialog
              onClose={() => setEditAgent(null)}
-             label={t("personal.agentNotify.title", { name: editAgent.name })}
+             label={t("personal.agentNotify.title", { name: userLabel(editAgent) })}
              testId="personal-agent-notify-dialog"
            >
              <ModalHeader>
-               <ModalTitle>{t("personal.agentNotify.title", { name: editAgent.name })}</ModalTitle>
+               <ModalTitle>{t("personal.agentNotify.title", { name: userLabel(editAgent) })}</ModalTitle>
              </ModalHeader>
              <ModalBody>
                <Stack space="space.150">
+                 <FormField
+                   label={t("personal.agentNotify.displayName")}
+                   htmlFor="edit-display-name"
+                 >
+                   <Textfield
+                     id="edit-display-name"
+                     value={editDisplayName}
+                     testId="personal-agent-edit-display-name"
+                     onChange={(e) => setEditDisplayName(e.currentTarget.value)}
+                   />
+                 </FormField>
                  <FormField label={t("personal.agentNotify.webhook")} htmlFor="edit-hook">
                    <Textfield
                      id="edit-hook"

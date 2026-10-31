@@ -16,6 +16,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from rdm.application.dto import user_brief
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Project, WorkItem
@@ -117,7 +118,7 @@ class HistoryService:
         user = users.get(user_id)
         if user is None:
             return {"id": user_id}
-        return {"id": user.id, "name": user.name, "type": user.type}
+        return user_brief(user)
 
     def _normalize(self, record: EventRecord, users: dict[str, Any]) -> HistoryEntry:
         payload = record.payload or {}

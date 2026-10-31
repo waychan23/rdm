@@ -17,6 +17,7 @@ export interface OrgUser {
   id: string;
   type: string;
   name: string;
+  display_name?: string | null;
   description_md?: string | null;
   manager_user_id?: string | null;
   org_roles: string[];
@@ -41,6 +42,7 @@ export interface ProjectMemberRow extends OrgUser {
 export interface Assignee {
   id: string;
   name: string;
+  display_name?: string | null;
   type: string;
 }
 
@@ -149,7 +151,7 @@ export interface HistoryEntry {
   event_type: string;
   action: string;
   occurred_at: string;
-  actor: { id: string; name?: string; type?: string } | null;
+  actor: { id: string; name?: string; display_name?: string | null; type?: string } | null;
   changes: Record<string, HistoryChange>;
   comment?: { id: string; excerpt?: string; reply_to_id?: string | null } | null;
   meta?: Record<string, unknown> | null;
@@ -166,7 +168,7 @@ export interface Attachment {
   download_url: string;
   state?: "temp" | "active" | string;
   committed_at?: string | null;
-  uploader: { id: string; name?: string; type?: string };
+  uploader: { id: string; name?: string; display_name?: string | null; type?: string };
   created_at: string;
 }
 
@@ -186,7 +188,7 @@ export interface Comment {
   work_item_id: string;
   body_md: string;
   reply_to_id?: string | null;
-  author: { id: string; name?: string; type?: string };
+  author: { id: string; name?: string; display_name?: string | null; type?: string };
   attachments?: Attachment[];
   created_at: string;
   updated_at?: string | null;
@@ -226,12 +228,18 @@ export interface MailMessage {
   message_id: string;
   thread_id?: string;
   project?: { id: string; key: string; name: string };
-  from: { id: string; name?: string; type?: string };
-  mailbox_owner?: { id: string; name?: string; type?: string };
+  from: { id: string; name?: string; display_name?: string | null; type?: string };
+  mailbox_owner?: { id: string; name?: string; display_name?: string | null; type?: string };
   subject: string;
   body_md: string;
   recipient_type: string;
-  recipients?: Array<{ id: string; name?: string; type?: string; recipient_type?: string }>;
+  recipients?: Array<{
+    id: string;
+    name?: string;
+    display_name?: string | null;
+    type?: string;
+    recipient_type?: string;
+  }>;
   refs: string[];
   reply_to_id?: string | null;
   read_at?: string | null;
@@ -243,7 +251,7 @@ export interface MailGroup {
   id: string;
   name: string;
   kind: string;
-  members: Array<{ id: string; name: string; type: string }>;
+  members: Array<{ id: string; name: string; display_name?: string | null; type: string }>;
   created_at: string;
 }
 
@@ -314,7 +322,7 @@ export interface Token {
 
 export interface Whoami {
   user: OrgUser;
-  identity: { id: string; name: string; type: string; act_as: boolean };
+  identity: { id: string; name: string; display_name?: string | null; type: string; act_as: boolean };
   org_roles: string[];
   agents: OrgUser[];
   projects: Project[];

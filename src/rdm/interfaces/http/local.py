@@ -49,7 +49,11 @@ async def owner_recovery(
         )
     return {
         "data": {
-            "user": {"id": owner.id, "name": owner.name},
+            "user": {
+                "id": owner.id,
+                "name": owner.name,
+                "display_name": owner.display_name,
+            },
             "set_password_url": f"/set-password?ticket={raw}",
             "expires_in_days": 7,
         }

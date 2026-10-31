@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 
 import { statusLabel } from "../../lib/labels";
 import { portalMenuProps } from "../../lib/portalMenu";
+import { userLabel } from "../../lib/users";
 import type { WorkflowStepDef } from "../../types";
 
 interface Props {
@@ -44,7 +45,7 @@ export default function StepStartDialog({
     if (!open || !step) return;
     setSelected(
       step.auto_executors.map((user) => ({
-        label: user.name ?? user.id,
+        label: userLabel(user) || user.id,
         value: user.id,
       })),
     );
@@ -53,7 +54,7 @@ export default function StepStartDialog({
 
   if (!step) return null;
   const options: Option[] = step.candidates.map((user) => ({
-    label: `${user.name ?? user.id}${user.type === "agent" ? t("panel.agentSuffix") : ""}`,
+    label: `${userLabel(user) || user.id}${user.type === "agent" ? t("panel.agentSuffix") : ""}`,
     value: user.id,
   }));
   const max = step.executors.max ?? step.candidates.length;

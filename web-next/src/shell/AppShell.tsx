@@ -24,6 +24,7 @@ import LocaleSwitcher from "../components/LocaleSwitcher";
 import { logout, refreshSession, useCurrentUser } from "../lib/auth";
 import { safePostLoginPath } from "../lib/oauth";
 import { startEventStream } from "../lib/stream";
+import { userLabel } from "../lib/users";
 import "../styles/shell.css";
 
 const styles = cssMap({
@@ -221,10 +222,10 @@ export default function AppShell() {
                 {who
                   ? who.identity.act_as
                     ? t("topbar.actingAs", {
-                        identity: who.identity.name,
-                        user: who.user.name,
+                        identity: userLabel(who.identity),
+                        user: userLabel(who.user),
                       })
-                    : who.user.name
+                    : userLabel(who.user)
                   : "—"}
               </Text>
             </Box>

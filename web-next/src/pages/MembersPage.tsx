@@ -14,6 +14,7 @@ import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { roleLabel } from "../lib/labels";
+import { userLabel } from "../lib/users";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
 import type { OrgUser, Project, ProjectMemberRow } from "../types";
@@ -37,7 +38,7 @@ function AgentRow({ agent }: { agent: NonNullable<ProjectMemberRow["agents"]>[nu
           <span className="rdm-indent" aria-hidden>
             ↳
           </span>
-          <Text size="small">{agent.user.name}</Text>
+          <Text size="small">{userLabel(agent.user)}</Text>
           <Lozenge appearance="default">{t("agent.auto")}</Lozenge>
           {!agent.user.effective_active && (
             <Lozenge appearance="default">{t("agent.disabled")}</Lozenge>
@@ -218,7 +219,7 @@ export default function MembersPage() {
         onConfirm={() => void remove()}
       >
         {t("removeDialog.body", {
-          name: removeTarget?.name ?? "—",
+          name: removeTarget ? userLabel(removeTarget) : "—",
           extra: removeExtra,
         })}
       </ConfirmDialog>
@@ -243,7 +244,7 @@ function MemberGroup({
       <tr data-testid={`member-row-${member.id}`}>
         <td>
           <Inline space="space.100" alignBlock="center">
-            <Text weight="medium">{member.name}</Text>
+            <Text weight="medium">{userLabel(member)}</Text>
             {isOwner && <Lozenge appearance="inprogress">{t("ownerBadge")}</Lozenge>}
             {!member.is_active && <Lozenge appearance="default">{t("agent.disabled")}</Lozenge>}
           </Inline>

@@ -38,6 +38,7 @@ import { formatDate, formatSize } from "../../lib/format";
 import { useNotify } from "../../lib/flags";
 import { flattenMembers } from "../../lib/members";
 import { portalMenuProps } from "../../lib/portalMenu";
+import { userLabel } from "../../lib/users";
 import type {
   ActiveStep,
   Artifact,
@@ -706,7 +707,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     artifacts,
   } = bundle;
   const memberOptions: MemberOption[] = members.map((m) => ({
-    label: `${m.name}${m.type === "agent" ? t("panel.agentSuffix") : ""}`,
+    label: `${userLabel(m)}${m.type === "agent" ? t("panel.agentSuffix") : ""}`,
     value: m.id,
     name: m.name,
   }));
@@ -751,7 +752,9 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       {replyTo && (
         <div className="rdm-item-comment-reply-chip">
           <Text size="small" color="color.text.subtlest">
-            {t("panel.replyChip", { name: replyTo.author.name ?? replyTo.author.id })}
+            {t("panel.replyChip", {
+              name: userLabel(replyTo.author) || replyTo.author.id,
+            })}
           </Text>
           <TextButton onClick={() => setReplyTo(null)}>{t("inlineField.cancel")}</TextButton>
         </div>
@@ -1007,7 +1010,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
               return (
                 <div key={c.id} className="rdm-item-comment" data-testid={`item-comment-${c.id}`}>
                   <div className="rdm-item-comment-head">
-                    <PersonCell name={c.author.name ?? c.author.id} />
+                    <PersonCell name={userLabel(c.author) || c.author.id} />
                     <Inline space="space.100" alignBlock="center">
                       <Text size="small" color="color.text.subtlest">
                         {formatDate(c.created_at)}
@@ -1044,7 +1047,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                   {parentComment && (
                     <div className="rdm-item-comment-reply">
                       {t("panel.replyQuote", {
-                        name: parentComment.author.name ?? parentComment.author.id,
+                        name: userLabel(parentComment.author) || parentComment.author.id,
                       })}
                       {parentComment.body_md.slice(0, 80)}
                     </div>

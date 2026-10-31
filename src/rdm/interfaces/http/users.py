@@ -21,6 +21,7 @@ router = APIRouter(prefix="/api/v1", tags=["users"])
 
 class UserCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
+    display_name: str | None = Field(default=None, max_length=100)
     email: str | None = None
     description_md: str | None = None
 
@@ -29,6 +30,7 @@ class UserUpdateIn(BaseModel):
     model_config = {"extra": "forbid"}
 
     name: str | None = Field(default=None, min_length=1, max_length=100)
+    display_name: str | None = Field(default=None, max_length=100)
     email: str | None = None
     description_md: str | None = None
 
@@ -75,6 +77,7 @@ async def create_user(
         user, reset_url = await UserService(uow).create_human(
             actor,
             name=body.name,
+            display_name=body.display_name,
             email=body.email,
             description_md=body.description_md,
         )

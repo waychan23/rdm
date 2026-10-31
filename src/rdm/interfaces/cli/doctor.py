@@ -141,7 +141,7 @@ def check_bootstrap(settings: Settings) -> CheckResult:
                     WARN,
                     "Org Owner 尚未设置密码且 bootstrap-url 已失效；执行 rdm account recover-owner",
                 )
-            return CheckResult("bootstrap", OK, f"Org Owner {owner.name} 已就绪")
+            return CheckResult("bootstrap", OK, f"Org Owner {owner.label} 已就绪")
     finally:
         engine.dispose()
 

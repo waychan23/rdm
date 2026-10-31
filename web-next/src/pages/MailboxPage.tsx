@@ -35,6 +35,7 @@ import { useNotify } from "../lib/flags";
 import { useCurrentUser } from "../lib/auth";
 import type { MailGroup, MailMessage, Mailbox, OrgUser, ProjectMemberRow } from "../types";
 import { flattenMembers } from "../lib/members";
+import { userLabel } from "../lib/users";
 
 const styles = cssMap({
   card: {
@@ -303,7 +304,7 @@ export default function MailboxPage() {
   };
 
   const openReply = (m: MailMessage) => {
-    const sender = m.from.name ?? m.from.id;
+    const sender = userLabel(m.from) || m.from.id;
     const subject = m.subject.replace(/^Re:\s*/i, "");
     setCompose({
       to: [{ label: sender, value: m.from.id ?? sender }],
@@ -315,7 +316,10 @@ export default function MailboxPage() {
     setShowCompose(true);
   };
 
-  const memberOptions: Option[] = members.map((m) => ({ label: m.name, value: m.id }));
+  const memberOptions: Option[] = members.map((m) => ({
+    label: userLabel(m),
+    value: m.id,
+  }));
   const recipientOptions: Option[] = [
     ...memberOptions,
     ...groups.map((g) => ({ label: t("group.option", { name: g.name }), value: g.name })),
@@ -329,8 +333,10 @@ export default function MailboxPage() {
     { label: t("sort.oldest"), value: "asc" },
   ];
   const identityOptions: Option[] = [
-    ...(me ? [{ label: t("identity.me", { name: me.user.name }), value: me.user.id }] : []),
-    ...agents.map((a) => ({ label: t("identity.agent", { name: a.name }), value: a.id })),
+    ...(me
+      ? [{ label: t("identity.me", { name: userLabel(me.user) }), value: me.user.id }]
+      : []),
+    ...agents.map((a) => ({ label: t("identity.agent", { name: userLabel(a) }), value: a.id })),
   ];
 
   const threadGroups = useMemo(() => {
@@ -396,16 +402,20 @@ export default function MailboxPage() {
                 {m.mailbox_owner.id === me?.user.id
                   ? t("owner.mine")
                   : m.mailbox_owner.type === "agent"
-                    ? t("owner.agent", { name: m.mailbox_owner.name ?? t("owner.unknown") })
-                    : (m.mailbox_owner.name ?? t("owner.unknown"))}
+                    ? t("owner.agent", {
+                        name: userLabel(m.mailbox_owner) || t("owner.unknown"),
+                      })
+                    : userLabel(m.mailbox_owner) || t("owner.unknown")}
               </Lozenge>
             )}
             <Text weight="semibold">{m.subject}</Text>
-            <Lozenge appearance="default">{m.from.name ?? m.from.id}</Lozenge>
+            <Lozenge appearance="default">{userLabel(m.from) || m.from.id}</Lozenge>
             {folder === "sent" && m.recipients?.length ? (
               <Text size="small" color="color.text.subtlest">
                 {t("message.recipients", {
-                  names: m.recipients.map((r) => r.name ?? r.id).join(t("listSeparator")),
+                  names: m.recipients
+                    .map((r) => userLabel(r) || r.id)
+                    .join(t("listSeparator")),
                 })}
               </Text>
             ) : null}
@@ -790,7 +800,7 @@ export default function MailboxPage() {
                       <Inline space="space.100" alignBlock="center" shouldWrap>
                         <Text weight="medium">{g.name}</Text>
                         <Text size="small" color="color.text.subtlest">
-                          {g.members.map((m) => m.name).join(t("listSeparator")) ||
+                          {g.members.map((m) => userLabel(m)).join(t("listSeparator")) ||
                             t("group.noMembers")}
                         </Text>
                       </Inline>

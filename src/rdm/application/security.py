@@ -39,7 +39,7 @@ def require_org_owner(actor: Actor) -> None:
             tr(
                 "security.org_owner_required",
                 default="用户 {user} 不是组织 Owner，该操作仅限 Org Owner。",
-                user=actor.name,
+                user=actor.label,
             ),
             details={"user_id": actor.human_id, "org_roles": actor.org_roles},
         )
@@ -55,7 +55,7 @@ def require_user_manager(actor: Actor) -> None:
             tr(
                 "security.user_manager_required",
                 default="用户 {user} 没有组织用户管理权限（需要 Org Owner 或 user-manager）。",
-                user=actor.name,
+                user=actor.label,
             ),
             details={"user_id": actor.human_id, "org_roles": actor.org_roles},
         )
@@ -71,7 +71,7 @@ def require_can_create_project(actor: Actor) -> None:
             tr(
                 "security.project_create_forbidden",
                 default="用户 {user} 不能创建项目（需要 Org Owner 或 project-director）。",
-                user=actor.name,
+                user=actor.label,
             ),
             details={"user_id": actor.human_id, "org_roles": actor.org_roles},
         )
@@ -94,7 +94,7 @@ def require_project_owner(actor: Actor, project_id: str) -> None:
             tr(
                 "security.project_owner_required",
                 default="用户 {user} 不是该项目的 project_owner，项目成员管理仅限 Owner。",
-                user=actor.name,
+                user=actor.label,
             ),
             details={"user_id": actor.human_id, "project_id": project_id},
         )
@@ -114,7 +114,7 @@ def require_sprint_manager(actor: Actor, project_id: str) -> None:
                     "仅 Owner/Manager）；如需操作请"
                     "用 mailbox_send 联系负责人。"
                 ),
-                user=actor.name,
+                user=actor.label,
             ),
             details={
                 "user_id": actor.human_id,
@@ -135,7 +135,7 @@ def require_owner_or_manager(actor: Actor, project_id: str, resource: str | None
                 "（仅 Owner/Manager）；如需操作"
                 "请用 mailbox_send 联系负责人。"
             ),
-            user=actor.name,
+            user=actor.label,
             resource=resource or tr("security.this_resource", default="该资源"),
         ),
         details={"user_id": actor.human_id, "project_id": project_id},
@@ -189,7 +189,7 @@ def require_can_edit(
                 "用户 {user} 不能编辑 {display_id}：仅负责人、参与人、manager 或 project_owner"
                 " 可编辑；如需接管请先让负责人把工作项指派给你。"
             ),
-            user=actor.name,
+            user=actor.label,
             display_id=display_id,
         ),
         details={
@@ -224,7 +224,7 @@ def require_can_assign(
                 "用户 {user} 不能指派 {display_id}：未指派时只能自领，其余情况仅负责人、参与人、"
                 "manager 或 project_owner 可改派。"
             ),
-            user=actor.name,
+            user=actor.label,
             display_id=display_id,
         ),
         details={
