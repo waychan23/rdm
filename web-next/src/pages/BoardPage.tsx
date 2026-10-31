@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
 import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
@@ -53,9 +53,22 @@ export default function BoardPage() {
   const notify = useNotify();
   useRestoreScroll();
 
-  const [kind, setKind] = useState("task");
-  const [showTerminal, setShowTerminal] = useState(true);
-  const initialSnapshot = recall<BoardSnapshot>(boardCacheKey(projectKey, "task"));
+  const [searchParams, setSearchParams] = useSearchParams();
+  const kind = searchParams.get("kind") ?? "task";
+  const showTerminal = searchParams.get("showTerminal") !== "false";
+  const setKind = (next: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "task") params.delete("kind");
+    else params.set("kind", next);
+    setSearchParams(params, { replace: true });
+  };
+  const setShowTerminal = (next: boolean) => {
+    const params = new URLSearchParams(searchParams);
+    if (next) params.delete("showTerminal");
+    else params.set("showTerminal", "false");
+    setSearchParams(params, { replace: true });
+  };
+  const initialSnapshot = recall<BoardSnapshot>(boardCacheKey(projectKey, kind));
   const [items, setItems] = useState<WorkItem[]>(initialSnapshot?.items ?? []);
   const [workflow, setWorkflow] = useState<WorkflowDto | null>(
     initialSnapshot?.workflow ?? null,

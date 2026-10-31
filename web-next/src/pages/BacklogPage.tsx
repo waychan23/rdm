@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -120,20 +120,41 @@ export default function BacklogPage() {
 function BacklogView({ projectKey }: { projectKey: string }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   useRestoreScroll();
 
-  const [kinds, setKinds] = useState<string[]>(["epic", "story", "issue", "task"]);
-  const [status, setStatus] = useState<Option | null>(null);
-  const [assignee, setAssignee] = useState<Option | null>(null);
-  const [reviewer, setReviewer] = useState<Option | null>(null);
-  const [qInput, setQInput] = useState("");
-  const [q, setQ] = useState("");
-  const [page, setPage] = useState(1);
+  const kindsParam = searchParams.get("kind");
+  const kinds = kindsParam
+    ? kindsParam.split(",").filter(Boolean)
+    : ["epic", "story", "issue", "task"];
+  const statusValue = searchParams.get("status") ?? "";
+  const assigneeValue = searchParams.get("assignee") ?? "";
+  const reviewerValue = searchParams.get("reviewer") ?? "";
+  const q = searchParams.get("q") ?? "";
+  const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
+  const view: ViewMode =
+    searchParams.get("view") === "tree"
+      ? "tree"
+      : searchParams.get("view") === "flat"
+        ? "flat"
+        : readView(projectKey);
+  const [qInput, setQInput] = useState(q);
   const [showCreate, setShowCreate] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
-  const [view, setView] = useState<ViewMode>(() => readView(projectKey));
   const [collapsed, setCollapsed] = useState<Set<string>>(() => readCollapsed(projectKey));
   const treeMode = view === "tree";
+
+  useEffect(() => setQInput(q), [q]);
+
+  const patchParams = (patch: Record<string, string | null>, resetPage = true) => {
+    const next = new URLSearchParams(searchParams);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null || value === "") next.delete(key);
+      else next.set(key, value);
+    }
+    if (resetPage && !("page" in patch)) next.delete("page");
+    setSearchParams(next, { replace: true });
+  };
 
   const membersState = useAsync<ProjectMemberRow[]>(
     async () => (await api.get<ProjectMemberRow[]>(`/projects/${projectKey}/members`)).data,
@@ -161,6 +182,25 @@ function BacklogView({ projectKey }: { projectKey: string }) {
       ...flattenMembers(membersState.data ?? []).map((m) => ({ label: m.name, value: m.id })),
     ];
   }, [membersState.data]);
+
+  const status = statusValue
+    ? (statusOptions.find((o) => o.value === statusValue) ?? {
+        label: statusValue,
+        value: statusValue,
+      })
+    : null;
+  const assignee = assigneeValue
+    ? (assigneeOptions.find((o) => o.value === assigneeValue) ?? {
+        label: assigneeValue,
+        value: assigneeValue,
+      })
+    : null;
+  const reviewer = reviewerValue
+    ? (assigneeOptions.find((o) => o.value === reviewerValue) ?? {
+        label: reviewerValue,
+        value: reviewerValue,
+      })
+    : null;
 
   const filterParams = useMemo(() => {
     const params = new URLSearchParams();
@@ -212,15 +252,15 @@ function BacklogView({ projectKey }: { projectKey: string }) {
 
   const toggleKind = (value: string, checked: boolean) => {
     // Zero selected kinds means "all"; multiple kinds travel as one comma list.
-    setKinds((prev) => (checked ? [...prev, value] : prev.filter((k) => k !== value)));
-    setPage(1);
+    const next = checked ? [...kinds, value] : kinds.filter((k) => k !== value);
+    const ordered = ["epic", "story", "issue", "task"].filter((k) => next.includes(k));
+    patchParams({ kind: ordered.join(",") });
   };
 
   const changeView = (next: ViewMode) => {
     if (next === view) return;
-    setView(next);
     writeStorage(VIEW_KEY(projectKey), next);
-    setPage(1);
+    patchParams({ view: next });
   };
 
   const toggleNode = (item: WorkItem) => {
@@ -305,10 +345,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
           <Select<Option>
             options={statusOptions}
             value={status}
-            onChange={(opt) => {
-              setStatus(opt as Option | null);
-              setPage(1);
-            }}
+            onChange={(opt) => patchParams({ status: (opt as Option | null)?.value ?? null })}
             isClearable
             spacing="compact"
             placeholder="状态"
@@ -318,10 +355,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
           <Select<Option>
             options={assigneeOptions}
             value={assignee}
-            onChange={(opt) => {
-              setAssignee(opt as Option | null);
-              setPage(1);
-            }}
+            onChange={(opt) => patchParams({ assignee: (opt as Option | null)?.value ?? null })}
             isClearable
             spacing="compact"
             placeholder="负责人"
@@ -331,10 +365,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
           <Select<Option>
             options={assigneeOptions}
             value={reviewer}
-            onChange={(opt) => {
-              setReviewer(opt as Option | null);
-              setPage(1);
-            }}
+            onChange={(opt) => patchParams({ reviewer: (opt as Option | null)?.value ?? null })}
             isClearable
             spacing="compact"
             placeholder="评审人"
@@ -347,16 +378,10 @@ function BacklogView({ projectKey }: { projectKey: string }) {
             testId="work-item-search"
             onChange={(e) => setQInput(e.currentTarget.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                setQ(qInput.trim());
-                setPage(1);
-              }
+              if (e.key === "Enter") patchParams({ q: qInput.trim() });
             }}
             onBlur={() => {
-              if (q !== qInput.trim()) {
-                setQ(qInput.trim());
-                setPage(1);
-              }
+              if (q !== qInput.trim()) patchParams({ q: qInput.trim() });
             }}
           />
         </Box>
@@ -393,7 +418,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
               page={page}
               pageCount={pageCount}
               onOpen={openItem}
-              onPageChange={setPage}
+              onPageChange={(p) => patchParams({ page: String(p) }, false)}
               onToggle={treeMode ? toggleNode : undefined}
               countNote={tree ? `${tree.rootCount} 个顶层` : undefined}
             />
@@ -407,7 +432,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
         onClose={() => setShowCreate(false)}
         onCreated={(item) => {
           setReloadNonce((n) => n + 1);
-          setPage(1);
+          patchParams({ page: null });
           openItem(item);
         }}
       />

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -59,18 +59,45 @@ export default function MailboxPage() {
   const notify = useNotify();
   const me = useCurrentUser();
   const projectKey = routeProjectKey ?? "";
-  const [projectFilter, setProjectFilter] = useState(projectKey);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const projectFilter = searchParams.get("project") ?? projectKey;
+  const folder: "inbox" | "archived" | "sent" =
+    searchParams.get("folder") === "archived"
+      ? "archived"
+      : searchParams.get("folder") === "sent"
+        ? "sent"
+        : "inbox";
+  const order: "desc" | "asc" = searchParams.get("order") === "asc" ? "asc" : "desc";
+  const view: "flat" | "thread" = searchParams.get("view") === "thread" ? "thread" : "flat";
+  const query = searchParams.get("q") ?? "";
+  const identity = searchParams.get("identity");
+  const unreadOnly = searchParams.get("unread") !== "false";
+
+  const patchParams = (patch: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null || value === "") next.delete(key);
+      else next.set(key, value);
+    }
+    setSearchParams(next, { replace: true });
+  };
+  const setProjectFilter = (value: string) =>
+    patchParams({ project: value && value !== projectKey ? value : null });
+  const setFolder = (value: "inbox" | "archived" | "sent") =>
+    patchParams({ folder: value === "inbox" ? null : value });
+  const setOrder = (value: "asc" | "desc") =>
+    patchParams({ order: value === "desc" ? null : value });
+  const setView = (value: "flat" | "thread") =>
+    patchParams({ view: value === "flat" ? null : value });
+  const setQuery = (value: string) => patchParams({ q: value || null });
+  const setIdentity = (value: string | null) => patchParams({ identity: value });
+  const setUnreadOnly = (value: boolean) =>
+    patchParams({ unread: value ? null : "false" });
 
   const [messages, setMessages] = useState<MailMessage[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [unreadOnly, setUnreadOnly] = useState(true);
-  const [folder, setFolder] = useState<"inbox" | "archived" | "sent">("inbox");
-  const [order, setOrder] = useState<"desc" | "asc">("desc");
-  const [view, setView] = useState<"flat" | "thread">("flat");
   const [collapsedThreads, setCollapsedThreads] = useState<Set<string>>(new Set());
-  const [query, setQuery] = useState("");
-  const [searchDraft, setSearchDraft] = useState("");
-  const [identity, setIdentity] = useState<string | null>(null);
+  const [searchDraft, setSearchDraft] = useState(query);
   const [agents, setAgents] = useState<OrgUser[]>([]);
   const [groups, setGroups] = useState<MailGroup[]>([]);
   const [showGroups, setShowGroups] = useState(false);
@@ -125,9 +152,7 @@ export default function MailboxPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unreadOnly, projectFilter, identity, folder, query, order]);
 
-  useEffect(() => {
-    setProjectFilter(projectKey);
-  }, [projectKey]);
+  useEffect(() => setSearchDraft(query), [query]);
 
   useEffect(() => {
     if (!projectFilter) {

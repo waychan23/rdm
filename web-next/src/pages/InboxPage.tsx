@@ -1,5 +1,5 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, type KeyboardEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -72,9 +72,23 @@ function unreadStyle(read: boolean) {
 export default function InboxPage() {
   const navigate = useNavigate();
   const notify = useNotify();
-  const [tab, setTab] = useState<Tab>("notifications");
-  const [unreadOnly, setUnreadOnly] = useState(true);
-  const [order, setOrder] = useState<Order>("desc");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab: Tab = searchParams.get("tab") === "todo" ? "todo" : "notifications";
+  const unreadOnly = searchParams.get("unread") !== "false";
+  const order: Order = searchParams.get("order") === "asc" ? "asc" : "desc";
+  const patchParams = (patch: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null || value === "") next.delete(key);
+      else next.set(key, value);
+    }
+    setSearchParams(next, { replace: true });
+  };
+  const setTab = (value: Tab) => patchParams({ tab: value === "todo" ? "todo" : null });
+  const setUnreadOnly = (value: boolean) =>
+    patchParams({ unread: value ? null : "false" });
+  const setOrder = (value: Order) =>
+    patchParams({ order: value === "desc" ? null : value });
 
   const notifications = useAsync<NotificationResult>(async () => {
     const res = await api.get<Notification[]>(
