@@ -5,15 +5,16 @@
 export const ALLOWED_PARENT_KINDS: Record<string, string[]> = {
   epic: [],
   story: ["epic"],
-  issue: [],
+  issue: ["story", "task"],
   task: ["epic", "story", "issue", "task"],
 };
 
 export const ALLOWED_CHILD_KINDS: Record<string, string[]> = {
   epic: ["story", "task"],
-  story: ["task"],
+  // Keep "task" first so child dialogs still default to a task.
+  story: ["task", "issue"],
   issue: ["task"],
-  task: ["task"],
+  task: ["task", "issue"],
 };
 
 export function allowedParentKinds(kind: string): string[] {

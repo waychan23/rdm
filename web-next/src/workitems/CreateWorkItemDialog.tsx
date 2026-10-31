@@ -122,7 +122,13 @@ export default function CreateWorkItemDialog({
 
   useEffect(() => {
     if (!open) return;
-    setKind(allowedKinds?.[0] ?? "task");
+    // Story/task may now also hold defects; keep subtasks as the default child.
+    const prefersTask =
+      parentLocked &&
+      (initialParent?.kind === "story" || initialParent?.kind === "task") &&
+      allowedKinds?.includes("task");
+    const defaultKind = prefersTask ? "task" : (allowedKinds?.[0] ?? "task");
+    setKind(defaultKind);
     setTitle("");
     setDescription("");
     setPriority(DEFAULT_PRIORITY);

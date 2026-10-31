@@ -3,8 +3,8 @@
 Business rules (docs/architecture.md §3.2, §5; rulings §16.22-26, §17 M6):
 - ids accepted by every entry point are either KEY-42 display ids or ULIDs;
   resolution lives here, never in adapters.
-- parent/kind rules: story->epic, task->epic|story|issue|task (or no parent),
-  epic/issue cannot be children.
+- parent/kind rules: story->epic, issue->story|task,
+  task->epic|story|issue|task (or no parent); epic cannot be a child.
 - kind-specific fields cross-validate against the item kind (mcp-tools §4).
 - content editing: assignee, participants, manager/project_owner.
 - status is never written here: transitions go through transition() (M1-2).
@@ -139,7 +139,8 @@ def _priority_value(value: Any) -> int:
 _ALLOWED_PARENT: dict[str, set[str]] = {
     "epic": set(),
     "story": {"epic"},
-    "issue": set(),
+    # Defects may hang off a story or task (§17.117); top-level issues stay allowed.
+    "issue": {"story", "task"},
     "task": {"epic", "story", "issue", "task"},
 }
 

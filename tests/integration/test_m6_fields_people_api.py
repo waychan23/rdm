@@ -252,7 +252,7 @@ async def test_task_type_aliases_and_subtype_workflow(server, owner_token: str) 
     )
     assert child["parent_id"] == review["id"]
     detail = await _detail(client, owner_token, review["display_id"])
-    assert detail["meta"]["allowed_child_kinds"] == ["task"]
+    assert detail["meta"]["allowed_child_kinds"] == ["issue", "task"]
 
 
 async def test_workflow_dto_exposes_task_types_and_subtypes(server, owner_token: str) -> None:

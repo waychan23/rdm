@@ -39,7 +39,7 @@ async def test_reparent_rules_and_meta(server, owner_token) -> None:
     ).json()
     assert detail["meta"]["parent"]["display_id"] == story["display_id"]
     assert detail["meta"]["allowed_parent_kinds"] == ["epic", "issue", "story", "task"]
-    assert detail["meta"]["allowed_child_kinds"] == ["task"]
+    assert detail["meta"]["allowed_child_kinds"] == ["issue", "task"]
 
     epic_detail = (
         await client.get(f"{API}/work-items/{epic['display_id']}", headers=auth(owner_token))
@@ -156,3 +156,54 @@ async def test_source_story_update(server, owner_token) -> None:
         headers=auth(owner_token),
     )
     assert r.status_code == 404
+
+
+async def test_issue_can_be_child_of_story_or_task(server, owner_token) -> None:
+    """§17.117: defects may hang off a story or task; other parents stay invalid."""
+    client, _settings, _app = server
+    await _project(client, owner_token)
+    epic = await _item(client, owner_token, {"kind": "epic", "title": "E"})
+    story = await _item(
+        client, owner_token, {"kind": "story", "title": "S", "parent": epic["display_id"]}
+    )
+    task = await _item(
+        client, owner_token, {"kind": "task", "title": "T", "parent": story["display_id"]}
+    )
+
+    story_issue = await _item(
+        client, owner_token, {"kind": "issue", "title": "SBUG", "parent": story["display_id"]}
+    )
+    assert story_issue["parent_id"] == story["id"]
+
+    task_issue = await _item(
+        client, owner_token, {"kind": "issue", "title": "TBUG", "parent": task["display_id"]}
+    )
+    assert task_issue["parent_id"] == task["id"]
+
+    story_detail = (
+        await client.get(f"{API}/work-items/{story['display_id']}", headers=auth(owner_token))
+    ).json()
+    assert story_detail["meta"]["allowed_child_kinds"] == ["issue", "task"]
+
+    task_detail = (
+        await client.get(f"{API}/work-items/{task['display_id']}", headers=auth(owner_token))
+    ).json()
+    assert task_detail["meta"]["allowed_child_kinds"] == ["issue", "task"]
+
+    issue_detail = (
+        await client.get(f"{API}/work-items/{story_issue['display_id']}", headers=auth(owner_token))
+    ).json()
+    assert issue_detail["meta"]["allowed_parent_kinds"] == ["story", "task"]
+
+    # Top-level issues remain allowed.
+    top = await _item(client, owner_token, {"kind": "issue", "title": "TOP"})
+    assert top["parent_id"] is None
+
+    # Epic parents are still rejected for issues.
+    r = await client.post(
+        f"{API}/projects/DEMO/work-items",
+        json={"kind": "issue", "title": "BAD", "parent": epic["display_id"]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "VALIDATION_ERROR"
