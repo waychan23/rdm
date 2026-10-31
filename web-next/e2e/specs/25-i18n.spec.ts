@@ -22,4 +22,12 @@ test.describe("i18n", () => {
     await expect(page.getByTestId("rail-item-projects")).toContainText("项目");
     expect(await page.evaluate(() => localStorage.getItem("rdm.locale"))).toBe("zh-CN");
   });
+
+  test("members page title interpolates the project key", async ({ app, page }) => {
+    await page.goto(`${app.baseURL}/projects/WFE2E/members`);
+    const header = page.getByTestId("members-header");
+    await expect(header).toBeVisible();
+    await expect(header).toContainText("WFE2E");
+    await expect(header).not.toContainText("{projectKey}");
+  });
 });

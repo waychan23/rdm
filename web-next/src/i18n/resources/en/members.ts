@@ -1,6 +1,6 @@
 const members = {
   page: {
-    title: "Members · {projectKey}",
+    title: "Members · {{projectKey}}",
     addMember: "Add member",
   },
   agent: {
@@ -37,8 +37,8 @@ const members = {
   removeDialog: {
     title: "Remove from project",
     confirm: "Remove",
-    body: "Remove {name} from the project? {extra}",
-    extra: "Their {count} agent(s) will also be removed from the project.",
+    body: "Remove {{name}} from the project? {{extra}}",
+    extra: "Their {{count}} agent(s) will also be removed from the project.",
   },
   errors: {
     addFailed: "Failed to add member",
@@ -60,7 +60,7 @@ const members = {
     add: "Add",
   },
   editDialog: {
-    title: "Project roles · {name}",
+    title: "Project roles · {{name}}",
     fixedRole: "Fixed role",
     rolePlaceholder: "Select project roles",
     ownerHintLocked: "The project owner role cannot be edited here; use “Transfer project owner” instead.",

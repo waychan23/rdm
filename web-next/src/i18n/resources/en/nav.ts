@@ -20,7 +20,7 @@ const nav = {
     notifications: "Notifications",
     mailbox: "Mailbox",
     logout: "Sign out",
-    actingAs: "{identity} (as {user})",
+    actingAs: "{{identity}} (as {{user}})",
   },
   notFound: {
     header: "Page not found (404)",

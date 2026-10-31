@@ -57,7 +57,7 @@ const org = {
   },
   editUser: {
     dialogLabel: "Edit user",
-    title: "Edit user · {name}",
+    title: "Edit user · {{name}}",
     displayNameLabel: "Display name (leave blank to use the login name)",
     emailLabel: "Email (optional, notifications only)",
     descriptionLabel: "Description (optional)",
@@ -66,9 +66,9 @@ const org = {
   },
   rolesDialog: {
     dialogLabel: "Organization roles",
-    title: "Organization roles · {name}",
-    userManager: "{role} (manage users)",
-    projectDirector: "{role} (create projects, reassign project owners)",
+    title: "Organization roles · {{name}}",
+    userManager: "{{role}} (manage users)",
+    projectDirector: "{{role}} (create projects, reassign project owners)",
     cancel: "Cancel",
     save: "Save",
   },
@@ -82,20 +82,20 @@ const org = {
   revokeDialog: {
     title: "Revoke access tokens",
     confirm: "Revoke",
-    body: "Revoke all access tokens for {name} and their agents? This cannot be undone.",
+    body: "Revoke all access tokens for {{name}} and their agents? This cannot be undone.",
   },
   disableDialog: {
     title: "Disable user",
     confirm: "Disable",
-    body: "Disable {name}? They will no longer be able to sign in and existing tokens will be revoked. If they are a project owner, an Org Owner or project-director must reassign the project.",
+    body: "Disable {{name}}? They will no longer be able to sign in and existing tokens will be revoked. If they are a project owner, an Org Owner or project-director must reassign the project.",
   },
   transferDialog: {
     title: "Transfer Org Owner",
     confirm: "Transfer",
-    body: "Transfer Org Owner to {name}? You will lose super admin privileges.",
+    body: "Transfer Org Owner to {{name}}? You will lose super admin privileges.",
   },
   projectSettings: {
-    title: "Project settings · {projectKey}",
+    title: "Project settings · {{projectKey}}",
     info: {
       projectId: "Project ID",
       status: "Status",
@@ -116,12 +116,12 @@ const org = {
       currentSuffix: " (current project owner)",
       transferTitle: "Reassign project owner",
       transferConfirm: "Reassign",
-      transferBody: "Reassign the project owner from {from} to {to}? The previous owner will lose project owner permissions.",
+      transferBody: "Reassign the project owner from {{from}} to {{to}}? The previous owner will lose project owner permissions.",
     },
     archive: {
       title: "Archive project",
       confirm: "Archive",
-      body: "Archive project {projectKey}? It will remain accessible read-only.",
+      body: "Archive project {{projectKey}}? It will remain accessible read-only.",
     },
     notices: {
       saved: "Project saved",
@@ -175,7 +175,7 @@ const org = {
         actions: "Actions",
       },
       self: "Self",
-      agentIdentity: "agent {name}",
+      agentIdentity: "agent {{name}}",
       permanent: "Never",
       valid: "Valid",
       revoked: "Revoked",
@@ -198,7 +198,7 @@ const org = {
       days: "Validity (days, leave blank for never)",
       identity: "Identity",
       identityPlaceholder: "Self",
-      agentOption: "{name} (agent)",
+      agentOption: "{{name}} (agent)",
       close: "Close",
       create: "Create",
     },
@@ -230,7 +230,7 @@ const org = {
       create: "Create",
     },
     agentNotify: {
-      title: "Notification settings · {name}",
+      title: "Notification settings · {{name}}",
       displayName: "Display name (optional)",
       webhook: "Webhook URL",
       format: "Format",
@@ -240,7 +240,7 @@ const org = {
     revokeDialog: {
       title: "Revoke access token",
       confirm: "Revoke",
-      body: "Revoke the access token labeled “{label}”? Clients using it will stop working immediately, and this cannot be undone.",
+      body: "Revoke the access token labeled “{{label}}”? Clients using it will stop working immediately, and this cannot be undone.",
     },
     actionFailed: "Action failed",
     saveFailed: "Failed to save",

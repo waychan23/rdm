@@ -1,6 +1,6 @@
 const members = {
   page: {
-    title: "成员 · {projectKey}",
+    title: "成员 · {{projectKey}}",
     addMember: "添加成员",
   },
   agent: {
@@ -37,8 +37,8 @@ const members = {
   removeDialog: {
     title: "移出项目",
     confirm: "移出",
-    body: "确定把 {name} 移出项目？{extra}",
-    extra: "其 {count} 个 agent 也会随同移出项目。",
+    body: "确定把 {{name}} 移出项目？{{extra}}",
+    extra: "其 {{count}} 个 agent 也会随同移出项目。",
   },
   errors: {
     addFailed: "添加失败",
@@ -60,7 +60,7 @@ const members = {
     add: "添加",
   },
   editDialog: {
-    title: "项目角色 · {name}",
+    title: "项目角色 · {{name}}",
     fixedRole: "固定角色",
     rolePlaceholder: "选择项目角色",
     ownerHintLocked: "项目经理角色不可在此编辑；只能通过「转让项目经理」变更。",

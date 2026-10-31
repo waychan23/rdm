@@ -43,9 +43,9 @@ const common = {
     pageError: "Something went wrong",
     reloadPage: "Reload page",
     renderError: "An unknown error occurred while rendering.",
-    timeout: "The request timed out after {seconds} seconds. Try again later.",
+    timeout: "The request timed out after {{seconds}} seconds. Try again later.",
     uploadNetwork: "Upload failed: network error",
-    httpStatus: "HTTP {status}",
+    httpStatus: "HTTP {{status}}",
   },
   locale: {
     label: "Language",
@@ -53,7 +53,7 @@ const common = {
     en: "English",
   },
   confirmDelete: "Delete this? This cannot be undone.",
-  typeKindLabel: "Type {kind}",
+  typeKindLabel: "Type {{kind}}",
   unsavedChanges: "You have unsaved changes. Leave anyway?",
 };
 

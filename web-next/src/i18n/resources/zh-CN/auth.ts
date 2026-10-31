@@ -79,7 +79,7 @@ const auth = {
     },
     loading: "加载授权请求…",
     title: "授权访问 rdm",
-    request: "应用 <bold>{client}</bold> 请求访问你的 rdm 工作区（scope: {scopes}）。",
+    request: "应用 <bold>{{client}}</bold> 请求访问你的 rdm 工作区（scope: {{scopes}}）。",
     identityPrompt: "以哪个身份授权",
     managedByHuman: "受管于人类账号",
     deny: "拒绝",

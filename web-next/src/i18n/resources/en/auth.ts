@@ -80,7 +80,7 @@ const auth = {
     loading: "Loading authorization request…",
     title: "Authorize access to rdm",
     request:
-      "Application <bold>{client}</bold> is requesting access to your rdm workspace (scope: {scopes}).",
+      "Application <bold>{{client}}</bold> is requesting access to your rdm workspace (scope: {{scopes}}).",
     identityPrompt: "Authorize as",
     managedByHuman: "Managed by a human account",
     deny: "Deny",

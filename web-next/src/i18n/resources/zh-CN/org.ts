@@ -57,7 +57,7 @@ const org = {
   },
   editUser: {
     dialogLabel: "编辑用户",
-    title: "编辑用户 · {name}",
+    title: "编辑用户 · {{name}}",
     displayNameLabel: "展示名称（留空则显示登录名）",
     emailLabel: "Email（可选，仅通知）",
     descriptionLabel: "描述（可选）",
@@ -66,9 +66,9 @@ const org = {
   },
   rolesDialog: {
     dialogLabel: "组织角色",
-    title: "组织角色 · {name}",
-    userManager: "{role}（管理用户）",
-    projectDirector: "{role}（创建项目、改派项目经理）",
+    title: "组织角色 · {{name}}",
+    userManager: "{{role}}（管理用户）",
+    projectDirector: "{{role}}（创建项目、改派项目经理）",
     cancel: "取消",
     save: "保存",
   },
@@ -82,20 +82,20 @@ const org = {
   revokeDialog: {
     title: "撤销访问令牌",
     confirm: "撤销",
-    body: "撤销 {name} 及其 agent 的全部访问令牌？该操作不可恢复。",
+    body: "撤销 {{name}} 及其 agent 的全部访问令牌？该操作不可恢复。",
   },
   disableDialog: {
     title: "停用用户",
     confirm: "停用",
-    body: "停用 {name}？该用户将无法登录，现有令牌会被撤销。若其担任项目经理，项目需要由 Org Owner 或 project-director 另行转让。",
+    body: "停用 {{name}}？该用户将无法登录，现有令牌会被撤销。若其担任项目经理，项目需要由 Org Owner 或 project-director 另行转让。",
   },
   transferDialog: {
     title: "转让 Org Owner",
     confirm: "转让",
-    body: "把 Org Owner 转让给 {name}？你将失去超级管理员权限。",
+    body: "把 Org Owner 转让给 {{name}}？你将失去超级管理员权限。",
   },
   projectSettings: {
-    title: "项目设置 · {projectKey}",
+    title: "项目设置 · {{projectKey}}",
     info: {
       projectId: "项目 ID",
       status: "状态",
@@ -116,12 +116,12 @@ const org = {
       currentSuffix: "（当前项目经理）",
       transferTitle: "改派项目经理",
       transferConfirm: "改派",
-      transferBody: "确定把项目经理从 {from} 改派给 {to}？改派后原项目经理会失去项目 owner 权限。",
+      transferBody: "确定把项目经理从 {{from}} 改派给 {{to}}？改派后原项目经理会失去项目 owner 权限。",
     },
     archive: {
       title: "归档项目",
       confirm: "归档",
-      body: "归档项目 {projectKey}？归档后仍可只读访问。",
+      body: "归档项目 {{projectKey}}？归档后仍可只读访问。",
     },
     notices: {
       saved: "项目已保存",
@@ -175,7 +175,7 @@ const org = {
         actions: "操作",
       },
       self: "本人",
-      agentIdentity: "agent {name}",
+      agentIdentity: "agent {{name}}",
       permanent: "永久",
       valid: "有效",
       revoked: "已吊销",
@@ -198,7 +198,7 @@ const org = {
       days: "有效期（天，留空=永久）",
       identity: "使用身份",
       identityPlaceholder: "本人",
-      agentOption: "{name}（agent）",
+      agentOption: "{{name}}（agent）",
       close: "关闭",
       create: "创建",
     },
@@ -230,7 +230,7 @@ const org = {
       create: "创建",
     },
     agentNotify: {
-      title: "通知设置 · {name}",
+      title: "通知设置 · {{name}}",
       displayName: "展示名称（可选）",
       webhook: "Webhook URL",
       format: "格式",
@@ -240,7 +240,7 @@ const org = {
     revokeDialog: {
       title: "吊销访问令牌",
       confirm: "吊销",
-      body: "确定吊销标签为「{label}」的访问令牌？使用该令牌的客户端会立即失效，且不可恢复。",
+      body: "确定吊销标签为「{{label}}」的访问令牌？使用该令牌的客户端会立即失效，且不可恢复。",
     },
     actionFailed: "操作失败",
     saveFailed: "保存失败",

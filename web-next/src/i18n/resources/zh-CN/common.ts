@@ -43,9 +43,9 @@ const common = {
     pageError: "页面出错了",
     reloadPage: "刷新页面",
     renderError: "渲染时发生未知错误。",
-    timeout: "请求超时（{seconds} 秒），请稍后重试。",
+    timeout: "请求超时（{{seconds}} 秒），请稍后重试。",
     uploadNetwork: "上传失败：网络错误",
-    httpStatus: "HTTP {status}",
+    httpStatus: "HTTP {{status}}",
   },
   locale: {
     label: "语言",
@@ -53,7 +53,7 @@ const common = {
     en: "English",
   },
   confirmDelete: "确定删除吗？此操作不可撤销。",
-  typeKindLabel: "类型 {kind}",
+  typeKindLabel: "类型 {{kind}}",
   unsavedChanges: "有未保存的修改，确定离开吗？",
 };
 

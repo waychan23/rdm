@@ -20,7 +20,7 @@ const nav = {
     notifications: "通知",
     mailbox: "信箱",
     logout: "登出",
-    actingAs: "{identity}（以 {user} 身份）",
+    actingAs: "{{identity}}（以 {{user}} 身份）",
   },
   notFound: {
     header: "页面不存在（404）",
