@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import sqlite3
-
 import httpx
+
+from tests.db import sync_rows
 
 API = "/api/v1"
 
@@ -96,14 +96,15 @@ async def test_artifact_crud_and_owner_types(server, owner_token) -> None:
 
     r = await client.post(f"{API}/artifacts/{art['id']}/delete", headers=auth(owner_token))
     assert r.status_code == 204
-    with sqlite3.connect(settings.db_path) as conn:
-        types = {
-            row[0]
-            for row in conn.execute(
-                "select event_type from event where aggregate_id=?", (art["id"],)
-            )
-        }
-        assert types == {"artifact.added", "artifact.deleted"}
+    types = {
+        row[0]
+        for row in sync_rows(
+            settings,
+            "select event_type from event where aggregate_id=:id",
+            {"id": art["id"]},
+        )
+    }
+    assert types == {"artifact.added", "artifact.deleted"}
     assert worker_id  # fixture sanity
 
 
@@ -145,14 +146,15 @@ async def test_workspace_owner_manager_only_crud(server, owner_token) -> None:
 
     r = await client.delete(f"{API}/workspaces/{ws['id']}", headers=auth(owner_token))
     assert r.status_code == 204
-    with sqlite3.connect(settings.db_path) as conn:
-        types = {
-            row[0]
-            for row in conn.execute(
-                "select event_type from event where aggregate_id=?", (ws["id"],)
-            )
-        }
-        assert types == {"workspace.added", "workspace.updated", "workspace.deleted"}
+    types = {
+        row[0]
+        for row in sync_rows(
+            settings,
+            "select event_type from event where aggregate_id=:id",
+            {"id": ws["id"]},
+        )
+    }
+    assert types == {"workspace.added", "workspace.updated", "workspace.deleted"}
 
 
 async def test_workspace_location_is_free_form(server, owner_token) -> None:

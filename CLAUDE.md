@@ -24,6 +24,10 @@ human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，两个组
 
 - 后端：`uv run pytest -q`、`uv run ruff check .`、`uv run ruff format --check .`、`uv run mypy src/rdm/domain src/rdm/application`。
   本机开着系统代理时，loopback 测试会 502，加 `NO_PROXY=127.0.0.1,localhost,::1`。
+- PostgreSQL 后端（可选，§17.114）：`RDM_TEST_BACKEND=postgres|both uv run pytest -q`
+  （testcontainers 用 `paradedb/paradedb:0.26.4-pg18`，每测试独立库；Docker 不可用时跳过）。
+  手工冒烟：`uv sync --extra postgres`，起 ParadeDB 镜像，
+  `RDM_DATABASE_URL=postgresql://postgres:pw@127.0.0.1:5432/rdm uv run rdm init|serve|doctor`。
 - 前端：`pnpm -C web-next dev`（5173，代理 API 到 8765）、`pnpm -C web-next build`（产物进 `src/rdm/resources/web-next-dist`）。
 - 前端 e2e（Playwright，重点覆盖工作流引擎）：`pnpm -C web-next e2e`（先 build 再跑浏览器 spec；
   首次需 `pnpm -C web-next exec playwright install chromium`）。详见 `web-next/e2e/README.md`。

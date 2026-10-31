@@ -1,7 +1,7 @@
-"""Contract test fixtures: fresh migrated sqlite file per test.
+"""Contract test fixtures: fresh migrated database per test.
 
-When RDM_TEST_DB_URL points at Postgres the same suite is intended to run
-there (architecture §11.7); for M0 only the sqlite path is wired.
+SQLite by default; with `RDM_TEST_BACKEND=postgres|both` the same suite runs
+on a per-test PostgreSQL database created by tests/conftest.py (§17.114).
 """
 
 from __future__ import annotations
@@ -48,7 +48,10 @@ async def session_factory(
 
 
 @pytest.fixture
-def db_url(tmp_path: Path) -> str:
+def db_url(tmp_path: Path, db_backend: str, pg_database_url: str | None) -> str:
+    if db_backend == "postgres":
+        assert pg_database_url is not None
+        return pg_database_url
     return f"sqlite+aiosqlite:///{tmp_path / 'contract.db'}"
 
 

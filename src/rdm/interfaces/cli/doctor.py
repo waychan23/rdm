@@ -66,9 +66,14 @@ def check_data_dir(settings: Settings) -> CheckResult:
     return CheckResult("data-dir", OK, str(data_dir))
 
 
+def _db_configured(settings: Settings) -> bool:
+    """SQLite needs its file; PostgreSQL is configured by its URL alone."""
+    return bool(settings.database_url) or settings.db_path.exists()
+
+
 def check_database(settings: Settings) -> CheckResult:
     db_path: Path = settings.db_path
-    if not db_path.exists():
+    if settings.is_sqlite and not db_path.exists():
         return CheckResult("database", FAIL, "rdm.db 不存在（先运行 rdm init）")
     cfg = _alembic_config(settings)
     head = ScriptDirectory.from_config(cfg).get_current_head()
@@ -92,7 +97,7 @@ def check_database(settings: Settings) -> CheckResult:
 
 def check_bootstrap(settings: Settings) -> CheckResult:
     """Organization bootstrap state (no secret files any more, §17)."""
-    if not settings.db_path.exists():
+    if not _db_configured(settings):
         return CheckResult("bootstrap", OK, "数据库不存在，跳过")
 
     engine = create_engine(settings.db_sync_url)
@@ -108,7 +113,7 @@ def check_bootstrap(settings: Settings) -> CheckResult:
                 text(
                     "select id, name, password_hash, must_reset_password, is_active "
                     "from users where deleted_at is null and type = 'human' "
-                    "and org_roles like '%org_owner%'"
+                    "and CAST(org_roles AS TEXT) like '%org_owner%'"
                 )
             ).all()
             if len(owners) != 1:
@@ -159,7 +164,7 @@ def check_workflow_data(settings: Settings) -> CheckResult:
         engine = WorkflowEngine(spec)
     except Exception as exc:  # noqa: BLE001
         return CheckResult("workflow-data", FAIL, f"workflow.json5 校验失败：{exc}")
-    if not settings.db_path.exists():
+    if not _db_configured(settings):
         return CheckResult("workflow-data", OK, "数据库不存在，跳过")
     engine = WorkflowEngine(spec)
     issues: list[str] = []
@@ -251,7 +256,7 @@ def check_oauth_metadata(settings: Settings) -> CheckResult:
 
 
 def check_outbox(settings: Settings) -> CheckResult:
-    if not settings.db_path.exists():
+    if not _db_configured(settings):
         return CheckResult("outbox", WARN, "数据库不存在，跳过")
     engine = create_engine(settings.db_sync_url)
     try:
@@ -271,7 +276,13 @@ def check_outbox(settings: Settings) -> CheckResult:
     delivered = int(counts.get("delivered", 0))
     detail = f"pending={pending} failed={failed} delivered={delivered}"
 
-    oldest_dt = dt.datetime.fromisoformat(oldest) if oldest else None
+    oldest_dt = (
+        None
+        if oldest is None
+        else oldest
+        if isinstance(oldest, dt.datetime)
+        else dt.datetime.fromisoformat(oldest)
+    )
     if oldest_dt is not None and oldest_dt.tzinfo is None:
         oldest_dt = oldest_dt.replace(tzinfo=dt.UTC)
     age = dt.datetime.now(dt.UTC) - oldest_dt if oldest_dt else None
@@ -285,7 +296,7 @@ def check_outbox(settings: Settings) -> CheckResult:
 
 
 def check_attachments(settings: Settings) -> CheckResult:
-    if not settings.db_path.exists():
+    if not _db_configured(settings):
         return CheckResult("attachments", WARN, "数据库不存在，跳过")
     store = LocalFileStore(settings.projects_dir)
     engine = create_engine(settings.db_sync_url)
@@ -335,10 +346,13 @@ def check_attachments(settings: Settings) -> CheckResult:
         oldest = min(str(created) for created, _rel in temp_rows)
 
         def _stale(value: object) -> bool:
-            try:
-                parsed = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-            except ValueError:
-                return False
+            if isinstance(value, dt.datetime):
+                parsed = value
+            else:
+                try:
+                    parsed = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                except ValueError:
+                    return False
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=dt.UTC)
             return dt.datetime.now(dt.UTC) - parsed > dt.timedelta(hours=24)

@@ -27,6 +27,11 @@ dependencies = [
 [project.scripts]
 rdm = "rdm.interfaces.cli.main:app"
 
+[project.optional-dependencies]
+# Optional PostgreSQL backend (§17.114). psycopg 3 serves both the async app
+# engine and the sync Alembic/doctor engines, so one driver is enough.
+postgres = ["psycopg[binary]>=3.2"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -50,6 +55,8 @@ dev = [
     "ruff",
     "mypy",
     "asgi-lifespan>=2.1.0",
+    "psycopg[binary]>=3.2",
+    "testcontainers>=4.9",
 ]
 
 [tool.ruff]
@@ -80,3 +87,7 @@ strict = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "sqlite_only: test requires the sqlite backend",
+    "postgres_only: test requires postgres",
+]

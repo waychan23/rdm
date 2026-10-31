@@ -3,38 +3,37 @@
 from __future__ import annotations
 
 from importlib.resources import files
-from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 
+import rdm.infrastructure.db.models  # noqa: F401 - populate metadata
+from rdm.infrastructure.db.base import Base
+from tests.db import sync_url
 
-def _cfg(db_path: Path) -> Config:
+RDM_TABLES = set(Base.metadata.tables)
+
+
+def _cfg(db_url: str) -> Config:
     cfg = Config()
     cfg.set_main_option("script_location", str(files("rdm.infrastructure.migrations")))
-    cfg.attributes["rdm.db_url"] = f"sqlite:///{db_path}"
+    cfg.attributes["rdm.db_url"] = sync_url(db_url)
     return cfg
 
 
-def test_0007_rebuilds_empty_database(tmp_path: Path) -> None:
-    db_path = tmp_path / "m.db"
-    command.upgrade(_cfg(db_path), "head")
-    tables = {
-        t
-        for t in inspect(create_engine(f"sqlite:///{db_path}")).get_table_names()
-        if not t.startswith("search_index")
-    }
+def test_0007_rebuilds_empty_database(db_url: str) -> None:
+    command.upgrade(_cfg(db_url), "head")
+    tables = set(inspect(create_engine(sync_url(db_url))).get_table_names())
+    assert RDM_TABLES <= tables
     assert {"organization", "users", "user_token", "project_member"} <= tables
     assert "member_token" not in tables
-    assert len(tables - {"alembic_version"}) == 32
 
 
-def test_0007_refuses_populated_legacy_database(tmp_path: Path) -> None:
-    db_path = tmp_path / "m.db"
-    command.upgrade(_cfg(db_path), "0006")
-    engine = create_engine(f"sqlite:///{db_path}")
+def test_0007_refuses_populated_legacy_database(db_url: str) -> None:
+    command.upgrade(_cfg(db_url), "0006")
+    engine = create_engine(sync_url(db_url))
     with engine.begin() as conn:
         conn.execute(
             text(
@@ -43,13 +42,9 @@ def test_0007_refuses_populated_legacy_database(tmp_path: Path) -> None:
             )
         )
     with pytest.raises(RuntimeError, match="M5"):
-        command.upgrade(_cfg(db_path), "head")
-    tables = {
-        t
-        for t in inspect(create_engine(f"sqlite:///{db_path}")).get_table_names()
-        if not t.startswith("search_index")
-    }
+        command.upgrade(_cfg(db_url), "head")
+    tables = set(inspect(create_engine(sync_url(db_url))).get_table_names())
     assert "organization" not in tables
-    with create_engine(f"sqlite:///{db_path}").connect() as conn:
+    with create_engine(sync_url(db_url)).connect() as conn:
         version = conn.execute(text("select version_num from alembic_version")).scalar_one()
     assert version == "0006"

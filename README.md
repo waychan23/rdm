@@ -2,7 +2,7 @@
 
 human/agent 协作的研发工作管理：受工作流引擎约束的 WorkItem/Sprint、站内信箱、
 附件/产出物/工作区、站内通知、Webhook、全局搜索、30 个 MCP 工具与完整 Web。单组织部署（初始化
-创建默认组织，预留多租户隔离），SQLite，服务只监听 127.0.0.1。
+创建默认组织，预留多租户隔离），默认 SQLite（可选 PostgreSQL + ParadeDB 搜索），服务只监听 127.0.0.1。
 
 ## 5 分钟跑起来
 
@@ -31,6 +31,31 @@ uv run rdm serve              # http://127.0.0.1:8765 （Ctrl-C 停止）
   metadata/outbox 积压/附件孤儿，`--json`）
 - Org Owner 忘记密码：在部署主机执行 `rdm account recover-owner`（需服务运行；
   通过仅回环的 HTTP 端点重新生成 bootstrap-url）
+
+## 可选：PostgreSQL + ParadeDB 后端
+
+SQLite 仍是默认。需要共享数据库或更好的中文全文搜索时，可切换到 PostgreSQL：
+
+```bash
+uv sync --extra postgres
+# 必须使用带 pg_search 扩展的镜像（ParadeDB 官方 PG 18 镜像）
+docker run -d --name rdm-pg \
+  -e POSTGRES_PASSWORD=change-me -e POSTGRES_DB=rdm \
+  -p 5432:5432 paradedb/paradedb:0.26.4-pg18
+
+export RDM_DATABASE_URL=postgresql://postgres:change-me@127.0.0.1:5432/rdm
+uv run rdm init
+uv run rdm serve
+```
+
+- `RDM_DATABASE_URL`（或 `--database-url`）同时作用于 `init|serve|db|doctor|workflow validate`；
+  原生 PostgreSQL 没有 `pg_search` 时 `rdm init/serve` 会直接报错。
+- `data-dir` 仍然保存 `projects/`、`webhook-secret`、`attachment-secret`（数据库不再放在这里）。
+- 搜索：SQLite 用 FTS5 trigram；PostgreSQL 用 ParadeDB BM25 + jieba 分词，
+  1–2 字符的短查询回退 `ILIKE`。
+- 备份改用 `pg_dump`，见 [docs/runbook.md](docs/runbook.md)。
+- 测试：`RDM_TEST_BACKEND=postgres|both uv run pytest -q`（testcontainers 复用
+  `paradedb/paradedb:0.26.4-pg18`，每个测试独立 database）。
 
 ## 身份模型（组织/用户/项目）
 

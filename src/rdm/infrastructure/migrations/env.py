@@ -2,7 +2,8 @@
 
 The DB URL is injected programmatically by the CLI (`rdm db ...`) via
 config attributes, key "rdm.db_url" — no alembic.ini is needed.
-Migrations run on a synchronous driver (sqlite by default).
+Migrations run on a synchronous driver (sqlite by default; PostgreSQL uses
+the dual sync/async psycopg3 dialect, §17.114).
 """
 
 from __future__ import annotations
@@ -58,7 +59,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         compare_type=True,
-        render_as_batch=True,
+        render_as_batch=_db_url().startswith("sqlite"),
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -88,7 +89,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
-            render_as_batch=True,
+            render_as_batch=connection.dialect.name == "sqlite",
         )
         with context.begin_transaction():
             context.run_migrations()

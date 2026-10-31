@@ -22,7 +22,7 @@ def _is_local(host: str) -> bool:
         return False
 
 
-def run_serve(data_dir: Path, host: str, port: int) -> None:
+def run_serve(data_dir: Path, host: str, port: int, database_url: str = "") -> None:
     # The v1 --owner-token shared secret was a no-op at runtime; M3 refuses
     # non-loopback binds outright (architecture §16.59). Reach a remote host
     # via SSH port forwarding or an authenticating reverse proxy.
@@ -35,12 +35,17 @@ def run_serve(data_dir: Path, host: str, port: int) -> None:
         )
         raise typer.Exit(code=2)
 
-    settings = Settings(data_dir=data_dir, host=host, port=port)
+    settings = Settings(
+        data_dir=data_dir,
+        host=host,
+        port=port,
+        **({"database_url": database_url} if database_url else {}),
+    )
     # Migrate first so a bare `rdm serve` on a fresh data dir works.
     from rdm.interfaces.cli.db import initialize_data_dir, run_upgrade
 
     initialize_data_dir(data_dir)
-    run_upgrade(data_dir)
+    run_upgrade(data_dir, database_url=database_url or None)
 
     # Workflow edits are code changes; a stale active step is not fatal at
     # boot (operators may be mid-upgrade) but must be visible immediately.

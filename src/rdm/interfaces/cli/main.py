@@ -17,6 +17,7 @@ DEFAULT_DATA_DIR = Path.home() / "rdm-data"
 DEFAULT_URL = "http://127.0.0.1:8765"
 
 DataDirOpt = Annotated[Path, typer.Option("--data-dir", envvar="RDM_DATA_DIR")]
+DatabaseUrlOpt = Annotated[str, typer.Option("--database-url", envvar="RDM_DATABASE_URL")]
 UrlOpt = Annotated[str, typer.Option("--url", envvar="RDM_SERVER_URL")]
 TokenOpt = Annotated[str | None, typer.Option("--token", envvar="RDM_TOKEN")]
 ProjectOpt = Annotated[str | None, typer.Option("--project", envvar="RDM_PROJECT")]
@@ -71,12 +72,15 @@ def main(
 
 
 @app.command()
-def init(data_dir: DataDirOpt = DEFAULT_DATA_DIR) -> None:
+def init(
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+    database_url: DatabaseUrlOpt = "",
+) -> None:
     """Initialize a data directory and upgrade the database to head."""
     from rdm.interfaces.cli import db as db_commands
 
     db_commands.initialize_data_dir(data_dir)
-    db_commands.run_upgrade(data_dir)
+    db_commands.run_upgrade(data_dir, database_url=database_url or None)
     typer.secho(f"Initialized {data_dir}", fg=typer.colors.GREEN)
 
 
@@ -85,11 +89,12 @@ def serve(
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
     host: Annotated[str, typer.Option("--host", envvar="RDM_HOST")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", envvar="RDM_PORT")] = 8765,
+    database_url: DatabaseUrlOpt = "",
 ) -> None:
     """Start the HTTP + MCP server (loopback binds only)."""
     from rdm.interfaces.cli import server as server_commands
 
-    server_commands.run_serve(data_dir, host, port)
+    server_commands.run_serve(data_dir, host, port, database_url)
 
 
 @account_app.command("recover-owner")
@@ -105,41 +110,49 @@ def account_recover_owner(
 
 
 @workflow_app.command("validate")
-def workflow_validate(data_dir: DataDirOpt = DEFAULT_DATA_DIR) -> None:
+def workflow_validate(
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+    database_url: DatabaseUrlOpt = "",
+) -> None:
     """解析 workflow.json5 并检查在途工作项/活动步骤是否仍兼容。"""
     from rdm.interfaces.cli import workflow as workflow_commands
 
-    raise typer.Exit(workflow_commands.validate(data_dir))
+    raise typer.Exit(workflow_commands.validate(data_dir, database_url or None))
 
 
 @db_app.command("upgrade")
 def db_upgrade(
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
     revision: Annotated[str, typer.Argument(help="Target revision, default head.")] = "head",
+    database_url: DatabaseUrlOpt = "",
 ) -> None:
     """Apply migrations up to REVISION (idempotent)."""
     from rdm.interfaces.cli import db as db_commands
 
-    db_commands.run_upgrade(data_dir, revision)
+    db_commands.run_upgrade(data_dir, revision, database_url=database_url or None)
 
 
 @db_app.command("downgrade")
 def db_downgrade(
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
     revision: Annotated[str, typer.Argument(help="Target revision, e.g. -1 or base.")] = "-1",
+    database_url: DatabaseUrlOpt = "",
 ) -> None:
     """Roll back migrations to REVISION."""
     from rdm.interfaces.cli import db as db_commands
 
-    db_commands.run_downgrade(data_dir, revision)
+    db_commands.run_downgrade(data_dir, revision, database_url=database_url or None)
 
 
 @db_app.command("status")
-def db_status(data_dir: DataDirOpt = DEFAULT_DATA_DIR) -> None:
+def db_status(
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+    database_url: DatabaseUrlOpt = "",
+) -> None:
     """Show current migration revision and whether the DB is at head."""
     from rdm.interfaces.cli import db as db_commands
 
-    db_commands.run_status(data_dir)
+    db_commands.run_status(data_dir, database_url=database_url or None)
 
 
 @project_app.command("list")
@@ -852,12 +865,16 @@ def doctor(
     skip_endpoint: Annotated[
         bool, typer.Option("--skip-endpoint", help="Do not probe the running server")
     ] = False,
+    database_url: DatabaseUrlOpt = "",
 ) -> None:
     """Run data-dir/database/workflow/outbox/attachment diagnostics."""
     from rdm.config import Settings
     from rdm.interfaces.cli.doctor import run_doctor
 
-    settings = Settings(data_dir=data_dir)
+    settings = Settings(
+        data_dir=data_dir,
+        **({"database_url": database_url} if database_url else {}),
+    )
     code = run_doctor(settings, as_json=as_json, include_endpoint=not skip_endpoint)
     raise typer.Exit(code)
 

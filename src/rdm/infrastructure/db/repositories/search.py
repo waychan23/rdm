@@ -1,7 +1,9 @@
-"""SQLite FTS5 search adapter (§17 M7).
+"""Full-text search adapter.
 
-The virtual table and its triggers are created by migration 0019. This module
-is the only place allowed to use FTS5 SQL; callers go through SearchService.
+SQLite uses FTS5 (migration 0019); PostgreSQL uses ParadeDB `pg_search`
+BM25 + jieba over the same unified `search_index` table (§17.114). This
+module is the only place allowed to use dialect-specific search SQL;
+callers go through SearchService.
 """
 
 from __future__ import annotations
@@ -31,6 +33,16 @@ def _match_expression(query: str) -> str:
     return " AND ".join('"' + t.replace('"', '""') + '"' for t in terms)
 
 
+def _pg_query_terms(query: str) -> str:
+    """Strip punctuation that would otherwise become stray matched tokens."""
+    return " ".join(re.sub(r"[^\w]+", " ", query).split())
+
+
+def _dialect(session: AsyncSession) -> str:
+    bind = session.get_bind()
+    return bind.dialect.name if bind is not None else "sqlite"
+
+
 class SearchRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
@@ -46,38 +58,12 @@ class SearchRepository:
     ) -> list[SearchRow]:
         if not project_ids or not query.strip():
             return []
-        params: dict[str, object] = {
-            "limit": limit,
-            "offset": offset,
-        }
-        placeholders = []
-        for i, project_id in enumerate(project_ids):
-            key = f"p{i}"
-            placeholders.append(f":{key}")
-            params[key] = project_id
-        filters = [f"project_id IN ({', '.join(placeholders)})"]
-        if types:
-            type_placeholders = []
-            for i, entity_type in enumerate(types):
-                key = f"t{i}"
-                type_placeholders.append(f":{key}")
-                params[key] = entity_type
-            filters.append(f"entity_type IN ({', '.join(type_placeholders)})")
-        where = " AND ".join(filters)
-        if len(query.strip()) >= 3:
-            params["match"] = _match_expression(query)
-            sql = (
-                "SELECT entity_type, entity_id, project_id, ref, title, body "
-                "FROM search_index WHERE search_index MATCH :match AND "
-                f"{where} ORDER BY rank LIMIT :limit OFFSET :offset"
-            )
+        if _dialect(self._s) == "postgresql":
+            params, sql = self._postgres_sql(project_ids, query, types, limit, offset)
         else:
-            params["like"] = f"%{query.strip()}%"
-            sql = (
-                "SELECT entity_type, entity_id, project_id, ref, title, body "
-                "FROM search_index WHERE (title LIKE :like OR body LIKE :like) AND "
-                f"{where} ORDER BY rowid DESC LIMIT :limit OFFSET :offset"
-            )
+            params, sql = self._sqlite_sql(project_ids, query, types, limit, offset)
+        if sql is None:
+            return []
         rows = (await self._s.execute(text(sql), params)).all()
         return [
             SearchRow(
@@ -90,3 +76,96 @@ class SearchRepository:
             )
             for row in rows
         ]
+
+    @staticmethod
+    def _filters(
+        project_ids: Sequence[str],
+        types: Sequence[str] | None,
+        params: dict[str, object],
+        *,
+        prefix: str = "",
+    ) -> str:
+        placeholders = []
+        for i, project_id in enumerate(project_ids):
+            key = f"p{i}"
+            placeholders.append(f":{key}")
+            params[key] = project_id
+        filters = [f"{prefix}project_id IN ({', '.join(placeholders)})"]
+        if types:
+            type_placeholders = []
+            for i, entity_type in enumerate(types):
+                key = f"t{i}"
+                type_placeholders.append(f":{key}")
+                params[key] = entity_type
+            filters.append(f"{prefix}entity_type IN ({', '.join(type_placeholders)})")
+        return " AND ".join(filters)
+
+    def _sqlite_sql(
+        self,
+        project_ids: Sequence[str],
+        query: str,
+        types: Sequence[str] | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[dict[str, object], str | None]:
+        params: dict[str, object] = {"limit": limit, "offset": offset}
+        where = self._filters(project_ids, types, params)
+        q = query.strip()
+        if len(q) >= 3:
+            params["match"] = _match_expression(query)
+            sql = (
+                "SELECT entity_type, entity_id, project_id, ref, title, body "
+                "FROM search_index WHERE search_index MATCH :match AND "
+                f"{where} ORDER BY rank LIMIT :limit OFFSET :offset"
+            )
+        else:
+            params["like"] = f"%{q}%"
+            sql = (
+                "SELECT entity_type, entity_id, project_id, ref, title, body "
+                "FROM search_index WHERE (title LIKE :like OR body LIKE :like) AND "
+                f"{where} ORDER BY rowid DESC LIMIT :limit OFFSET :offset"
+            )
+        return params, sql
+
+    def _postgres_sql(
+        self,
+        project_ids: Sequence[str],
+        query: str,
+        types: Sequence[str] | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[dict[str, object], str | None]:
+        params: dict[str, object] = {"limit": limit, "offset": offset}
+        q = query.strip()
+        if len(q) >= 3:
+            where = self._filters(project_ids, types, params, prefix="si.")
+            cleaned = _pg_query_terms(q)
+            if not cleaned:
+                return params, None
+            params["q"] = cleaned
+            # ParadeDB Top-K requires LIMIT; OFFSET is applied by the outer page
+            # over an inner LIMIT of offset + page size.
+            params["inner_limit"] = offset + limit
+            sql = (
+                "WITH top_results AS ("
+                " SELECT si.id, si.entity_type, si.entity_id, si.project_id, si.ref, "
+                "si.title, si.body, pdb.score(si.id) AS score"
+                " FROM search_index si"
+                f" WHERE si.content &&& :q AND {where}"
+                " ORDER BY pdb.score(si.id) DESC, si.id DESC"
+                " LIMIT :inner_limit"
+                ") SELECT entity_type, entity_id, project_id, ref, title, body"
+                " FROM top_results ORDER BY score DESC, id DESC"
+                " LIMIT :limit OFFSET :offset"
+            )
+        else:
+            # jieba cannot match 1–2 character fragments reliably; keep the
+            # same substring fallback as SQLite (sequential scan).
+            where = self._filters(project_ids, types, params)
+            params["like"] = f"%{q}%"
+            sql = (
+                "SELECT entity_type, entity_id, project_id, ref, title, body "
+                "FROM search_index WHERE (title ILIKE :like OR body ILIKE :like) AND "
+                f"{where} ORDER BY id DESC LIMIT :limit OFFSET :offset"
+            )
+        return params, sql

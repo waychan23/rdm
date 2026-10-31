@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import sqlite3
-
 import httpx
+
+from tests.db import sync_rows
 
 API = "/api/v1"
 
@@ -245,13 +245,13 @@ async def test_cascade_delete_and_restore_parent_chain(server, owner_token: str)
     ).status_code == 200
 
     # events recorded for created/assigned-less/deleted/restored
-    with sqlite3.connect(settings.db_path) as conn:
-        kinds = {
-            row[0]
-            for row in conn.execute(
-                "select distinct event_type from event where aggregate_type='work_item'"
-            )
-        }
+    kinds = {
+        row[0]
+        for row in sync_rows(
+            settings,
+            "select distinct event_type from event where aggregate_type='work_item'",
+        )
+    }
     assert {"work_item.created", "work_item.deleted", "work_item.restored"} <= kinds
 
 

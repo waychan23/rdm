@@ -211,16 +211,13 @@ async def test_step_start_notifies_executors(server, owner_token: str) -> None:
     assert [n for n in r.json()["data"] if n["type"] == "step"] == []
 
     import json
-    import sqlite3
 
-    con = sqlite3.connect(settings.data_dir / "rdm.db")
-    try:
-        payloads = [
-            json.loads(row[0])
-            for row in con.execute("select payload from webhook_outbox").fetchall()
-        ]
-    finally:
-        con.close()
+    from tests.db import sync_rows
+
+    payloads = [
+        json.loads(row[0]) if isinstance(row[0], str) else row[0]
+        for row in sync_rows(settings, "select payload from webhook_outbox")
+    ]
     assert {p["event"] for p in payloads} == {"work_item.step_started"}
     assert {p["data"]["display_id"] for p in payloads} == {item["display_id"]}
 

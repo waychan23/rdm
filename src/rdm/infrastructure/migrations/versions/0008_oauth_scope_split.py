@@ -33,24 +33,36 @@ _SCOPE_COLUMNS = (
 )
 
 
+def _rewrite_scopes(conn, table: str, *, new: str, old: str) -> None:  # type: ignore[no-untyped-def]
+    if conn.dialect.name == "postgresql":
+        # json has no equality operator; compare as jsonb for semantic equality
+        # and cast the text parameter when assigning.
+        conn.execute(
+            text(
+                f"UPDATE {table} SET scopes = CAST(:new AS JSON) "
+                "WHERE client_id = :cid AND CAST(scopes AS JSONB) = CAST(:old AS JSONB)"
+            ),
+            {"new": new, "cid": _WEB_CLIENT_ID, "old": old},
+        )
+    else:
+        conn.execute(
+            text(f"UPDATE {table} SET scopes = :new WHERE client_id = :cid AND scopes = :old"),
+            {"new": new, "cid": _WEB_CLIENT_ID, "old": old},
+        )
+
+
 def upgrade() -> None:
     conn = op.get_bind()
     _rewrite_client_info(conn, "web")
     for table in _SCOPE_COLUMNS:
-        conn.execute(
-            text(f"UPDATE {table} SET scopes = :new WHERE client_id = :cid AND scopes = :old"),
-            {"new": _NEW_SCOPE, "cid": _WEB_CLIENT_ID, "old": _OLD_SCOPE},
-        )
+        _rewrite_scopes(conn, table, new=_NEW_SCOPE, old=_OLD_SCOPE)
 
 
 def downgrade() -> None:
     conn = op.get_bind()
     _rewrite_client_info(conn, "mcp")
     for table in _SCOPE_COLUMNS:
-        conn.execute(
-            text(f"UPDATE {table} SET scopes = :old WHERE client_id = :cid AND scopes = :new"),
-            {"new": _NEW_SCOPE, "cid": _WEB_CLIENT_ID, "old": _OLD_SCOPE},
-        )
+        _rewrite_scopes(conn, table, new=_OLD_SCOPE, old=_NEW_SCOPE)
 
 
 def _rewrite_client_info(conn, scope: str) -> None:  # type: ignore[no-untyped-def]
@@ -66,7 +78,9 @@ def _rewrite_client_info(conn, scope: str) -> None:  # type: ignore[no-untyped-d
     if info.get("scope") == scope:
         return
     info["scope"] = scope
-    conn.execute(
-        text("UPDATE oauth_client SET client_info = :info WHERE client_id = :cid"),
-        {"info": json.dumps(info), "cid": _WEB_CLIENT_ID},
+    statement = (
+        "UPDATE oauth_client SET client_info = CAST(:info AS JSON) WHERE client_id = :cid"
+        if conn.dialect.name == "postgresql"
+        else "UPDATE oauth_client SET client_info = :info WHERE client_id = :cid"
     )
+    conn.execute(statement, {"info": json.dumps(info), "cid": _WEB_CLIENT_ID})

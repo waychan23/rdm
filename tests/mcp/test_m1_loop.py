@@ -7,8 +7,7 @@ real claude/opencode agents will.
 
 from __future__ import annotations
 
-import sqlite3
-
+from tests.db import sync_rows
 from tests.mcp.mcp_helpers import call
 
 
@@ -184,8 +183,7 @@ async def test_m1_single_agent_loop(server, mcp_clients) -> None:
         assert restored["meta"]["restored"] == [story_ref, task_ref]
 
     # event ledger: every M1 event family used in the loop was recorded once+
-    with sqlite3.connect(settings.db_path) as conn:
-        types = {row[0] for row in conn.execute("select distinct event_type from event")}
+    types = {row[0] for row in sync_rows(settings, "select distinct event_type from event")}
     assert {
         "work_item.created",
         "work_item.status_changed",

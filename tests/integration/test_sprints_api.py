@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import sqlite3
-
 import httpx
+
+from tests.db import sync_rows
 
 API = "/api/v1"
 
@@ -133,13 +133,13 @@ async def test_sprint_lifecycle_items_start_close_gate(server, owner_token: str)
     assert r.status_code == 200 and r.json()["data"]["status"] == "CLOSED"
 
     # events
-    with sqlite3.connect(settings.db_path) as conn:
-        types = {
-            row[0]
-            for row in conn.execute(
-                "select distinct event_type from event where aggregate_type='sprint'"
-            )
-        }
+    types = {
+        row[0]
+        for row in sync_rows(
+            settings,
+            "select distinct event_type from event where aggregate_type='sprint'",
+        )
+    }
     assert {
         "sprint.created",
         "sprint.item_added",

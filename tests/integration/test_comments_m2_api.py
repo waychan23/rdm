@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import sqlite3
-
 import httpx
+
+from tests.db import json_text, sync_rows
 
 API = "/api/v1"
 
@@ -77,15 +77,17 @@ async def test_comment_with_attachment_ids_rebinds(server, owner_token) -> None:
     assert r.status_code == 200
     assert r.content == b"data-bytes"
 
-    with sqlite3.connect(settings.db_path) as conn:
-        row = conn.execute(
-            "select owner_type, owner_id from attachment where id=?", (att["id"],)
-        ).fetchone()
-        assert row == ("comment", comment["id"])
-        payload = conn.execute(
-            "select payload from event where event_type='comment.created' order by seq desc limit 1"
-        ).fetchone()[0]
-        assert att["id"] in payload  # JSON text contains the id
+    row = sync_rows(
+        settings,
+        "select owner_type, owner_id from attachment where id=:id",
+        {"id": att["id"]},
+    )[0]
+    assert tuple(row) == ("comment", comment["id"])
+    payload = sync_rows(
+        settings,
+        "select payload from event where event_type='comment.created' order by seq desc limit 1",
+    )[0][0]
+    assert att["id"] in json_text(payload)
 
 
 async def test_comment_with_bad_attachment_ids_rejected(server, owner_token) -> None:
@@ -136,18 +138,19 @@ async def test_comment_delete_permissions_and_cascade(server, owner_token, tmp_p
     on_disk = [p for p in settings.projects_dir.glob("*/attachments/*/*") if p.is_file()]
     assert on_disk and on_disk[0].exists()
 
-    with sqlite3.connect(settings.db_path) as conn:
-        types = {
-            row[0]
-            for row in conn.execute(
-                "select distinct event_type from event where aggregate_id=?", (comment_id,)
-            )
-        }
-        assert "comment.deleted" in types
-        cascade = conn.execute(
-            "select payload from event where event_type='comment.deleted'"
-        ).fetchone()[0]
-        assert att["id"] in cascade
+    types = {
+        row[0]
+        for row in sync_rows(
+            settings,
+            "select distinct event_type from event where aggregate_id=:id",
+            {"id": comment_id},
+        )
+    }
+    assert "comment.deleted" in types
+    cascade = sync_rows(settings, "select payload from event where event_type='comment.deleted'")[
+        0
+    ][0]
+    assert att["id"] in json_text(cascade)
 
 
 async def test_owner_can_delete_others_comments(server, owner_token) -> None:

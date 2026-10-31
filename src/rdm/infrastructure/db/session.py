@@ -19,7 +19,7 @@ _SQLITE_PRAGMAS = (
 
 
 def make_engine(url: str) -> AsyncEngine:
-    engine = create_async_engine(url, future=True)
+    engine = create_async_engine(url, future=True, pool_pre_ping=not url.startswith("sqlite"))
     if url.startswith("sqlite"):
 
         @event.listens_for(engine.sync_engine, "connect")
