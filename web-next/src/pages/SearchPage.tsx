@@ -9,6 +9,7 @@ import Spinner from "@atlaskit/spinner";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
+import { cardBorder } from "../components/cardBorder";
 import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
 import { api } from "../lib/api";
@@ -18,9 +19,6 @@ import type { SearchHit } from "../types";
 const styles = cssMap({
   card: {
     borderRadius: "var(--ds-radius-small)",
-    borderWidth: "var(--ds-border-width)",
-    borderStyle: "solid",
-    borderColor: "var(--ds-border)",
     paddingBlock: "var(--ds-space-150)",
     paddingInline: "var(--ds-space-200)",
     backgroundColor: "var(--ds-surface)",
@@ -100,6 +98,7 @@ export default function SearchPage() {
             <Box
               key={`${hit.entity_type}:${hit.entity_id}`}
               xcss={styles.card}
+              style={cardBorder}
               testId={`search-hit-${hit.entity_type}-${hit.entity_id}`}
               role="button"
               tabIndex={0}

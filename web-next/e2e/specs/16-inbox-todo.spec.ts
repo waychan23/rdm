@@ -26,6 +26,13 @@ test.describe("inbox todo tab", () => {
     await expect(
       alicePage.getByTestId("todo-overdue").getByText(overdue.display_id),
     ).toBeVisible();
+    await expect(alicePage.getByTestId("inbox-header")).toContainText("通知/待办");
+
+    // Cross-project todo navigation needs the row's project_key.
+    await alicePage.getByTestId("todo-assigned").getByTestId(`todo-item-${overdue.id}`).click();
+    await expect(alicePage.getByTestId("item-panel-display-id")).toHaveText(
+      overdue.display_id,
+    );
 
     // Bob has an approval step waiting; it appears under both pending/approval.
     const task = await api.createItem({

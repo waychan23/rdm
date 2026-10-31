@@ -294,7 +294,7 @@ export default function PersonalSettingsPage() {
          <Stack space="space.150">
            <Heading size="small">通知设置</Heading>
            <Text size="small" color="color.text.subtle">
-             控制站内通知；关闭后仍可在收件箱查看历史。
+             控制站内通知；关闭后仍可在「通知/待办」查看历史。
            </Text>
            <Inline space="space.200" shouldWrap>
              {NOTIFICATION_LABELS.map(([type, label]) => (

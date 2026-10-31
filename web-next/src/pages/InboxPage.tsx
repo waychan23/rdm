@@ -11,6 +11,7 @@ import Spinner from "@atlaskit/spinner";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { token } from "@atlaskit/tokens";
 
+import { cardBorder } from "../components/cardBorder";
 import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
@@ -38,9 +39,6 @@ const SORT_OPTIONS = [
 const styles = cssMap({
   card: {
     borderRadius: "var(--ds-radius-small)",
-    borderWidth: "var(--ds-border-width)",
-    borderStyle: "solid",
-    borderColor: "var(--ds-border)",
     paddingBlock: "var(--ds-space-150)",
     paddingInline: "var(--ds-space-200)",
     backgroundColor: "var(--ds-surface)",
@@ -133,15 +131,20 @@ export default function InboxPage() {
     }
   };
 
-  const openItem = (item: WorkItem) =>
+  const openItem = (item: WorkItem) => {
+    if (!item.project_key) {
+      notify.error("无法打开工作项", "缺少所属项目信息，请刷新后重试。");
+      return;
+    }
     navigate(`/projects/${item.project_key}/items/${item.display_id}`);
+  };
 
   const openStep = (entry: TodoStepEntry) => openItem(entry.item);
 
   return (
     <Page testId="page-inbox">
       <PageHeader
-        title="收件箱"
+        title="通知/待办"
         testId="inbox-header"
         actions={
           <Inline space="space.150" alignBlock="center">
@@ -216,7 +219,7 @@ export default function InboxPage() {
               <Box
                 key={n.id}
                 xcss={styles.card}
-                style={unreadStyle(Boolean(n.read_at))}
+                style={{ ...cardBorder, ...unreadStyle(Boolean(n.read_at)) }}
                 testId={`inbox-item-${n.id}`}
                 role="button"
                 tabIndex={0}
@@ -329,6 +332,7 @@ function StepRow({ entry, onOpen }: { entry: TodoStepEntry; onOpen: (e: TodoStep
   return (
     <Box
       xcss={styles.card}
+      style={cardBorder}
       testId={`todo-step-${entry.step.id}`}
       role="button"
       tabIndex={0}
@@ -360,6 +364,7 @@ function ItemRow({ item, onOpen }: { item: WorkItem; onOpen: (i: WorkItem) => vo
   return (
     <Box
       xcss={styles.card}
+      style={cardBorder}
       testId={`todo-item-${item.id}`}
       role="button"
       tabIndex={0}

@@ -181,6 +181,7 @@ def work_item_summary_out(
     return {
         "id": full["id"],
         "display_id": full["display_id"],
+        "project_key": project.key,
         "kind": full["kind"],
         "task_type": full["task_type"],
         "title": full["title"],

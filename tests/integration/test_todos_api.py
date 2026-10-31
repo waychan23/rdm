@@ -47,6 +47,7 @@ async def test_todo_assigned_and_overdue(server, owner_token: str) -> None:
     assert r.status_code == 200, r.text
     data = r.json()["data"]
     assert [row["display_id"] for row in data["assigned"]] == [item["display_id"]]
+    assert data["assigned"][0]["project_key"] == "DEMO"
     assert [row["display_id"] for row in data["overdue"]] == [item["display_id"]]
     assert data["pending_steps"] == []
 

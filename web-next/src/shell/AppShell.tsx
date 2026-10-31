@@ -227,7 +227,7 @@ export default function AppShell() {
         <nav className="rdm-rail" aria-label="主导航" data-testid="app-sidebar">
           <div className="rdm-rail-group" data-testid="rail-group-org">
             <RailItem to="/projects" label="项目" testId="projects" icon={GridIcon} end />
-            <RailItem to="/inbox" label="收件箱" testId="inbox" icon={InboxIcon} />
+            <RailItem to="/inbox" label="通知/待办" testId="inbox" icon={InboxIcon} />
             {(who?.org_roles.includes("org_owner") ||
               who?.org_roles.includes("user_manager")) && (
               <RailItem to="/org/users" label="用户" testId="org-users" icon={PeopleIcon} />
