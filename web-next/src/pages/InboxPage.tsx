@@ -6,6 +6,7 @@ import Button from "@atlaskit/button/default/button";
 import Checkbox from "@atlaskit/checkbox";
 import EmptyState from "@atlaskit/empty-state";
 import Lozenge from "@atlaskit/lozenge";
+import Select from "@atlaskit/select";
 import Spinner from "@atlaskit/spinner";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { token } from "@atlaskit/tokens";
@@ -27,6 +28,12 @@ interface NotificationResult {
 }
 
 type Tab = "notifications" | "todo";
+type Order = "desc" | "asc";
+
+const SORT_OPTIONS = [
+  { label: "最新在前", value: "desc" },
+  { label: "最早在前", value: "asc" },
+];
 
 const styles = cssMap({
   card: {
@@ -69,17 +76,18 @@ export default function InboxPage() {
   const notify = useNotify();
   const [tab, setTab] = useState<Tab>("notifications");
   const [unreadOnly, setUnreadOnly] = useState(true);
+  const [order, setOrder] = useState<Order>("desc");
 
   const notifications = useAsync<NotificationResult>(async () => {
     const res = await api.get<Notification[]>(
-      `/notifications?unread_only=${unreadOnly}&limit=100`,
+      `/notifications?unread_only=${unreadOnly}&order=${order}&limit=100`,
     );
     return {
       items: res.data,
       unread: Number(res.meta?.unread ?? 0),
       total: Number(res.meta?.total ?? res.data.length),
     };
-  }, [unreadOnly]);
+  }, [unreadOnly, order]);
 
   const todos = useAsync<TodoBundle>(async () => {
     if (tab !== "todo") {
@@ -155,6 +163,17 @@ export default function InboxPage() {
             </Inline>
             {tab === "notifications" ? (
               <>
+                <Box style={{ width: 130 }}>
+                  <Select
+                    spacing="compact"
+                    options={SORT_OPTIONS}
+                    value={SORT_OPTIONS.find((o) => o.value === order) ?? null}
+                    onChange={(opt) =>
+                      setOrder(((opt as { value?: string } | null)?.value as Order) ?? "desc")
+                    }
+                    testId="inbox-sort"
+                  />
+                </Box>
                 <Checkbox
                   label="只看未读"
                   isChecked={unreadOnly}

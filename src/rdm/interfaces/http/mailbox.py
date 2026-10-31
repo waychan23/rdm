@@ -49,6 +49,8 @@ async def check_mailbox(
     identity: str | None = None,
     folder: str = "inbox",
     q: str | None = None,
+    order: str = "desc",
+    before: str | None = None,
     container: Container = Depends(get_container),
     actor: Actor = Depends(get_actor),
 ) -> dict:
@@ -63,6 +65,42 @@ async def check_mailbox(
             identity=identity,
             folder=folder,
             q=q,
+            order=order,
+            before=before,
+        )
+    return {"data": body}
+
+
+@router.get("/mailbox")
+async def check_mailbox_all_projects(
+    project: str | None = None,
+    since: str | None = None,
+    unread_only: bool = True,
+    limit: int = 20,
+    include_agents: bool = False,
+    identity: str | None = None,
+    folder: str = "inbox",
+    q: str | None = None,
+    order: str = "desc",
+    before: str | None = None,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    """Org-level inbox: all accessible projects, optionally filtered by project."""
+    async with container.uow() as uow:
+        body = await MailboxService(uow).check(
+            actor,
+            project_key=project,
+            since=since,
+            unread_only=unread_only,
+            limit=min(limit, 100),
+            include_agents=include_agents,
+            identity=identity,
+            folder=folder,
+            q=q,
+            all_projects=True,
+            order=order,
+            before=before,
         )
     return {"data": body}
 

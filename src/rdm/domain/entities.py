@@ -377,6 +377,8 @@ class Message:
     subject: str
     body_md: str
     reply_to_id: str | None = None
+    # Root message id for threading (self for a new thread).
+    thread_id: str | None = None
     created_at: dt.datetime = field(default_factory=_utcnow)
     deleted_at: dt.datetime | None = None
     deleted_by: str | None = None

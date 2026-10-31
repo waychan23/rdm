@@ -198,6 +198,7 @@ class NotificationService:
         identity: str | None = None,
         unread_only: bool = False,
         project_key: str | None = None,
+        order: str = "desc",
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[Notification], int, int]:
@@ -209,6 +210,7 @@ class NotificationService:
             recipient,
             unread_only=unread_only,
             project_id=project_id,
+            order=order,
             limit=limit,
             offset=max(0, offset),
         )

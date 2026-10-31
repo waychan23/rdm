@@ -276,6 +276,7 @@ def message_to_domain(row: MessageModel) -> Message:
         subject=row.subject,
         body_md=row.body_md,
         reply_to_id=row.reply_to_id,
+        thread_id=row.thread_id,
         created_at=row.created_at,
         deleted_at=row.deleted_at,
         deleted_by=row.deleted_by,

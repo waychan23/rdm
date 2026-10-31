@@ -408,3 +408,104 @@ async def test_send_to_group_name_fans_out(server, owner_token: str) -> None:
     for token in (alice, bob):
         r = await client.get(f"{API}/projects/DEMO/mailbox", headers=auth(token))
         assert [m["subject"] for m in r.json()["data"]["messages"]] == ["群发通知"]
+
+
+async def test_org_mailbox_filters_projects_sorts_and_threads(server, owner_token: str) -> None:
+    from tests.support import add_to_project
+
+    client, _settings, _app = server
+    await _project(client, owner_token, "DEMO")
+    r = await client.post(
+        f"{API}/projects", json={"key": "OTHER", "name": "另一个项目"}, headers=auth(owner_token)
+    )
+    assert r.status_code == 201, r.text
+    alice_id, alice = await _member(client, owner_token, "alice")
+    await add_to_project(client, owner_token, "OTHER", alice_id, ["worker"])
+
+    r = await client.post(
+        f"{API}/projects/DEMO/messages",
+        json={"to": ["alice"], "subject": "第一封", "body_md": "demo"},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+    r = await client.post(
+        f"{API}/projects/OTHER/messages",
+        json={"to": ["alice"], "subject": "第二封", "body_md": "other"},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+    first_id = r.json()["data"]["message_id"]
+    r = await client.post(
+        f"{API}/projects/OTHER/messages",
+        json={
+            "to": ["alice"],
+            "subject": "Re: 第二封",
+            "body_md": "reply",
+            "reply_to": first_id,
+        },
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+
+    # Org-level inbox spans both projects and carries project info.
+    r = await client.get(f"{API}/mailbox?unread_only=false", headers=auth(alice))
+    assert r.status_code == 200, r.text
+    body = r.json()["data"]
+    assert {m["project"]["key"] for m in body["messages"]} == {"DEMO", "OTHER"}
+    assert all(m["project"]["name"] for m in body["messages"])
+    # Default newest-first.
+    assert [m["subject"] for m in body["messages"]][0] == "Re: 第二封"
+    # Thread ids group the reply with its root.
+    other = [m for m in body["messages"] if m["project"]["key"] == "OTHER"]
+    assert len({m["thread_id"] for m in other}) == 1
+
+    # Project filter.
+    r = await client.get(f"{API}/mailbox?unread_only=false&project=DEMO", headers=auth(alice))
+    assert [m["project"]["key"] for m in r.json()["data"]["messages"]] == ["DEMO"]
+
+    # Ascending order.
+    r = await client.get(f"{API}/mailbox?unread_only=false&order=asc", headers=auth(alice))
+    subjects = [m["subject"] for m in r.json()["data"]["messages"]]
+    assert subjects[0] == "第一封"
+
+    # Descending cursor pagination uses before.
+    r = await client.get(f"{API}/mailbox?unread_only=false&limit=1&order=desc", headers=auth(alice))
+    page = r.json()["data"]
+    assert len(page["messages"]) == 1
+    assert page["next_cursor"]
+    r = await client.get(
+        f"{API}/mailbox?unread_only=false&limit=1&order=desc&before={page['next_cursor']}",
+        headers=auth(alice),
+    )
+    assert r.json()["data"]["messages"][0]["subject"] != page["messages"][0]["subject"]
+
+
+async def test_org_mailbox_sent_and_unread_counts(server, owner_token: str) -> None:
+    from tests.support import add_to_project
+
+    client, _settings, _app = server
+    await _project(client, owner_token, "DEMO")
+    r = await client.post(
+        f"{API}/projects", json={"key": "OTHER", "name": "另一个项目"}, headers=auth(owner_token)
+    )
+    assert r.status_code == 201, r.text
+    alice_id, alice = await _member(client, owner_token, "alice")
+    await add_to_project(client, owner_token, "OTHER", alice_id, ["worker"])
+    for key in ("DEMO", "OTHER"):
+        r = await client.post(
+            f"{API}/projects/{key}/messages",
+            json={"to": ["alice"], "subject": f"{key} 信", "body_md": "x"},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 201, r.text
+
+    r = await client.get(f"{API}/mailbox", headers=auth(alice))
+    assert r.json()["data"]["unread_count"] == 2
+    r = await client.get(f"{API}/mailbox?project=DEMO", headers=auth(alice))
+    assert r.json()["data"]["unread_count"] == 1
+
+    r = await client.get(f"{API}/mailbox?folder=sent", headers=auth(owner_token))
+    assert r.status_code == 200, r.text
+    sent = r.json()["data"]["messages"]
+    assert {m["project"]["key"] for m in sent} >= {"DEMO", "OTHER"}
+    assert all(m["recipients"] for m in sent)

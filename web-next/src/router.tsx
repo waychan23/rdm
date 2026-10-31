@@ -74,6 +74,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/projects" replace /> },
       { path: "projects", Component: () => withSuspense(<ProjectsPage />) },
       { path: "inbox", Component: () => withSuspense(<InboxPage />) },
+      { path: "mailbox", Component: () => withSuspense(<MailboxPage />) },
       { path: "search", Component: () => withSuspense(<SearchPage />) },
       { path: "projects/:key", Component: () => withSuspense(<OverviewPage />) },
       { path: "projects/:key/board", Component: () => withSuspense(<BoardPage />) },

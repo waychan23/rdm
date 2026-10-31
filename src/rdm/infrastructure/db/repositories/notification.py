@@ -42,6 +42,7 @@ class NotificationRepository:
         *,
         unread_only: bool = False,
         project_id: str | None = None,
+        order: str = "desc",
         limit: int = 50,
         offset: int = 0,
     ) -> list[Notification]:
@@ -52,11 +53,11 @@ class NotificationRepository:
             stmt = stmt.where(NotificationModel.read_at.is_(None))
         if project_id is not None:
             stmt = stmt.where(NotificationModel.project_id == project_id)
-        stmt = (
-            stmt.order_by(NotificationModel.created_at.desc(), NotificationModel.id.desc())
-            .limit(limit)
-            .offset(offset)
-        )
+        if order == "asc":
+            stmt = stmt.order_by(NotificationModel.created_at, NotificationModel.id)
+        else:
+            stmt = stmt.order_by(NotificationModel.created_at.desc(), NotificationModel.id.desc())
+        stmt = stmt.limit(limit).offset(offset)
         rows = list((await self._s.execute(stmt)).scalars().all())
         return [notification_to_domain(r) for r in rows]
 

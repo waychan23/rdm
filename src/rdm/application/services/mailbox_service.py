@@ -160,11 +160,13 @@ class MailboxService:
             raise ValidationError("至少需要一个收件人", details={"field": "to"})
 
         ref_items = [await self.items.resolve_item(actor, ref) for ref in refs] if refs else []
+        thread_id: str | None = None
         if reply_to:
             assert self.uow.messages is not None
             parent = await self.uow.messages.get_message(reply_to)
             if parent is None or parent.project_id != project.id:
                 raise NotFound(f"reply_to 消息 {reply_to} 不存在", details={"message_id": reply_to})
+            thread_id = parent.thread_id or parent.id
 
         message, deliveries = await self._fan_out(
             project,
@@ -174,6 +176,7 @@ class MailboxService:
             body_md=body_md,
             ref_items=ref_items,
             reply_to=reply_to,
+            thread_id=thread_id,
         )
         await commit_inline_images(self.uow, project.id, body_md)
         await self._append_message_event(project, actor, message, recipients, ref_items)
@@ -189,6 +192,7 @@ class MailboxService:
         body_md: str,
         ref_items: Sequence[WorkItem],
         reply_to: str | None,
+        thread_id: str | None = None,
     ) -> tuple[Message, list[MessageDelivery]]:
         assert self.uow.messages is not None
         now = dt.datetime.now(dt.UTC)
@@ -201,6 +205,7 @@ class MailboxService:
             reply_to_id=reply_to,
             created_at=now,
         )
+        message.thread_id = thread_id or message.id
         await self.uow.messages.add_message(message)
 
         deliveries: list[MessageDelivery] = []
@@ -280,10 +285,21 @@ class MailboxService:
         identity: str | None = None,
         folder: str = "inbox",
         q: str | None = None,
+        all_projects: bool = False,
+        order: str = "desc",
+        before: str | None = None,
     ) -> dict[str, Any]:
         assert self.uow.messages is not None and self.uow.work_items is not None
-        project = await self.items.resolve_project(actor, project_key)
-        await self.ensure_indiv(project.id, actor.id)
+        if all_projects:
+            if project_key is not None:
+                scoped = await self.items.resolve_project(actor, project_key)
+                project_ids = [scoped.id]
+            else:
+                project_ids = actor.project_ids()
+        else:
+            project = await self.items.resolve_project(actor, project_key)
+            project_ids = [project.id]
+            await self.ensure_indiv(project.id, actor.id)
         identity_ids = await self._mailbox_identity_ids(actor, include_agents=include_agents)
         if identity is not None:
             if identity not in identity_ids:
@@ -291,21 +307,27 @@ class MailboxService:
             identity_ids = [identity]
         if folder not in {"inbox", "archived", "sent"}:
             raise ValidationError(f"未知信箱分类 {folder!r}", details={"field": "folder"})
+        if order not in {"asc", "desc"}:
+            raise ValidationError(f"未知排序 {order!r}", details={"field": "order"})
         if folder == "sent":
             return await self._check_sent(
-                project,
+                project_ids,
                 identity_ids,
                 since=since,
+                before=before,
+                order=order,
                 limit=limit,
                 q=q,
             )
         page = await self.uow.messages.list_deliveries_for_users(
             identity_ids,
-            project_id=project.id,
+            project_ids=project_ids,
             since_id=since,
+            before_id=before,
             unread_only=unread_only and folder == "inbox",
             archived=folder == "archived",
             q=q,
+            order=order,
             limit=limit + 1,
         )
         has_more = len(page) > limit
@@ -314,75 +336,101 @@ class MailboxService:
         messages = await self.uow.messages.list_messages([d.message_id for d in page])
         msg_by_id = {m.id: m for m in messages}
         refs = await self.uow.messages.list_refs([m.id for m in messages])
-        ref_items: list[WorkItem] = await self.uow.work_items.list_by_ids(
-            project.id, [r.work_item_id for r in refs], include_deleted=True
-        )
+        assert self.uow.users is not None and self.uow.projects is not None
+        project_by_id: dict[str, Project] = {}
+        for message in messages:
+            if message.project_id not in project_by_id:
+                project_row = await self.uow.projects.get(message.project_id)
+                if project_row is not None:
+                    project_by_id[message.project_id] = project_row
+        ref_items: list[WorkItem] = []
+        if len(project_ids) == 1 and refs:
+            ref_items = await self.uow.work_items.list_by_ids(
+                project_ids[0],
+                [r.work_item_id for r in refs],
+                include_deleted=True,
+            )
         item_by_id = {i.id: i for i in ref_items}
-        assert self.uow.users is not None
         owner_by_id = {user_id: await self.uow.users.get(user_id) for user_id in identity_ids}
 
         rows: list[dict[str, Any]] = []
         for delivery in page:
-            message = msg_by_id.get(delivery.message_id)
-            if message is None:
+            row_message = msg_by_id.get(delivery.message_id)
+            if row_message is None:
                 continue
-            # The sender may be a member of another project (org-level user).
-            sender = await self.uow.users.get(message.from_user_id)
+            row_project = project_by_id.get(row_message.project_id)
+            if row_project is None:
+                continue
+            sender = await self.uow.users.get(row_message.from_user_id)
             owner = owner_by_id.get(delivery.recipient_user_id)
             item_refs = [
-                f"{project.key}-{item_by_id[r.work_item_id].display_no}"
+                f"{row_project.key}-{item_by_id[r.work_item_id].display_no}"
                 for r in refs
-                if r.message_id == message.id and r.work_item_id in item_by_id
+                if r.message_id == row_message.id and r.work_item_id in item_by_id
             ]
             rows.append(
                 {
                     "delivery_id": delivery.id,
-                    "message_id": message.id,
+                    "message_id": row_message.id,
+                    "thread_id": row_message.thread_id or row_message.id,
+                    "project": {
+                        "id": row_project.id,
+                        "key": row_project.key,
+                        "name": row_project.name,
+                    },
                     "from": (
                         {"id": sender.id, "name": sender.name, "type": sender.type}
                         if sender is not None
-                        else {"id": message.from_user_id}
+                        else {"id": row_message.from_user_id}
                     ),
                     "mailbox_owner": (
                         {"id": owner.id, "name": owner.name, "type": owner.type}
                         if owner is not None
                         else {"id": delivery.recipient_user_id}
                     ),
-                    "subject": message.subject,
-                    "body_md": message.body_md,
+                    "subject": row_message.subject,
+                    "body_md": row_message.body_md,
                     "recipient_type": delivery.recipient_type,
                     "refs": item_refs,
-                    "reply_to_id": message.reply_to_id,
+                    "reply_to_id": row_message.reply_to_id,
                     "read_at": iso_utc(delivery.read_at) if delivery.read_at else None,
                     "archived_at": (
                         iso_utc(delivery.archived_at) if delivery.archived_at else None
                     ),
-                    "created_at": iso_utc(message.created_at),
+                    "created_at": iso_utc(row_message.created_at),
                 }
             )
         return {
             "messages": rows,
             "next_cursor": page[-1].id if has_more and page else None,
             "unread_count": await self.uow.messages.unread_count_for_users(
-                identity_ids, project_id=project.id
+                identity_ids, project_ids=project_ids
             ),
         }
 
     async def _check_sent(
         self,
-        project: Project,
+        project_ids: Sequence[str],
         identity_ids: Sequence[str],
         *,
         since: str | None,
+        before: str | None,
+        order: str,
         limit: int,
         q: str | None,
     ) -> dict[str, Any]:
-        assert self.uow.messages is not None and self.uow.users is not None
+        assert (
+            self.uow.messages is not None
+            and self.uow.users is not None
+            and self.uow.projects is not None
+        )
         page = await self.uow.messages.list_sent_messages(
-            project.id,
+            project_ids,
             identity_ids,
             q=q,
             since_id=since,
+            before_id=before,
+            order=order,
             limit=limit + 1,
         )
         has_more = len(page) > limit
@@ -400,16 +448,27 @@ class MailboxService:
                 }
             )
         refs = await self.uow.messages.list_refs([m.id for m in page])
-        assert self.uow.work_items is not None
-        ref_items: list[WorkItem] = await self.uow.work_items.list_by_ids(
-            project.id, [r.work_item_id for r in refs], include_deleted=True
-        )
-        item_by_id = {i.id: i for i in ref_items}
+        item_by_id = {}
+        if len(project_ids) == 1 and refs:
+            assert self.uow.work_items is not None
+            ref_items: list[WorkItem] = await self.uow.work_items.list_by_ids(
+                project_ids[0], [r.work_item_id for r in refs], include_deleted=True
+            )
+            item_by_id = {i.id: i for i in ref_items}
         sender = await self.uow.users.get(identity_ids[0]) if identity_ids else None
+        project_by_id: dict[str, Project] = {}
+        for message in page:
+            if message.project_id not in project_by_id:
+                project_row = await self.uow.projects.get(message.project_id)
+                if project_row is not None:
+                    project_by_id[message.project_id] = project_row
         rows = []
         for message in page:
+            row_project = project_by_id.get(message.project_id)
+            if row_project is None:
+                continue
             item_refs = [
-                f"{project.key}-{item_by_id[r.work_item_id].display_no}"
+                f"{row_project.key}-{item_by_id[r.work_item_id].display_no}"
                 for r in refs
                 if r.message_id == message.id and r.work_item_id in item_by_id
             ]
@@ -417,6 +476,12 @@ class MailboxService:
                 {
                     "delivery_id": f"sent:{message.id}",
                     "message_id": message.id,
+                    "thread_id": message.thread_id or message.id,
+                    "project": {
+                        "id": row_project.id,
+                        "key": row_project.key,
+                        "name": row_project.name,
+                    },
                     "from": (
                         {"id": sender.id, "name": sender.name, "type": sender.type}
                         if sender is not None

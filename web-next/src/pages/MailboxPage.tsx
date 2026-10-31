@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
@@ -54,15 +54,20 @@ interface Option {
 }
 
 export default function MailboxPage() {
-  const { key: projectKey = "" } = useParams();
+  const { key: routeProjectKey } = useParams<{ key?: string }>();
   const location = useLocation();
   const notify = useNotify();
   const me = useCurrentUser();
+  const projectKey = routeProjectKey ?? "";
+  const [projectFilter, setProjectFilter] = useState(projectKey);
 
   const [messages, setMessages] = useState<MailMessage[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [unreadOnly, setUnreadOnly] = useState(true);
   const [folder, setFolder] = useState<"inbox" | "archived" | "sent">("inbox");
+  const [order, setOrder] = useState<"desc" | "asc">("desc");
+  const [view, setView] = useState<"flat" | "thread">("flat");
+  const [collapsedThreads, setCollapsedThreads] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [searchDraft, setSearchDraft] = useState("");
   const [identity, setIdentity] = useState<string | null>(null);
@@ -99,8 +104,10 @@ export default function MailboxPage() {
         });
         if (identity) params.set("identity", identity);
         if (query.trim()) params.set("q", query.trim());
-        if (cursor) params.set("since", cursor);
-        const box = (await api.get<Mailbox>(`/projects/${projectKey}/mailbox?${params}`)).data;
+        params.set("order", order);
+        if (cursor) params.set(order === "desc" ? "before" : "since", cursor);
+        const base = projectFilter ? `/projects/${projectFilter}/mailbox` : "/mailbox";
+        const box = (await api.get<Mailbox>(`${base}?${params}`)).data;
         setMessages((prev) => (replace ? box.messages : [...prev, ...box.messages]));
         setNextCursor(box.next_cursor);
       } catch (e) {
@@ -109,21 +116,29 @@ export default function MailboxPage() {
         setLoading(false);
       }
     },
-    [projectKey, identity, unreadOnly, folder, query],
+    [projectFilter, identity, unreadOnly, folder, query, order],
   );
 
   useEffect(() => {
     setSelected(new Set());
     void fetchPage(null, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unreadOnly, projectKey, identity, folder, query]);
+  }, [unreadOnly, projectFilter, identity, folder, query, order]);
 
   useEffect(() => {
+    setProjectFilter(projectKey);
+  }, [projectKey]);
+
+  useEffect(() => {
+    if (!projectFilter) {
+      setMembers([]);
+      return;
+    }
     api
-      .get<ProjectMemberRow[]>(`/projects/${projectKey}/members`)
+      .get<ProjectMemberRow[]>(`/projects/${projectFilter}/members`)
       .then((r) => setMembers(flattenMembers(r.data)))
       .catch(() => {});
-  }, [projectKey]);
+  }, [projectFilter]);
 
   useEffect(() => {
     api
@@ -176,19 +191,27 @@ export default function MailboxPage() {
   };
 
   const loadGroups = useCallback(async () => {
+    if (!projectFilter) {
+      setGroups([]);
+      return;
+    }
     try {
-      const res = await api.get<MailGroup[]>(`/projects/${projectKey}/mailboxes`);
+      const res = await api.get<MailGroup[]>(`/projects/${projectFilter}/mailboxes`);
       setGroups(res.data);
     } catch (e) {
       notify.error("加载群信箱失败", errorCause(e)?.message);
     }
-  }, [projectKey, notify]);
+  }, [projectFilter, notify]);
 
   useEffect(() => {
     void loadGroups();
   }, [loadGroups]);
 
   const openGroups = async () => {
+    if (!projectFilter) {
+      notify.error("请先在顶部选择项目");
+      return;
+    }
     setShowGroups(true);
     setGroupName("");
     setGroupMembers([]);
@@ -196,6 +219,10 @@ export default function MailboxPage() {
   };
 
   const createGroup = async () => {
+    if (!projectFilter) {
+      notify.error("请先在顶部选择项目");
+      return;
+    }
     if (!groupName.trim()) {
       notify.error("群信箱名称必填");
       return;
@@ -215,13 +242,17 @@ export default function MailboxPage() {
   };
 
   const send = async () => {
+    if (!projectFilter) {
+      notify.error("请先在顶部选择项目后再发信");
+      return;
+    }
     if (!compose.to.length || !compose.subject.trim() || !compose.body.trim()) {
       notify.error("收件人、主题、正文均必填");
       return;
     }
     setSending(true);
     try {
-      await api.post(`/projects/${projectKey}/messages`, {
+      await api.post(`/projects/${projectFilter}/messages`, {
         to: compose.to.map((o) => o.value),
         subject: compose.subject,
         body_md: compose.body,
@@ -262,18 +293,160 @@ export default function MailboxPage() {
     ...memberOptions,
     ...groups.map((g) => ({ label: `${g.name}（群信箱）`, value: g.name })),
   ];
+  const projectOptions: Option[] = (me?.projects ?? []).map((p) => ({
+    label: `${p.key} · ${p.name}`,
+    value: p.key,
+  }));
+  const sortOptions: Option[] = [
+    { label: "最新在前", value: "desc" },
+    { label: "最早在前", value: "asc" },
+  ];
   const identityOptions: Option[] = [
     ...(me ? [{ label: `我（${me.user.name}）`, value: me.user.id }] : []),
     ...agents.map((a) => ({ label: `${a.name}（agent）`, value: a.id })),
   ];
 
+  const threadGroups = useMemo(() => {
+    const groups = new Map<string, MailMessage[]>();
+    for (const message of messages) {
+      const key = message.thread_id || message.message_id;
+      const bucket = groups.get(key) ?? [];
+      bucket.push(message);
+      groups.set(key, bucket);
+    }
+    return [...groups.entries()]
+      .map(([id, rows]) => {
+        const sorted = [...rows].sort((a, b) => a.created_at.localeCompare(b.created_at));
+        return {
+          id,
+          messages: sorted,
+          root: sorted.find((row) => !row.reply_to_id) ?? sorted[0],
+          latest: sorted[sorted.length - 1],
+        };
+      })
+      .sort((a, b) =>
+        order === "desc"
+          ? b.latest.created_at.localeCompare(a.latest.created_at)
+          : a.latest.created_at.localeCompare(b.latest.created_at),
+      );
+  }, [messages, order]);
+
+  const renderMessage = (m: MailMessage) => {
+    const refProject = m.project?.key ?? projectFilter;
+    return (
+      <Box
+        key={m.delivery_id}
+        xcss={styles.card}
+        testId={`mailbox-item-${m.delivery_id}`}
+        style={
+          m.read_at
+            ? cardBorder
+            : {
+                ...cardBorder,
+                borderInlineStart: `3px solid ${token("color.border.selected")}`,
+              }
+        }
+      >
+        <Stack space="space.075">
+          <Inline space="space.100" alignBlock="center" shouldWrap>
+            {folder !== "sent" && (
+              <Checkbox
+                isChecked={selected.has(m.delivery_id)}
+                testId={`mailbox-item-select-${m.delivery_id}`}
+                onChange={() => toggle(m.delivery_id)}
+              />
+            )}
+            {!projectFilter && m.project ? (
+              <Lozenge appearance="default" testId={`mailbox-project-${m.delivery_id}`}>
+                {m.project.name}（{m.project.key}）
+              </Lozenge>
+            ) : null}
+            {m.mailbox_owner && (
+              <Lozenge
+                appearance={m.mailbox_owner.type === "agent" ? "warning" : "new"}
+                testId={`mailbox-owner-${m.delivery_id}`}
+              >
+                {m.mailbox_owner.id === me?.user.id
+                  ? "我的信箱"
+                  : `${m.mailbox_owner.name ?? "未知身份"}${
+                      m.mailbox_owner.type === "agent" ? "（agent）" : ""
+                    }`}
+              </Lozenge>
+            )}
+            <Text weight="semibold">{m.subject}</Text>
+            <Lozenge appearance="default">{m.from.name ?? m.from.id}</Lozenge>
+            {folder === "sent" && m.recipients?.length ? (
+              <Text size="small" color="color.text.subtlest">
+                收件人：{m.recipients.map((r) => r.name ?? r.id).join("、")}
+              </Text>
+            ) : null}
+            <Text size="small" color="color.text.subtlest">
+              {formatDate(m.created_at)}
+            </Text>
+            {!m.read_at && folder === "inbox" && (
+              <TextButton
+                data-testid={`mailbox-item-mark-read-${m.delivery_id}`}
+                onClick={() => void markRead([m.delivery_id])}
+              >
+                标已读
+              </TextButton>
+            )}
+            {folder !== "sent" && (
+              <>
+                <TextButton
+                  data-testid={`mailbox-item-archive-${m.delivery_id}`}
+                  onClick={() => void archive([m.delivery_id], folder === "inbox")}
+                >
+                  {folder === "inbox" ? "归档" : "移回收件箱"}
+                </TextButton>
+                <TextButton
+                  data-testid={`mailbox-item-delete-${m.delivery_id}`}
+                  onClick={() => void remove([m.delivery_id])}
+                >
+                  删除
+                </TextButton>
+              </>
+            )}
+            <TextButton
+              data-testid={`mailbox-item-reply-${m.delivery_id}`}
+              onClick={() => openReply(m)}
+            >
+              回复
+            </TextButton>
+          </Inline>
+          <Box paddingInlineStart="space.300">
+            <MarkdownText source={m.body_md} onImageClick={setPreview} />
+          </Box>
+          {m.refs.length > 0 && (
+            <Inline space="space.100">
+              <Text size="small" color="color.text.subtlest">
+                关联：
+              </Text>
+              {m.refs.map((r) => (
+                <Link
+                  key={r}
+                  className="rdm-link"
+                  to={`/projects/${refProject}/items/${r}`}
+                  state={{ from: location.pathname + location.search }}
+                  data-testid={`mailbox-item-ref-${r}`}
+                >
+                  {r}
+                </Link>
+              ))}
+            </Inline>
+          )}
+        </Stack>
+      </Box>
+    );
+  };
+
   return (
     <Page testId="page-mailbox">
       <PageHeader
-        title={`信箱 · ${projectKey}`}
+        title={projectFilter ? `信箱 · ${projectFilter}` : "信箱"}
         testId="mailbox-header"
         actions={
-          <Inline space="space.100" alignBlock="center">
+          <Inline space="space.100" alignBlock="center" shouldWrap>
             <Inline space="space.050">
               {(["inbox", "archived", "sent"] as const).map((f) => (
                 <Button
@@ -287,6 +460,18 @@ export default function MailboxPage() {
                 </Button>
               ))}
             </Inline>
+            <Box style={{ width: 210 }}>
+              <Select<Option>
+                isClearable
+                spacing="compact"
+                placeholder="全部项目"
+                inputId="mailbox-project-filter"
+                options={projectOptions}
+                value={projectOptions.find((o) => o.value === projectFilter) ?? null}
+                onChange={(opt) => setProjectFilter((opt as Option | null)?.value ?? "")}
+                testId="mailbox-project-filter"
+              />
+            </Box>
             <Box style={{ width: 190 }}>
               <Select<Option>
                 isClearable
@@ -309,6 +494,36 @@ export default function MailboxPage() {
                 onBlur={() => setQuery(searchDraft.trim())}
               />
             </Box>
+            <Box style={{ width: 130 }}>
+              <Select<Option>
+                spacing="compact"
+                inputId="mailbox-sort"
+                options={sortOptions}
+                value={sortOptions.find((o) => o.value === order) ?? null}
+                onChange={(opt) =>
+                  setOrder(((opt as Option | null)?.value as "asc" | "desc") ?? "desc")
+                }
+                testId="mailbox-sort"
+              />
+            </Box>
+            <Inline space="space.050">
+              <Button
+                appearance={view === "flat" ? "primary" : "default"}
+                spacing="compact"
+                testId="mailbox-view-flat"
+                onClick={() => setView("flat")}
+              >
+                平铺
+              </Button>
+              <Button
+                appearance={view === "thread" ? "primary" : "default"}
+                spacing="compact"
+                testId="mailbox-view-thread"
+                onClick={() => setView("thread")}
+              >
+                会话
+              </Button>
+            </Inline>
             {folder === "inbox" && (
               <Checkbox
                 label="仅未读"
@@ -351,105 +566,72 @@ export default function MailboxPage() {
           <EmptyState header="没有信件" description="有新站内信时会出现在这里。" />
         </Box>
       ) : (
-        <Stack space="space.100" testId="mailbox-list">
-          {messages.map((m) => (
-            <Box
-              key={m.delivery_id}
-              xcss={styles.card}
-              testId={`mailbox-item-${m.delivery_id}`}
-              style={
-                m.read_at
-                  ? cardBorder
-                  : { ...cardBorder, borderInlineStart: `3px solid ${token("color.border.selected")}` }
-              }
-            >
-              <Stack space="space.075">
-                <Inline space="space.100" alignBlock="center">
-                  {folder !== "sent" && (
-                    <Checkbox
-                      isChecked={selected.has(m.delivery_id)}
-                      testId={`mailbox-item-select-${m.delivery_id}`}
-                      onChange={() => toggle(m.delivery_id)}
-                    />
-                  )}
-                  {m.mailbox_owner && (
-                    <Lozenge
-                      appearance={m.mailbox_owner.type === "agent" ? "warning" : "new"}
-                      testId={`mailbox-owner-${m.delivery_id}`}
-                    >
-                      {m.mailbox_owner.id === me?.user.id
-                        ? "我的信箱"
-                        : `${m.mailbox_owner.name ?? "未知身份"}${
-                            m.mailbox_owner.type === "agent" ? "（agent）" : ""
-                          }`}
-                    </Lozenge>
-                  )}
-                  <Text weight="semibold">{m.subject}</Text>
-                  <Lozenge appearance="default">{m.from.name ?? m.from.id}</Lozenge>
-                  {folder === "sent" && m.recipients?.length ? (
-                    <Text size="small" color="color.text.subtlest">
-                      收件人：{m.recipients.map((r) => r.name ?? r.id).join("、")}
-                    </Text>
-                  ) : null}
-                  <Text size="small" color="color.text.subtlest">
-                    {formatDate(m.created_at)}
-                  </Text>
-                  {!m.read_at && folder === "inbox" && (
-                    <TextButton
-                      data-testid={`mailbox-item-mark-read-${m.delivery_id}`}
-                      onClick={() => void markRead([m.delivery_id])}
-                    >
-                      标已读
-                    </TextButton>
-                  )}
-                  {folder !== "sent" && (
-                    <>
-                      <TextButton
-                        data-testid={`mailbox-item-archive-${m.delivery_id}`}
-                        onClick={() => void archive([m.delivery_id], folder === "inbox")}
-                      >
-                        {folder === "inbox" ? "归档" : "移回收件箱"}
-                      </TextButton>
-                      <TextButton
-                        data-testid={`mailbox-item-delete-${m.delivery_id}`}
-                        onClick={() => void remove([m.delivery_id])}
-                      >
-                        删除
-                      </TextButton>
-                    </>
-                  )}
-                  <TextButton
-                    data-testid={`mailbox-item-reply-${m.delivery_id}`}
-                    onClick={() => openReply(m)}
+        <Box testId="mailbox-list">
+          {view === "flat" ? (
+            <Stack space="space.100">{messages.map((m) => renderMessage(m))}</Stack>
+          ) : (
+            <Stack space="space.150">
+              {threadGroups.map((thread) => {
+                const collapsed = collapsedThreads.has(thread.id);
+                return (
+                  <Box
+                    key={thread.id}
+                    style={cardBorder}
+                    padding="space.100"
+                    testId={`mailbox-thread-${thread.id}`}
                   >
-                    回复
-                  </TextButton>
-                </Inline>
-                <Box paddingInlineStart="space.300">
-                  <MarkdownText source={m.body_md} onImageClick={setPreview} />
-                </Box>
-                {m.refs.length > 0 && (
-                  <Inline space="space.100">
-                    <Text size="small" color="color.text.subtlest">
-                      关联：
-                    </Text>
-                    {m.refs.map((r) => (
-                      <Link
-                        key={r}
-                        className="rdm-link"
-                        to={`/projects/${projectKey}/items/${r}`}
-                        state={{ from: location.pathname + location.search }}
-                        data-testid={`mailbox-item-ref-${r}`}
-                      >
-                        {r}
-                      </Link>
-                    ))}
-                  </Inline>
-                )}
-              </Stack>
-            </Box>
-          ))}
-        </Stack>
+                    <Box
+                      role="button"
+                      tabIndex={0}
+                      onClick={() =>
+                        setCollapsedThreads((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(thread.id)) next.delete(thread.id);
+                          else next.add(thread.id);
+                          return next;
+                        })
+                      }
+                      onKeyDown={(e: KeyboardEvent<HTMLElement>) => {
+                        if (e.target !== e.currentTarget) return;
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setCollapsedThreads((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(thread.id)) next.delete(thread.id);
+                            else next.add(thread.id);
+                            return next;
+                          });
+                        }
+                      }}
+                      testId={`mailbox-thread-toggle-${thread.id}`}
+                    >
+                      <Inline space="space.100" alignBlock="center" shouldWrap>
+                        <Text weight="semibold">{thread.root.subject}</Text>
+                        <Lozenge appearance="default">{thread.messages.length} 封</Lozenge>
+                        {!projectFilter && thread.root.project ? (
+                          <Lozenge appearance="default">{thread.root.project.name}</Lozenge>
+                        ) : null}
+                        <Text size="small" color="color.text.subtlest">
+                          {formatDate(thread.latest.created_at)}
+                        </Text>
+                        <Text size="small" color="color.text.subtlest">
+                          {collapsed ? "展开" : "折叠"}
+                        </Text>
+                      </Inline>
+                    </Box>
+                    {!collapsed && (
+                      <Box paddingBlockStart="space.100">
+                        <Stack space="space.100">
+                          {thread.messages.map((m) => renderMessage(m))}
+                        </Stack>
+                      </Box>
+                    )}
+                  </Box>
+                );
+              })}
+            </Stack>
+          )}
+        </Box>
       )}
 
       {nextCursor && (

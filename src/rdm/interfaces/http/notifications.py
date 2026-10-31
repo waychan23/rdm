@@ -38,6 +38,7 @@ async def list_notifications(
     identity: str | None = None,
     unread_only: bool = False,
     project: str | None = None,
+    order: str = "desc",
     limit: int = 50,
     offset: int = 0,
     container: Container = Depends(get_container),
@@ -49,6 +50,7 @@ async def list_notifications(
             identity=identity,
             unread_only=unread_only,
             project_key=project,
+            order=order,
             limit=limit,
             offset=offset,
         )

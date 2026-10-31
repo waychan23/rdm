@@ -224,6 +224,8 @@ export interface Workspace {
 export interface MailMessage {
   delivery_id: string;
   message_id: string;
+  thread_id?: string;
+  project?: { id: string; key: string; name: string };
   from: { id: string; name?: string; type?: string };
   mailbox_owner?: { id: string; name?: string; type?: string };
   subject: string;

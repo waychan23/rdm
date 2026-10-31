@@ -116,6 +116,7 @@ class MessageRepository:
                 subject=message.subject,
                 body_md=message.body_md,
                 reply_to_id=message.reply_to_id,
+                thread_id=message.thread_id,
                 created_at=message.created_at,
             )
         )
@@ -174,25 +175,31 @@ class MessageRepository:
         recipient_user_ids: Sequence[str],
         *,
         project_id: str | None = None,
+        project_ids: Sequence[str] | None = None,
         since_id: str | None = None,
+        before_id: str | None = None,
         unread_only: bool = False,
         archived: bool | None = None,
         q: str | None = None,
+        order: str = "asc",
         limit: int = 20,
     ) -> list[MessageDelivery]:
         if not recipient_user_ids:
+            return []
+        if project_ids is not None and not project_ids:
             return []
         stmt = select(MessageDeliveryModel).where(
             MessageDeliveryModel.recipient_user_id.in_(list(recipient_user_ids)),
             MessageDeliveryModel.deleted_at.is_(None),
         )
-        if project_id is not None:
+        if project_id is not None or project_ids is not None:
             stmt = stmt.join(
                 MailboxModel, MessageDeliveryModel.mailbox_id == MailboxModel.id
-            ).where(
-                MailboxModel.project_id == project_id,
-                MailboxModel.deleted_at.is_(None),
-            )
+            ).where(MailboxModel.deleted_at.is_(None))
+            if project_id is not None:
+                stmt = stmt.where(MailboxModel.project_id == project_id)
+            else:
+                stmt = stmt.where(MailboxModel.project_id.in_(list(project_ids or [])))
         if q:
             stmt = stmt.join(
                 MessageModel, MessageDeliveryModel.message_id == MessageModel.id
@@ -209,25 +216,33 @@ class MessageRepository:
             stmt = stmt.where(MessageDeliveryModel.archived_at.is_(None))
         if since_id:
             stmt = stmt.where(MessageDeliveryModel.id > since_id)
+        if before_id:
+            stmt = stmt.where(MessageDeliveryModel.id < before_id)
         if unread_only:
             stmt = stmt.where(MessageDeliveryModel.read_at.is_(None))
-        stmt = stmt.order_by(MessageDeliveryModel.id).limit(limit)
+        if order == "desc":
+            stmt = stmt.order_by(MessageDeliveryModel.id.desc())
+        else:
+            stmt = stmt.order_by(MessageDeliveryModel.id)
+        stmt = stmt.limit(limit)
         rows = list((await self._s.execute(stmt)).scalars().all())
         return [delivery_to_domain(r) for r in rows]
 
     async def list_sent_messages(
         self,
-        project_id: str,
+        project_ids: Sequence[str],
         from_user_ids: Sequence[str],
         *,
         q: str | None = None,
         since_id: str | None = None,
+        before_id: str | None = None,
+        order: str = "asc",
         limit: int = 20,
     ) -> list[Message]:
-        if not from_user_ids:
+        if not from_user_ids or not project_ids:
             return []
         stmt = select(MessageModel).where(
-            MessageModel.project_id == project_id,
+            MessageModel.project_id.in_(list(project_ids)),
             MessageModel.from_user_id.in_(list(from_user_ids)),
             MessageModel.deleted_at.is_(None),
         )
@@ -240,7 +255,13 @@ class MessageRepository:
             )
         if since_id:
             stmt = stmt.where(MessageModel.id > since_id)
-        stmt = stmt.order_by(MessageModel.id).limit(limit)
+        if before_id:
+            stmt = stmt.where(MessageModel.id < before_id)
+        if order == "desc":
+            stmt = stmt.order_by(MessageModel.id.desc())
+        else:
+            stmt = stmt.order_by(MessageModel.id)
+        stmt = stmt.limit(limit)
         rows = list((await self._s.execute(stmt)).scalars().all())
         return [message_to_domain(r) for r in rows]
 
@@ -336,9 +357,15 @@ class MessageRepository:
         return await self.unread_count_for_users([recipient_user_id], project_id=project_id)
 
     async def unread_count_for_users(
-        self, recipient_user_ids: Sequence[str], *, project_id: str | None = None
+        self,
+        recipient_user_ids: Sequence[str],
+        *,
+        project_id: str | None = None,
+        project_ids: Sequence[str] | None = None,
     ) -> int:
         if not recipient_user_ids:
+            return 0
+        if project_ids is not None and not project_ids:
             return 0
         stmt = (
             select(func.count())
@@ -349,13 +376,14 @@ class MessageRepository:
                 MessageDeliveryModel.deleted_at.is_(None),
             )
         )
-        if project_id is not None:
+        if project_id is not None or project_ids is not None:
             stmt = stmt.join(
                 MailboxModel, MessageDeliveryModel.mailbox_id == MailboxModel.id
-            ).where(
-                MailboxModel.project_id == project_id,
-                MailboxModel.deleted_at.is_(None),
-            )
+            ).where(MailboxModel.deleted_at.is_(None))
+            if project_id is not None:
+                stmt = stmt.where(MailboxModel.project_id == project_id)
+            else:
+                stmt = stmt.where(MailboxModel.project_id.in_(list(project_ids or [])))
         return int((await self._s.execute(stmt)).scalar_one())
 
     async def mark_read(

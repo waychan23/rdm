@@ -223,3 +223,25 @@ async def test_step_start_notifies_executors(server, owner_token: str) -> None:
         con.close()
     assert {p["event"] for p in payloads} == {"work_item.step_started"}
     assert {p["data"]["display_id"] for p in payloads} == {item["display_id"]}
+
+
+async def test_notification_sort_order(server, owner_token: str) -> None:
+    client, _settings, _app = server
+    await _project(client, owner_token)
+    alice_id, alice_token = await make_member(client, owner_token, "DEMO", "alice", ["worker"])
+    first = await _item(client, owner_token, "排序一")
+    second = await _item(client, owner_token, "排序二")
+    for item in (first, second):
+        r = await client.post(
+            f"{API}/work-items/{item['display_id']}/assign",
+            json={"member": alice_id},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 200, r.text
+
+    r = await client.get(f"{API}/notifications?order=desc", headers=auth(alice_token))
+    desc = [n["title"] for n in r.json()["data"]]
+    r = await client.get(f"{API}/notifications?order=asc", headers=auth(alice_token))
+    asc = [n["title"] for n in r.json()["data"]]
+    assert desc == list(reversed(asc))
+    assert desc[0].endswith(second["display_id"])

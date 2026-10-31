@@ -67,6 +67,7 @@ class MessageModel(SoftDeleteMixin, Base):
     subject: Mapped[str] = mapped_column(String(300), nullable=False)
     body_md: Mapped[str] = mapped_column(Text, nullable=False)
     reply_to_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    thread_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

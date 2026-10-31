@@ -192,7 +192,9 @@ export default function AppShell() {
               label="信箱"
               appearance="subtle"
               testId="topbar-mailbox"
-              onClick={() => projectKey && navigate(`/projects/${projectKey}/mailbox`)}
+              onClick={() =>
+                navigate(projectKey ? `/projects/${projectKey}/mailbox` : "/mailbox")
+              }
             />
             {unreadCount > 0 ? (
               <Box xcss={styles.bellBadge}>
