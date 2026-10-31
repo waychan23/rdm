@@ -382,3 +382,29 @@ async def test_archive_sent_search_delete_and_groups(server, owner_token: str) -
         headers=auth(frontend),
     )
     assert r.json()["data"]["deleted"] == 0
+
+
+async def test_send_to_group_name_fans_out(server, owner_token: str) -> None:
+    client, _settings, _app = server
+    await _project(client, owner_token)
+    _a_id, alice = await _member(client, owner_token, "alice")
+    _b_id, bob = await _member(client, owner_token, "bob")
+
+    r = await client.post(
+        f"{API}/projects/DEMO/mailboxes",
+        json={"name": "qa-group", "members": ["alice", "bob"]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+
+    r = await client.post(
+        f"{API}/projects/DEMO/messages",
+        json={"to": ["qa-group"], "subject": "群发通知", "body_md": "请查收"},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["data"]["deliveries"] == 2
+
+    for token in (alice, bob):
+        r = await client.get(f"{API}/projects/DEMO/mailbox", headers=auth(token))
+        assert [m["subject"] for m in r.json()["data"]["messages"]] == ["群发通知"]

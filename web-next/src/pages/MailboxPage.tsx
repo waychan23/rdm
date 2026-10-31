@@ -175,16 +175,24 @@ export default function MailboxPage() {
     }
   };
 
-  const openGroups = async () => {
-    setShowGroups(true);
-    setGroupName("");
-    setGroupMembers([]);
+  const loadGroups = useCallback(async () => {
     try {
       const res = await api.get<MailGroup[]>(`/projects/${projectKey}/mailboxes`);
       setGroups(res.data);
     } catch (e) {
       notify.error("加载群信箱失败", errorCause(e)?.message);
     }
+  }, [projectKey, notify]);
+
+  useEffect(() => {
+    void loadGroups();
+  }, [loadGroups]);
+
+  const openGroups = async () => {
+    setShowGroups(true);
+    setGroupName("");
+    setGroupMembers([]);
+    await loadGroups();
   };
 
   const createGroup = async () => {
@@ -200,8 +208,7 @@ export default function MailboxPage() {
       notify.success("已创建群信箱");
       setGroupName("");
       setGroupMembers([]);
-      const res = await api.get<MailGroup[]>(`/projects/${projectKey}/mailboxes`);
-      setGroups(res.data);
+      await loadGroups();
     } catch (e) {
       notify.error("创建失败", errorCause(e)?.message);
     }
@@ -251,6 +258,10 @@ export default function MailboxPage() {
   };
 
   const memberOptions: Option[] = members.map((m) => ({ label: m.name, value: m.id }));
+  const recipientOptions: Option[] = [
+    ...memberOptions,
+    ...groups.map((g) => ({ label: `${g.name}（群信箱）`, value: g.name })),
+  ];
   const identityOptions: Option[] = [
     ...(me ? [{ label: `我（${me.user.name}）`, value: me.user.id }] : []),
     ...agents.map((a) => ({ label: `${a.name}（agent）`, value: a.id })),
@@ -466,10 +477,10 @@ export default function MailboxPage() {
                   <Select<Option, true> {...portalMenuProps}
                     inputId="mail-to"
                     isMulti
-                    options={memberOptions}
+                    options={recipientOptions}
                     value={compose.to}
                     onChange={(opts) => setCompose({ ...compose, to: opts as Option[] })}
-                    placeholder="选择成员"
+                    placeholder="选择成员或群信箱"
                   />
                 </FormField>
                 <FormField label="主题" htmlFor="mail-subject">

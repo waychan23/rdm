@@ -55,5 +55,27 @@ test.describe("mailbox folders, search and groups", () => {
     await alice.getByTestId("mailbox-group-name").fill(groupName);
     await alice.getByTestId("mailbox-group-create").click();
     await expect(alice.getByTestId("mailbox-group-list")).toContainText(groupName);
+    await alice
+      .getByTestId("mailbox-groups-dialog")
+      .getByRole("button", { name: "关闭" })
+      .click();
+
+    // The compose recipient picker includes group names; sending fans out.
+    const sendGroup = `send-group-${Date.now()}`;
+    await api.post(
+      `/projects/${app.projectKey}/mailboxes`,
+      { name: sendGroup, members: ["alice"] },
+      "owner",
+    );
+    await alice.reload();
+    await alice.getByTestId("mailbox-compose-button").click();
+    await alice.locator("#mail-to").click();
+    await alice.locator("#mail-to").fill(sendGroup);
+    await alice.locator("#mail-to").press("Enter");
+    const groupSubject = `群发-${Date.now()}`;
+    await alice.getByTestId("mailbox-compose-subject").fill(groupSubject);
+    await alice.getByTestId("mailbox-compose-body").fill("群发正文");
+    await alice.getByTestId("mailbox-compose-submit").click();
+    await expect(alice.getByText(groupSubject)).toBeVisible();
   });
 });
