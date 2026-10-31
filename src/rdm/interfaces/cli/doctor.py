@@ -28,6 +28,9 @@ from sqlalchemy import create_engine, inspect, text
 from rdm.config import Settings
 from rdm.domain.workflow.engine import WorkflowEngine
 from rdm.domain.workflow.loader import load_spec
+from rdm.domain.workflow.schema import ResolvedKindWorkflow
+from rdm.domain.workflow.task_types import normalize_task_type
+from rdm.domain.workflow.versioning import deserialize_definition
 from rdm.infrastructure.files.local_store import LocalFileStore
 
 OK = "OK"
@@ -158,7 +161,7 @@ def check_workflow(_settings: Settings) -> CheckResult:
 
 
 def check_workflow_data(settings: Settings) -> CheckResult:
-    """In-flight items and active steps must still exist in the current definition."""
+    """Pinned definitions must contain each item's state and active step keys."""
     try:
         spec = load_spec()
         engine = WorkflowEngine(spec)
@@ -166,57 +169,121 @@ def check_workflow_data(settings: Settings) -> CheckResult:
         return CheckResult("workflow-data", FAIL, f"workflow.json5 校验失败：{exc}")
     if not _db_configured(settings):
         return CheckResult("workflow-data", OK, "数据库不存在，跳过")
-    engine = WorkflowEngine(spec)
     issues: list[str] = []
+    unpinned = 0
+    stale = 0
     engine_conn = create_engine(settings.db_sync_url)
     try:
         with engine_conn.connect() as conn:
             tables = set(inspect(conn).get_table_names())
             if "work_item" not in tables:
                 return CheckResult("workflow-data", OK, "工作项表不存在，跳过")
+            columns = {column["name"] for column in inspect(conn).get_columns("work_item")}
+            if "work_item_workflow_version" not in tables or "workflow_def_id" not in columns:
+                return CheckResult("workflow-data", WARN, "工作流定义版本尚未迁移")
+
+            definitions: dict[str, ResolvedKindWorkflow] = {}
+            definition_versions: dict[str, int] = {}
+            latest: dict[tuple[str, str | None], int] = {}
             rows = conn.execute(
                 text(
-                    "select distinct w.kind, w.status, t.task_type from work_item w "
+                    "select id, kind, subtype, version, config_schema_version, definition "
+                    "from work_item_workflow_version"
+                )
+            ).all()
+            for version_id, kind, subtype, version, schema_version, raw in rows:
+                try:
+                    payload = raw if isinstance(raw, dict) else json.loads(raw)
+                    resolved = deserialize_definition(
+                        kind,
+                        subtype or None,
+                        payload,
+                        schema_version=schema_version,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    issues.append(
+                        f"定义 {kind}/{subtype or '-'} v{version} "
+                        f"(schema {schema_version}) 无法解析：{str(exc)[:80]}"
+                    )
+                    continue
+                definitions[version_id] = resolved
+                definition_versions[version_id] = version
+                key = (kind, subtype or None)
+                latest[key] = max(latest.get(key, 0), version)
+
+            items = conn.execute(
+                text(
+                    "select w.id, w.kind, w.status, w.workflow_def_id, t.task_type, "
+                    "w.display_no, p.key "
+                    "from work_item w "
                     "left join work_item_task t on t.work_item_id = w.id "
+                    "join project p on p.id = w.project_id "
                     "where w.deleted_at is null"
                 )
             ).all()
-            for kind, status, task_type in rows:
-                try:
-                    engine.resolve(kind, task_type)
-                    engine.allowed(kind, status, task_type=task_type)
-                except Exception:  # noqa: BLE001
-                    issues.append(f"{kind}/{task_type or '-'} 状态 {status} 不在当前定义")
+            item_def: dict[str, str | None] = {}
+            for item_id, kind, status, def_id, task_type, display_no, project_key in items:
+                item_def[item_id] = def_id
+                if def_id is None:
+                    unpinned += 1
+                    normalized = normalize_task_type(task_type) if kind == "task" else None
+                    try:
+                        engine.resolve(kind, normalized)
+                        engine.allowed(kind, status, task_type=normalized)
+                    except Exception:  # noqa: BLE001
+                        issues.append(f"{project_key}-{display_no} 状态 {status} 不在当前定义")
+                    continue
+                resolved = definitions.get(def_id)
+                if resolved is None:
+                    issues.append(f"{project_key}-{display_no} 引用的定义 {def_id} 不存在或损坏")
+                    continue
+                if status not in resolved.states:
+                    issues.append(f"{project_key}-{display_no} 状态 {status} 不在固定定义中")
+                latest_version = latest.get((resolved.kind, resolved.task_type))
+                if latest_version is not None and definition_versions.get(def_id) != latest_version:
+                    stale += 1
+
             if "work_item_step" in tables:
                 steps = conn.execute(
                     text(
-                        "select s.step_key, s.from_status, w.kind, t.task_type, "
-                        "w.display_no, p.key "
+                        "select s.step_key, s.from_status, s.work_item_id, "
+                        "w.kind, t.task_type, w.display_no, p.key "
                         "from work_item_step s join work_item w on w.id = s.work_item_id "
                         "left join work_item_task t on t.work_item_id = w.id "
                         "join project p on p.id = w.project_id "
                         "where s.status in ('PENDING','BLOCKED') and w.deleted_at is null"
                     )
                 ).all()
-                for step_key, from_status, kind, task_type, display_no, project_key in steps:
+                for (
+                    step_key,
+                    from_status,
+                    item_id,
+                    kind,
+                    task_type,
+                    display_no,
+                    project_key,
+                ) in steps:
+                    def_id = item_def.get(item_id)
+                    pinned_def = definitions.get(def_id) if def_id else None
+                    keys: set[str] = set()
                     try:
-                        keys = {
-                            step.key
-                            for step in engine.steps_from(kind, from_status, task_type=task_type)
-                        }
+                        if pinned_def is not None:
+                            keys = {step.key for step in pinned_def.steps.get(from_status, ())}
+                        else:
+                            normalized = normalize_task_type(task_type) if kind == "task" else None
+                            keys = {
+                                step.key
+                                for step in engine.steps_from(
+                                    kind, from_status, task_type=normalized
+                                )
+                            }
                     except Exception:  # noqa: BLE001
                         keys = set()
                     if step_key not in keys:
+                        scope = "固定定义" if pinned_def is not None else "当前定义"
                         issues.append(
-                            f"{project_key}-{display_no} 的活动步骤 {step_key} 在当前定义中不存在"
+                            f"{project_key}-{display_no} 的活动步骤 {step_key} 在{scope}中不存在"
                         )
-            stale = conn.execute(
-                text(
-                    "select count(*) from work_item "
-                    "where deleted_at is null and workflow_version <> :rev"
-                ),
-                {"rev": spec.revision},
-            ).scalar()
     except Exception as exc:  # noqa: BLE001
         return CheckResult("workflow-data", FAIL, f"工作流数据校验失败：{str(exc)[:160]}")
     finally:
@@ -227,9 +294,11 @@ def check_workflow_data(settings: Settings) -> CheckResult:
             FAIL,
             f"revision {spec.revision}；" + "；".join(issues[:8]),
         )
-    detail = f"revision {spec.revision}；活动步骤均存在于当前定义"
+    detail = f"revision {spec.revision}；{len(definitions)} 个定义版本；活动步骤均有效"
+    if unpinned:
+        detail += f"；{unpinned} 个工作项未固定版本（升级/启动时回填）"
     if stale:
-        detail += f"；{stale} 个工作项停留在旧修订（可继续操作）"
+        detail += f"；{stale} 个工作项停留在旧定义版本（可继续操作）"
     return CheckResult("workflow-data", OK, detail)
 
 

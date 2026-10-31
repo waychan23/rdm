@@ -47,7 +47,7 @@
 | 工具 | 用途 | 关键入参 |
 |---|---|---|
 | `work_item_list` 【M1/M6】 | 通用筛选：kind/status/assignee/reviewer/sprint/parent/priority/keyword，分页 | `kind?, status?, assignee?, reviewer?, sprint?, parent?, q?, limit?, cursor?, include_deleted?` |
-| `work_item_get` 【M1/M6】 | 详情 + 子项 + 父项 + attachments + `allowed_transitions` + `available_steps`/`active_step`/`permissions` + allowed parent/child kinds | `id` |
+| `work_item_get` 【M1/M6】 | 详情 + 子项 + 父项 + attachments + `allowed_transitions` + `available_steps`/`active_step`/`permissions` + allowed parent/child kinds；`data` 含固定定义 `workflow_version`/`workflow_def_id`（§17.120，新增字段） | `id` |
 | `my_work_list` 【M2/M7】 | 我的待办（assignee=me 且非终态，按 priority/display_no 排序）；传 `status` 时按状态精确过滤；传 `project` 时只列该项目；`include_steps=true` 时 `meta.pending_steps` 返回待执行/待审批步骤 | `status?, project?, include_steps?` |
 | `backlog_list` 【M2】 | ProductBacklog：**未进入任何 Sprint** 且非终态的 items（跨全部 sprint 链接差集） | `kind?, project?` |
 | `sprint_list` / `sprint_get` 【M2】 | Sprint 列表（可按状态过滤）/ 详情（含 items 与 status_counts） | `status?, project?` / `id` |

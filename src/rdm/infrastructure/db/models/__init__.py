@@ -40,6 +40,7 @@ from rdm.infrastructure.db.models.workitem import (
     WorkItemStepModel,
     WorkItemStoryModel,
     WorkItemTaskModel,
+    WorkItemWorkflowVersionModel,
 )
 
 __all__ = [
@@ -59,6 +60,7 @@ __all__ = [
     "WorkItemReviewerModel",
     "WorkItemStepModel",
     "WorkItemStepExecutorModel",
+    "WorkItemWorkflowVersionModel",
     "SprintModel",
     "SprintItemModel",
     "CommentModel",

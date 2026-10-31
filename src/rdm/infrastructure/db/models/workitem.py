@@ -43,9 +43,20 @@ class WorkItemModel(AuditMixin, SoftDeleteMixin, Base):
     planned_end_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
     rank: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     assignee_user_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    # workflow.json5 revision this item was last advanced under (§17 M7).
+    # Effective workflow definition version this item is pinned to (§17.120).
+    # Redundant display copy of work_item_workflow_version.version.
     workflow_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
+    )
+    # Pinned definition row; NULL only for unmigrated/legacy rows.
+    workflow_def_id: Mapped[str | None] = mapped_column(
+        String(32),
+        ForeignKey(
+            "work_item_workflow_version.id",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        nullable=True,
     )
     # Built-in optional field enabled per workflow (architecture §17, M6).
     review_content_md: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -64,6 +75,7 @@ class WorkItemModel(AuditMixin, SoftDeleteMixin, Base):
             "assignee_user_id",
             "status",
         ),
+        Index("ix_work_item_workflow_def_id", "workflow_def_id"),
         Index(
             "ux_work_item_project_display_no",
             "project_id",
@@ -71,6 +83,45 @@ class WorkItemModel(AuditMixin, SoftDeleteMixin, Base):
             unique=True,
             sqlite_where=text("deleted_at IS NULL"),
             postgresql_where=text("deleted_at IS NULL"),
+        ),
+    )
+
+
+class WorkItemWorkflowVersionModel(AuditMixin, Base):
+    """Concrete effective workflow definition snapshot per (kind, subtype).
+
+    ``definition`` is canonical JSON — see ``domain.workflow.versioning``.
+    ``subtype`` is an empty string for kinds without subtypes so the unique
+    constraint behaves the same on SQLite and PostgreSQL.
+    """
+
+    __tablename__ = "work_item_workflow_version"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)
+    subtype: Mapped[str] = mapped_column(String(20), nullable=False, server_default="")
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    def_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    definition: Mapped[dict] = mapped_column(JSON, nullable=False)
+    # workflow.json5 top-level version/revision at snapshot time (§17.120).
+    # config_schema_version is part of the equality check; config_version is
+    # informational.
+    config_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    config_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+
+    __table_args__ = (
+        Index(
+            "ux_work_item_workflow_version_key",
+            "kind",
+            "subtype",
+            "version",
+            unique=True,
+        ),
+        Index(
+            "ix_work_item_workflow_version_hash",
+            "kind",
+            "subtype",
+            "def_hash",
         ),
     )
 

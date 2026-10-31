@@ -21,6 +21,7 @@ from typing import Any
 from rdm.application import security
 from rdm.application.services.attachment_commit import commit_inline_images
 from rdm.application.services.notification_service import NotificationService
+from rdm.application.services.workflow_version_service import WorkflowVersionService
 from rdm.domain.actor import Actor
 from rdm.domain.constants import DEFAULT_PRIORITY, PRIORITY_MAX, PRIORITY_MIN
 from rdm.domain.entities import (
@@ -47,9 +48,11 @@ from rdm.domain.events import (
     status_changed_payload,
     updated_payload,
 )
+from rdm.domain.workflow.engine import WorkflowEngine
 from rdm.domain.workflow.loader import load_engine
 from rdm.domain.workflow.names import localized_name, step_display_name
 from rdm.domain.workflow.schema import ResolvedKindWorkflow
+from rdm.domain.workflow.task_types import item_task_type, normalize_task_type
 from rdm.i18n import current_locale, tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.events.bus import StreamEvent, get_bus
@@ -143,23 +146,6 @@ _ALLOWED_PARENT: dict[str, set[str]] = {
     "issue": {"story", "task"},
     "task": {"epic", "story", "issue", "task"},
 }
-
-# Canonical task type codes live in workflow.json5; these aliases keep old
-# clients/tests working for one milestone.
-TASK_TYPE_ALIASES = {"qa": "testing", "ux_design": "ui_design"}
-
-
-def normalize_task_type(value: str | None) -> str:
-    task_type = (value or "other").strip()
-    return TASK_TYPE_ALIASES.get(task_type, task_type)
-
-
-def item_task_type(item: WorkItem) -> str | None:
-    if item.kind != "task":
-        return None
-    if isinstance(item.fields, TaskFields):
-        return normalize_task_type(item.fields.task_type)
-    return "other"
 
 
 def allowed_parent_kinds(kind: str) -> list[str]:
@@ -490,13 +476,9 @@ class WorkItemService:
             )
         in_sprint = set(await self.uow.sprint_items.active_work_item_ids(project.id))
         items = await self.uow.work_items.list(project.id, kind=kind, limit=200, expand=True)
-        engine = load_engine()
-        items = [
-            i
-            for i in items
-            if i.id not in in_sprint
-            and not engine.is_terminal(i.kind, i.status, task_type=item_task_type(i))
-        ]
+        items = [i for i in items if i.id not in in_sprint]
+        terminal = await self._versions().terminal_map(items)
+        items = [i for i in items if not terminal[i.id]]
         items.sort(key=lambda i: (i.priority, i.display_no))
         return project, items
 
@@ -524,12 +506,8 @@ class WorkItemService:
         if status is not None:
             items.sort(key=lambda i: (i.priority, i.display_no))
             return items
-        engine = load_engine()
-        items = [
-            i
-            for i in items
-            if not engine.is_terminal(i.kind, i.status, task_type=item_task_type(i))
-        ]
+        terminal = await self._versions().terminal_map(items)
+        items = [i for i in items if not terminal[i.id]]
         items.sort(key=lambda i: (i.priority, i.display_no))
         return items
 
@@ -542,12 +520,8 @@ class WorkItemService:
                     project_id, assignee_user_id=actor.id, limit=100, expand=True
                 )
             )
-        engine = load_engine()
-        return [
-            i
-            for i in items
-            if not engine.is_terminal(i.kind, i.status, task_type=item_task_type(i))
-        ]
+        terminal = await self._versions().terminal_map(items)
+        return [i for i in items if not terminal[i.id]]
 
     async def get_item(
         self, actor: Actor, ref: str, *, include_deleted: bool = False
@@ -580,6 +554,15 @@ class WorkItemService:
 
     def _workflow(self, kind: str, task_type: str | None) -> ResolvedKindWorkflow:
         return load_engine().resolve(kind, task_type)
+
+    def _versions(self) -> WorkflowVersionService:
+        return WorkflowVersionService(self.uow, load_engine())
+
+    async def _engine_for_item(self, item: WorkItem) -> WorkflowEngine:
+        return await self._versions().engine_for(item)
+
+    async def _resolved_for_item(self, item: WorkItem) -> ResolvedKindWorkflow:
+        return await self._versions().resolved_for(item)
 
     async def _resolve_people(
         self, actor: Actor, project_id: str, refs: Iterable[str]
@@ -791,13 +774,16 @@ class WorkItemService:
             participant_ids.append(actor.id)
 
         assert self.uow.work_items is not None
+        workflow_version = await WorkflowVersionService(self.uow, load_engine()).ensure(
+            kind, task_type, resolved=workflow, created_by=actor.id
+        )
         display_no = await self.uow.allocate_display_no(project.id)
         item = WorkItem(
             id=new_id(),
             project_id=project.id,
             display_no=display_no,
             kind=kind,
-            status=load_engine().initial_status(kind, task_type),
+            status=workflow.initial,
             title=title,
             parent_id=parent.id if parent else None,
             description_md=data.get("description_md"),
@@ -805,7 +791,8 @@ class WorkItemService:
             planned_start_date=_date_value("planned_start_date", data.get("planned_start_date")),
             planned_end_date=_date_value("planned_end_date", data.get("planned_end_date")),
             assignee_user_id=assignee.id if assignee else None,
-            workflow_version=load_engine().spec.revision,
+            workflow_version=workflow_version.version,
+            workflow_def_id=workflow_version.id,
             fields=fields,
             participant_user_ids=participant_ids,
             reviewer_user_ids=reviewer_ids,
@@ -881,7 +868,7 @@ class WorkItemService:
             )
 
         task_type = item_task_type(item)
-        workflow = self._workflow(item.kind, task_type)
+        workflow = await self._resolved_for_item(item)
         self._check_optional_fields(workflow, payload)
         if "task_type" in keys:
             normalized = self._validate_task_type(payload["task_type"])
@@ -1155,7 +1142,7 @@ class WorkItemService:
                     "status": active.status,
                 },
             )
-        engine = load_engine()
+        engine = await self._engine_for_item(item)
         task_type = item_task_type(item)
         steps = engine.steps_from(item.kind, item.status, task_type=task_type)
         matching = [step for step in steps if step.to == to]
@@ -1315,14 +1302,20 @@ class WorkItemService:
         project = await self.uow.projects.get(item.project_id)
         assert project is not None
         display_id = self.display_id(project, item)
-        engine = load_engine()
+        engine = await self._engine_for_item(item)
         task_type = item_task_type(item)
-        workflow = self._workflow(item.kind, task_type)
+        workflow = engine.resolve(item.kind, task_type)
         field_values, field_labels = self._gate_field_values(item, workflow)
         direct_children: list[WorkItem] = await self.uow.work_items.list_children(item.id)
+        child_terminal = await self._versions().terminal_map(direct_children)
         gate_ctx = GateContext(
             children=[
-                GateChild(kind=c.kind, status=c.status, display_id=self.display_id(project, c))
+                GateChild(
+                    kind=c.kind,
+                    status=c.status,
+                    display_id=self.display_id(project, c),
+                    terminal=child_terminal[c.id],
+                )
                 for c in direct_children
             ],
             field_values=field_values,
@@ -1340,13 +1333,10 @@ class WorkItemService:
 
         old_status = item.status
         item.status = to
-        item.workflow_version = engine.spec.revision
         await self.uow.work_items.save(item)
         allowed_next = list(engine.allowed(item.kind, to, task_type=task_type))
         blocking = [
-            self.display_id(project, c)
-            for c in direct_children
-            if not engine.is_terminal(c.kind, c.status, task_type=item_task_type(c))
+            self.display_id(project, c) for c in direct_children if not child_terminal[c.id]
         ]
         meta: dict[str, Any] = {
             "row_version": item.row_version,
@@ -1675,7 +1665,7 @@ class WorkItemService:
         fields = item.fields.__dict__ if item.fields is not None else {}
         custom_text: list[str | None] = []
         if item.custom_fields:
-            workflow = self._workflow(item.kind, item_task_type(item))
+            workflow = await self._resolved_for_item(item)
             custom_text = [
                 item.custom_fields.get(field.key)
                 for field in workflow.fields.custom

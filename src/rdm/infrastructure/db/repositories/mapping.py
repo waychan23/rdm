@@ -31,6 +31,7 @@ from rdm.domain.entities import (
     TaskFields,
     User,
     UserToken,
+    WorkflowVersion,
     WorkItem,
     WorkItemStep,
     WorkItemStepExecutor,
@@ -64,6 +65,7 @@ from rdm.infrastructure.db.models import (
     WorkItemStepModel,
     WorkItemStoryModel,
     WorkItemTaskModel,
+    WorkItemWorkflowVersionModel,
     WorkspaceModel,
 )
 
@@ -195,6 +197,7 @@ def work_item_to_domain(
         rank=row.rank,
         assignee_user_id=row.assignee_user_id,
         workflow_version=row.workflow_version,
+        workflow_def_id=row.workflow_def_id,
         row_version=row.row_version,
         fields=fields,
         participant_user_ids=list(participant_user_ids or []),
@@ -508,6 +511,22 @@ def step_executor_to_domain(row: WorkItemStepExecutorModel) -> WorkItemStepExecu
         created_by=row.created_by,
         updated_at=row.updated_at,
         completed_at=row.completed_at,
+    )
+
+
+def workflow_version_to_domain(row: WorkItemWorkflowVersionModel) -> WorkflowVersion:
+    return WorkflowVersion(
+        id=row.id,
+        kind=row.kind,
+        subtype=row.subtype or None,
+        version=row.version,
+        def_hash=row.def_hash,
+        definition=dict(row.definition or {}),
+        config_schema_version=row.config_schema_version,
+        config_version=row.config_version,
+        created_at=row.created_at,
+        created_by=row.created_by,
+        updated_at=row.updated_at,
     )
 
 

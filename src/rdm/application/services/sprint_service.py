@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 
 from rdm.application import security
 from rdm.application.services.attachment_commit import commit_inline_images
+from rdm.application.services.workflow_version_service import WorkflowVersionService
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Project, Sprint, SprintItem, WorkItem
@@ -187,7 +188,7 @@ class SprintService:
             )
         added: list[WorkItem] = []
         links: list[SprintItem] = []
-        engine = load_engine()
+        versions = WorkflowVersionService(self.uow, load_engine())
         for ref in item_refs:
             item = await self.items.resolve_item(actor, ref)
             if item.kind not in _SPRINT_ITEM_KINDS:
@@ -200,7 +201,8 @@ class SprintService:
                     ),
                     details={"work_item_id": item.id, "kind": item.kind},
                 )
-            if engine.is_terminal(item.kind, item.status):
+            terminal = await versions.terminal_map([item])
+            if terminal[item.id]:
                 raise ValidationError(
                     tr(
                         "sprint.item_terminal",
@@ -328,12 +330,14 @@ class SprintService:
             else []
         )
         engine = load_engine()
+        terminal = await WorkflowVersionService(self.uow, engine).terminal_map(members_items)
         ctx = GateContext(
             sprint_items=[
                 GateSprintItem(
                     kind=i.kind,
                     status=i.status,
                     display_id=f"{project.key}-{i.display_no}",
+                    terminal=terminal[i.id],
                 )
                 for i in members_items
             ]

@@ -166,7 +166,25 @@
 - 引用在加载时即展开为普通图：REST/MCP 的 `GET /api/v1/workflow`、`workflow_get`、
   `meta.available_steps`、`rdm workflow validate` 看到的都是**解析后的**状态与步骤，
   不暴露 `use` 结构，因此前端无需感知。
-- `revision` 仍按“对在途工作项有影响”的标准递增；纯重构为 `use`（解析结果不变）不必递增。
+- 顶层 `version` 会作为 `config_schema_version`、`revision` 作为 `config_version` 落到 `work_item_workflow_version`。
+  - **修改配置结构**（字段形状、语法、语义）→ `version` 必须 +1，`revision` 也必须 +1。新增 `version` 时必须在 `src/rdm/domain/workflow/schema_versions/` 增加对应的 `vN.py` / `SchemaVn` 策略；旧策略保留，已固定的历史工作项仍按自己的 schema 版本读取。
+  - **修改任意配置语义内容（含结构变更）** → `revision` 必须 +1；注释/排版除外。`config_version` 仅记录；是否产生新的 `work_item_workflow_version` 仍由生效定义是否相等决定。
+  - `config_schema_version` 参与相等判断：`version` 变化时即使生效定义完全相同，也会强制生成新版本。
+  - 两者都不参与运行时状态机判断，在途兼容由工作项固定的定义版本负责。
+- 每个 `(kind, subtype)` **展开后**的生效定义会落库到 `work_item_workflow_version`。创建工作时项（及升级/启动的同步）会把当前定义与该 key 的最新版本比较：
+  - 只改注释、空白或 JSON 对象键顺序**不会**产生新版本；
+  - 改数组顺序（states/steps）、步骤/边、gate、字段或 `label`/`name` 等文案**会**产生新版本（`version` 自动 +1）；
+  - 回退到历史内容也会生成一个新版本，不复用旧行。
+- 旧工作项固定创建时的定义版本：之后改配置不会改变它的状态机、步骤 key、gate 或文案；新工作项使用当前定义。
+- 升级时未固定的历史工作项会被绑定到**升级时的现行配置**（无法重建更早的定义）。如果本次升级同时删除了某个在用状态，需先迁移这些数据。
+- task-mode 步骤的 `complete_on` 保存在父项固定定义中；子任务可能固定到另一版本，`rdm workflow validate` / `rdm doctor` 会对不一致给出提示。
+
+### 2.2 新增配置结构版本
+
+1. 改配置结构时递增 `workflow.json5` 的 `version`（同时递增 `revision`）。
+2. 在 `src/rdm/domain/workflow/schema_versions/` 新增 `vN.py`，实现 `SchemaVn(DefinitionSchema)` 的 `_serialize` / `_deserialize`，并在包的 `__init__.py` 导入该模块。子类通过 `__init_subclass__` 自动注册；注册表与调用方不需要改。
+3. **保留旧的 `SchemaVn` 实现**：已固定旧 schema 的工作项仍按自己的 `config_schema_version` 读取，不能为了“只支持最新版”而删除历史策略。
+4. 如确需废弃某历史版本，必须先提供数据迁移（把工作项重新固定到新版本）并显式移除策略；未知版本会抛出 `UnsupportedWorkflowSchema`，doctor 报 FAIL。
 
 ---
 

@@ -257,6 +257,8 @@ class WorkItem:
     rank: int = 0
     assignee_user_id: str | None = None
     workflow_version: int = 1
+    # Pinned effective definition row (§17.120); None on legacy/unmigrated rows.
+    workflow_def_id: str | None = None
     row_version: int = 0
     fields: KindFields | None = None
     # M6: explicit participant/reviewer rows and configurable fields.
@@ -273,6 +275,25 @@ class WorkItem:
     @property
     def kind_enum(self) -> WorkItemKind:
         return WorkItemKind(self.kind)
+
+
+@dataclass(kw_only=True)
+class WorkflowVersion:
+    """A persisted effective workflow definition for one (kind, subtype)."""
+
+    id: str
+    kind: str
+    subtype: str | None
+    version: int
+    def_hash: str
+    definition: dict[str, Any]
+    # Snapshot of workflow.json5 top-level ``version`` / ``revision`` (§17.120).
+    # Only config_schema_version participates in equality.
+    config_schema_version: int
+    config_version: int
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
 
 
 @dataclass(kw_only=True)

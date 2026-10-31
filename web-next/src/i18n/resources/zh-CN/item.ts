@@ -222,7 +222,7 @@ const item = {
     customEmpty: "未选择",
     selectMember: "选择成员",
     editField: "编辑{{label}}",
-    typeVersion: "类型 / 版本",
+    typeVersion: "类型 / 流程版本 / 实例版本",
     createdAt: "创建时间",
     agentSuffix: "（agent）",
     saveSuccess: "保存成功",

@@ -16,6 +16,7 @@ from rdm.application.ports import FileStore
 from rdm.application.services.comment_service import CommentService
 from rdm.application.services.notification_service import NotificationService
 from rdm.application.services.webhook_notify import enqueue as enqueue_webhook
+from rdm.application.services.workflow_version_service import WorkflowVersionService
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Project, User, WorkItem, WorkItemStep, WorkItemStepExecutor
 from rdm.domain.enums import StepExecutorStatus, StepStatus
@@ -38,6 +39,7 @@ from rdm.domain.workflow.engine import WorkflowEngine
 from rdm.domain.workflow.loader import load_engine
 from rdm.domain.workflow.names import localized_name, step_display_name
 from rdm.domain.workflow.schema import GateSpec, ResolvedKindWorkflow, StepSpec
+from rdm.domain.workflow.task_types import item_task_type
 from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.id import new_id
@@ -71,13 +73,14 @@ class StepService:
 
     # --- helpers ----------------------------------------------------------
 
-    def _engine(self) -> WorkflowEngine:
-        return load_engine()
+    def _versions(self) -> WorkflowVersionService:
+        return WorkflowVersionService(self.uow, load_engine())
+
+    async def _engine_for(self, item: WorkItem) -> WorkflowEngine:
+        return await self._versions().engine_for(item)
 
     @staticmethod
     def _task_type(item: WorkItem) -> str | None:
-        from rdm.application.services.workitem_service import item_task_type
-
         return item_task_type(item)
 
     async def _project(self, item: WorkItem) -> Project:
@@ -362,8 +365,7 @@ class StepService:
             )
         return chosen
 
-    def _config(self, item: WorkItem, step: StepSpec) -> dict[str, Any]:
-        engine = self._engine()
+    def _config(self, item: WorkItem, step: StepSpec, engine: WorkflowEngine) -> dict[str, Any]:
         task_type = self._task_type(item)
         gate = engine.effective_gate(item.kind, item.status, step, task_type=task_type)
         return {
@@ -420,7 +422,7 @@ class StepService:
 
     async def describe(self, item: WorkItem, actor: Actor) -> dict[str, Any]:
         assert self.uow.work_item_steps is not None
-        engine = self._engine()
+        engine = await self._engine_for(item)
         task_type = self._task_type(item)
         active = await self.uow.work_item_steps.get_active_for_item(item.id)
         is_assignee = security.is_assignee(actor, item)
@@ -580,15 +582,16 @@ class StepService:
     ) -> tuple[Project, WorkItem, dict[str, Any]]:
         from rdm.application.services.workitem_service import WorkItemService
 
-        engine = self._engine()
+        engine = await self._engine_for(item)
         task_type = self._task_type(item)
         meta = await self.describe(item, actor)
         assert self.uow.work_items is not None
         children: list[WorkItem] = await self.uow.work_items.list_children(item.id)
+        child_terminal = await self._versions().terminal_map(children)
         blocking = [
             f"{project.key}-{child.display_no}"
             for child in children
-            if not engine.is_terminal(child.kind, child.status, task_type=self._task_type(child))
+            if not child_terminal[child.id]
         ]
         meta["row_version"] = item.row_version
         meta["allowed_transitions"] = list(
@@ -650,7 +653,7 @@ class StepService:
                 },
             )
 
-        engine = self._engine()
+        engine = await self._engine_for(item)
         task_type = self._task_type(item)
         workflow = engine.resolve(item.kind, task_type)
         step = engine.resolve_step(
@@ -806,7 +809,7 @@ class StepService:
             mode=step.mode,
             status=status,
             required_count=len(chosen),
-            config=self._config(item, step),
+            config=self._config(item, step, await self._engine_for(item)),
             created_at=dt.datetime.now(dt.UTC),
             created_by=actor.id,
         )
@@ -1237,7 +1240,7 @@ class StepService:
                 tr("step.reassign_after_done", default="已有执行人完成，不能改派；请取消后重开。"),
                 details={"step_id": step.id},
             )
-        engine = self._engine()
+        engine = await self._engine_for(item)
         task_type = self._task_type(item)
         step_spec = engine.resolve_step(
             item.kind,
@@ -1332,7 +1335,6 @@ class StepService:
     ) -> None:
         from rdm.application.services.workitem_service import WorkItemService
 
-        engine = self._engine()
         service = WorkItemService(self.uow)
         assert self.uow.work_items is not None
         for executor in executors:
@@ -1341,6 +1343,7 @@ class StepService:
             task = await self.uow.work_items.get(executor.task_id)
             if task is None:
                 continue
+            engine = await self._engine_for(task)
             task_type = self._task_type(task)
             if engine.is_terminal(task.kind, task.status, task_type=task_type):
                 continue

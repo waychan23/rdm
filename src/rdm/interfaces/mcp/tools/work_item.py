@@ -13,10 +13,10 @@ from rdm.application.services.workitem_service import (
     WorkItemService,
     allowed_child_kinds,
     allowed_parent_kinds,
-    item_task_type,
 )
 from rdm.domain.errors import ValidationError
 from rdm.domain.workflow.names import step_display_name
+from rdm.domain.workflow.task_types import item_task_type
 from rdm.interfaces.http.container import Container
 from rdm.interfaces.http.schemas import (
     TransitionIn,
@@ -176,10 +176,12 @@ def register(mcp: FastMCP, container: Container) -> None:
             members = await _users(uow, proj.id)
             assert uow.work_items is not None
             children = await uow.work_items.list_children(item.id)
+            from rdm.application.services.workflow_version_service import WorkflowVersionService
             from rdm.domain.workflow.loader import load_engine
             from rdm.interfaces.mcp.tools._attachments import attachment_mcp_out
 
-            allowed = load_engine().allowed(item.kind, item.status, task_type=item_task_type(item))
+            engine = await WorkflowVersionService(uow, load_engine()).engine_for(item)
+            allowed = engine.allowed(item.kind, item.status, task_type=item_task_type(item))
             parent_item = (
                 await uow.work_items.get(item.parent_id, include_deleted=True)
                 if item.parent_id

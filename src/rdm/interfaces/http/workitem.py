@@ -7,14 +7,15 @@ from fastapi import APIRouter, Depends
 from rdm.application.services.history_service import HistoryService
 from rdm.application.services.membership_service import MembershipService
 from rdm.application.services.step_service import StepService
+from rdm.application.services.workflow_version_service import WorkflowVersionService
 from rdm.application.services.workitem_service import (
     WorkItemService,
     allowed_child_kinds,
     allowed_parent_kinds,
-    item_task_type,
 )
 from rdm.domain.actor import Actor
 from rdm.domain.workflow.loader import load_engine
+from rdm.domain.workflow.task_types import item_task_type
 from rdm.interfaces.http.container import Container, get_actor, get_container
 from rdm.interfaces.http.schemas import (
     ReparentIn,
@@ -116,7 +117,8 @@ async def get_work_item(
             if item.parent_id
             else None
         )
-        allowed = load_engine().allowed(item.kind, item.status, task_type=item_task_type(item))
+        engine = await WorkflowVersionService(uow, load_engine()).engine_for(item)
+        allowed = engine.allowed(item.kind, item.status, task_type=item_task_type(item))
         data = work_item_out(item, project, members)
         step_meta = await StepService(uow, container.file_store).describe(item, actor)
         meta = {

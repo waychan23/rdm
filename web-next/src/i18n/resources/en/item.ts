@@ -224,7 +224,7 @@ const item = {
     customEmpty: "Not selected",
     selectMember: "Select a member",
     editField: "Edit {{label}}",
-    typeVersion: "Type / version",
+    typeVersion: "Type / workflow version / instance version",
     createdAt: "Created",
     agentSuffix: " (agent)",
     saveSuccess: "Saved",

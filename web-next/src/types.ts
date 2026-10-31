@@ -66,6 +66,8 @@ export interface WorkItem {
   review_content_md?: string | null;
   custom_fields?: Record<string, unknown> | null;
   fields?: Record<string, unknown> | null;
+  workflow_version?: number;
+  workflow_def_id?: string | null;
   row_version: number;
   created_at: string;
   updated_at?: string | null;

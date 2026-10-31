@@ -79,6 +79,10 @@ def run_upgrade(data_dir: Path, revision: str = "head", *, database_url: str | N
     require_pg_search(settings)
     initialize_data_dir(data_dir)
     command.upgrade(_alembic_config(settings), revision)
+    if revision == "head":
+        from rdm.infrastructure.db.workflow_version_sync import sync_workflow_versions
+
+        sync_workflow_versions(settings)
 
 
 def run_downgrade(data_dir: Path, revision: str, *, database_url: str | None = None) -> None:

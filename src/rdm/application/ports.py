@@ -37,6 +37,7 @@ from rdm.domain.entities import (
     SprintItem,
     User,
     UserToken,
+    WorkflowVersion,
     WorkItem,
     Workspace,
 )
@@ -281,6 +282,16 @@ class WorkItemRepository(Protocol):
     async def soft_delete(
         self, item_id: str, actor_id: str, *, cascade_ids: Sequence[str] | None = None
     ) -> Sequence[str]: ...
+
+
+class WorkflowVersionRepository(Protocol):
+    async def add(self, version: WorkflowVersion) -> None: ...
+
+    async def get(self, version_id: str) -> WorkflowVersion | None: ...
+
+    async def get_many(self, version_ids: Sequence[str]) -> dict[str, WorkflowVersion]: ...
+
+    async def latest(self, kind: str, subtype: str | None) -> WorkflowVersion | None: ...
 
 
 class SprintRepository(Protocol):
@@ -587,6 +598,7 @@ class UnitOfWork(Protocol):
     oauth_consents: ConsentRepository
     oauth_login_tickets: LoginTicketRepository
     work_items: WorkItemRepository
+    workflow_versions: WorkflowVersionRepository
     sprints: SprintRepository
     sprint_items: SprintItemRepository
     mailboxes: MailboxRepository

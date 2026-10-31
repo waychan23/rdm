@@ -9,7 +9,8 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass, field
 
-from rdm.application.services.workitem_service import WorkItemService, item_task_type
+from rdm.application.services.workflow_version_service import WorkflowVersionService
+from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Notification, Project, WorkItem, WorkItemStep, WorkItemStepExecutor
 from rdm.domain.workflow.loader import load_engine
@@ -55,8 +56,7 @@ class TodoService:
             project_row = await self.uow.projects.get(project_id)
             if project_row is not None:
                 projects[project_id] = project_row
-        engine = load_engine()
-        assigned: dict[str, tuple[Project, WorkItem]] = {}
+        candidates: dict[str, tuple[Project, WorkItem]] = {}
         for project_id in project_ids:
             current_project = projects.get(project_id)
             if current_project is None:
@@ -68,9 +68,11 @@ class TodoService:
                     limit=100,
                     expand=True,
                 ):
-                    if engine.is_terminal(item.kind, item.status, task_type=item_task_type(item)):
-                        continue
-                    assigned[item.id] = (current_project, item)
+                    candidates[item.id] = (current_project, item)
+        terminal = await WorkflowVersionService(self.uow, load_engine()).terminal_map(
+            [pair[1] for pair in candidates.values()]
+        )
+        assigned = {item_id: pair for item_id, pair in candidates.items() if not terminal[item_id]}
         ordered = sorted(
             assigned.values(),
             key=lambda pair: (
@@ -87,7 +89,7 @@ class TodoService:
             if pair[1].planned_end_date is not None and pair[1].planned_end_date < today
         ]
 
-        pending: list[TodoStep] = []
+        pending_candidates: list[TodoStep] = []
         assert self.uow.work_item_steps is not None
         for step, executor in await self.uow.work_item_steps.list_pending_for_users(identities):
             pending_item = await self.uow.work_items.get(step.work_item_id)
@@ -96,13 +98,7 @@ class TodoService:
             pending_project = projects.get(pending_item.project_id)
             if pending_project is None:
                 continue
-            if engine.is_terminal(
-                pending_item.kind,
-                pending_item.status,
-                task_type=item_task_type(pending_item),
-            ):
-                continue
-            pending.append(
+            pending_candidates.append(
                 TodoStep(
                     project=pending_project,
                     item=pending_item,
@@ -110,6 +106,10 @@ class TodoService:
                     executor=executor,
                 )
             )
+        pending_terminal = await WorkflowVersionService(self.uow, load_engine()).terminal_map(
+            [entry.item for entry in pending_candidates]
+        )
+        pending = [entry for entry in pending_candidates if not pending_terminal[entry.item.id]]
         approvals = [entry for entry in pending if entry.step.mode == "approval"]
 
         assert self.uow.notifications is not None

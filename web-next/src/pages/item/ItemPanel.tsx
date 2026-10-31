@@ -1499,7 +1499,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             <div className="rdm-item-field">
               <div className="rdm-item-section-label">{t("panel.typeVersion")}</div>
               <Text size="small" color="color.text.subtlest">
-                {kindLabel(item.kind)} · v{item.row_version}
+                {kindLabel(item.kind)} · v{item.workflow_version ?? "—"} · v{item.row_version}
               </Text>
             </div>
             <div className="rdm-item-field">

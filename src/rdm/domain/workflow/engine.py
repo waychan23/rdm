@@ -30,6 +30,9 @@ class GateChild:
     kind: str
     status: str
     display_id: str
+    # Terminality under the child's own pinned definition (§17.120). None keeps
+    # the legacy lookup against the engine's current definition.
+    terminal: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,7 @@ class GateSprintItem:
     kind: str
     status: str
     display_id: str
+    terminal: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -62,8 +66,14 @@ def _field_present(value: Any) -> bool:
 
 
 class WorkflowEngine:
-    def __init__(self, spec: WorkflowSpec) -> None:
+    def __init__(
+        self,
+        spec: WorkflowSpec,
+        *,
+        pinned: Mapping[tuple[str, str | None], ResolvedKindWorkflow] | None = None,
+    ) -> None:
         self._spec = spec
+        self._pinned = dict(pinned or {})
         self._resolved: dict[tuple[str, str | None], ResolvedKindWorkflow] = {}
 
     @property
@@ -74,6 +84,9 @@ class WorkflowEngine:
 
     def resolve(self, kind: str, task_type: str | None = None) -> ResolvedKindWorkflow:
         key = (kind, task_type if kind == "task" else None)
+        pinned = self._pinned.get(key)
+        if pinned is not None:
+            return pinned
         resolved = self._resolved.get(key)
         if resolved is not None:
             return resolved
@@ -332,6 +345,12 @@ class WorkflowEngine:
                 step=step,
             )
 
+    def _context_terminal(self, item: GateChild | GateSprintItem) -> bool:
+        """Use the caller-computed pinned terminality when provided."""
+        if item.terminal is not None:
+            return item.terminal
+        return self.is_terminal(item.kind, item.status)
+
     def _check_gate(
         self,
         src: str,
@@ -350,7 +369,7 @@ class WorkflowEngine:
 
         if gate.children_all_terminal:
             blocking_children = [
-                c.display_id for c in ctx.children if not self.is_terminal(c.kind, c.status)
+                c.display_id for c in ctx.children if not self._context_terminal(c)
             ]
             if blocking_children:
                 blocking.extend(blocking_children)
@@ -376,7 +395,7 @@ class WorkflowEngine:
 
         if gate.no_nonterminal_sprint_items:
             blocking_items = [
-                i.display_id for i in ctx.sprint_items if not self.is_terminal(i.kind, i.status)
+                i.display_id for i in ctx.sprint_items if not self._context_terminal(i)
             ]
             if blocking_items:
                 blocking.extend(blocking_items)

@@ -38,7 +38,7 @@ def test_migrated_schema_matches_metadata(db_url: str) -> None:
         t for t in tables if not t.startswith("search_index") and t != "alembic_version"
     } - _EXTENSION_TABLES
     assert migrated == set(Base.metadata.tables)
-    assert len(Base.metadata.tables) == 32
+    assert len(Base.metadata.tables) == 33
 
 
 @pytest.mark.postgres_only

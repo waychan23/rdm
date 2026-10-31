@@ -166,6 +166,8 @@ def work_item_out(item: WorkItem, project: Project, users: dict[str, User] | Non
         "custom_fields": dict(item.custom_fields or {}),
         "accountable_human_id": accountable_id,
         "fields": _fields_out(item),
+        "workflow_version": item.workflow_version,
+        "workflow_def_id": item.workflow_def_id,
         "row_version": item.row_version,
         "created_at": _iso(item.created_at),
         "updated_at": _iso(item.updated_at),
