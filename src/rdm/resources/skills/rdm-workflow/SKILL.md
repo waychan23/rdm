@@ -12,7 +12,7 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 1. 读取当前工作区根目录的 `.rdm/project.json`。
 2. 有 `{"version": 1, "project": "KEY"}`：调用 `project_bind(project="KEY")` 校验；之后所有项目级工具显式传 `project="KEY"`。不要询问用户。
 3. 没有：调用 `project_bind()` 拿到 `options`，把 `key/name/roles` 展示给用户**自己选择**；不要推荐，不要根据信箱有无信、未读数、最近活动或角色推断。调用 `project_bind(project="KEY")`，把返回的 `persist.content` 写入 `.rdm/project.json`；之后项目级工具传 `project="KEY"`。
-   带 `project` 参数的工具包括 `work_item_list`、`backlog_list`、`sprint_list`、`member_list`、`work_item_create`、`sprint_create`、`mailbox_check`、`mailbox_send`、`artifact_add`、`attachment_list`、`project_get`；按 id 操作的工具（如 `work_item_get`、`work_item_transition`、`sprint_manage`）不需要传。
+   带 `project` 参数的工具包括 `work_item_list`、`backlog_list`、`sprint_list`、`release_list`、`member_list`、`work_item_create`、`sprint_create`、`release_create`、`mailbox_check`、`mailbox_send`、`artifact_add`、`attachment_list`、`project_get`；按 id 操作的工具（如 `work_item_get`、`work_item_transition`、`sprint_manage`、`release_manage`）不需要传。
 4. 收到 `PROJECT_REQUIRED` / `PROJECT_BINDING_INVALID` 时，按 `details.recovery` 自愈：读文件 → `project_bind` → 带 `project` 重试。**不要**要求用户重新执行 `rdm integrate`，**不要**让用户手输项目 ID。
 5. 改绑：`project_bind(project=NEW, current=OLD)`，先向用户确认返回的 `change`，再覆盖 `.rdm/project.json`。单次跨项目操作直接传 `project=OTHER`，不要改绑文件。
 6. `.rdm/project.json` 不含密钥；是否提交由用户决定（希望每个开发者本地选择时加入 `.gitignore`）。
@@ -60,7 +60,14 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 3. **agent 可以作为 DONE 步骤的执行人**（§17.102）：DONE 目标不再按身份类型过滤候选人。只要 `actors`（assignee/participants/reviewers）解析到你，就可以发起并执行 `CODE_REVIEW`/任务式步骤收口到 `DONE`；需要人类验收时，由负责人把 reviewer/执行人配置为 human，或由该 agent 的 human manager 代操作（操作历史仍记实际操作身份）。
 4. story 在 TO_TEST、task 在 TO_REVIEW 后用 `mailbox_send` 通知 accountable_human 验收。issue 的 CLOSED_DONE 是 QA 关单语义。
 5. Story/Issue/Epic 进入终态有 gate：所有直接子项必须先终态；issue 关闭还要求至少 1 个子任务。
-## 6. 异常处理
+## 6. 版本发布（Release）
+
+- 版本是项目级产品发布单，只包含 **story**；用 `release_list` / `release_get` 查看范围与就绪度。
+- 任意项目成员可用 `release_manage(action="add_items")` 把 story 加入 PLANNED 版本（DONE 也可加入）；同一 story 可属于多个版本。
+- 创建/编辑/发布/取消仅 Owner/Manager。`release_publish` 要求所有 story 已 DONE/PUBLISHED，并把 DONE story 推到 PUBLISHED；agent 不要自行发布，先 `mailbox_send` 给版本负责人。
+- `RELEASE_NOT_READY` 的 `details.blocking` 列出未完成 story；先推进这些工作项，不要绕过发布检查。
+
+## 7. 异常处理
 
 - 一切错误都是结构化信封 `{"error": {"code", "message", "details"}}`：按 `message` 的中文指引行动，`details`（如 allowed_transitions、available_steps、blocking_children、missing_fields、current_version）给具体数据。
 - `FORBIDDEN` / `WORKFLOW_STEP_FORBIDDEN`：你的身份无权做此事（步骤只能由负责人发起/改派，只能由被指派执行人执行；sprint 创建/启动/关闭仅 owner/manager）——用 mailbox_send 请求有权限的人协助，不要重试。
@@ -69,7 +76,7 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 - `WORKFLOW_STEP_NO_CANDIDATES` / `WORKFLOW_STEP_NOTE_REQUIRED`：先补齐 reviewer/参与人/执行人，或填写必填备注。
 - `NOT_FOUND`：id 错或不属于当前项目；重新 `work_item_get` / 查列表确认，**不要猜 id**。
 - **同一个错误连续出现两次**：停止重试，`mailbox_send` 给 accountable_human，附上错误原文与你尝试的操作。
-## 7. 图片与附件
+## 8. 图片与附件
 
 - 工作项描述、评论、Sprint 目标里的图片是 **project 级附件**，正文写成
   `![说明](/api/v1/attachments/<id>/download)`；不要内嵌 base64。
@@ -83,7 +90,7 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 - 上传/删除附件只能走 Web/OpenAPI：`POST /projects/<key>/attachments`
   （multipart，`owner_type=project` 或 `work_item`）；MCP 不传二进制。
 
-## 8. 禁止事项
+## 9. 禁止事项
 
 - 不要猜工作项/成员 id；先查询。
 - 不要尝试绕过 `work_item_transition`/`work_item_step` 改状态。

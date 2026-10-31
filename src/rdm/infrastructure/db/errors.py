@@ -8,7 +8,12 @@ rolled back by the UoW exit, the translated error must not be retried on it.
 
 from __future__ import annotations
 
-from rdm.domain.errors import RdmError, SprintActiveExists, ValidationError
+from rdm.domain.errors import (
+    RdmError,
+    ReleaseNameDuplicate,
+    SprintActiveExists,
+    ValidationError,
+)
 
 
 def _text(exc: Exception) -> str:
@@ -27,6 +32,16 @@ def translate_integrity(exc: Exception) -> RdmError:
         return ValidationError(
             "该工作项已在另一个 Sprint 中，一个工作项同一时间只能属于一个 Sprint。",
             details={"constraint": "ux_sprint_item_one_sprint"},
+        )
+    if "ux_product_release_name" in text or "product_release.project_id" in text:
+        return ReleaseNameDuplicate(
+            "该项目已存在同名版本。",
+            details={"constraint": "ux_product_release_name"},
+        )
+    if "ux_product_release_item" in text or "product_release_item" in text:
+        return ValidationError(
+            "该 story 已在此版本中。",
+            details={"constraint": "ux_product_release_item"},
         )
     if "mailbox_member" in text or "ux_mailbox_member" in text:
         return ValidationError(

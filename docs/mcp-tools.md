@@ -8,7 +8,7 @@
 1. **状态推进只走具名工具**（direct 用 `work_item_transition`；approval/task 用 `work_item_step`；sprint 用 `sprint_start` / `sprint_close`），不存在"直接 update status"的通用工具。
 2. **读响应自带下一步**：任何 item 级响应都带 `allowed_transitions`、`accountable_human`、`children_summary`，agent 不需要猜。
 3. **错误即指引**：错误 `message` 必须包含"当前状态 → 允许去向 → 建议的下一步工具"；`details` 结构化（见 §5）。
-4. **工具数量受控**（当前 30 个，下文逐字枚举为准）：查询/编辑通用化，状态推进具名化。新增/签名变更须在 architecture §17 记裁决。
+4. **工具数量受控**（当前 35 个，下文逐字枚举为准）：查询/编辑通用化，状态推进具名化。新增/签名变更须在 architecture §17 记裁决。
 5. **MCP 不传二进制**：附件只读列表/下载链接；上传走 OpenAPI/Web。
 6. **返回精简**：列表默认 20 条、只回摘要字段（`display_id, kind, title, status, assignee, priority`）；详情用 `expand` 参数按需展开。
 7. **幂等/并发**：写工具返回 `row_version`；冲突时返回 `CONFLICT_VERSION` 并附最新版本，agent 重读后重试。
@@ -25,13 +25,14 @@
              "details": { "blocking_children": ["RDM-13"], "allowed_transitions": ["CANCELLED"], "hint": "..." } } }
 ```
 
-## 3. 工具清单（30）
+## 3. 工具清单（35）
 
 > 计数勘误（2026-10-24，architecture §16.24）：早期版本标称 26 个，实际枚举为 **27 个**——§3.2 标题写 7 但实列 8（`sprint_list`/`sprint_get` 在表中合占一行）。分节实数：3+8+7+4+3+2=27。
 > **实现口径**：M1 交付 17 个；M2 已补齐全部 **27 个**（见 §16.51）；M5 新增 `project_bind` 后为 **28 个**，注册数测试改为精确匹配 28 个。
 > **M5 变更**：新增 `project_bind`（architecture §17.80），总数 **28**；注册数测试改为精确匹配 28 个。
 > **M6 变更**：新增 `work_item_step`（architecture §17.93），总数 **29**；注册数测试改为精确匹配 29 个。
 > **M7 变更**：新增 `search`（architecture §17.103），总数 **30**；`work_item_step` 增加 `reject`，`my_work_list` 增加 `include_steps`（签名变更，不增工具）。
+> **M9 变更**：新增版本发布 5 个工具 `release_list` / `release_get` / `release_create` / `release_manage` / `release_publish`（architecture §17.121），总数 **35**。
 
 ### 3.1 身份 / 上下文（4）【M1 全量 + M5】
 
@@ -77,7 +78,17 @@
 | `sprint_start` 【M1】 | 启动（置 active，校验同项目唯一 active，冲突报 `SPRINT_ACTIVE_EXISTS`） |
 | `sprint_close` 【M1】 | 关闭；存在非终态 item 时 gate 拒绝；关闭前可用 sprint_manage remove_item 移走非终态项 |
 
-### 3.5 信箱（3）
+### 3.5 版本发布 Release（5）【M9】
+
+| 工具 | 用途 | 关键入参 |
+|---|---|---|
+| `release_list` 【M9】 | 列出版本（按创建时间倒序），可按 `PLANNED/RELEASED/CANCELLED` 过滤；每项带 `stats{total,done,published,cancelled,percent}` | `project?, status?` |
+| `release_get` 【M9】 | 版本详情：字段、story 列表、`stats`、`status_counts`、`readiness{can_publish,blocking}`；`blocking` 非空时不要发布 | `id` |
+| `release_create` 【M9】 | 创建版本（仅 Owner/Manager）；`name` 项目内唯一（如 `v1.4.0`），`target_date` 用 `YYYY-MM-DD` | `name, project?, description_md?, target_date?, manager?` |
+| `release_manage` 【M9】 | `action: add_items|remove_item|update|cancel`；只接受 story，DONE 可加入，PUBLISHED/CANCELLED 拒绝；同一 story 可属于多个版本；终态版本冻结 | `id, action, items?/item?, name?, description_md?, target_date?, manager?` |
+| `release_publish` 【M9】 | 发布版本（仅 Owner/Manager）；要求非空且所有 story 为 DONE/PUBLISHED，否则 `RELEASE_NOT_READY` + `details.blocking`；成功时同事务把所有 DONE story 推到 PUBLISHED 并写 `released_at` | `id` |
+
+### 3.6 信箱（3）
 
 | 工具 | 用途 |
 |---|---|
@@ -85,7 +96,9 @@
 | `mailbox_send` 【M1】 | 发信：`to[]/cc[]`（member 或 group mailbox 名）、subject、body_md、`refs[]`（work_item ids）、`reply_to`（上一封信的 message_id，形成服务端回信链路） |
 | `mailbox_mark_read` 【M2】 | 批量标记已读（传 delivery id，即信件条目中的 delivery_id） | `delivery_ids[]` |
 
-### 3.6 产出物 / 附件 / 工作区（2）| 工具 | 用途 |
+### 3.7 产出物 / 附件 / 工作区（2）
+
+| 工具 | 用途 | 关键入参 |
 |---|---|
 | `artifact_add` 【M2】 | 挂链接型产出物（设计稿/API 文档/仓库链接）；`owner_type` 仅暴露 project/item/comment（message 只走 REST），URL 限 http(s) | `owner_type, owner, kind, label, url` |
 | `attachment_list` 【M2】 | 列附件元数据 + `download_url` + 短时 `fetch_url`（不传二进制）；`owner_type=project` 时 `owner` 可省略（项目级内联图片）。**上传/下载/删除走 REST**：`POST /projects/<key>/attachments`（multipart：file + owner_type + owner_ref? + state?，20MB 上限、可执行类型黑名单）、`GET /attachments/<id>/download`、`DELETE` | `owner?, owner_type?, project?` |
@@ -226,4 +239,4 @@ MCP 请求不携带 cwd；绑定事实源是客户端工作区根目录的 `.rdm
 - 命名：`资源_动作`（`work_item_*`、`sprint_*`、`mailbox_*`），全小写蛇形；无前缀 `rdm_`（server 名已隔离）。
 - 注册：`interfaces/mcp/tools/<resource>.py` 每文件一个模块，`register(mcp, container)` 函数（container 用于开 UoW）；工具函数只做 pydantic 入参 → 调 service → 包信封。
 - 测试：每个工具至少一条 happy path + 一条错误码映射测试；`workflow_get` 的工具输出必须与 REST `/api/v1/workflow` 完全一致（同一函数生成）。
-- 工具总数当前 30（见 §3）；新增或签名变更必须在 `docs/architecture.md` §17 记裁决，不做无理由扩张。
+- 工具总数当前 35（见 §3）；新增或签名变更必须在 `docs/architecture.md` §17 记裁决，不做无理由扩张。

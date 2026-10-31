@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from rdm.application.dto import user_brief
+from rdm.application.services.release_service import ReleaseOverview
 from rdm.domain.entities import (
     Artifact,
     Attachment,
@@ -15,6 +16,7 @@ from rdm.domain.entities import (
     Notification,
     Project,
     ProjectMember,
+    Release,
     Sprint,
     TaskFields,
     User,
@@ -289,6 +291,44 @@ def sprint_out(s: Sprint) -> dict:
         "manager_user_id": s.manager_user_id,
         "created_at": _iso(s.created_at),
     }
+
+
+def release_out(r: Release, stats: dict[str, int] | None = None) -> dict:
+    return {
+        "id": r.id,
+        "project_id": r.project_id,
+        "name": r.name,
+        "description_md": r.description_md,
+        "status": str(r.status),
+        "target_date": _iso(r.target_date),
+        "released_at": _iso(r.released_at),
+        "manager_user_id": r.manager_user_id,
+        "stats": stats or {"total": 0, "done": 0, "published": 0, "cancelled": 0, "percent": 0},
+        "created_at": _iso(r.created_at),
+        "updated_at": _iso(r.updated_at),
+    }
+
+
+def release_detail_out(overview: ReleaseOverview, users: dict[str, User] | None = None) -> dict:
+    users = users or {}
+    data = release_out(overview.release, overview.stats)
+    data["items"] = [
+        work_item_summary_out(item, overview.project, users) for item in overview.items
+    ]
+    data["status_counts"] = overview.status_counts
+    data["readiness"] = {
+        "can_publish": overview.can_publish,
+        "blocking": [
+            {
+                "id": item.id,
+                "display_id": f"{overview.project.key}-{item.display_no}",
+                "title": item.title,
+                "status": item.status,
+            }
+            for item in overview.blocking
+        ],
+    }
+    return data
 
 
 def notification_title(n: Notification) -> str:

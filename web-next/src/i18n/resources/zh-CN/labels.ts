@@ -19,6 +19,7 @@ const labels = {
     PLANNED: "计划中",
     ACTIVE: "进行中",
     CLOSED: "已关闭",
+    RELEASED: "已发布",
     PENDING: "待执行",
     COMPLETED: "已完成",
     REJECTED: "已拒绝",

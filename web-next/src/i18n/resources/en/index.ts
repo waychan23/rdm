@@ -1,4 +1,5 @@
 import projects from "./projects";
+import releases from "./releases";
 import sprints from "./sprints";
 import inbox from "./inbox";
 import mailbox from "./mailbox";
@@ -25,6 +26,7 @@ export const en = {
   components,
   projects,
   sprints,
+  releases,
   inbox,
   mailbox,
   members,

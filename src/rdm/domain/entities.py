@@ -13,6 +13,7 @@ from typing import Any
 from rdm.domain.constants import DEFAULT_PRIORITY
 from rdm.domain.enums import (
     ProjectStatus,
+    ReleaseStatus,
     Severity,
     SprintStatus,
     TaskType,
@@ -361,6 +362,41 @@ class Sprint:
 class SprintItem:
     id: str
     sprint_id: str
+    work_item_id: str
+    added_by: str | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None
+
+
+@dataclass(kw_only=True)
+class Release:
+    """A shippable product version (§17.121).
+
+    ``name`` is the human-facing version string (e.g. ``v1.4.0``); ``status``
+    is frozen once RELEASED/CANCELLED. ``released_at`` is the actual publish
+    moment, while ``target_date`` is the planned ship date.
+    """
+
+    id: str
+    project_id: str
+    name: str
+    description_md: str | None = None
+    status: ReleaseStatus = ReleaseStatus.PLANNED
+    target_date: dt.date | None = None
+    released_at: dt.datetime | None = None
+    manager_user_id: str | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    deleted_at: dt.datetime | None = None
+    deleted_by: str | None = None
+
+
+@dataclass(kw_only=True)
+class ReleaseItem:
+    id: str
+    release_id: str
     work_item_id: str
     added_by: str | None = None
     created_at: dt.datetime = field(default_factory=_utcnow)

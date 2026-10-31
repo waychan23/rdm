@@ -62,6 +62,13 @@ class EventType(StrEnum):
     SPRINT_ITEM_REMOVED = "sprint.item_removed"
     SPRINT_STARTED = "sprint.started"
     SPRINT_CLOSED = "sprint.closed"
+    # release
+    RELEASE_CREATED = "release.created"
+    RELEASE_UPDATED = "release.updated"
+    RELEASE_ITEM_ADDED = "release.item_added"
+    RELEASE_ITEM_REMOVED = "release.item_removed"
+    RELEASE_PUBLISHED = "release.published"
+    RELEASE_CANCELLED = "release.cancelled"
     # comment
     COMMENT_CREATED = "comment.created"
     COMMENT_UPDATED = "comment.updated"
@@ -94,6 +101,7 @@ WEBHOOK_WHITELIST: frozenset[EventType] = frozenset(
         EventType.COMMENT_CREATED,
         EventType.SPRINT_STARTED,
         EventType.SPRINT_CLOSED,
+        EventType.RELEASE_PUBLISHED,
     }
 )
 

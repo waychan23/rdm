@@ -3,6 +3,7 @@ const nav = {
     board: "Board",
     backlog: "Work items",
     sprints: "Sprints",
+    releases: "Releases",
     mailbox: "Mailbox",
     workspaces: "Workspaces",
     members: "Members",

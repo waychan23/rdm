@@ -23,6 +23,7 @@ from rdm.interfaces.http.mailbox import router as mailbox_router
 from rdm.interfaces.http.me import router as me_router
 from rdm.interfaces.http.notifications import router as notifications_router
 from rdm.interfaces.http.overview import router as overview_router
+from rdm.interfaces.http.release import router as releases_router
 from rdm.interfaces.http.routers import (
     members_router,
     projects_router,
@@ -103,6 +104,7 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     app.include_router(members_router)
     app.include_router(work_items_router)
     app.include_router(sprints_router)
+    app.include_router(releases_router)
     app.include_router(mailbox_router)
     app.include_router(comments_router)
     app.include_router(attachments_router)

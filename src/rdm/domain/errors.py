@@ -27,6 +27,8 @@ class ErrorCode(StrEnum):
     ALREADY_ASSIGNED = "ALREADY_ASSIGNED"
     PROJECT_KEY_DUPLICATE = "PROJECT_KEY_DUPLICATE"
     SPRINT_ACTIVE_EXISTS = "SPRINT_ACTIVE_EXISTS"
+    RELEASE_NAME_DUPLICATE = "RELEASE_NAME_DUPLICATE"
+    RELEASE_NOT_READY = "RELEASE_NOT_READY"
     ATTACHMENT_TOO_LARGE = "ATTACHMENT_TOO_LARGE"
     UNSUPPORTED_MIME = "UNSUPPORTED_MIME"
     RDM_SERVER_UNREACHABLE = "RDM_SERVER_UNREACHABLE"
@@ -158,6 +160,18 @@ class ProjectKeyDuplicate(RdmError):
 
 class SprintActiveExists(RdmError):
     code = ErrorCode.SPRINT_ACTIVE_EXISTS
+    http_status = 409
+
+
+class ReleaseNameDuplicate(RdmError):
+    code = ErrorCode.RELEASE_NAME_DUPLICATE
+    http_status = 409
+
+
+class ReleaseNotReady(RdmError):
+    """Publish preconditions failed (empty scope or unfinished stories)."""
+
+    code = ErrorCode.RELEASE_NOT_READY
     http_status = 409
 
 

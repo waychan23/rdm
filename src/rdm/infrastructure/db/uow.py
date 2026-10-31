@@ -39,6 +39,10 @@ from rdm.infrastructure.db.repositories.oauth import (
 from rdm.infrastructure.db.repositories.organization import OrganizationRepository
 from rdm.infrastructure.db.repositories.outbox import OutboxRepository
 from rdm.infrastructure.db.repositories.project import ProjectRepository
+from rdm.infrastructure.db.repositories.release import (
+    ProductReleaseItemRepository,
+    ProductReleaseRepository,
+)
 from rdm.infrastructure.db.repositories.search import SearchRepository
 from rdm.infrastructure.db.repositories.sprint import (
     SprintItemRepository,
@@ -95,6 +99,8 @@ class SqlAlchemyUnitOfWork:
         self.workflow_versions: WorkflowVersionRepository | None = None
         self.sprints: SprintRepository | None = None
         self.sprint_items: SprintItemRepository | None = None
+        self.releases: ProductReleaseRepository | None = None
+        self.release_items: ProductReleaseItemRepository | None = None
         self.mailboxes: MailboxRepository | None = None
         self.messages: MessageRepository | None = None
         self.comments: CommentRepository | None = None
@@ -131,6 +137,8 @@ class SqlAlchemyUnitOfWork:
             self.workflow_versions = WorkflowVersionRepository(self.session)
             self.sprints = SprintRepository(self.session)
             self.sprint_items = SprintItemRepository(self.session)
+            self.releases = ProductReleaseRepository(self.session)
+            self.release_items = ProductReleaseItemRepository(self.session)
             self.mailboxes = MailboxRepository(self.session)
             self.messages = MessageRepository(self.session)
             self.comments = CommentRepository(self.session)

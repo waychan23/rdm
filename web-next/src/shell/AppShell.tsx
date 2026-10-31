@@ -13,6 +13,7 @@ import GridIcon from "@atlaskit/icon/core/grid";
 import BoardIcon from "@atlaskit/icon/core/board";
 import BacklogIcon from "@atlaskit/icon/core/backlog";
 import CalendarIcon from "@atlaskit/icon/core/calendar";
+import ReleaseIcon from "@atlaskit/icon/core/release";
 import EmailIcon from "@atlaskit/icon/core/email";
 import FolderIcon from "@atlaskit/icon/core/folder-open";
 import PeopleIcon from "@atlaskit/icon/core/people-group";
@@ -90,6 +91,7 @@ type NavKey =
   | "project.board"
   | "project.backlog"
   | "project.sprints"
+  | "project.releases"
   | "project.mailbox"
   | "project.workspaces"
   | "project.members"
@@ -106,6 +108,7 @@ const PROJECT_NAV: NavEntry[] = [
   { to: (k) => `/projects/${k}/board`, labelKey: "project.board", testId: "board", icon: BoardIcon },
   { to: (k) => `/projects/${k}/backlog`, labelKey: "project.backlog", testId: "backlog", icon: BacklogIcon },
   { to: (k) => `/projects/${k}/sprints`, labelKey: "project.sprints", testId: "sprints", icon: CalendarIcon },
+  { to: (k) => `/projects/${k}/releases`, labelKey: "project.releases", testId: "releases", icon: ReleaseIcon },
   { to: (k) => `/projects/${k}/mailbox`, labelKey: "project.mailbox", testId: "mailbox", icon: EmailIcon },
   {
     to: (k) => `/projects/${k}/workspaces`,

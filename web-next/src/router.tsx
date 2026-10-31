@@ -20,6 +20,7 @@ const OverviewPage = lazy(() => import("./pages/OverviewPage"));
 const BoardPage = lazy(() => import("./pages/BoardPage"));
 const BacklogPage = lazy(() => import("./pages/BacklogPage"));
 const SprintsPage = lazy(() => import("./pages/SprintsPage"));
+const ReleasesPage = lazy(() => import("./pages/ReleasesPage"));
 const MailboxPage = lazy(() => import("./pages/MailboxPage"));
 const WorkspacesPage = lazy(() => import("./pages/WorkspacesPage"));
 const MembersPage = lazy(() => import("./pages/MembersPage"));
@@ -80,6 +81,7 @@ export const router = createBrowserRouter([
       { path: "projects/:key/board", Component: () => withSuspense(<BoardPage />) },
       { path: "projects/:key/backlog", Component: () => withSuspense(<BacklogPage />) },
       { path: "projects/:key/sprints", Component: () => withSuspense(<SprintsPage />) },
+      { path: "projects/:key/releases", Component: () => withSuspense(<ReleasesPage />) },
       { path: "projects/:key/mailbox", Component: () => withSuspense(<MailboxPage />) },
       {
         path: "projects/:key/workspaces",

@@ -3,6 +3,7 @@ const nav = {
     board: "看板",
     backlog: "工作项",
     sprints: "迭代",
+    releases: "版本",
     mailbox: "信箱",
     workspaces: "工作区",
     members: "成员",

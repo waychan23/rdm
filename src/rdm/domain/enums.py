@@ -76,6 +76,18 @@ class SprintStatus(StrEnum):
     CLOSED = "CLOSED"
 
 
+class ReleaseStatus(StrEnum):
+    """Product release lifecycle (architecture §17.121).
+
+    PLANNED releases may be edited; RELEASED/CANCELLED are frozen so the
+    shipped scope and timestamp stay auditable.
+    """
+
+    PLANNED = "PLANNED"
+    RELEASED = "RELEASED"
+    CANCELLED = "CANCELLED"
+
+
 class Severity(StrEnum):
     blocker = "blocker"
     critical = "critical"

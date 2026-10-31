@@ -328,6 +328,32 @@
     "sprint": "Sprint: {name}",
     "step_fallback": "step",
     "step_title": "[{key}] {display_id} step \"{name}\" {action}",
-    "step": "Step: {name}"
+    "step": "Step: {name}",
+    "release_title": "[{key}] Release {name} published",
+    "release": "Release: {name}",
+    "release_target": "Target date: {date}",
+    "release_released": "Released at: {at}",
+    "release_items": "Includes: {items}"
+  },
+  "release": {
+    "not_found": "Release {id} not found",
+    "status_invalid": "release status must be PLANNED/RELEASED/CANCELLED; got {status!r}",
+    "name_required": "name is required",
+    "name_empty": "name cannot be empty",
+    "name_too_long": "name must be at most 100 characters",
+    "name_duplicate": "Project {project} already has a release named \"{name}\".",
+    "frozen": "Release {name} is {status} and can no longer be edited.",
+    "kind_invalid": "Only stories can join a release; {display_id} is {kind}",
+    "item_other_project": "The selected work item does not belong to project {project}",
+    "item_status_invalid": "{display_id} is {status} and cannot join a release",
+    "item_already_in": "{display_id} is already in release {name}",
+    "item_not_in": "{display_id} is not in release {name}",
+    "empty": "Release {name} has no stories and cannot be published.",
+    "not_ready": "Release {name} still has unfinished stories: {items}",
+    "already_released": "Release {name} has already been published.",
+    "cancelled_no_publish": "Release {name} was cancelled and cannot be published.",
+    "publish_reason": "Shipped with release {name}",
+    "resource_label": "release",
+    "date_invalid": "target_date must be YYYY-MM-DD; got {value!r}"
   }
 }

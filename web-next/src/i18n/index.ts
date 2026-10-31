@@ -50,6 +50,7 @@ void i18n.use(initReactI18next).init({
     "components",
     "projects",
     "sprints",
+    "releases",
     "inbox",
     "mailbox",
     "members",

@@ -215,6 +215,44 @@ export interface SprintDetail extends Sprint {
   status_counts: Record<string, number>;
 }
 
+export interface ReleaseStats {
+  total: number;
+  done: number;
+  published: number;
+  cancelled: number;
+  percent: number;
+}
+
+export interface Release {
+  id: string;
+  project_id: string;
+  name: string;
+  description_md?: string | null;
+  status: string;
+  target_date?: string | null;
+  released_at?: string | null;
+  manager_user_id?: string | null;
+  stats: ReleaseStats;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface ReleaseBlockingItem {
+  id: string;
+  display_id: string;
+  title: string;
+  status: string;
+}
+
+export interface ReleaseDetail extends Release {
+  items: WorkItem[];
+  status_counts: Record<string, number>;
+  readiness: {
+    can_publish: boolean;
+    blocking: ReleaseBlockingItem[];
+  };
+}
+
 export interface Workspace {
   id: string;
   project_id: string;

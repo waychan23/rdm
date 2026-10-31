@@ -328,6 +328,32 @@
     "sprint": "Sprint: {name}",
     "step_fallback": "步骤",
     "step_title": "[{key}] {display_id} 步骤「{name}」{action}",
-    "step": "步骤: {name}"
+    "step": "步骤: {name}",
+    "release_title": "[{key}] 版本 {name} 已发布",
+    "release": "版本: {name}",
+    "release_target": "计划日期: {date}",
+    "release_released": "发布时间: {at}",
+    "release_items": "包含: {items}"
+  },
+  "release": {
+    "not_found": "版本 {id} 不存在",
+    "status_invalid": "release status 必须是 PLANNED/RELEASED/CANCELLED，收到 {status!r}",
+    "name_required": "name 必填",
+    "name_empty": "name 不能为空",
+    "name_too_long": "name 最长 100 个字符",
+    "name_duplicate": "项目 {project} 已存在版本「{name}」。",
+    "frozen": "版本 {name} 已是 {status}，不能再修改范围或字段。",
+    "kind_invalid": "只有 story 可以加入版本，{display_id} 是 {kind}",
+    "item_other_project": "所选工作项不属于项目 {project}",
+    "item_status_invalid": "{display_id} 当前为 {status}，不能加入版本",
+    "item_already_in": "{display_id} 已在版本 {name} 中",
+    "item_not_in": "{display_id} 不在版本 {name} 中",
+    "empty": "版本 {name} 还没有 story，无法发布。",
+    "not_ready": "版本 {name} 还有未完成的 story：{items}",
+    "already_released": "版本 {name} 已发布，不能重复发布。",
+    "cancelled_no_publish": "版本 {name} 已取消，不能发布。",
+    "publish_reason": "随版本 {name} 发布",
+    "resource_label": "版本",
+    "date_invalid": "target_date 必须是 YYYY-MM-DD，收到 {value!r}"
   }
 }

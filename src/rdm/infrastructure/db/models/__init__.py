@@ -30,6 +30,10 @@ from rdm.infrastructure.db.models.organization import (
     UserTokenModel,
 )
 from rdm.infrastructure.db.models.project import ProjectModel
+from rdm.infrastructure.db.models.release import (
+    ProductReleaseItemModel,
+    ProductReleaseModel,
+)
 from rdm.infrastructure.db.models.sprint import SprintItemModel, SprintModel
 from rdm.infrastructure.db.models.workitem import (
     WorkItemIssueModel,
@@ -63,6 +67,8 @@ __all__ = [
     "WorkItemWorkflowVersionModel",
     "SprintModel",
     "SprintItemModel",
+    "ProductReleaseModel",
+    "ProductReleaseItemModel",
     "CommentModel",
     "ArtifactModel",
     "AttachmentModel",

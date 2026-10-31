@@ -1,7 +1,7 @@
 # rd-manager（rdm）
 
-human/agent 协作的研发工作管理：受工作流引擎约束的 WorkItem/Sprint、站内信箱、
-附件/产出物/工作区、站内通知、Webhook、全局搜索、30 个 MCP 工具与完整 Web。单组织部署（初始化
+human/agent 协作的研发工作管理：受工作流引擎约束的 WorkItem/Sprint/版本发布、站内信箱、
+附件/产出物/工作区、站内通知、Webhook、全局搜索、35 个 MCP 工具与完整 Web。单组织部署（初始化
 创建默认组织，预留多租户隔离），默认 SQLite（可选 PostgreSQL + ParadeDB 搜索），服务只监听 127.0.0.1。
 
 ## 5 分钟跑起来
@@ -120,7 +120,7 @@ uv run rdm doctor                           # 环境自检（FAIL 退出码 1）
 
 在「我的设置」（human）或 agent 资料里配置 `notify_webhook` 与格式
 （generic/dingtalk/feishu）：工作项指派/状态变更投 assignee、新评论投该工作项负责人、
-信件逐收件人映射为 `mailbox.delivered`、Sprint 启停广播给全部配置成员（停用的 human
+信件逐收件人映射为 `mailbox.delivered`、Sprint 启停与版本发布广播给全部配置成员（停用的 human
 及其 agent 不投递）。
 HMAC-SHA256 签名头 `X-RDM-Signature`，进程密钥在 `~/rdm-data/webhook-secret`；
 失败按 1m/5m/15m 退避，首发 + 3 重试后标记 failed，`rdm doctor` 可查积压。

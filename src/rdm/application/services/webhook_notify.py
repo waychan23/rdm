@@ -19,6 +19,7 @@ from rdm.domain.entities import (
     Message,
     OutboxRow,
     Project,
+    Release,
     Sprint,
     User,
     WorkItem,
@@ -163,6 +164,30 @@ def _human_summary(view: dict[str, Any]) -> tuple[str, list[str]]:
                 text=_excerpt(data.get("body_excerpt", "")),
             )
         )
+    elif event == "release.published":
+        title = tr(
+            "webhook.release_title",
+            default="[{key}] 版本 {name} 已发布",
+            key=key,
+            name=data.get("name"),
+        )
+        lines.append(tr("webhook.release", default="版本: {name}", name=data.get("name")))
+        if data.get("target_date"):
+            lines.append(
+                tr("webhook.release_target", default="计划日期: {date}", date=data["target_date"])
+            )
+        if data.get("released_at"):
+            lines.append(
+                tr("webhook.release_released", default="发布时间: {at}", at=data["released_at"])
+            )
+        if data.get("items"):
+            lines.append(
+                tr(
+                    "webhook.release_items",
+                    default="包含: {items}",
+                    items=", ".join(data["items"]),
+                )
+            )
     elif event in {"sprint.started", "sprint.closed"}:
         title = tr(
             "webhook.sprint_title",
@@ -357,6 +382,35 @@ async def notify_message(
         actor=sender,
         targets=[m.id for m in recipients],
         data=data_base,
+    )
+
+
+async def notify_release(
+    uow: SqlAlchemyUnitOfWork,
+    *,
+    project: Project,
+    release: Release,
+    event_id: int,
+    event_name: str,
+    actor: Actor,
+    payload: dict[str, Any],
+) -> None:
+    snapshot = payload.get("snapshot", {})
+    await enqueue(
+        uow,
+        project=project,
+        event_id=event_id,
+        logical_event=event_name,
+        actor=actor,
+        targets=None,  # broadcast to every member with a webhook
+        data={
+            "release_id": release.id,
+            "name": release.name,
+            "status": str(release.status),
+            "target_date": snapshot.get("target_date"),
+            "released_at": snapshot.get("released_at"),
+            "items": payload.get("items", []),
+        },
     )
 
 

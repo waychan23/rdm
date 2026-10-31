@@ -19,6 +19,7 @@ const labels = {
     PLANNED: "Planned",
     ACTIVE: "Active",
     CLOSED: "Closed",
+    RELEASED: "Released",
     PENDING: "Pending",
     COMPLETED: "Completed",
     REJECTED: "Rejected",

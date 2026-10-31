@@ -24,6 +24,9 @@ from rdm.domain.entities import (
     Project,
     ProjectMember,
     ProjectStatus,
+    Release,
+    ReleaseItem,
+    ReleaseStatus,
     Sprint,
     SprintItem,
     SprintStatus,
@@ -53,6 +56,8 @@ from rdm.infrastructure.db.models import (
     OAuthLoginTicketModel,
     OrganizationModel,
     PasswordTicketModel,
+    ProductReleaseItemModel,
+    ProductReleaseModel,
     ProjectMemberModel,
     ProjectModel,
     SprintItemModel,
@@ -240,6 +245,36 @@ def sprint_to_domain(row: SprintModel) -> Sprint:
         created_at=row.created_at,
         created_by=row.created_by,
         updated_at=row.updated_at,
+        deleted_at=row.deleted_at,
+        deleted_by=row.deleted_by,
+    )
+
+
+def release_to_domain(row: ProductReleaseModel) -> Release:
+    return Release(
+        id=row.id,
+        project_id=row.project_id,
+        name=row.name,
+        description_md=row.description_md,
+        status=ReleaseStatus(row.status),
+        target_date=row.target_date,
+        released_at=row.released_at,
+        manager_user_id=row.manager_user_id,
+        created_at=row.created_at,
+        created_by=row.created_by,
+        updated_at=row.updated_at,
+        deleted_at=row.deleted_at,
+        deleted_by=row.deleted_by,
+    )
+
+
+def release_item_to_domain(row: ProductReleaseItemModel) -> ReleaseItem:
+    return ReleaseItem(
+        id=row.id,
+        release_id=row.release_id,
+        work_item_id=row.work_item_id,
+        added_by=row.added_by,
+        created_at=row.created_at,
         deleted_at=row.deleted_at,
         deleted_by=row.deleted_by,
     )

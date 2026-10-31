@@ -33,6 +33,8 @@ from rdm.domain.entities import (
     PasswordTicket,
     Project,
     ProjectMember,
+    Release,
+    ReleaseItem,
     Sprint,
     SprintItem,
     User,
@@ -52,6 +54,8 @@ TokenList = list[UserToken]
 WorkItemList = list[WorkItem]
 SprintList = list[Sprint]
 SprintItemList = list[SprintItem]
+ReleaseList = list[Release]
+ReleaseItemList = list[ReleaseItem]
 CommentList = list[Comment]
 MailboxList = list[Mailbox]
 MailboxMemberList = list[MailboxMember]
@@ -320,6 +324,36 @@ class SprintItemRepository(Protocol):
     async def list_for_sprint(self, sprint_id: str) -> SprintItemList: ...
 
     async def active_link_for_item(self, work_item_id: str) -> SprintItem | None: ...
+
+
+class ProductReleaseRepository(Protocol):
+    async def add(self, release: Release) -> None: ...
+
+    async def get(self, release_id: str, *, include_deleted: bool = False) -> Release | None: ...
+
+    async def get_by_name(self, project_id: str, name: str) -> Release | None: ...
+
+    async def list(
+        self,
+        project_id: str,
+        *,
+        status: str | None = None,
+        include_deleted: bool = False,
+    ) -> ReleaseList: ...
+
+    async def save_fields(self, release: Release) -> None: ...
+
+    async def save_status(self, release: Release) -> None: ...
+
+
+class ProductReleaseItemRepository(Protocol):
+    async def bulk_add(self, items: Sequence[ReleaseItem]) -> None: ...
+
+    async def remove(self, release_id: str, work_item_id: str, actor_id: str) -> bool: ...
+
+    async def list_for_release(self, release_id: str) -> ReleaseItemList: ...
+
+    async def status_rows(self, release_ids: Sequence[str]) -> list[tuple[str, str]]: ...
 
 
 class CommentRepository(Protocol):
@@ -601,6 +635,8 @@ class UnitOfWork(Protocol):
     workflow_versions: WorkflowVersionRepository
     sprints: SprintRepository
     sprint_items: SprintItemRepository
+    releases: ProductReleaseRepository
+    release_items: ProductReleaseItemRepository
     mailboxes: MailboxRepository
     messages: MessageRepository
     comments: CommentRepository

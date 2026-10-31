@@ -26,6 +26,8 @@ async def test_all_api_paths_have_tags(server, owner_token: str) -> None:
         f"{API}/projects/{{key}}/work-items",
         f"{API}/projects/{{key}}/mailbox",
         f"{API}/projects/{{key}}/sprints",
+        f"{API}/projects/{{key}}/releases",
+        f"{API}/releases/{{release_id}}",
         f"{API}/work-items/{{ref}}/comments",
     }
     assert asserted <= set(paths)
