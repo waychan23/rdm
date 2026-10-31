@@ -190,6 +190,7 @@
     "resource_manage_forbidden": "用户 {user} 不能管理{resource}（仅 Owner/Manager）；如需操作请用 mailbox_send 联系负责人。",
     "this_resource": "该资源",
     "project_access_denied": "项目不存在（或你无权访问）",
+    "delete_forbidden": "用户 {user} 不能删除 {display_id}：仅创建人、manager 或 project_owner 可删除；如需操作请用 mailbox_send 联系负责人。",
     "edit_forbidden": "用户 {user} 不能编辑 {display_id}：仅负责人、参与人、manager 或 project_owner 可编辑；如需接管请先让负责人把工作项指派给你。",
     "assign_forbidden": "用户 {user} 不能指派 {display_id}：未指派时只能自领，其余情况仅负责人、参与人、manager 或 project_owner 可改派。"
   },

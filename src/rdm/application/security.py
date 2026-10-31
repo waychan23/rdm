@@ -201,6 +201,30 @@ def require_can_edit(
     )
 
 
+def can_delete(actor: Actor, item: WorkItem) -> bool:
+    """Deletion is creator-only plus project owners/managers (§17.118)."""
+    if item.created_by is not None and actor.id == item.created_by:
+        return True
+    return bool({"project_owner", "manager"} & set(actor.project_roles(item.project_id)))
+
+
+def require_can_delete(actor: Actor, item: WorkItem, display_id: str) -> None:
+    if can_delete(actor, item):
+        return
+    raise Forbidden(
+        tr(
+            "security.delete_forbidden",
+            default=(
+                "用户 {user} 不能删除 {display_id}：仅创建人、manager 或 project_owner"
+                " 可删除；如需操作请用 mailbox_send 联系负责人。"
+            ),
+            user=actor.label,
+            display_id=display_id,
+        ),
+        details={"user_id": actor.id, "created_by": item.created_by},
+    )
+
+
 def require_can_assign(
     actor: Actor,
     item: WorkItem,

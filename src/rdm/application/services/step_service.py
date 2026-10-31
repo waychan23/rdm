@@ -566,6 +566,8 @@ class StepService:
             "can_assign": can_edit or item.assignee_user_id is None,
             "can_start_steps": is_assignee,
             "can_execute": bool(active_dto is not None and active_dto.get("can_execute")),
+            # Soft delete cascades to the subtree; creator/owner/manager only.
+            "can_delete": security.can_delete(actor, item),
         }
         return {
             "available_steps": available,

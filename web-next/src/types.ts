@@ -126,6 +126,7 @@ export interface WorkItemPermissions {
   can_assign?: boolean;
   can_start_steps?: boolean;
   can_execute?: boolean;
+  can_delete?: boolean;
 }
 
 export interface WorkItemDetailMeta {

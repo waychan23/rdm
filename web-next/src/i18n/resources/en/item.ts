@@ -257,6 +257,10 @@ const item = {
     cancelStepTitle: "Cancel step",
     cancelStepBody:
       "Completed executions are kept after cancelling, and remaining executors no longer need to submit. Cancel this step?",
+    deleteItem: "Delete work item",
+    deleteItemTitle: "Delete work item",
+    deleteItemBody: "Delete {{id}} and all of its children? This is a soft delete and can be restored by an administrator.",
+    itemDeleted: "Deleted {{id}}",
     deleteCommentTitle: "Delete comment",
     deleteCommentBody: "This cannot be undone. Delete this comment?",
     discardCommentTitle: "Discard comment",

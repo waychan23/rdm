@@ -146,6 +146,8 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   const [refreshKey, setRefreshKey] = useState(0);
   const [parentEditing, setParentEditing] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState<Comment | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [editingComment, setEditingComment] = useState<{ id: string; body: string } | null>(
     null,
   );
@@ -623,6 +625,20 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     }
   };
 
+  const deleteItem = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await api.del(`/work-items/${itemId}`);
+      notify.success(t("panel.itemDeleted", { id: bundle?.item.display_id ?? itemId }));
+      setConfirmDelete(false);
+      onClose();
+    } catch (e) {
+      notify.error(t("panel.deleteFailed"), errorCause(e)?.message);
+      setDeleting(false);
+    }
+  };
+
   const saveCommentEdit = async () => {
     if (!editingComment || !editingComment.body.trim()) return;
     try {
@@ -721,6 +737,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     projectRoles.includes("manager");
   const canEdit = Boolean(permissions.can_edit);
   const canAssign = Boolean(permissions.can_assign);
+  const canDelete = Boolean(permissions.can_delete ?? canModerate);
   // Epic has no kind extension table; empty field maps render no editor either.
   const hasKindFields =
     item.kind !== "epic" && Object.keys(item.fields ?? {}).length > 0;
@@ -833,6 +850,15 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         <TextButton data-testid="item-panel-copy-link" onClick={() => void copyLink()}>
           {t("panel.copyLink")}
         </TextButton>
+        {canDelete && (
+          <TextButton
+            danger
+            data-testid="item-panel-delete"
+            onClick={() => setConfirmDelete(true)}
+          >
+            {t("panel.deleteItem")}
+          </TextButton>
+        )}
       </header>
 
       <div className="rdm-item-body">
@@ -1562,6 +1588,20 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         onConfirm={() => void deleteComment()}
       >
         {t("panel.deleteCommentBody")}
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={confirmDelete}
+        title={t("panel.deleteItemTitle")}
+        confirmLabel={t("panel.deleteItem")}
+        danger
+        busy={deleting}
+        testId="item-delete-dialog"
+        onClose={() => {
+          if (!deleting) setConfirmDelete(false);
+        }}
+        onConfirm={() => void deleteItem()}
+      >
+        {t("panel.deleteItemBody", { id: bundle?.item.display_id ?? itemId })}
       </ConfirmDialog>
       <ConfirmDialog
         open={commentCancelConfirm}

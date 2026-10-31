@@ -310,6 +310,24 @@ async def test_permissions_worker_and_cross_project(server, owner_token: str) ->
     )
     assert r.status_code == 201, r.text
 
+    # Delete cascades and is limited to the creator, managers and owners.
+    worker_view = (await client.get(f"{API}/work-items/DEMO-1", headers=auth(worker_token))).json()
+    assert worker_view["meta"]["permissions"]["can_delete"] is True
+    owner_view = await client.get(f"{API}/work-items/DEMO-1", headers=auth(owner_token))
+    assert owner_view.json()["meta"]["permissions"]["can_delete"] is True
+
+    _carol_id, carol_token = await _make_member(client, owner_token, "DEMO", "carol", ["worker"])
+    carol_view = (await client.get(f"{API}/work-items/DEMO-1", headers=auth(carol_token))).json()
+    assert carol_view["meta"]["permissions"]["can_delete"] is False
+    assert (
+        await client.delete(f"{API}/work-items/DEMO-1", headers=auth(carol_token))
+    ).status_code == 403
+
+    # The creator can delete their own item (soft delete).
+    assert (
+        await client.delete(f"{API}/work-items/DEMO-1", headers=auth(worker_token))
+    ).status_code == 200
+
     # cross-project access by a non-owner surfaces as NOT_FOUND
     await _create_project(client, owner_token, "OTHER")
     await client.post(

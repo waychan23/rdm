@@ -190,6 +190,7 @@
     "resource_manage_forbidden": "User {user} cannot manage {resource} (Owner/Manager only); use mailbox_send to contact the owner.",
     "this_resource": "this resource",
     "project_access_denied": "Project not found (or you have no access)",
+    "delete_forbidden": "User {user} cannot delete {display_id}: only the creator, a manager, or a project owner can delete it. Use mailbox_send to contact the owner.",
     "edit_forbidden": "User {user} cannot edit {display_id}: only the assignee, participants, manager or project_owner may edit. To take over, ask the assignee to assign the item to you.",
     "assign_forbidden": "User {user} cannot assign {display_id}: unassigned items can only be self-claimed; otherwise only the assignee, participants, manager or project_owner may reassign."
   },

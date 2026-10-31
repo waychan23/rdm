@@ -1391,9 +1391,7 @@ class WorkItemService:
 
     async def delete_item(self, actor: Actor, ref: str) -> tuple[Project, list[str]]:
         project, item = await self.get_item(actor, ref)
-        security.require_owner_or_manager(
-            actor, project.id, tr("work_item.resource_label", default="工作项")
-        )
+        security.require_can_delete(actor, item, self.display_id(project, item))
         descendants = await self._active_subtree(item.id)
         cascade = [n for n in descendants if n.id != item.id]
         assert self.uow.work_items is not None
