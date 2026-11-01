@@ -50,6 +50,11 @@ const projects = {
       tree: "层级",
     },
     create: "新建",
+    sort: {
+      label: "排序",
+      newest: "创建时间（新→旧）",
+      oldest: "创建时间（旧→新）",
+    },
     filter: {
       status: "状态",
       completion: "完结状态",

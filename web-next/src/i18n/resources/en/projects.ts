@@ -52,6 +52,11 @@ const projects = {
       tree: "Tree",
     },
     create: "New",
+    sort: {
+      label: "Sort",
+      newest: "Created (newest)",
+      oldest: "Created (oldest)",
+    },
     filter: {
       status: "Status",
       completion: "Completion",

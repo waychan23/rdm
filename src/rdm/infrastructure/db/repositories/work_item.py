@@ -101,6 +101,7 @@ class WorkItemRepository:
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
         backlog_only: bool = False,
+        order: str | None = None,
         expand: bool = False,
         include_deleted: bool = False,
         limit: int = 50,
@@ -150,7 +151,14 @@ class WorkItemRepository:
                     WorkItemModel.review_content_md.ilike(pattern),
                 )
             )
-        stmt = stmt.order_by(WorkItemModel.display_no).limit(limit).offset(offset)
+        # display_no is the tiebreaker so equal timestamps keep a stable order.
+        if order == "created_desc":
+            stmt = stmt.order_by(WorkItemModel.created_at.desc(), WorkItemModel.display_no.desc())
+        elif order == "created_asc":
+            stmt = stmt.order_by(WorkItemModel.created_at.asc(), WorkItemModel.display_no.asc())
+        else:
+            stmt = stmt.order_by(WorkItemModel.display_no)
+        stmt = stmt.limit(limit).offset(offset)
         rows = list((await self._s.execute(stmt)).scalars().all())
         fields_map = await self._assemble_fields(rows) if expand and rows else {}
         return [work_item_to_domain(r, fields_map.get(r.id)) for r in rows]

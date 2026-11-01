@@ -241,6 +241,7 @@ class WorkItemRepository(Protocol):
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
         backlog_only: bool = False,
+        order: str | None = None,
         expand: bool = False,
         include_deleted: bool = False,
         limit: int = 50,

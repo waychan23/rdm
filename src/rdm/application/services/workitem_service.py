@@ -298,6 +298,7 @@ class WorkItemService:
         q: str | None = None,
         backlog: bool = False,
         completed: bool | None = None,
+        order: str | None = None,
         include_deleted: bool = False,
         limit: int = 20,
         offset: int = 0,
@@ -366,6 +367,7 @@ class WorkItemService:
                 q=q,
                 include_statuses=include_statuses,
                 exclude_statuses=exclude_statuses,
+                order=order,
                 limit=100_000,
                 offset=0,
             )
@@ -398,6 +400,7 @@ class WorkItemService:
             include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,
             backlog_only=backlog,
+            order=order,
             include_deleted=include_deleted,
             limit=min(limit, 100),
             offset=offset,
@@ -430,6 +433,7 @@ class WorkItemService:
         offset: int,
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
+        order: str | None = None,
     ) -> tuple[Project, list[WorkItem]]:
         assert (
             self.uow.sprints is not None
@@ -474,7 +478,12 @@ class WorkItemService:
             return True
 
         items = [i for i in items if keep(i)]
-        items.sort(key=lambda i: i.display_no)
+        if order == "created_desc":
+            items.sort(key=lambda i: (i.created_at, i.display_no), reverse=True)
+        elif order == "created_asc":
+            items.sort(key=lambda i: (i.created_at, i.display_no))
+        else:
+            items.sort(key=lambda i: i.display_no)
         return project, items[offset : offset + min(limit, 100)]
 
     async def backlog_items(

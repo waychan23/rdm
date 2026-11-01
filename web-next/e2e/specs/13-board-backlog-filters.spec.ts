@@ -78,6 +78,34 @@ test.describe("backlog filters and board terminal columns", () => {
     await expect(doneRow).toHaveCount(0);
   });
 
+  test("list sorts by creation time, newest first by default (RDM-46)", async ({
+    api,
+    app,
+    page,
+  }) => {
+    const projectKey = await api.createSandboxProject();
+    const stamp = Date.now();
+    const older = await api.createItemIn(projectKey, { kind: "task", title: `older-${stamp}` });
+    const newer = await api.createItemIn(projectKey, { kind: "task", title: `newer-${stamp}` });
+
+    await page.goto(`${app.baseURL}/projects/${projectKey}/backlog`);
+    const rows = page.locator('[data-testid^="work-item-row-"]');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toHaveAttribute(
+      "data-testid",
+      `work-item-row-${newer.display_id}`,
+    );
+
+    const sort = page.getByTestId("work-item-filter-order");
+    await sort.getByRole("combobox").click();
+    await page.getByRole("option", { name: "创建时间（旧→新）", exact: true }).click();
+    await expect(page).toHaveURL(/order=created_asc/);
+    await expect(rows.nth(0)).toHaveAttribute(
+      "data-testid",
+      `work-item-row-${older.display_id}`,
+    );
+  });
+
   test("board terminal-column toggle actually hides terminal columns", async ({ app, page }) => {
     await page.goto(`${app.baseURL}${boardPath(app)}`);
     await expect(page.getByTestId("page-board")).toBeVisible();

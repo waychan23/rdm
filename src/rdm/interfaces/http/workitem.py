@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends
 
 from rdm.application.services.history_service import HistoryService
@@ -55,6 +57,7 @@ async def list_work_items(
     q: str | None = None,
     backlog: bool = False,
     completed: bool | None = None,
+    order: Literal["created_asc", "created_desc"] | None = None,
     include_deleted: bool = False,
     limit: int = 20,
     offset: int = 0,
@@ -74,6 +77,7 @@ async def list_work_items(
             q=q,
             backlog=backlog,
             completed=completed,
+            order=order,
             include_deleted=include_deleted,
             limit=limit,
             offset=offset,

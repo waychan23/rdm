@@ -365,6 +365,33 @@ async def test_list_completed_filter(server, owner_token: str) -> None:
     assert r.json()["meta"]["total"] == 2
 
 
+async def test_list_order_by_created(server, owner_token: str) -> None:
+    """The list page sorts by creation time; the default stays display_no (RDM-46)."""
+    client, _settings, _app = server
+    await _create_project(client, owner_token)
+    created: list[str] = []
+    for title in ("first", "second", "third"):
+        r = await client.post(
+            f"{API}/projects/DEMO/work-items",
+            json={"kind": "task", "title": title},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 201, r.text
+        created.append(r.json()["data"]["display_id"])
+
+    async def titles(query: str) -> list[str]:
+        r = await client.get(f"{API}/projects/DEMO/work-items?{query}", headers=auth(owner_token))
+        assert r.status_code == 200, r.text
+        return [item["title"] for item in r.json()["data"]]
+
+    assert await titles("") == ["first", "second", "third"]
+    assert await titles("order=created_asc") == ["first", "second", "third"]
+    assert await titles("order=created_desc") == ["third", "second", "first"]
+
+    r = await client.get(f"{API}/projects/DEMO/work-items?order=bad", headers=auth(owner_token))
+    assert r.status_code == 422
+
+
 async def test_permissions_worker_and_cross_project(server, owner_token: str) -> None:
     client, _settings, _app = server
     await _create_project(client, owner_token, "DEMO")
