@@ -766,3 +766,33 @@ async def test_priority_is_mandatory_and_validated(server, owner_token: str) -> 
             headers=auth(owner_token),
         )
         assert r.status_code == 422, r.text
+
+
+async def test_detail_meta_includes_root_first_ancestors(server, owner_token: str) -> None:
+    """RDM-61: the drawer breadcrumb uses meta.ancestors (root-first)."""
+    client, _settings, _app = server
+    await _create_project(client, owner_token)
+
+    async def create(body: dict) -> dict:
+        r = await client.post(
+            f"{API}/projects/DEMO/work-items", json=body, headers=auth(owner_token)
+        )
+        assert r.status_code == 201, r.text
+        return r.json()["data"]
+
+    epic = await create({"kind": "epic", "title": "epic"})
+    story = await create({"kind": "story", "title": "story", "parent": epic["display_id"]})
+    task = await create({"kind": "task", "title": "task", "parent": story["display_id"]})
+
+    r = await client.get(f"{API}/work-items/{task['display_id']}", headers=auth(owner_token))
+    assert r.status_code == 200, r.text
+    meta = r.json()["meta"]
+    assert [a["display_id"] for a in meta["ancestors"]] == [
+        epic["display_id"],
+        story["display_id"],
+    ]
+    assert meta["parent"]["display_id"] == story["display_id"]
+
+    # The root item has an empty chain.
+    r = await client.get(f"{API}/work-items/{epic['display_id']}", headers=auth(owner_token))
+    assert r.json()["meta"]["ancestors"] == []

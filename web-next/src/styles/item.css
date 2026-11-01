@@ -42,6 +42,57 @@
   flex-shrink: 0;
 }
 
+/* Header breadcrumb: ancestors are clickable, the current item is static.
+   Actions stay pinned to the right regardless of breadcrumb length. */
+.rdm-item-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-050, 4px);
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+.rdm-item-breadcrumb::-webkit-scrollbar {
+  display: none;
+}
+.rdm-item-breadcrumb-link,
+.rdm-item-breadcrumb-current {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-050, 4px);
+  flex-shrink: 0;
+}
+.rdm-item-breadcrumb-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ds-link);
+}
+.rdm-item-breadcrumb-link:hover .rdm-item-breadcrumb-id {
+  text-decoration: underline;
+}
+.rdm-item-breadcrumb-current {
+  color: var(--ds-text-subtle);
+  font-weight: var(--ds-font-weight-medium, 500);
+}
+.rdm-item-breadcrumb-sep {
+  color: var(--ds-text-subtlest);
+  flex-shrink: 0;
+}
+.rdm-item-breadcrumb-id {
+  font-variant-numeric: tabular-nums;
+}
+.rdm-item-head-actions {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-100, 8px);
+  flex-shrink: 0;
+}
+
 .rdm-item-body {
   flex: 1;
   display: flex;

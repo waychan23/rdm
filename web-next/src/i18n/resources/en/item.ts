@@ -161,6 +161,7 @@ const item = {
     loadFailed: "Failed to load the work item, or it has been deleted.",
     backToList: "Back to list",
     close: "Close",
+    breadcrumbLabel: "Hierarchy breadcrumb",
     editFull: "Edit all fields",
     copyLink: "Copy link",
     linkCopied: "Link copied",

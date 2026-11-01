@@ -46,6 +46,23 @@ async def _users_map(uow, project_id: str) -> dict:
     return await MembershipService(uow).users_index(project_id)
 
 
+async def _ancestors(uow, item) -> list:
+    """Root-first ancestor chain for the drawer breadcrumb (cycle-safe)."""
+    assert uow.work_items is not None
+    chain = []
+    seen = {item.id}
+    current = item
+    while current.parent_id and current.parent_id not in seen:
+        parent = await uow.work_items.get(current.parent_id, include_deleted=True)
+        if parent is None:
+            break
+        seen.add(parent.id)
+        chain.append(parent)
+        current = parent
+    chain.reverse()
+    return chain
+
+
 def _split_csv(value: str | None) -> list[str]:
     return [part.strip() for part in (value or "").split(",") if part.strip()]
 
@@ -204,6 +221,7 @@ async def get_work_item(
             if item.parent_id
             else None
         )
+        ancestors = await _ancestors(uow, item)
         engine = await WorkflowVersionService(uow, load_engine()).engine_for(item)
         allowed = engine.allowed(item.kind, item.status, task_type=item_task_type(item))
         data = work_item_out(item, project, members)
@@ -214,6 +232,8 @@ async def get_work_item(
             "parent": work_item_summary_out(parent_item, project, members)
             if parent_item is not None
             else None,
+            # Root-first chain, excluding the current item (drawer breadcrumb).
+            "ancestors": ([work_item_summary_out(a, project, members) for a in ancestors]),
             "allowed_parent_kinds": allowed_parent_kinds(item.kind),
             "allowed_child_kinds": allowed_child_kinds(item.kind),
             **step_meta,

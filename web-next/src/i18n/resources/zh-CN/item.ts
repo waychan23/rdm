@@ -159,6 +159,7 @@ const item = {
     loadFailed: "工作项加载失败或已被删除。",
     backToList: "返回列表",
     close: "关闭",
+    breadcrumbLabel: "层级面包屑",
     editFull: "完整编辑",
     copyLink: "复制链接",
     linkCopied: "链接已复制",

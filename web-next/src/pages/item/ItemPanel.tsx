@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Button from "@atlaskit/button/default/button";
 import IconButton from "@atlaskit/button/icon/button";
@@ -80,6 +80,7 @@ interface Props {
 interface DetailBundle {
   item: WorkItem;
   parent: WorkItem | null;
+  ancestors: WorkItem[];
   children: WorkItem[];
   allowed: string[];
   allowedParentKinds: string[];
@@ -200,6 +201,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
       setBundle({
         item: detail.data,
         parent: meta.parent ?? null,
+        ancestors: meta.ancestors ?? [],
         children: meta.children ?? [],
         allowed: meta.allowed_transitions ?? [],
         allowedParentKinds: meta.allowed_parent_kinds ?? [],
@@ -754,6 +756,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   const {
     item,
     parent,
+    ancestors,
     children,
     allowed,
     allowedParentKinds,
@@ -768,6 +771,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     artifacts,
     sprint,
   } = bundle;
+  const breadcrumb = [...ancestors, item];
   const memberOptions: MemberOption[] = members.map((m) => ({
     label: `${userLabel(m)}${m.type === "agent" ? t("panel.agentSuffix") : ""}`,
     value: m.id,
@@ -884,27 +888,68 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           testId="item-panel-close"
           onClick={onClose}
         />
-        <TypeKindIcon kind={item.kind} />
-        <Text weight="medium" color="color.link" testId="item-panel-display-id">
-          {item.display_id}
-        </Text>
-        {canEdit && (
-          <TextButton data-testid="item-panel-edit" onClick={() => setShowEdit(true)}>
-            {t("panel.editFull")}
+        <nav
+          className="rdm-item-breadcrumb"
+          aria-label={t("panel.breadcrumbLabel")}
+          data-testid="item-panel-breadcrumb"
+        >
+          {breadcrumb.map((node, index) => {
+            const last = index === breadcrumb.length - 1;
+            const label = (
+              <>
+                <TypeKindIcon kind={node.kind} />
+                <span
+                  className="rdm-item-breadcrumb-id"
+                  {...(last ? { "data-testid": "item-panel-display-id" } : {})}
+                >
+                  {node.display_id}
+                </span>
+              </>
+            );
+            return (
+              <Fragment key={node.id}>
+                {index > 0 && (
+                  <span className="rdm-item-breadcrumb-sep" aria-hidden>
+                    /
+                  </span>
+                )}
+                {last ? (
+                  <span className="rdm-item-breadcrumb-current" aria-current="page">
+                    {label}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="rdm-item-breadcrumb-link"
+                    data-testid={`item-panel-ancestor-${node.display_id}`}
+                    onClick={() => onOpenItem(node.id)}
+                  >
+                    {label}
+                  </button>
+                )}
+              </Fragment>
+            );
+          })}
+        </nav>
+        <div className="rdm-item-head-actions">
+          {canEdit && (
+            <TextButton data-testid="item-panel-edit" onClick={() => setShowEdit(true)}>
+              {t("panel.editFull")}
+            </TextButton>
+          )}
+          <TextButton data-testid="item-panel-copy-link" onClick={() => void copyLink()}>
+            {t("panel.copyLink")}
           </TextButton>
-        )}
-        <TextButton data-testid="item-panel-copy-link" onClick={() => void copyLink()}>
-          {t("panel.copyLink")}
-        </TextButton>
-        {canDelete && (
-          <TextButton
-            danger
-            data-testid="item-panel-delete"
-            onClick={() => setConfirmDelete(true)}
-          >
-            {t("panel.deleteItem")}
-          </TextButton>
-        )}
+          {canDelete && (
+            <TextButton
+              danger
+              data-testid="item-panel-delete"
+              onClick={() => setConfirmDelete(true)}
+            >
+              {t("panel.deleteItem")}
+            </TextButton>
+          )}
+        </div>
       </header>
 
       <div className="rdm-item-body">

@@ -137,6 +137,8 @@ export interface WorkItemDetailMeta {
   allowed_transitions?: string[];
   children?: WorkItem[];
   parent?: WorkItem | null;
+  /** Root-first ancestor chain (excluding the current item), for breadcrumbs. */
+  ancestors?: WorkItem[];
   allowed_parent_kinds?: string[];
   allowed_child_kinds?: string[];
   available_steps?: WorkflowStepDef[];
