@@ -136,6 +136,7 @@
     "kind_invalid": "kind 必须是 epic/story/issue/task，收到 {kind!r}",
     "title_required": "title 必填",
     "parent_not_allowed": "{kind} 的父项只能是 {allowed}，收到的父项是 {parent}",
+    "parent_trigger_reason": "由子项 {child} 的状态变更自动触发（{old_status} → {new_status}）",
     "none": "无",
     "row_version_required": "row_version 必填且必须是整数",
     "version_conflict_edit": "{display_id} 已被他人修改（当前版本 {version}），请先 work_item_get 重读再修改。",

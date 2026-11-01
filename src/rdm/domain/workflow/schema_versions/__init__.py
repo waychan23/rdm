@@ -15,6 +15,7 @@ from rdm.domain.workflow.schema_versions.base import (
 
 # Import after ``base`` so subclass registration sees the registry.
 from . import v3 as v3  # noqa: F401,E402
+from . import v4 as v4  # noqa: F401,E402
 
 __all__ = [
     "DefinitionSchema",

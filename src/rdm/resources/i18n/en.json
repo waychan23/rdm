@@ -136,6 +136,7 @@
     "kind_invalid": "kind must be epic/story/issue/task; got {kind!r}",
     "title_required": "title is required",
     "parent_not_allowed": "{kind} can only have parent kinds {allowed}; got parent {parent}",
+    "parent_trigger_reason": "Triggered by child {child} changing status ({old_status} → {new_status})",
     "none": "none",
     "row_version_required": "row_version is required and must be an integer",
     "version_conflict_edit": "{display_id} was modified by someone else (current version {version}); call work_item_get to reload before editing.",

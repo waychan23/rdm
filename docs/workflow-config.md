@@ -1,4 +1,4 @@
-# workflow.json5 配置手册（v3）
+# workflow.json5 配置手册（v4）
 
 > 适用：`src/rdm/resources/workflow.json5`（随包发布的唯一工作流定义）。
 > 相关实现：`src/rdm/domain/workflow/schema.py`、`engine.py`；运行时行为见
@@ -234,6 +234,7 @@
 | `gates` | 否 | `{"目标状态": GateSpec}`，作为所有进入该状态步骤的默认 gate |
 | `fields` | 否 | 开启 reviewer/review_content 与自定义字段 |
 | `subtypes` | 否 | 子类型覆盖；目前用于 `task` |
+| `parent_triggers` | 否 | 子项状态变更触发父项状态变更；见 3.1（v4 新增） |
 | `use` | 否 | 引用 `workflow_defs` 中的命名定义；见 2.1 |
 
 兼容输入：也可以用旧式 `"transitions": {"TODO": ["IN_PROGRESS"]}` 代替 `steps`。
@@ -241,7 +242,61 @@
 的步骤。同一 kind 不能同时声明 `steps` 和 `transitions`。
 
 声明 `use` 时，上表标为必填的 `states/initial/terminal/steps` 由命名定义提供，
-本层不能重复声明（见 2.1）。
+本层不能重复声明（见 2.1）。`parent_triggers` 属于可选语义，命名定义里可以声明，
+kind/subtype 本地声明会整体覆盖；子类型显式写 `parent_triggers: []` 表示不继承。
+
+### 3.1 parent_triggers：子项变更触发父项（schema v4）
+
+工作流定义声明在**子项**的生效定义里；子项状态变化后，引擎按顺序评估规则，
+命中且父项条件满足时，自动把父项流转到目标状态。每次自动流转都会再次评估，
+因此可以沿父链级联（最多 10 层）。
+
+```json5
+{
+  "kinds": {
+    "task": {
+      // ... states / steps ...
+      "parent_triggers": [
+        {
+          // 子项匹配器；三个维度都可省略，省略表示“任意”。
+          "when": {
+            "from": ["TODO"],                 // 子项变更前状态
+            "to": ["IN_PROGRESS"],            // 子项变更后状态
+            "task_types": ["frontend", "backend", "fullstack"] // 仅 task 子类型
+          },
+          // 父项条件与目标。
+          "parent": {
+            "from": ["TODO"],                 // 父项当前必须处于其一；省略=任意非终态
+            "to": "IN_PROGRESS"               // 父项目标状态
+          }
+        },
+        {
+          // 所有直接子项都终态时，把父项从 TO_TEST 推到 DONE。
+          "when": { "to": ["DONE"] },
+          "all_children_terminal": true,
+          "parent": { "from": ["TO_TEST"], "to": "DONE" }
+        }
+      ]
+    }
+  }
+}
+```
+
+执行规则（`WorkItemService._apply_parent_triggers`）：
+
+1. 规则来自**子项的固定定义**（§17.120 快照）；`when.task_types` 只能用于 task 定义，
+   值必须在 `task_types` 目录中。
+2. `when.from/to` 必须是该子项定义里存在的状态；省略表示不限制。
+3. `all_children_terminal=true` 时，只有本次变更后父项的**全部直接子项**都处于各自固定定义的终态才命中。
+4. 父项当前状态必须满足 `parent.from`；省略 `from` 时只允许非终态，且不会重复进入目标状态。
+5. 父项必须能从当前状态经**唯一**一步到达 `parent.to`；同名目标有多个步骤时不自动选择，规则跳过。
+6. 自动流转仍走父项自己的 gate（`required_fields`、`children_all_terminal` 等）；
+   gate 不满足时跳过，不报错。父项存在进行中的步骤时也跳过，避免与人工步骤冲突。
+7. 自动流转写正常的 `work_item.status_changed` 事件（`payload.auto=true`），
+   `reason` 记录触发的子项与前后状态。
+
+注意：生产 `workflow.json5` 目前只升到 `version: 4`、`revision: 3`，**没有声明任何规则**；
+按实际场景配置后需递增 `revision`，并在合并前跑 `rdm workflow validate`。
 
 ---
 

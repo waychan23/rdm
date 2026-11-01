@@ -88,6 +88,72 @@ class GateSpec(BaseModel):
         return not basic and not self.required_fields
 
 
+class ParentTriggerWhen(BaseModel):
+    """Matcher for the child status change that fires a parent trigger (§17.137).
+
+    An absent dimension matches anything. ``task_types`` only applies to task
+    children (the definition that declares the trigger belongs to the child).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
+    from_: tuple[str, ...] = Field(default=(), alias="from")
+    to: tuple[str, ...] = ()
+    task_types: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def _validate(self) -> ParentTriggerWhen:
+        if len(set(self.from_)) != len(self.from_):
+            raise ValueError("parent trigger when.from must be unique")
+        if len(set(self.to)) != len(self.to):
+            raise ValueError("parent trigger when.to must be unique")
+        if len(set(self.task_types)) != len(self.task_types):
+            raise ValueError("parent trigger when.task_types must be unique")
+        return self
+
+    def matches(self, from_state: str, to_state: str, task_type: str | None) -> bool:
+        if self.from_ and from_state not in self.from_:
+            return False
+        if self.to and to_state not in self.to:
+            return False
+        if self.task_types:
+            return task_type is not None and task_type in self.task_types
+        return True
+
+
+class ParentTriggerParent(BaseModel):
+    """Guard and target for the parent side of a trigger."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
+    # Absent means "any non-terminal parent state other than the target".
+    from_: tuple[str, ...] = Field(default=(), alias="from")
+    to: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _validate(self) -> ParentTriggerParent:
+        if len(set(self.from_)) != len(self.from_):
+            raise ValueError("parent trigger parent.from must be unique")
+        return self
+
+
+class ParentTriggerSpec(BaseModel):
+    """A child status change that may cascade to the parent (§17.137).
+
+    Rules live on the child's workflow definition. The engine evaluates them
+    after every status change, including changes caused by another trigger, so
+    cascades can climb more than one level.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    when: ParentTriggerWhen = Field(default_factory=ParentTriggerWhen)
+    parent: ParentTriggerParent
+    # When true the rule only fires if every direct sibling is terminal *after*
+    # this change (i.e. the last non-terminal child just became terminal).
+    all_children_terminal: bool = False
+
+
 class ExecutorRange(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -261,6 +327,8 @@ class SubtypeWorkflow(BaseModel):
     steps: dict[str, tuple[StepSpec, ...]] | None = None
     gates: dict[str, GateSpec] | None = None
     fields: FieldsSpec | None = None
+    # Declaring the key replaces the kind-level rules; absent inherits them.
+    parent_triggers: tuple[ParentTriggerSpec, ...] | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -301,6 +369,7 @@ class KindWorkflow(BaseModel):
     steps: dict[str, tuple[StepSpec, ...]]
     gates: dict[str, GateSpec] = {}
     fields: FieldsSpec = Field(default_factory=FieldsSpec)
+    parent_triggers: tuple[ParentTriggerSpec, ...] = ()
     subtypes: dict[str, SubtypeWorkflow] = {}
 
     @model_validator(mode="before")
@@ -336,6 +405,7 @@ class NamedWorkflow(BaseModel):
     steps: dict[str, tuple[StepSpec, ...]]
     gates: dict[str, GateSpec] = {}
     fields: FieldsSpec = Field(default_factory=FieldsSpec)
+    parent_triggers: tuple[ParentTriggerSpec, ...] = ()
 
     @model_validator(mode="before")
     @classmethod
@@ -432,6 +502,7 @@ class ResolvedKindWorkflow:
     gates: dict[str, GateSpec]
     fields: FieldsSpec
     label_en: str | None = None
+    parent_triggers: tuple[ParentTriggerSpec, ...] = ()
 
     def steps_from(self, state: str) -> tuple[StepSpec, ...]:
         return tuple(self.steps[state])
@@ -586,6 +657,7 @@ class WorkflowSpec(BaseModel):
                 steps=dict(base.steps),
                 gates=dict(base.gates),
                 fields=base.fields,
+                parent_triggers=base.parent_triggers,
             )
             self._validate_resolved(resolved, _seen | {key})
             return resolved
@@ -601,6 +673,9 @@ class WorkflowSpec(BaseModel):
         )
         gates = dict(subtype.gates) if subtype.gates is not None else dict(base.gates)
         fields = _merge_fields(base.fields, subtype.fields)
+        triggers = (
+            subtype.parent_triggers if subtype.parent_triggers is not None else base.parent_triggers
+        )
         resolved = ResolvedKindWorkflow(
             kind=kind,
             task_type=key[1],
@@ -612,6 +687,7 @@ class WorkflowSpec(BaseModel):
             steps=steps,
             gates=gates,
             fields=fields,
+            parent_triggers=triggers,
         )
         self._validate_resolved(resolved, _seen | {key})
         return resolved
@@ -681,3 +757,13 @@ class WorkflowSpec(BaseModel):
                     f"{resolved.kind}: custom field {custom_field.key!r} collides with a "
                     "master field"
                 )
+        for index, trigger in enumerate(resolved.parent_triggers):
+            where = f"{resolved.kind}: parent_triggers[{index}]"
+            unknown_states = sorted((set(trigger.when.from_) | set(trigger.when.to)) - state_set)
+            if unknown_states:
+                raise ValueError(f"{where}: unknown child states {unknown_states}")
+            unknown_types = sorted(set(trigger.when.task_types) - set(self.task_types))
+            if unknown_types:
+                raise ValueError(f"{where}: unknown task types {unknown_types}")
+            if trigger.when.task_types and resolved.kind != "task":
+                raise ValueError(f"{where}: when.task_types is only valid for task definitions")

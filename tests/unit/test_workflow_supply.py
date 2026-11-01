@@ -14,7 +14,7 @@ def test_json5_loads_and_engine_is_singleton() -> None:
     assert spec1 is spec2
     assert load_engine() is load_engine()
     raw = pyjson5.loads(load_spec_text())
-    assert raw["version"] == 3
+    assert raw["version"] == 4
     assert "kinds" in raw and "task_types" in raw
 
 

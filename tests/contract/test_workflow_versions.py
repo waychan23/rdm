@@ -80,23 +80,25 @@ async def test_config_schema_version_change_creates_new_version(
 ) -> None:
     from rdm.domain.workflow.schema_versions import base, v3
 
-    class SchemaV4(v3.SchemaV3):
-        schema_version = 4
+    # A throwaway strategy keeps this test independent of the packaged schema
+    # version (currently 4 with parent triggers, §17.137).
+    class SchemaTest(v3.SchemaV3):
+        schema_version = 105
 
     try:
         first = await WorkflowVersionService(uow, load_engine()).ensure("story", None)
 
-        schema_engine = WorkflowEngine(_modified_spec(version=4))
+        schema_engine = WorkflowEngine(_modified_spec(version=105))
         second = await WorkflowVersionService(uow, schema_engine).ensure(
             "story", None, resolved=schema_engine.resolve("story")
         )
 
         assert second.id != first.id
         assert second.version == 2
-        assert second.config_schema_version == 4
-        assert second.definition["format"] == 4
+        assert second.config_schema_version == 105
+        assert second.definition["format"] == 105
     finally:
-        base._REGISTRY.pop(4, None)
+        base._REGISTRY.pop(105, None)
 
 
 async def test_config_version_only_change_reuses_latest(

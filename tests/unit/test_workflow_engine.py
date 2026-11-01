@@ -14,7 +14,7 @@ def engine() -> WorkflowEngine:
 
 def test_spec_has_all_kinds_and_version() -> None:
     spec = load_spec()
-    assert spec.version == 3
+    assert spec.version == 4
     assert set(spec.kinds) == {"epic", "story", "issue", "task", "sprint"}
 
 
