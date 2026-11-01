@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import TextButton from "../../components/TextButton";
 import type { MarkdownImageClick } from "../../components/MarkdownText";
+import { sanitizeHoursInput } from "../../lib/format";
 import type { WorkItem } from "../../types";
 import { severityOptions } from "../../workitems/constants";
 import {
@@ -152,7 +153,9 @@ export default function WorkItemFieldsView({
           : String(fields.est_work_hours)}
         canEdit={canEdit}
         emptyText="—"
-        inputType="number"
+        inputType="text"
+        inputMode="decimal"
+        sanitize={sanitizeHoursInput}
         editLabel={t("fieldsView.editEstHours")}
         renderView={hoursText}
         onSave={(next) =>
@@ -168,7 +171,9 @@ export default function WorkItemFieldsView({
           : String(fields.actual_work_hours)}
         canEdit={canEdit}
         emptyText="—"
-        inputType="number"
+        inputType="text"
+        inputMode="decimal"
+        sanitize={sanitizeHoursInput}
         editLabel={t("fieldsView.editActualHours")}
         renderView={hoursText}
         onSave={(next) =>

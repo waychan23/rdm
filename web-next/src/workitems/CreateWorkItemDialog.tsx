@@ -21,6 +21,7 @@ import WorkItemPicker, { type WorkItemOption } from "../components/WorkItemPicke
 import { api, errorCause } from "../lib/api";
 import { useCurrentUser } from "../lib/auth";
 import { useNotify } from "../lib/flags";
+import { parseHoursInput } from "../lib/format";
 import { portalMenuProps } from "../lib/portalMenu";
 import type { WorkflowDto, WorkflowFields, WorkItem } from "../types";
 import { kindOptions, taskTypeOptions } from "./constants";
@@ -95,7 +96,7 @@ export default function CreateWorkItemDialog({
     actual: "",
     sourceStory: null,
   });
-  const [task, setTask] = useState<TaskFields>({ task_type: "other", est_work_hours: 0 });
+  const [task, setTask] = useState<TaskFields>({ task_type: "other", est_work_hours: "0" });
   const [workflow, setWorkflow] = useState<WorkflowDto | null>(null);
   const [people, setPeople] = useState<OptionalFieldValues>(emptyOptionalValues(null));
   const [saving, setSaving] = useState(false);
@@ -144,7 +145,7 @@ export default function CreateWorkItemDialog({
       actual: "",
       sourceStory: null,
     });
-    setTask({ task_type: "other", est_work_hours: 0 });
+    setTask({ task_type: "other", est_work_hours: "0" });
     setPeople(emptyOptionalValues(identityId));
     // Callers may pass inline arrays; only re-seed on open / kind-set change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -199,7 +200,7 @@ export default function CreateWorkItemDialog({
       }
       if (kind === "task") {
         payload.task_type = task.task_type;
-        payload.est_work_hours = task.est_work_hours;
+        payload.est_work_hours = parseHoursInput(task.est_work_hours);
       }
       payload.participants = people.participants;
       if (people.assignee) payload.assignee = people.assignee;

@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import FormField from "../components/FormField";
 import MarkdownEditor from "../components/MarkdownEditor";
 import WorkItemPicker, { type WorkItemOption } from "../components/WorkItemPicker";
+import { sanitizeHoursInput } from "../lib/format";
 import { portalMenuProps } from "../lib/portalMenu";
 import { severityOptions, taskTypeOptions } from "./constants";
 
@@ -20,7 +21,8 @@ export interface IssueFields {
 
 export interface TaskFields {
   task_type: string;
-  est_work_hours: number;
+  /** Raw input text so "0." and leading zeros are not lost while typing. */
+  est_work_hours: string;
 }
 
 interface Props {
@@ -146,12 +148,16 @@ export default function KindSpecificFields({
         <FormField label={t("kind.estHours")} htmlFor="wi-est-hours">
           <Textfield
             id="wi-est-hours"
-            type="number"
-            min={0}
-            step={0.5}
+            type="text"
+            inputMode="decimal"
             value={task.est_work_hours}
             testId="wi-est-hours"
-            onChange={(e) => onTask({ ...task, est_work_hours: Number(e.currentTarget.value) })}
+            onChange={(e) =>
+              onTask({
+                ...task,
+                est_work_hours: sanitizeHoursInput(e.currentTarget.value),
+              })
+            }
           />
         </FormField>
       </Stack>

@@ -267,6 +267,9 @@ interface InlineTextFieldProps {
   placeholder?: string;
   editLabel: string;
   inputType?: "text" | "number";
+  inputMode?: "text" | "numeric" | "decimal";
+  /** Normalizes each keystroke before it reaches the field state. */
+  sanitize?: (raw: string) => string;
   maxLength?: number;
   readClassName?: string;
   validate?: (value: string) => string | undefined;
@@ -284,6 +287,8 @@ export function InlineTextField({
   placeholder,
   editLabel,
   inputType = "text",
+  inputMode,
+  sanitize,
   maxLength,
   readClassName,
   validate,
@@ -340,12 +345,19 @@ export function InlineTextField({
               <Textfield
                 value={String(fieldProps.value ?? "")}
                 type={inputType}
+                inputMode={inputMode}
                 maxLength={maxLength}
                 placeholder={placeholder}
                 autoFocus
                 isDisabled={saving}
                 testId={`${testId}-input`}
-                onChange={(event) => fieldProps.onChange(event.currentTarget.value)}
+                onChange={(event) =>
+                  fieldProps.onChange(
+                    sanitize
+                      ? sanitize(event.currentTarget.value)
+                      : event.currentTarget.value,
+                  )
+                }
               />
               <EditorFooter
                 errorMessage={fieldProps.errorMessage}
