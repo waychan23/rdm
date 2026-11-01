@@ -289,8 +289,8 @@ export default function WorkItemPickerDialog({
       {open && (
         <ModalDialog
           onClose={onClose}
-          width="calc(100vw * 2 / 7)"
-          height="50vh"
+          width="50vw"
+          height="60vh"
           testId="work-item-picker-dialog"
         >
           <ModalHeader>

@@ -121,6 +121,11 @@ test("picker filters and keeps selections across filters", async ({ api, app, pa
 
   const picker = page.getByTestId("work-item-picker-dialog");
   await expect(picker).toBeVisible();
+  // RDM-39 feedback: half the viewport wide, 3/5 tall.
+  const pickerBox = await picker.boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(pickerBox!.width).toBeGreaterThanOrEqual(viewport.width * 0.45);
+  expect(pickerBox!.height).toBeGreaterThanOrEqual(viewport.height * 0.55);
   await picker.getByTestId(`work-item-picker-row-${urgent.display_id}`).click();
   await expect(picker.getByTestId("work-item-picker-selected")).toContainText("1");
 
