@@ -379,7 +379,15 @@ export default function WorkItemToolbar({
             }}
           />
         </Box>
+      </Inline>
 
+      {/* Sort sits with the filters; create/refresh are the page actions. */}
+      <Inline
+        space="space.100"
+        alignBlock="center"
+        spread="space-between"
+        testId="work-item-toolbar-actions"
+      >
         <Box xcss={styles.order} testId="work-item-filter-order">
           <Select<Option>
             options={orderOptions}
@@ -395,26 +403,28 @@ export default function WorkItemToolbar({
           />
         </Box>
 
-        {showRefresh && onRefresh && (
-          <Button
-            appearance="subtle"
-            spacing="compact"
-            testId="work-item-refresh"
-            onClick={onRefresh}
-          >
-            {t("workItemFilters.refresh")}
-          </Button>
-        )}
+        <Inline space="space.100" alignBlock="center">
+          {showRefresh && onRefresh && (
+            <Button
+              appearance="subtle"
+              spacing="compact"
+              testId="work-item-refresh"
+              onClick={onRefresh}
+            >
+              {t("workItemFilters.refresh")}
+            </Button>
+          )}
 
-        {showCreate && onCreate && (
-          <Button
-            appearance="primary"
-            testId="work-item-create-button"
-            onClick={onCreate}
-          >
-            {t("workItemFilters.create")}
-          </Button>
-        )}
+          {showCreate && onCreate && (
+            <Button
+              appearance="primary"
+              testId="work-item-create-button"
+              onClick={onCreate}
+            >
+              {t("workItemFilters.create")}
+            </Button>
+          )}
+        </Inline>
       </Inline>
 
       {activeSprint && (
