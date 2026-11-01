@@ -7,6 +7,7 @@ import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/ad
 import Button from "@atlaskit/button/default/button";
 import Checkbox from "@atlaskit/checkbox";
 import EmptyState from "@atlaskit/empty-state";
+import Select from "@atlaskit/select";
 import Spinner from "@atlaskit/spinner";
 import { Box, Inline } from "@atlaskit/primitives/compiled";
 
@@ -19,7 +20,8 @@ import { useRestoreScroll } from "../hooks/useRestoreScroll";
 import { useListOrigin, useListSearchParams } from "../lib/originSearch";
 import { recall, remember } from "../lib/pageCache";
 import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
-import type { WorkItem, WorkflowDto } from "../types";
+import { portalMenuProps } from "../lib/portalMenu";
+import type { Sprint, WorkItem, WorkflowDto } from "../types";
 import { kindOptions } from "../workitems/constants";
 import BoardCard from "./board/BoardCard";
 import BoardColumn from "./board/BoardColumn";
@@ -29,7 +31,8 @@ interface BoardSnapshot {
   workflow: WorkflowDto;
 }
 
-const boardCacheKey = (projectKey: string, kind: string) => `board|${projectKey}|${kind}`;
+const boardCacheKey = (projectKey: string, kind: string, sprint: string) =>
+  `board|${projectKey}|${kind}|${sprint}`;
 
 const styles = cssMap({
   // Scroll container. The board row inside grows with its tallest column, so
@@ -60,6 +63,9 @@ const styles = cssMap({
     justifyContent: "center",
     flex: "1",
   },
+  sprintFilter: {
+    width: "180px",
+  },
 });
 
 export default function BoardPage() {
@@ -74,11 +80,18 @@ export default function BoardPage() {
   const [searchParams, setSearchParams] = useListSearchParams();
   const listOrigin = useListOrigin();
   const kind = searchParams.get("kind") ?? "task";
+  const sprint = searchParams.get("sprint") ?? "";
   const showTerminal = searchParams.get("showTerminal") !== "false";
   const setKind = (next: string) => {
     const params = new URLSearchParams(searchParams);
     if (next === "task") params.delete("kind");
     else params.set("kind", next);
+    setSearchParams(params, { replace: true });
+  };
+  const setSprint = (next: string | null) => {
+    const params = new URLSearchParams(searchParams);
+    if (next) params.set("sprint", next);
+    else params.delete("sprint");
     setSearchParams(params, { replace: true });
   };
   const setShowTerminal = (next: boolean) => {
@@ -87,7 +100,22 @@ export default function BoardPage() {
     else params.set("showTerminal", "false");
     setSearchParams(params, { replace: true });
   };
-  const initialSnapshot = recall<BoardSnapshot>(boardCacheKey(projectKey, kind));
+  const [sprints, setSprints] = useState<Sprint[]>([]);
+  useEffect(() => {
+    let alive = true;
+    api
+      .get<Sprint[]>(`/projects/${projectKey}/sprints`)
+      .then((res) => {
+        if (alive) setSprints(res.data);
+      })
+      .catch(() => {
+        // The filter stays empty; the board itself still works unfiltered.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [projectKey]);
+  const initialSnapshot = recall<BoardSnapshot>(boardCacheKey(projectKey, kind, sprint));
   const [items, setItems] = useState<WorkItem[]>(initialSnapshot?.items ?? []);
   const [workflow, setWorkflow] = useState<WorkflowDto | null>(
     initialSnapshot?.workflow ?? null,
@@ -96,12 +124,12 @@ export default function BoardPage() {
   const [error, setError] = useState<unknown>(null);
 
   // Latest values for the (mount-once) drop monitor.
-  const stateRef = useRef({ items, workflow, kind, projectKey });
-  stateRef.current = { items, workflow, kind, projectKey };
+  const stateRef = useRef({ items, workflow, kind, sprint, projectKey });
+  stateRef.current = { items, workflow, kind, sprint, projectKey };
 
   const load = useCallback(
-    async (nextKind: string, initial = false) => {
-      const cacheKey = boardCacheKey(projectKey, nextKind);
+    async (nextKind: string, nextSprint: string, initial = false) => {
+      const cacheKey = boardCacheKey(projectKey, nextKind, nextSprint);
       const snapshot = initial ? recall<BoardSnapshot>(cacheKey) : undefined;
       if (snapshot) {
         setWorkflow(snapshot.workflow);
@@ -111,6 +139,7 @@ export default function BoardPage() {
       setError(null);
       try {
         const params = new URLSearchParams({ kind: nextKind, limit: "200" });
+        if (nextSprint) params.set("sprint", nextSprint);
         const [wf, list] = await Promise.all([
           initial || !stateRef.current.workflow
             ? api.get<WorkflowDto>("/workflow")
@@ -132,10 +161,10 @@ export default function BoardPage() {
   );
 
   useEffect(() => {
-    load(kind, true);
-    // load identity is stable; reload when the kind filter changes.
+    load(kind, sprint, true);
+    // load identity is stable; reload when the kind/sprint filters change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind]);
+  }, [kind, sprint]);
 
   const handleDrop = useCallback(
     async (itemId: string, target: string) => {
@@ -177,7 +206,7 @@ export default function BoardPage() {
           note_md: null,
         });
         notify.success(`${item.display_id} → ${target}`);
-        await load(stateRef.current.kind);
+        await load(stateRef.current.kind, stateRef.current.sprint);
       } catch (e) {
         setItems((prev) =>
           prev.map((i) => (i.id === item.id ? { ...i, status: previous } : i)),
@@ -236,6 +265,11 @@ export default function BoardPage() {
     }));
   }, [workflow, kind, showTerminal, items]);
 
+  const sprintOptions = useMemo(
+    () => sprints.map((s) => ({ label: s.name, value: s.id })),
+    [sprints],
+  );
+
   const openItem = (item: WorkItem) => {
     // From the drawer backdrop the board URL (not the item route) is the origin.
     const from = listOrigin ?? location.pathname + location.search;
@@ -250,6 +284,18 @@ export default function BoardPage() {
         testId="board-header"
         actions={
           <Inline space="space.100" alignBlock="center">
+            <Box xcss={styles.sprintFilter} testId="board-sprint-filter">
+              <Select<{ label: string; value: string }>
+                {...portalMenuProps}
+                options={sprintOptions}
+                value={sprintOptions.find((o) => o.value === sprint) ?? null}
+                onChange={(opt) => setSprint((opt as { value: string } | null)?.value ?? null)}
+                isClearable
+                spacing="compact"
+                placeholder={t("board.sprintFilter")}
+                testId="board-sprint-select"
+              />
+            </Box>
             <Inline space="space.050" alignBlock="center" testId="board-kind-filter">
               {kindOptions().map((k) => (
                 <Button
@@ -275,7 +321,7 @@ export default function BoardPage() {
 
       <Box xcss={styles.board} testId="board-columns">
         {error ? (
-          <ErrorState error={error} onRetry={() => load(kind, true)} testId="board-error" />
+          <ErrorState error={error} onRetry={() => load(kind, sprint, true)} testId="board-error" />
         ) : loading ? (
           <Box xcss={styles.loading} testId="board-loading">
             <Spinner size="large" />
