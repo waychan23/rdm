@@ -775,7 +775,8 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   const memberOptions: MemberOption[] = members.map((m) => ({
     label: `${userLabel(m)}${m.type === "agent" ? t("panel.agentSuffix") : ""}`,
     value: m.id,
-    name: m.name,
+    // Read view shows the display name (§17.116); `name` stays the handle.
+    name: userLabel(m),
   }));
   const currentPriority = priorityOption(item.priority).value;
   const identityId = me?.identity.id ?? me?.user.id ?? null;
