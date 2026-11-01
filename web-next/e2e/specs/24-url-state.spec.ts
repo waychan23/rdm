@@ -75,12 +75,19 @@ test.describe("URL-backed filter state", () => {
     page,
   }) => {
     await page.goto(`${app.baseURL}/projects/${app.projectKey}/board`);
-    await page.getByTestId("board-kind-story").click();
+    // Kinds are a multi-select; leaving only story writes kind=story.
+    const kindFilter = page.getByTestId("board-kind-filter");
+    await kindFilter.getByRole("combobox").click();
+    await page.getByRole("option", { name: "缺陷", exact: true }).click();
+    // Atlaskit closes the multi menu after each pick.
+    await kindFilter.getByRole("combobox").click();
+    await page.getByRole("option", { name: "任务", exact: true }).click();
     await page.getByRole("checkbox", { name: "显示终态列" }).click();
     await expect(page).toHaveURL(/kind=story/);
     await expect(page).toHaveURL(/showTerminal=false/);
     await page.reload();
     await expect(page).toHaveURL(/kind=story/);
+    await expect(page.getByTestId("board-kind-filter")).toContainText("需求");
     await expect(page.getByRole("checkbox", { name: "显示终态列" })).not.toBeChecked();
 
     await page.goto(`${app.baseURL}/projects/${app.projectKey}/mailbox`);

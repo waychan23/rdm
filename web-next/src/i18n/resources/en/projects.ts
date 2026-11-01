@@ -79,6 +79,9 @@ const projects = {
   board: {
     title: "Board",
     sprintFilter: "All sprints",
+    sprintDates: "{{start}} ~ {{end}}",
+    kindFilter: "Item types",
+    rootOnly: "Top-level items only",
     showTerminal: "Show terminal columns",
     empty: "No workflow columns for this type",
     stepRequiredTitle: "Use the work item detail to run this step",

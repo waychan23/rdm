@@ -75,6 +75,9 @@ const projects = {
   board: {
     title: "看板",
     sprintFilter: "全部迭代",
+    sprintDates: "{{start}} ~ {{end}}",
+    kindFilter: "工作项类型",
+    rootOnly: "仅展示一级工作项",
     showTerminal: "显示终态列",
     empty: "该类型暂无工作流列",
     stepRequiredTitle: "请在工作项详情中执行步骤",
