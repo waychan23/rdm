@@ -1,5 +1,18 @@
 import { expect, test } from "../support/fixtures";
 import { boardPath } from "../support/ui";
+import type { Api, Item } from "../support/api";
+
+/** A plain task (task_standard) reaches DONE through two direct steps. */
+async function completeTask(api: Api, item: Item): Promise<void> {
+  for (const to of ["IN_PROGRESS", "DONE"]) {
+    const fresh = await api.getItem(item.display_id, "alice");
+    await api.post(
+      `/work-items/${item.display_id}/transition`,
+      { to, row_version: fresh.data.row_version },
+      "alice",
+    );
+  }
+}
 
 test.describe("backlog filters and board terminal columns", () => {
   test("multi-kind filter shows only the selected kinds", async ({ api, app, page }) => {
@@ -24,6 +37,45 @@ test.describe("backlog filters and board terminal columns", () => {
     await page.getByRole("checkbox", { name: "缺陷" }).click();
     await expect(page.getByTestId(`work-item-row-${story.display_id}`)).toBeVisible();
     await expect(page.getByTestId(`work-item-row-${issue.display_id}`)).toBeVisible();
+  });
+
+  test("completed filter narrows the list to terminal states (RDM-45)", async ({
+    api,
+    app,
+    page,
+  }) => {
+    const projectKey = await api.createSandboxProject();
+    const stamp = Date.now();
+    const done = await api.createItemIn(projectKey, {
+      kind: "task",
+      title: `completed-${stamp}`,
+      assignee: "alice",
+    });
+    const open = await api.createItemIn(projectKey, {
+      kind: "task",
+      title: `open-${stamp}`,
+      assignee: "alice",
+    });
+    await completeTask(api, done);
+
+    await page.goto(`${app.baseURL}/projects/${projectKey}/backlog`);
+    const doneRow = page.getByTestId(`work-item-row-${done.display_id}`);
+    const openRow = page.getByTestId(`work-item-row-${open.display_id}`);
+    await expect(doneRow).toBeVisible();
+    await expect(openRow).toBeVisible();
+
+    const filter = page.getByTestId("work-item-filter-completed");
+    await filter.getByRole("combobox").click();
+    await page.getByRole("option", { name: "已完结", exact: true }).click();
+    await expect(page).toHaveURL(/completed=true/);
+    await expect(doneRow).toBeVisible();
+    await expect(openRow).toHaveCount(0);
+
+    await filter.getByRole("combobox").click();
+    await page.getByRole("option", { name: "未完结", exact: true }).click();
+    await expect(page).toHaveURL(/completed=false/);
+    await expect(openRow).toBeVisible();
+    await expect(doneRow).toHaveCount(0);
   });
 
   test("board terminal-column toggle actually hides terminal columns", async ({ app, page }) => {

@@ -52,6 +52,9 @@ const projects = {
     create: "新建",
     filter: {
       status: "状态",
+      completion: "完结状态",
+      completed: "已完结",
+      uncompleted: "未完结",
       assignee: "负责人",
       reviewer: "评审人",
       search: "搜索标题/评审意见",

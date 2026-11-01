@@ -98,6 +98,7 @@ class WorkItemRepository:
         reviewer_user_id: str | None = None,
         parent_id: str | None = None,
         q: str | None = None,
+        include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
         backlog_only: bool = False,
         expand: bool = False,
@@ -114,6 +115,8 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.kind.in_(list(kinds)))
         if status is not None:
             stmt = stmt.where(WorkItemModel.status == status)
+        if include_statuses is not None:
+            stmt = stmt.where(WorkItemModel.status.in_(list(include_statuses)))
         if exclude_statuses:
             stmt = stmt.where(WorkItemModel.status.notin_(list(exclude_statuses)))
         if backlog_only:
@@ -163,6 +166,7 @@ class WorkItemRepository:
         reviewer_user_id: str | None = None,
         parent_id: str | None = None,
         q: str | None = None,
+        include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
         backlog_only: bool = False,
         include_deleted: bool = False,
@@ -180,6 +184,8 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.kind.in_(list(kinds)))
         if status is not None:
             stmt = stmt.where(WorkItemModel.status == status)
+        if include_statuses is not None:
+            stmt = stmt.where(WorkItemModel.status.in_(list(include_statuses)))
         if exclude_statuses:
             stmt = stmt.where(WorkItemModel.status.notin_(list(exclude_statuses)))
         if backlog_only:

@@ -289,6 +289,82 @@ async def test_list_filters_and_q(server, owner_token: str) -> None:
     assert {i["display_id"] for i in r.json()["data"]} == {"DEMO-1", "DEMO-2"}
 
 
+async def _complete_task(client: httpx.AsyncClient, token: str, item: dict) -> dict:
+    """Drive a task through the workflow to DONE."""
+    version = item["row_version"]
+    for to in ("IN_PROGRESS", "TO_REVIEW"):
+        r = await client.post(
+            f"{API}/work-items/{item['display_id']}/transition",
+            json={"to": to, "row_version": version},
+            headers=auth(token),
+        )
+        assert r.status_code == 200, r.text
+        version = r.json()["data"]["row_version"]
+    # The DONE gate requires a review comment before the step can start.
+    r = await client.patch(
+        f"{API}/work-items/{item['display_id']}",
+        json={"row_version": version, "review_content_md": "自测通过"},
+        headers=auth(token),
+    )
+    assert r.status_code == 200, r.text
+    version = r.json()["data"]["row_version"]
+    r = await client.post(
+        f"{API}/work-items/{item['display_id']}/steps/CODE_REVIEW",
+        json={"row_version": version, "executors": ["dev"], "note_md": None},
+        headers=auth(token),
+    )
+    assert r.status_code == 200, r.text
+    step = r.json()["meta"]["active_step"]
+    r = await client.post(
+        f"{API}/work-item-steps/{step['id']}/execute",
+        json={"note_md": "self review"},
+        headers=auth(token),
+    )
+    assert r.status_code == 200, r.text
+    done = r.json()["data"]
+    assert done["status"] == "DONE"
+    return done
+
+
+async def test_list_completed_filter(server, owner_token: str) -> None:
+    """`completed` filters by terminal state, which differs per workflow (RDM-45)."""
+    client, _settings, _app = server
+    await _create_project(client, owner_token)
+    _dev_id, dev_token = await _make_member(client, owner_token, "DEMO", "dev", ["worker"])
+
+    async def create(title: str) -> dict:
+        r = await client.post(
+            f"{API}/projects/DEMO/work-items",
+            json={"kind": "task", "title": title, "assignee": "dev"},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 201, r.text
+        return r.json()["data"]
+
+    done_item = await create("done task")
+    open_item = await create("open task")
+    epic = await client.post(
+        f"{API}/projects/DEMO/work-items",
+        json={"kind": "epic", "title": "open epic"},
+        headers=auth(owner_token),
+    )
+    assert epic.status_code == 201, epic.text
+    await _complete_task(client, dev_token, done_item)
+
+    async def ids(query: str) -> set[str]:
+        r = await client.get(f"{API}/projects/DEMO/work-items?{query}", headers=auth(owner_token))
+        assert r.status_code == 200, r.text
+        return {item["display_id"] for item in r.json()["data"]}
+
+    assert await ids("completed=true") == {done_item["display_id"]}
+    assert await ids("completed=false") == {open_item["display_id"], "DEMO-3"}
+    # Meta total follows the same filter (pagination is computed from it).
+    r = await client.get(
+        f"{API}/projects/DEMO/work-items?completed=false", headers=auth(owner_token)
+    )
+    assert r.json()["meta"]["total"] == 2
+
+
 async def test_permissions_worker_and_cross_project(server, owner_token: str) -> None:
     client, _settings, _app = server
     await _create_project(client, owner_token, "DEMO")

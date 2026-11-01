@@ -54,6 +54,9 @@ const projects = {
     create: "New",
     filter: {
       status: "Status",
+      completion: "Completion",
+      completed: "Completed",
+      uncompleted: "Open",
       assignee: "Assignee",
       reviewer: "Reviewer",
       search: "Search title or review comment",

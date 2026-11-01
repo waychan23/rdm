@@ -134,6 +134,10 @@ function BacklogView({ projectKey }: { projectKey: string }) {
     ? kindsParam.split(",").filter(Boolean)
     : ["epic", "story", "issue", "task"];
   const statusValue = searchParams.get("status") ?? "";
+  const completedValue = searchParams.get("completed");
+  // Terminal states differ per workflow, so "completed" is resolved server-side.
+  const completed: boolean | null =
+    completedValue === "true" ? true : completedValue === "false" ? false : null;
   const assigneeValue = searchParams.get("assignee") ?? "";
   const reviewerValue = searchParams.get("reviewer") ?? "";
   const q = searchParams.get("q") ?? "";
@@ -182,6 +186,14 @@ function BacklogView({ projectKey }: { projectKey: string }) {
     return [...states].map((s) => ({ label: statusLabel(s), value: s }));
   }, [workflowState.data, t]);
 
+  const completedOptions = useMemo<Option[]>(
+    () => [
+      { label: t("backlog.filter.uncompleted"), value: "false" },
+      { label: t("backlog.filter.completed"), value: "true" },
+    ],
+    [t],
+  );
+
   const assigneeOptions = useMemo<Option[]>(() => {
     return [
       { label: t("backlog.filter.mine"), value: "me" },
@@ -204,6 +216,10 @@ function BacklogView({ projectKey }: { projectKey: string }) {
         value: assigneeValue,
       })
     : null;
+  const completedOption =
+    completed === null
+      ? null
+      : (completedOptions.find((o) => o.value === String(completed)) ?? null);
   const reviewer = reviewerValue
     ? (assigneeOptions.find((o) => o.value === reviewerValue) ?? {
         label: reviewerValue,
@@ -215,11 +231,12 @@ function BacklogView({ projectKey }: { projectKey: string }) {
     const params = new URLSearchParams();
     if (kinds.length > 0) params.set("kind", kinds.join(","));
     if (status) params.set("status", status.value);
+    if (completed !== null) params.set("completed", String(completed));
     if (assignee) params.set("assignee", assignee.value === "me" ? "me" : assignee.value);
     if (reviewer) params.set("reviewer", reviewer.value === "me" ? "me" : reviewer.value);
     if (q) params.set("q", q);
     return params.toString();
-  }, [kinds, status, assignee, reviewer, q]);
+  }, [kinds, status, completed, assignee, reviewer, q]);
 
   // Re-fetch only when the request actually changes: the tree loads the whole
   // filtered set once, so paging its roots must not hit the network again.
@@ -351,6 +368,16 @@ function BacklogView({ projectKey }: { projectKey: string }) {
             onChange={(e) => toggleKind(k.value, e.currentTarget.checked)}
           />
         ))}
+        <Box xcss={pageStyles.filterWidth} testId="work-item-filter-completed">
+          <Select<Option>
+            options={completedOptions}
+            value={completedOption}
+            onChange={(opt) => patchParams({ completed: (opt as Option | null)?.value ?? null })}
+            isClearable
+            spacing="compact"
+            placeholder={t("backlog.filter.completion")}
+          />
+        </Box>
         <Box xcss={pageStyles.filterWidth} testId="work-item-filter-status">
           <Select<Option>
             options={statusOptions}

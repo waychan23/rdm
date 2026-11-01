@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from decimal import Decimal
 from typing import Any
 
@@ -297,6 +297,7 @@ class WorkItemService:
         sprint_ref: str | None = None,
         q: str | None = None,
         backlog: bool = False,
+        completed: bool | None = None,
         include_deleted: bool = False,
         limit: int = 20,
         offset: int = 0,
@@ -339,10 +340,17 @@ class WorkItemService:
             ).id
         if include_deleted and not security.is_project_owner(actor, project.id):
             include_deleted = False
+        include_statuses: list[str] | None = None
         exclude_statuses: list[str] | None = None
-        if backlog:
-            engine = load_engine()
-            exclude_statuses = sorted(engine.all_terminal_states())
+        # "Completed" is workflow-dependent (each kind has its own terminal
+        # states), so it is resolved to the union of terminal states here
+        # instead of being a single status value on the wire.
+        if completed is not None or backlog:
+            terminal = sorted(load_engine().all_terminal_states())
+            if completed:
+                include_statuses = terminal
+            else:
+                exclude_statuses = terminal
 
         if sprint_ref is not None:
             project, all_items = await self._list_in_sprint(
@@ -356,6 +364,8 @@ class WorkItemService:
                 reviewer_id=reviewer_id,
                 parent_id=parent_id,
                 q=q,
+                include_statuses=include_statuses,
+                exclude_statuses=exclude_statuses,
                 limit=100_000,
                 offset=0,
             )
@@ -371,6 +381,7 @@ class WorkItemService:
             reviewer_user_id=reviewer_id,
             parent_id=parent_id,
             q=q,
+            include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,
             backlog_only=backlog,
             include_deleted=include_deleted,
@@ -384,6 +395,7 @@ class WorkItemService:
             reviewer_user_id=reviewer_id,
             parent_id=parent_id,
             q=q,
+            include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,
             backlog_only=backlog,
             include_deleted=include_deleted,
@@ -416,6 +428,8 @@ class WorkItemService:
         q: str | None,
         limit: int,
         offset: int,
+        include_statuses: Sequence[str] | None = None,
+        exclude_statuses: Sequence[str] | None = None,
     ) -> tuple[Project, list[WorkItem]]:
         assert (
             self.uow.sprints is not None
@@ -442,6 +456,10 @@ class WorkItemService:
             if kinds is not None and item.kind not in kinds:
                 return False
             if status is not None and item.status != status:
+                return False
+            if include_statuses is not None and item.status not in include_statuses:
+                return False
+            if exclude_statuses and item.status in exclude_statuses:
                 return False
             if assignee_id is not None and item.assignee_user_id != assignee_id:
                 return False
