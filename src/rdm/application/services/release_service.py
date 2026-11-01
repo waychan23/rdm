@@ -34,10 +34,12 @@ from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.events.bus import StreamEvent, get_bus
 from rdm.infrastructure.id import new_id
 
-# A story counts as release-ready once accepted (DONE) or already shipped.
-_READY_STATUSES = {"DONE", "PUBLISHED"}
-# Stories already shipped or abandoned cannot be newly added to a release.
-_REJECTED_ITEM_STATUSES = {"PUBLISHED", "CANCELLED"}
+# Release scope is story + issue (§17.125). A story counts as ready once
+# accepted (DONE) or already shipped; an issue once accepted and closed.
+_RELEASE_ITEM_KINDS = {"story", "issue"}
+_READY_STATUSES = {"DONE", "PUBLISHED", "CLOSED_DONE"}
+# Items already shipped or abandoned cannot be newly added to a release.
+_REJECTED_ITEM_STATUSES = {"PUBLISHED", "CANCELLED", "CLOSED_REJECTED"}
 
 
 @dataclass(frozen=True)
@@ -289,11 +291,11 @@ class ReleaseService:
                     details={"work_item_id": item.id, "project_id": item.project_id},
                 )
             display_id = self.items.display_id(project, item)
-            if item.kind != "story":
+            if item.kind not in _RELEASE_ITEM_KINDS:
                 raise ValidationError(
                     tr(
                         "release.kind_invalid",
-                        default="只有 story 可以加入版本，{display_id} 是 {kind}",
+                        default="只有 story/issue 可以加入版本，{display_id} 是 {kind}",
                         display_id=display_id,
                         kind=item.kind,
                     ),
@@ -403,7 +405,7 @@ class ReleaseService:
             raise ReleaseNotReady(
                 tr(
                     "release.empty",
-                    default="版本 {name} 还没有 story，无法发布。",
+                    default="版本 {name} 还没有工作项，无法发布。",
                     name=release.name,
                 ),
                 details={"release_id": release.id, "reason": "empty", "blocking": []},
@@ -414,7 +416,7 @@ class ReleaseService:
             raise ReleaseNotReady(
                 tr(
                     "release.not_ready",
-                    default="版本 {name} 还有未完成的 story：{items}",
+                    default="版本 {name} 还有未完成的工作项：{items}",
                     name=release.name,
                     items=", ".join(blocking_refs),
                 ),
@@ -439,7 +441,9 @@ class ReleaseService:
             name=release.name,
         )
         for item in items:
-            if item.status != "DONE":
+            # Issues have no PUBLISHED state; CLOSED_DONE is already their
+            # shipped state, so only accepted stories move forward.
+            if item.kind != "story" or item.status != "DONE":
                 continue
             # A system transition still runs the pinned workflow gate
             # (PUBLISHED requires every child to be terminal).

@@ -44,6 +44,20 @@ async def _finish_story(client: httpx.AsyncClient, token: str, ref: str) -> dict
     return item
 
 
+async def _finish_issue(client: httpx.AsyncClient, token: str, ref: str) -> dict:
+    for to in ("TO_CONFIRM", "TO_FIX", "FIXING", "CLOSED_DONE"):
+        item = await _get_item(client, token, ref)
+        r = await client.post(
+            f"{API}/work-items/{ref}/transition",
+            json={"to": to, "row_version": item["row_version"]},
+            headers=auth(token),
+        )
+        assert r.status_code == 200, r.text
+    item = await _get_item(client, token, ref)
+    assert item["status"] == "CLOSED_DONE", item
+    return item
+
+
 async def _release(client: httpx.AsyncClient, token: str, **payload) -> dict:
     r = await client.post(f"{API}/projects/DEMO/releases", json=payload, headers=auth(token))
     assert r.status_code == 201, r.text
@@ -233,6 +247,107 @@ async def test_release_only_accepts_open_stories_and_allows_multiple_releases(
     )
     assert r.status_code == 422, r.text
     assert r.json()["error"]["details"]["release_id"] == r2["id"]
+
+
+async def test_release_accepts_issues(server, owner_token: str) -> None:
+    """Release scope is story + issue; issues ship via CLOSED_DONE (§17.125)."""
+    client, _settings, _app = server
+    await _project(client, owner_token)
+    issue = await _item(
+        client, owner_token, {"kind": "issue", "title": "登录 500", "assignee": "me"}
+    )
+    release = await _release(client, owner_token, name="v1")
+
+    r = await client.post(
+        f"{API}/releases/{release['id']}/items",
+        json={"items": [issue["display_id"]]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+
+    r = await client.get(f"{API}/releases/{release['id']}", headers=auth(owner_token))
+    assert r.status_code == 200, r.text
+    body = r.json()["data"]
+    assert body["stats"]["total"] == 1 and body["stats"]["done"] == 0
+    assert body["readiness"]["can_publish"] is False
+    assert body["readiness"]["blocking"][0]["display_id"] == issue["display_id"]
+
+    # An open issue blocks publishing, just like an unfinished story.
+    r = await client.post(f"{API}/releases/{release['id']}/publish", headers=auth(owner_token))
+    assert r.status_code == 409, r.text
+    assert r.json()["error"]["code"] == "RELEASE_NOT_READY"
+
+    # CLOSED_DONE needs at least one child and every child terminal.
+    child = await _item(
+        client,
+        owner_token,
+        {
+            "kind": "task",
+            "title": "修复登录",
+            "parent": issue["display_id"],
+            "assignee": "me",
+        },
+    )
+    # Test contract: task TODO -> IN_PROGRESS -> TO_REVIEW -> CODE_REVIEW -> DONE.
+    for to in ("IN_PROGRESS", "TO_REVIEW"):
+        item = await _get_item(client, owner_token, child["display_id"])
+        r = await client.post(
+            f"{API}/work-items/{child['display_id']}/transition",
+            json={"to": to, "row_version": item["row_version"]},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 200, r.text
+    item = await _get_item(client, owner_token, child["display_id"])
+    r = await client.patch(
+        f"{API}/work-items/{child['display_id']}",
+        json={"row_version": item["row_version"], "review_content_md": "fixed"},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        f"{API}/work-items/{child['display_id']}/steps/CODE_REVIEW",
+        json={"row_version": r.json()["data"]["row_version"]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    step_id = r.json()["meta"]["active_step"]["id"]
+    r = await client.post(
+        f"{API}/work-item-steps/{step_id}/execute",
+        json={"note_md": "ok"},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["status"] == "DONE"
+    await _finish_issue(client, owner_token, issue["display_id"])
+    r = await client.get(f"{API}/releases/{release['id']}", headers=auth(owner_token))
+    assert r.json()["data"]["stats"]["done"] == 1
+
+    r = await client.post(f"{API}/releases/{release['id']}/publish", headers=auth(owner_token))
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["status"] == "RELEASED"
+    # Issues have no PUBLISHED state; closing to fixed is final.
+    assert (await _get_item(client, owner_token, issue["display_id"]))["status"] == "CLOSED_DONE"
+
+    # Rejected/closed-fixed issues are valid past scope but not rejected ones.
+    rejected = await _item(
+        client, owner_token, {"kind": "issue", "title": "invalid", "assignee": "me"}
+    )
+    for to in ("TO_CONFIRM", "CLOSED_REJECTED"):
+        item = await _get_item(client, owner_token, rejected["display_id"])
+        r = await client.post(
+            f"{API}/work-items/{rejected['display_id']}/transition",
+            json={"to": to, "row_version": item["row_version"]},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 200, r.text
+    release2 = await _release(client, owner_token, name="v2")
+    r = await client.post(
+        f"{API}/releases/{release2['id']}/items",
+        json={"items": [rejected["display_id"]]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["details"]["status"] == "CLOSED_REJECTED"
 
 
 async def test_release_cancel_permissions_and_empty_publish(server, owner_token: str) -> None:

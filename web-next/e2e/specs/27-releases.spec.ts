@@ -67,3 +67,27 @@ test("publish stays disabled while a story is unfinished", async ({ api, app, pa
   await expect(page.getByTestId(`release-item-row-${story.display_id}`)).toBeVisible();
   await expect(page.getByTestId("release-publish")).toBeDisabled();
 });
+
+test("release scope accepts issues (RDM-35)", async ({ api, app, page }) => {
+  const projectKey = await api.createSandboxProject(["alice"]);
+  const issue = await api.createItemIn(projectKey, {
+    kind: "issue",
+    title: `release-issue-${Date.now()}`,
+    assignee: "alice",
+  });
+
+  await page.goto(`${app.baseURL}/projects/${projectKey}/releases`);
+  await page.getByTestId("release-create-button").click();
+  await page.getByTestId("release-form-name").fill("v1.1.0");
+  await page.getByTestId("release-form-submit").click();
+  await page.getByTestId("release-table").getByText("v1.1.0").click();
+  await expect(page.getByTestId("release-detail")).toBeVisible();
+
+  await page.getByTestId("release-detail").getByRole("combobox").click();
+  await page.getByRole("option", { name: new RegExp(issue.display_id) }).click();
+  await page.getByTestId("release-item-add").click();
+
+  await expect(page.getByTestId(`release-item-row-${issue.display_id}`)).toBeVisible();
+  // The issue is still open, so the release is not ready to publish.
+  await expect(page.getByTestId("release-publish")).toBeDisabled();
+});

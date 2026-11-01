@@ -436,9 +436,9 @@ export default function ReleasesPage() {
                       <WorkItemPicker
                         isMulti
                         projectKey={projectKey}
-                        allowedKinds={["story"]}
+                        allowedKinds={["story", "issue"]}
                         excludeIds={detail.items.map((item) => item.id)}
-                        excludeStatuses={["PUBLISHED", "CANCELLED"]}
+                        excludeStatuses={["PUBLISHED", "CANCELLED", "CLOSED_REJECTED"]}
                         value={itemRefs}
                         onChange={setItemRefs}
                         placeholder={t("pickerPlaceholder")}
