@@ -72,3 +72,10 @@
   max-height: 70vh;
   border-radius: var(--ds-radius-small, 4px);
 }
+
+/* Atlaskit Drawer does not scroll its content by default; sprint/release
+   detail drawers wrap their body in this container (RDM-74). */
+.rdm-drawer-scroll {
+  height: 100%;
+  overflow-y: auto;
+}

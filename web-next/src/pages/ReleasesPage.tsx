@@ -316,8 +316,9 @@ export default function ReleasesPage() {
         testId="release-detail-drawer"
       >
         {detail && (
-          <Box padding="space.300" testId="release-detail">
-            <Stack space="space.200">
+          <div className="rdm-drawer-scroll">
+            <Box padding="space.300" testId="release-detail">
+              <Stack space="space.200">
               <Inline space="space.150" alignBlock="center" shouldWrap>
                 <ReleaseStatusLozenge status={detail.status} />
                 <Heading size="medium">{detail.name}</Heading>
@@ -458,8 +459,9 @@ export default function ReleasesPage() {
                   </Inline>
                 </Stack>
               )}
-            </Stack>
-          </Box>
+              </Stack>
+            </Box>
+          </div>
         )}
       </Drawer>
 

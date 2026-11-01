@@ -136,8 +136,9 @@ export default function SprintDetailDrawer({
         testId="sprint-detail-drawer"
       >
         {detail && (
-          <Box padding="space.300" testId="sprint-detail">
-            <Stack space="space.200">
+          <div className="rdm-drawer-scroll">
+            <Box padding="space.300" testId="sprint-detail">
+              <Stack space="space.200">
               <Inline space="space.150" alignBlock="center">
                 {sprintLozenge(detail.status)}
                 <Heading size="medium">{detail.name}</Heading>
@@ -248,8 +249,9 @@ export default function SprintDetailDrawer({
                   </Inline>
                 </Stack>
               )}
-            </Stack>
-          </Box>
+              </Stack>
+            </Box>
+          </div>
         )}
       </Drawer>
 
