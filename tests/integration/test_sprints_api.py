@@ -213,6 +213,48 @@ async def test_item_can_belong_to_only_one_sprint(server, owner_token: str) -> N
     assert r.json()["data"]["items"] == []
 
 
+async def test_item_sprint_endpoint(server, owner_token: str) -> None:
+    """The drawer asks which sprint an item belongs to (RDM-44)."""
+    client, _s, _app = server
+    await _project(client, owner_token)
+    story = await _item(client, owner_token, {"kind": "story", "title": "s"})
+
+    r = await client.get(
+        f"{API}/work-items/{story['display_id']}/sprint", headers=auth(owner_token)
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["sprint"] is None
+
+    r = await client.post(
+        f"{API}/projects/DEMO/sprints", json={"name": "S1"}, headers=auth(owner_token)
+    )
+    sprint = r.json()["data"]
+    r = await client.post(
+        f"{API}/sprints/{sprint['id']}/items",
+        json={"items": [story["display_id"]]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+
+    r = await client.get(
+        f"{API}/work-items/{story['display_id']}/sprint", headers=auth(owner_token)
+    )
+    assert r.status_code == 200, r.text
+    linked = r.json()["data"]["sprint"]
+    assert linked["id"] == sprint["id"] and linked["name"] == "S1"
+
+    # Removing the link drops the association again.
+    r = await client.delete(
+        f"{API}/sprints/{sprint['id']}/items/{story['display_id']}",
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 204
+    r = await client.get(
+        f"{API}/work-items/{story['display_id']}/sprint", headers=auth(owner_token)
+    )
+    assert r.json()["data"]["sprint"] is None
+
+
 async def test_cannot_add_items_to_closed_sprint(server, owner_token: str) -> None:
     client, _s, _app = server
     await _project(client, owner_token)

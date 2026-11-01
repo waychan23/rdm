@@ -27,11 +27,11 @@ import WorkItemPicker, {
   type WorkItemOption,
 } from "../../components/WorkItemPicker";
 import EditWorkItemDialog from "../../workitems/EditWorkItemDialog";
-import { taskTypeOptions } from "../../workitems/constants";
+import { SPRINT_ITEM_KINDS, taskTypeOptions } from "../../workitems/constants";
 import { priorityOptions, priorityColor, priorityOption } from "../../workitems/priority";
 import StatusLozenge from "../../workitems/status";
 import { api, errorCause } from "../../lib/api";
-import { artifactKindLabel, kindLabel } from "../../lib/labels";
+import { artifactKindLabel, kindLabel, statusLabel } from "../../lib/labels";
 import { i18n } from "../../i18n";
 import { useCurrentUser } from "../../lib/auth";
 import { formatDate, formatSize } from "../../lib/format";
@@ -46,6 +46,7 @@ import type {
   Comment,
   OrgUser,
   ProjectMemberRow,
+  Sprint,
   WorkItem,
   WorkItemDetailMeta,
   WorkItemPermissions,
@@ -90,6 +91,8 @@ interface DetailBundle {
   members: OrgUser[];
   attachments: Attachment[];
   artifacts: Artifact[];
+  sprint: Sprint | null;
+  sprints: Sprint[];
 }
 
 interface PreviewImage {
@@ -145,6 +148,8 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [parentEditing, setParentEditing] = useState(false);
+  const [sprintEditing, setSprintEditing] = useState(false);
+  const [savingSprint, setSavingSprint] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState<Comment | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -176,7 +181,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         `/work-items/${encodeURIComponent(itemId)}`,
       );
       const meta = (detail.meta ?? {}) as WorkItemDetailMeta;
-      const [cm, mm, am, artm, wf] = await Promise.all([
+      const [cm, mm, am, artm, wf, sprintInfo, sprintList] = await Promise.all([
         api.get<Comment[]>(
           `/work-items/${itemId}/comments?limit=${COMMENTS_PAGE}&offset=0`,
         ),
@@ -188,6 +193,8 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           `/projects/${projectKey}/artifacts?owner_type=work_item&owner_ref=${encodeURIComponent(itemId)}`,
         ),
         api.get<WorkflowDto>("/workflow"),
+        api.get<{ sprint: Sprint | null }>(`/work-items/${itemId}/sprint`),
+        api.get<Sprint[]>(`/projects/${projectKey}/sprints`),
       ]);
       setBundle({
         item: detail.data,
@@ -204,6 +211,8 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         members: flattenMembers(mm.data),
         attachments: am.data,
         artifacts: artm.data,
+        sprint: sprintInfo.data.sprint,
+        sprints: sprintList.data,
       });
       versionRef.current = detail.data.row_version;
       setHasMoreComments(cm.data.length >= COMMENTS_PAGE);
@@ -224,6 +233,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     setStepReassign(null);
     setStepCancel(null);
     setParentEditing(false);
+    setSprintEditing(false);
     setShowEdit(false);
     setShowArtifact(false);
     setCommentToDelete(null);
@@ -571,6 +581,31 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     }
   };
 
+  // Allocation is exclusive (§16.38): moving means leave the old one first,
+  // then join the new one. A failed add leaves the item outside a sprint.
+  const changeSprint = async (sprintId: string | null) => {
+    if (!bundle || savingSprint || bundle.sprint?.id === sprintId) return;
+    setSavingSprint(true);
+    try {
+      if (bundle.sprint) {
+        await api.del(
+          `/sprints/${bundle.sprint.id}/items/${encodeURIComponent(bundle.item.display_id)}`,
+        );
+      }
+      if (sprintId) {
+        await api.post(`/sprints/${sprintId}/items`, { items: [bundle.item.display_id] });
+      }
+      setSprintEditing(false);
+      await refresh();
+      notify.success(t("panel.sprintSaved"));
+    } catch (e) {
+      notify.error(t("panel.sprintSaveFailed"), errorCause(e)?.message);
+      await refresh();
+    } finally {
+      setSavingSprint(false);
+    }
+  };
+
   const discardComment = () => {
     setDraft("");
     setReplyTo(null);
@@ -681,6 +716,15 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     () => (bundle?.parent ? toWorkItemOption(bundle.parent) : null),
     [bundle?.parent],
   );
+  // Only PLANNED/ACTIVE sprints accept items, and the current one is pointless
+  // as a "change to" target.
+  const sprintOptions = useMemo(
+    () =>
+      (bundle?.sprints ?? [])
+        .filter((s) => s.status !== "CLOSED" && s.id !== bundle?.sprint?.id)
+        .map((s) => ({ label: s.name, value: s.id })),
+    [bundle?.sprints, bundle?.sprint?.id],
+  );
 
   if (loadError) {
     return (
@@ -721,6 +765,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     members,
     attachments,
     artifacts,
+    sprint,
   } = bundle;
   const memberOptions: MemberOption[] = members.map((m) => ({
     label: `${userLabel(m)}${m.type === "agent" ? t("panel.agentSuffix") : ""}`,
@@ -1204,6 +1249,64 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                       )}
                     </Inline>
                   ) : null}
+                </Box>
+              </div>
+              <hr className="rdm-item-divider" />
+            </>
+          )}
+
+          {SPRINT_ITEM_KINDS.has(item.kind) && (
+            <>
+              <div className="rdm-item-field" data-testid="item-field-sprint">
+                <div className="rdm-item-section-label">{t("panel.sprint")}</div>
+                {sprint ? (
+                  <Inline space="space.100" alignBlock="center">
+                    <Text>{sprint.name}</Text>
+                    <Lozenge>{statusLabel(sprint.status)}</Lozenge>
+                  </Inline>
+                ) : (
+                  <Text size="small" color="color.text.subtlest">
+                    {t("panel.noSprint")}
+                  </Text>
+                )}
+                <Box paddingBlockStart="space.100">
+                  {sprintEditing ? (
+                    <Stack space="space.100">
+                      <Box testId="item-sprint-picker">
+                        <Select<{ label: string; value: string }>
+                          {...portalMenuProps}
+                          options={sprintOptions}
+                          value={null}
+                          placeholder={t("panel.selectSprint")}
+                          isDisabled={savingSprint}
+                          onChange={(opt) =>
+                            void changeSprint((opt as { value: string } | null)?.value ?? null)
+                          }
+                        />
+                      </Box>
+                      <TextButton onClick={() => setSprintEditing(false)}>
+                        {t("inlineField.cancel")}
+                      </TextButton>
+                    </Stack>
+                  ) : (
+                    <Inline space="space.100">
+                      <TextButton
+                        data-testid="item-sprint-change"
+                        onClick={() => setSprintEditing(true)}
+                      >
+                        {sprint ? t("panel.changeSprint") : t("panel.addSprint")}
+                      </TextButton>
+                      {sprint && (
+                        <TextButton
+                          danger
+                          data-testid="item-sprint-remove"
+                          onClick={() => void changeSprint(null)}
+                        >
+                          {t("panel.removeSprint")}
+                        </TextButton>
+                      )}
+                    </Inline>
+                  )}
                 </Box>
               </div>
               <hr className="rdm-item-divider" />

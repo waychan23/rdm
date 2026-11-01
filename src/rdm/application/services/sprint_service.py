@@ -291,6 +291,21 @@ class SprintService:
         )
         return project, sprint, item
 
+    async def sprint_for_item(self, actor: Actor, item_ref: str) -> tuple[Project, Sprint | None]:
+        """The one sprint an item belongs to (allocation is exclusive, §16.38)."""
+        assert (
+            self.uow.sprint_items is not None
+            and self.uow.sprints is not None
+            and self.uow.projects is not None
+        )
+        item = await self.items.resolve_item(actor, item_ref)
+        project = await self.uow.projects.get(item.project_id)
+        assert project is not None
+        link = await self.uow.sprint_items.active_link_for_item(item.id)
+        if link is None:
+            return project, None
+        return project, await self.uow.sprints.get(link.sprint_id)
+
     async def start(self, actor: Actor, sprint_id: str) -> tuple[Project, Sprint]:
         project, sprint = await self.resolve_sprint(actor, sprint_id)
         security.require_sprint_manager(actor, project.id)

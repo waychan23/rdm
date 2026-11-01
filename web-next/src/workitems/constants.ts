@@ -8,6 +8,9 @@ export interface KindOption {
 
 export const KIND_VALUES = ["epic", "story", "issue", "task"] as const;
 
+/** Mirrors the backend `_SPRINT_ITEM_KINDS` rule (§17.3, §16.31). */
+export const SPRINT_ITEM_KINDS: ReadonlySet<string> = new Set(["story", "issue", "task"]);
+
 export function kindOptions(): KindOption[] {
   return KIND_VALUES.map((value) => ({ value, label: kindLabel(value) }));
 }

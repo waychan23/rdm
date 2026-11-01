@@ -85,6 +85,18 @@ async def get_sprint(
     return {"data": data}
 
 
+@router.get("/work-items/{item_ref}/sprint")
+async def get_item_sprint(
+    item_ref: str,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    """Sprint the item currently belongs to (or null) — drawer iteration section."""
+    async with container.uow() as uow:
+        _project, sprint = await SprintService(uow).sprint_for_item(actor, item_ref)
+    return {"data": {"sprint": sprint_out(sprint) if sprint is not None else None}}
+
+
 @router.patch("/sprints/{sprint_id}")
 async def update_sprint(
     sprint_id: str,
