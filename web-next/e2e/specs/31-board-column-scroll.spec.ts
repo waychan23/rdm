@@ -47,6 +47,12 @@ test("board columns scroll and paginate independently", async ({ api, app, page 
   expect(endBox!.y + endBox!.height).toBeLessThanOrEqual(
     bodyBox!.y + bodyBox!.height - 8,
   );
+  // RDM-78: the end marker is horizontally centered within the column body.
+  expect(
+    Math.abs(
+      endBox!.x + endBox!.width / 2 - (bodyBox!.x + bodyBox!.width / 2),
+    ),
+  ).toBeLessThanOrEqual(2);
 
   // RDM-73: horizontal trackpad/wheel scrolling over a column must chain to
   // the board's horizontal scroller instead of dying in the column body.

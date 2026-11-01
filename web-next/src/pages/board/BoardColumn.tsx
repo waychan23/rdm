@@ -103,14 +103,18 @@ export default function BoardColumn({
           </Inline>
         )}
         {loadFailed && (
-          <Text size="small" color="color.text.danger">
-            {t("board.columnLoadFailed")}
-          </Text>
+          <Inline alignBlock="center" space="space.050" xcss={styles.message}>
+            <Text size="small" color="color.text.danger">
+              {t("board.columnLoadFailed")}
+            </Text>
+          </Inline>
         )}
         {!hasMore && !loadingMore && count > 0 && (
-          <Text size="small" color="color.text.subtlest" testId={`board-column-end-${status}`}>
-            {t("board.noMore")}
-          </Text>
+          <Inline alignBlock="center" space="space.050" xcss={styles.message}>
+            <Text size="small" color="color.text.subtlest" testId={`board-column-end-${status}`}>
+              {t("board.noMore")}
+            </Text>
+          </Inline>
         )}
       </div>
     </div>
@@ -121,5 +125,10 @@ const styles = cssMap({
   centered: {
     justifyContent: "center",
     paddingBlock: "var(--ds-space-100)",
+  },
+  // Column status/end messages share the card stack's width, so centering
+  // needs an explicit flex row (Text is inline-level).
+  message: {
+    justifyContent: "center",
   },
 });
