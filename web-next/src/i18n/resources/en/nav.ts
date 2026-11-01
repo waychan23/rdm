@@ -2,6 +2,7 @@ const nav = {
   project: {
     board: "Board",
     backlog: "Work items",
+    issues: "Issues",
     sprints: "Sprints",
     releases: "Releases",
     mailbox: "Mailbox",

@@ -133,10 +133,16 @@ function BacklogView({ projectKey }: { projectKey: string }) {
   const listOrigin = useListOrigin();
   useRestoreScroll();
 
+  // `/issues` is the same list pinned to the issue kind, with the kind filter
+  // hidden (sidebar "缺陷" entry).
+  const pagePath = listOrigin ? listOrigin.split("?")[0] : location.pathname;
+  const issuesOnly = pagePath.endsWith("/issues");
   const kindsParam = searchParams.get("kind");
-  const kinds = kindsParam
-    ? kindsParam.split(",").filter(Boolean)
-    : ["epic", "story", "issue", "task"];
+  const kinds = issuesOnly
+    ? ["issue"]
+    : kindsParam
+      ? kindsParam.split(",").filter(Boolean)
+      : ["epic", "story", "issue", "task"];
   const statusValue = searchParams.get("status") ?? "";
   const completedValue = searchParams.get("completed");
   // Terminal states differ per workflow, so "completed" is resolved server-side.
@@ -334,7 +340,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
   return (
     <Page fill testId="page-backlog">
       <PageHeader
-        title={t("backlog.title")}
+        title={issuesOnly ? t("issues.title") : t("backlog.title")}
         testId="backlog-header"
         actions={
           <>
@@ -375,7 +381,8 @@ function BacklogView({ projectKey }: { projectKey: string }) {
         shouldWrap
         testId="work-item-filters"
       >
-        {kindOptions().map((k) => (
+        {!issuesOnly &&
+          kindOptions().map((k) => (
           <Checkbox
             key={k.value}
             label={k.label}
@@ -494,6 +501,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
       <CreateWorkItemDialog
         open={showCreate}
         projectKey={projectKey}
+        allowedKinds={issuesOnly ? ["issue"] : undefined}
         onClose={() => setShowCreate(false)}
         onCreated={(item) => {
           setReloadNonce((n) => n + 1);

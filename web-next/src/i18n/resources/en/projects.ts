@@ -45,6 +45,9 @@ const projects = {
     activeSprint: "Active sprint · {{name}}",
     activeSprintTotal: "{{total}} items",
   },
+  issues: {
+    title: "Issues",
+  },
   backlog: {
     title: "Work items",
     view: {

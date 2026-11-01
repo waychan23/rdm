@@ -43,6 +43,9 @@ const projects = {
     activeSprint: "进行中迭代 · {{name}}",
     activeSprintTotal: "共 {{total}} 项",
   },
+  issues: {
+    title: "缺陷",
+  },
   backlog: {
     title: "工作项",
     view: {

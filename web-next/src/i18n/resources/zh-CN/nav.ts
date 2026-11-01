@@ -2,6 +2,7 @@ const nav = {
   project: {
     board: "看板",
     backlog: "工作项",
+    issues: "缺陷",
     sprints: "迭代",
     releases: "版本",
     mailbox: "信箱",

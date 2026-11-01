@@ -106,6 +106,31 @@ test.describe("backlog filters and board terminal columns", () => {
     );
   });
 
+  test("the issues entry pins the list to issue kind (RDM-47)", async ({ api, app, page }) => {
+    const projectKey = await api.createSandboxProject();
+    const stamp = Date.now();
+    const story = await api.createItemIn(projectKey, { kind: "story", title: `s-${stamp}` });
+    const issue = await api.createItemIn(projectKey, { kind: "issue", title: `i-${stamp}` });
+
+    await page.goto(`${app.baseURL}/projects/${projectKey}/issues`);
+    await expect(page.getByTestId("page-backlog")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "缺陷" })).toBeVisible();
+    await expect(page.getByTestId(`work-item-row-${issue.display_id}`)).toBeVisible();
+    await expect(page.getByTestId(`work-item-row-${story.display_id}`)).toHaveCount(0);
+    // The kind filter is hidden on the issues page.
+    await expect(page.getByTestId("work-item-filter-kind-issue")).toHaveCount(0);
+    await expect(page.getByTestId("rail-item-project-issues")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+
+    // Opening an item keeps the issue-only background list.
+    await page.getByTestId(`work-item-row-${issue.display_id}`).click();
+    await expect(page.getByTestId("item-panel")).toBeVisible();
+    await expect(page.getByTestId(`work-item-row-${issue.display_id}`)).toBeVisible();
+    await expect(page.getByTestId(`work-item-row-${story.display_id}`)).toHaveCount(0);
+  });
+
   test("board terminal-column toggle actually hides terminal columns", async ({ app, page }) => {
     await page.goto(`${app.baseURL}${boardPath(app)}`);
     await expect(page.getByTestId("page-board")).toBeVisible();

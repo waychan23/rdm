@@ -80,6 +80,7 @@ export const router = createBrowserRouter([
       { path: "projects/:key", Component: () => withSuspense(<OverviewPage />) },
       { path: "projects/:key/board", Component: () => withSuspense(<BoardPage />) },
       { path: "projects/:key/backlog", Component: () => withSuspense(<BacklogPage />) },
+      { path: "projects/:key/issues", Component: () => withSuspense(<BacklogPage />) },
       { path: "projects/:key/sprints", Component: () => withSuspense(<SprintsPage />) },
       { path: "projects/:key/releases", Component: () => withSuspense(<ReleasesPage />) },
       { path: "projects/:key/mailbox", Component: () => withSuspense(<MailboxPage />) },

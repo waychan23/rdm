@@ -12,6 +12,7 @@ import InboxIcon from "@atlaskit/icon/core/inbox";
 import GridIcon from "@atlaskit/icon/core/grid";
 import BoardIcon from "@atlaskit/icon/core/board";
 import BacklogIcon from "@atlaskit/icon/core/backlog";
+import BugIcon from "@atlaskit/icon/core/bug";
 import CalendarIcon from "@atlaskit/icon/core/calendar";
 import ReleaseIcon from "@atlaskit/icon/core/release";
 import EmailIcon from "@atlaskit/icon/core/email";
@@ -90,6 +91,7 @@ const styles = cssMap({
 type NavKey =
   | "project.board"
   | "project.backlog"
+  | "project.issues"
   | "project.sprints"
   | "project.releases"
   | "project.mailbox"
@@ -107,6 +109,7 @@ interface NavEntry {
 const PROJECT_NAV: NavEntry[] = [
   { to: (k) => `/projects/${k}/board`, labelKey: "project.board", testId: "board", icon: BoardIcon },
   { to: (k) => `/projects/${k}/backlog`, labelKey: "project.backlog", testId: "backlog", icon: BacklogIcon },
+  { to: (k) => `/projects/${k}/issues`, labelKey: "project.issues", testId: "issues", icon: BugIcon },
   { to: (k) => `/projects/${k}/sprints`, labelKey: "project.sprints", testId: "sprints", icon: CalendarIcon },
   { to: (k) => `/projects/${k}/releases`, labelKey: "project.releases", testId: "releases", icon: ReleaseIcon },
   { to: (k) => `/projects/${k}/mailbox`, labelKey: "project.mailbox", testId: "mailbox", icon: EmailIcon },
