@@ -98,6 +98,10 @@
   width: 100px;
 }
 
+.rdm-table .col-checkbox {
+  width: 40px;
+}
+
 .rdm-table .col-id {
   width: 120px;
 }

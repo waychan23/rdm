@@ -17,12 +17,12 @@ import ImagePreviewDialog from "../components/ImagePreviewDialog";
 import MarkdownText from "../components/MarkdownText";
 import { Page, PageHeader } from "../components/Page";
 import TextButton from "../components/TextButton";
-import WorkItemPicker, { type WorkItemOption } from "../components/WorkItemPicker";
+import WorkItemPickerDialog from "../components/WorkItemPickerDialog";
 import { useAsync } from "../hooks/useAsync";
 import { api, errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 import { formatDate } from "../lib/format";
-import type { Release, ReleaseDetail, ReleaseStats } from "../types";
+import type { Release, ReleaseDetail, ReleaseStats, WorkItem } from "../types";
 import StatusLozenge from "../workitems/status";
 import ReleaseFormDialog, { type ReleaseFormValues } from "./releases/ReleaseFormDialog";
 import "../styles/table.css";
@@ -83,7 +83,7 @@ export default function ReleasesPage() {
   const [showEdit, setShowEdit] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ReleaseDetail | null>(null);
-  const [itemRefs, setItemRefs] = useState<WorkItemOption[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
   const [confirmPublish, setConfirmPublish] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -137,14 +137,14 @@ export default function ReleasesPage() {
     }
   };
 
-  const addItem = async () => {
-    if (!detail || itemRefs.length === 0 || busy) return;
+  const addItems = async (items: WorkItem[]) => {
+    if (!detail || items.length === 0 || busy) return;
     setBusy(true);
     try {
       await api.post(`/releases/${detail.id}/items`, {
-        items: itemRefs.map((item) => item.display_id),
+        items: items.map((item) => item.display_id),
       });
-      setItemRefs([]);
+      setPickerOpen(false);
       await Promise.all([refreshDetail(), reload()]);
     } catch (e) {
       notify.error(t("addFailed"), errorCause(e)?.message);
@@ -431,26 +431,8 @@ export default function ReleasesPage() {
 
               {detail.status === "PLANNED" && (
                 <Stack space="space.150">
-                  <Inline space="space.100" alignBlock="end">
-                    <div style={{ flex: 1 }}>
-                      <WorkItemPicker
-                        isMulti
-                        projectKey={projectKey}
-                        allowedKinds={["story", "issue"]}
-                        excludeIds={detail.items.map((item) => item.id)}
-                        excludeStatuses={["PUBLISHED", "CANCELLED", "CLOSED_REJECTED"]}
-                        value={itemRefs}
-                        onChange={setItemRefs}
-                        placeholder={t("pickerPlaceholder")}
-                        testId="release-item-input"
-                      />
-                    </div>
-                    <Button
-                      isLoading={busy}
-                      isDisabled={itemRefs.length === 0}
-                      testId="release-item-add"
-                      onClick={() => void addItem()}
-                    >
+                  <Inline space="space.100" alignBlock="center">
+                    <Button testId="release-item-add" onClick={() => setPickerOpen(true)}>
                       {t("add")}
                     </Button>
                   </Inline>
@@ -506,6 +488,16 @@ export default function ReleasesPage() {
         src={preview?.src ?? null}
         alt={preview?.alt}
         onClose={() => setPreview(null)}
+      />
+      <WorkItemPickerDialog
+        open={pickerOpen}
+        projectKey={projectKey}
+        allowedKinds={["story", "issue"]}
+        excludeIds={detail?.items.map((item) => item.id) ?? []}
+        excludeStatuses={["PUBLISHED", "CANCELLED", "CLOSED_REJECTED"]}
+        confirmLabel={t("add")}
+        onClose={() => setPickerOpen(false)}
+        onConfirm={(items) => void addItems(items)}
       />
     </Page>
   );

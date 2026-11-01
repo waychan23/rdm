@@ -10,10 +10,10 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import ImagePreviewDialog from "../../components/ImagePreviewDialog";
 import MarkdownText from "../../components/MarkdownText";
 import TextButton from "../../components/TextButton";
-import WorkItemPicker, { type WorkItemOption } from "../../components/WorkItemPicker";
+import WorkItemPickerDialog from "../../components/WorkItemPickerDialog";
 import { api, errorCause } from "../../lib/api";
 import { useNotify } from "../../lib/flags";
-import type { SprintDetail } from "../../types";
+import type { SprintDetail, WorkItem } from "../../types";
 import StatusLozenge from "../../workitems/status";
 import SprintFormDialog, { type SprintFormValues } from "./SprintFormDialog";
 import { sprintLozenge } from "./sprintStatus";
@@ -38,7 +38,7 @@ export default function SprintDetailDrawer({
   const notify = useNotify();
   const [detail, setDetail] = useState<SprintDetail | null>(null);
   const [showEdit, setShowEdit] = useState(false);
-  const [itemRefs, setItemRefs] = useState<WorkItemOption[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -56,7 +56,7 @@ export default function SprintDetailDrawer({
   useEffect(() => {
     setDetail(null);
     setShowEdit(false);
-    setItemRefs([]);
+    setPickerOpen(false);
     setConfirmClose(false);
     if (sprintId) void refreshDetail();
   }, [sprintId, refreshDetail]);
@@ -78,14 +78,14 @@ export default function SprintDetailDrawer({
     }
   };
 
-  const addItem = async () => {
-    if (!detail || itemRefs.length === 0 || busy) return;
+  const addItems = async (items: WorkItem[]) => {
+    if (!detail || items.length === 0 || busy) return;
     setBusy(true);
     try {
       await api.post(`/sprints/${detail.id}/items`, {
-        items: itemRefs.map((item) => item.display_id),
+        items: items.map((item) => item.display_id),
       });
-      setItemRefs([]);
+      setPickerOpen(false);
       await afterMutation();
     } catch (e) {
       notify.error(t("addFailed"), errorCause(e)?.message);
@@ -215,25 +215,10 @@ export default function SprintDetailDrawer({
 
               {detail.status !== "CLOSED" && (
                 <Stack space="space.150">
-                  <Inline space="space.100" alignBlock="end">
-                    <div style={{ flex: 1 }}>
-                      <WorkItemPicker
-                        isMulti
-                        projectKey={projectKey}
-                        allowedKinds={["story", "issue", "task"]}
-                        excludeIds={detail.items.map((item) => item.id)}
-                        backlogOnly
-                        value={itemRefs}
-                        onChange={setItemRefs}
-                        placeholder={t("pickerPlaceholder")}
-                        testId="sprint-item-input"
-                      />
-                    </div>
+                  <Inline space="space.100" alignBlock="center">
                     <Button
-                      isLoading={busy}
-                      isDisabled={itemRefs.length === 0}
                       testId="sprint-item-add"
-                      onClick={() => void addItem()}
+                      onClick={() => setPickerOpen(true)}
                     >
                       {t("add")}
                     </Button>
@@ -281,6 +266,16 @@ export default function SprintDetailDrawer({
         }
         onClose={() => setShowEdit(false)}
         onSave={saveEdit}
+      />
+
+      <WorkItemPickerDialog
+        open={pickerOpen}
+        projectKey={projectKey}
+        allowedKinds={["story", "issue", "task"]}
+        excludeIds={detail?.items.map((item) => item.id) ?? []}
+        confirmLabel={t("add")}
+        onClose={() => setPickerOpen(false)}
+        onConfirm={(items) => void addItems(items)}
       />
 
       <ConfirmDialog

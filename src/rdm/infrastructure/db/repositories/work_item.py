@@ -103,6 +103,8 @@ class WorkItemRepository:
         parent_id: str | None = None,
         root_only: bool = False,
         subtypes: Sequence[str] | None = None,
+        priorities: Sequence[int] | None = None,
+        exclude_ids: Sequence[str] | None = None,
         q: str | None = None,
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
@@ -166,6 +168,10 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.parent_id == parent_id)
         if root_only:
             stmt = stmt.where(WorkItemModel.parent_id.is_(None))
+        if priorities:
+            stmt = stmt.where(WorkItemModel.priority.in_(list(priorities)))
+        if exclude_ids:
+            stmt = stmt.where(WorkItemModel.id.notin_(list(exclude_ids)))
         if subtypes:
             stmt = stmt.where(
                 or_(
@@ -203,6 +209,8 @@ class WorkItemRepository:
         parent_id: str | None = None,
         root_only: bool = False,
         subtypes: Sequence[str] | None = None,
+        priorities: Sequence[int] | None = None,
+        exclude_ids: Sequence[str] | None = None,
         q: str | None = None,
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
@@ -227,6 +235,8 @@ class WorkItemRepository:
             parent_id=parent_id,
             root_only=root_only,
             subtypes=subtypes,
+            priorities=priorities,
+            exclude_ids=exclude_ids,
             q=q,
             include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,
@@ -272,6 +282,8 @@ class WorkItemRepository:
         parent_id: str | None = None,
         root_only: bool = False,
         subtypes: Sequence[str] | None = None,
+        priorities: Sequence[int] | None = None,
+        exclude_ids: Sequence[str] | None = None,
         q: str | None = None,
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
@@ -292,6 +304,8 @@ class WorkItemRepository:
             parent_id=parent_id,
             root_only=root_only,
             subtypes=subtypes,
+            priorities=priorities,
+            exclude_ids=exclude_ids,
             q=q,
             include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,

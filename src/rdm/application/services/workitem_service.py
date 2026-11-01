@@ -305,6 +305,9 @@ class WorkItemService:
         completed: bool | None = None,
         root_only: bool = False,
         subtypes: Sequence[str] | None = None,
+        priorities: Sequence[int] | None = None,
+        exclude_ids: Sequence[str] | None = None,
+        exclude_statuses: Sequence[str] | None = None,
         order: str | None = None,
         include_deleted: bool = False,
         limit: int = 20,
@@ -360,7 +363,7 @@ class WorkItemService:
         if include_deleted and not security.is_project_owner(actor, project.id):
             include_deleted = False
         include_statuses: list[str] | None = None
-        exclude_statuses: list[str] | None = None
+        excluded_statuses = list(exclude_statuses or [])
         # "Completed" is workflow-dependent (each kind has its own terminal
         # states), so it is resolved to the union of terminal states here
         # instead of being a single status value on the wire.
@@ -369,7 +372,8 @@ class WorkItemService:
             if completed:
                 include_statuses = terminal
             else:
-                exclude_statuses = terminal
+                excluded_statuses.extend(terminal)
+        exclude_statuses = excluded_statuses or None
 
         if sprint_ref is not None:
             project, all_items = await self._list_in_sprint(
@@ -387,6 +391,8 @@ class WorkItemService:
                 parent_id=parent_id,
                 root_only=root_only,
                 subtypes=subtypes,
+                priorities=priorities,
+                exclude_ids=exclude_ids,
                 q=q,
                 include_statuses=include_statuses,
                 exclude_statuses=exclude_statuses,
@@ -410,6 +416,8 @@ class WorkItemService:
             parent_id=parent_id,
             root_only=root_only,
             subtypes=subtypes,
+            priorities=priorities,
+            exclude_ids=exclude_ids,
             q=q,
             include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,
@@ -429,6 +437,8 @@ class WorkItemService:
             parent_id=parent_id,
             root_only=root_only,
             subtypes=subtypes,
+            priorities=priorities,
+            exclude_ids=exclude_ids,
             q=q,
             include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,
@@ -466,6 +476,8 @@ class WorkItemService:
         parent_id: str | None,
         root_only: bool = False,
         subtypes: Sequence[str] | None = None,
+        priorities: Sequence[int] | None = None,
+        exclude_ids: Sequence[str] | None = None,
         q: str | None,
         limit: int,
         offset: int,
@@ -518,6 +530,10 @@ class WorkItemService:
             if root_only and item.parent_id is not None:
                 return False
             if subtypes and item.kind == "task" and item_task_type(item) not in subtypes:
+                return False
+            if priorities and item.priority not in priorities:
+                return False
+            if exclude_ids and item.id in exclude_ids:
                 return False
             if q:
                 haystack = f"{item.title}\n{item.review_content_md or ''}".lower()

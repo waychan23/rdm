@@ -542,6 +542,38 @@ async def test_list_composite_order(server, owner_token: str) -> None:
     ]
 
 
+async def test_list_priority_and_exclude_filters(server, owner_token: str) -> None:
+    """RDM-39 picker: priority multi-select plus exclude ids/statuses."""
+    client, _settings, _app = server
+    await _create_project(client, owner_token)
+    created: list[dict] = []
+    for title, priority in (("p1", 1), ("p2", 2), ("p3", 3)):
+        r = await client.post(
+            f"{API}/projects/DEMO/work-items",
+            json={"kind": "task", "title": title, "priority": priority},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 201, r.text
+        created.append(r.json()["data"])
+
+    async def ids(query: str) -> set[str]:
+        r = await client.get(f"{API}/projects/DEMO/work-items?{query}", headers=auth(owner_token))
+        assert r.status_code == 200, r.text
+        return {item["display_id"] for item in r.json()["data"]}
+
+    assert await ids("priority=1,2") == {created[0]["display_id"], created[1]["display_id"]}
+    assert await ids(f"exclude_ids={created[0]['id']}") == {
+        created[1]["display_id"],
+        created[2]["display_id"],
+    }
+    assert await ids("exclude_status=TODO") == set()
+    r = await client.get(
+        f"{API}/projects/DEMO/work-items?exclude_ids={created[0]['id']}",
+        headers=auth(owner_token),
+    )
+    assert r.json()["meta"]["total"] == 2
+
+
 async def test_filter_options_exclude_own_dimension(server, owner_token: str) -> None:
     """RDM-63: facets come from the unpaginated filtered set, each excluding itself."""
     client, _settings, _app = server

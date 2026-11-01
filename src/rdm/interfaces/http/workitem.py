@@ -50,6 +50,19 @@ def _split_csv(value: str | None) -> list[str]:
     return [part.strip() for part in (value or "").split(",") if part.strip()]
 
 
+def _split_priorities(value: str | None) -> list[int]:
+    """Parse `priority=1,2`; anything outside the valid 1..4 range is ignored."""
+    out: list[int] = []
+    for part in _split_csv(value):
+        try:
+            number = int(part)
+        except ValueError:
+            continue
+        if 1 <= number <= 4 and number not in out:
+            out.append(number)
+    return out
+
+
 @router.get("/projects/{key}/work-items")
 async def list_work_items(
     key: str,
@@ -62,6 +75,9 @@ async def list_work_items(
     parent: str | None = None,
     sprint: str | None = None,
     root_only: bool = False,
+    priority: str | None = None,
+    exclude_status: str | None = None,
+    exclude_ids: str | None = None,
     q: str | None = None,
     backlog: bool = False,
     completed: bool | None = None,
@@ -76,6 +92,9 @@ async def list_work_items(
     assignees = _split_csv(assignee)
     participants = _split_csv(participant)
     subtypes = _split_csv(subtype)
+    priorities = _split_priorities(priority)
+    excluded_statuses = _split_csv(exclude_status)
+    excluded_ids = _split_csv(exclude_ids)
     async with container.uow() as uow:
         project, items, total = await WorkItemService(uow).list_items_paginated(
             actor,
@@ -94,6 +113,9 @@ async def list_work_items(
             completed=completed,
             root_only=root_only,
             subtypes=subtypes or None,
+            priorities=priorities or None,
+            exclude_ids=excluded_ids or None,
+            exclude_statuses=excluded_statuses or None,
             order=order,
             include_deleted=include_deleted,
             limit=limit,

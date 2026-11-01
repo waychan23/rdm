@@ -28,6 +28,25 @@ const components = {
     close: "关闭",
     download: "下载",
   },
+  workItemPicker: {
+    title: "选择工作项",
+    search: "搜索标题/评审意见",
+    kind: "类型",
+    assignee: "负责人",
+    priority: "优先级",
+    status: "状态",
+    allKinds: "全部允许的类型",
+    allAssignees: "全部负责人",
+    allPriorities: "全部优先级",
+    allStatuses: "全部状态",
+    selectPage: "全选本页",
+    selected: "已选择 {{n}} 项",
+    clear: "清空",
+    cancel: "取消",
+    confirm: "确定",
+    empty: "没有可选的工作项",
+    total: "共 {{n}} 条",
+  },
 };
 
 export default components;

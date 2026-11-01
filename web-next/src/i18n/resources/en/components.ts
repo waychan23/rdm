@@ -28,6 +28,25 @@ const components = {
     close: "Close",
     download: "Download",
   },
+  workItemPicker: {
+    title: "Select work items",
+    search: "Search title or review comment",
+    kind: "Type",
+    assignee: "Assignee",
+    priority: "Priority",
+    status: "Status",
+    allKinds: "All allowed types",
+    allAssignees: "All assignees",
+    allPriorities: "All priorities",
+    allStatuses: "All statuses",
+    selectPage: "Select this page",
+    selected: "{{n}} selected",
+    clear: "Clear",
+    cancel: "Cancel",
+    confirm: "Confirm",
+    empty: "No selectable work items",
+    total: "{{n}} items",
+  },
 };
 
 export default components;
