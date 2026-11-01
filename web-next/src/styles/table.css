@@ -78,6 +78,14 @@
   width: 180px;
 }
 
+.rdm-table .col-sprint {
+  width: 160px;
+}
+
+.rdm-table .col-day {
+  width: 110px;
+}
+
 .rdm-table .col-date {
   width: 160px;
 }

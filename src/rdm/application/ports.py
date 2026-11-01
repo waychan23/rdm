@@ -328,6 +328,10 @@ class SprintItemRepository(Protocol):
 
     async def active_link_for_item(self, work_item_id: str) -> SprintItem | None: ...
 
+    async def active_links_for_items(self, work_item_ids: Sequence[str]) -> SprintItemList:
+        """Live membership links for a batch of items (list/board enrichment)."""
+        ...
+
 
 class ProductReleaseRepository(Protocol):
     async def add(self, release: Release) -> None: ...

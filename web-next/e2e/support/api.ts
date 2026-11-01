@@ -72,6 +72,8 @@ export interface CreateItemSeed {
   reviewer?: UserName[];
   review_content_md?: string | null;
   custom_fields?: Record<string, unknown>;
+  planned_start_date?: string;
+  planned_end_date?: string;
   /** Reach this status through direct steps before returning. Requires assignee. */
   status?: string;
 }
@@ -240,6 +242,8 @@ export class Api {
     if (seed.reviewer?.length) payload.reviewer = seed.reviewer.map((name) => this.userId(name));
     if (seed.review_content_md !== undefined) payload.review_content_md = seed.review_content_md;
     if (seed.custom_fields !== undefined) payload.custom_fields = seed.custom_fields;
+    if (seed.planned_start_date) payload.planned_start_date = seed.planned_start_date;
+    if (seed.planned_end_date) payload.planned_end_date = seed.planned_end_date;
     const created = (await this.post<Item>(`/projects/${projectKey}/work-items`, payload, actor))
       .data;
     if (seed.status && seed.status !== created.status) {

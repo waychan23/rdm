@@ -306,6 +306,21 @@ class SprintService:
             return project, None
         return project, await self.uow.sprints.get(link.sprint_id)
 
+    async def sprint_map_for_items(
+        self, project_id: str, item_ids: Sequence[str]
+    ) -> dict[str, Sprint]:
+        """Item id -> its sprint, for list/board rows (at most one each, §16.38)."""
+        assert self.uow.sprint_items is not None and self.uow.sprints is not None
+        links = await self.uow.sprint_items.active_links_for_items(item_ids)
+        if not links:
+            return {}
+        sprints = {sprint.id: sprint for sprint in await self.uow.sprints.list(project_id)}
+        return {
+            link.work_item_id: sprints[link.sprint_id]
+            for link in links
+            if link.sprint_id in sprints
+        }
+
     async def start(self, actor: Actor, sprint_id: str) -> tuple[Project, Sprint]:
         project, sprint = await self.resolve_sprint(actor, sprint_id)
         security.require_sprint_manager(actor, project.id)

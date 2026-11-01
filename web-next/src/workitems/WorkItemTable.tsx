@@ -79,8 +79,17 @@ export default function WorkItemTable({
             <th scope="col" className="col-priority">
               {t("table.colPriority")}
             </th>
+            <th scope="col" className="col-sprint">
+              {t("table.colSprint")}
+            </th>
             <th scope="col" className="col-person">
               {t("table.colAssignee")}
+            </th>
+            <th scope="col" className="col-day">
+              {t("table.colPlannedStart")}
+            </th>
+            <th scope="col" className="col-day">
+              {t("table.colPlannedEnd")}
             </th>
             <th
               scope="col"
@@ -178,7 +187,22 @@ export default function WorkItemTable({
                 <PriorityMark priority={row.priority} />
               </td>
               <td>
+                <span className="cell-meta" data-testid={`work-item-sprint-${row.display_id}`}>
+                  {row.sprint?.name ?? "—"}
+                </span>
+              </td>
+              <td>
                 <PersonCell name={row.assignee ? userLabel(row.assignee) : undefined} />
+              </td>
+              <td>
+                <span className="cell-meta" data-testid={`work-item-start-${row.display_id}`}>
+                  {row.planned_start_date ?? "—"}
+                </span>
+              </td>
+              <td>
+                <span className="cell-meta" data-testid={`work-item-end-${row.display_id}`}>
+                  {row.planned_end_date ?? "—"}
+                </span>
               </td>
               <td>
                 <span className="cell-meta">{formatDate(row.created_at)}</span>

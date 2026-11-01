@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { draggable } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function BoardCard({ item, onOpen }: Props) {
+  const { t } = useTranslation("workitems");
   const ref = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -73,6 +75,21 @@ export default function BoardCard({ item, onOpen }: Props) {
           {item.title}
         </Text>
         <PersonCell name={item.assignee ? userLabel(item.assignee) : undefined} />
+        {item.sprint && (
+          <Text size="small" color="color.text.subtle">
+            {t("card.sprintLine", { value: item.sprint.name })}
+          </Text>
+        )}
+        {item.planned_start_date && (
+          <Text size="small" color="color.text.subtle">
+            {t("card.startLine", { value: item.planned_start_date })}
+          </Text>
+        )}
+        {item.planned_end_date && (
+          <Text size="small" color="color.text.subtle">
+            {t("card.endLine", { value: item.planned_end_date })}
+          </Text>
+        )}
       </Stack>
     </div>
   );

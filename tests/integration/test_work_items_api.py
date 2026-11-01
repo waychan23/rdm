@@ -392,6 +392,49 @@ async def test_list_order_by_created(server, owner_token: str) -> None:
     assert r.status_code == 422
 
 
+async def test_list_includes_sprint_and_planned_dates(server, owner_token: str) -> None:
+    """List summaries carry the sprint and planned dates (RDM-59)."""
+    client, _settings, _app = server
+    await _create_project(client, owner_token)
+    story = (
+        await client.post(
+            f"{API}/projects/DEMO/work-items",
+            json={
+                "kind": "story",
+                "title": "planned",
+                "planned_start_date": "2026-02-01",
+                "planned_end_date": "2026-02-10",
+            },
+            headers=auth(owner_token),
+        )
+    ).json()["data"]
+
+    async def row() -> dict:
+        r = await client.get(
+            f"{API}/projects/DEMO/work-items?kind=story", headers=auth(owner_token)
+        )
+        assert r.status_code == 200, r.text
+        return r.json()["data"][0]
+
+    first = await row()
+    assert first["planned_start_date"] == "2026-02-01"
+    assert first["planned_end_date"] == "2026-02-10"
+    assert first["sprint"] is None
+
+    r = await client.post(
+        f"{API}/projects/DEMO/sprints", json={"name": "S1"}, headers=auth(owner_token)
+    )
+    sprint = r.json()["data"]
+    r = await client.post(
+        f"{API}/sprints/{sprint['id']}/items",
+        json={"items": [story["display_id"]]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+    linked = await row()
+    assert linked["sprint"] == {"id": sprint["id"], "name": "S1"}
+
+
 async def test_permissions_worker_and_cross_project(server, owner_token: str) -> None:
     client, _settings, _app = server
     await _create_project(client, owner_token, "DEMO")

@@ -134,6 +134,17 @@ class SprintItemRepository:
         )
         return [str(row[0]) for row in (await self._s.execute(stmt)).all()]
 
+    async def active_links_for_items(self, work_item_ids: Sequence[str]) -> list[SprintItem]:
+        """Live (non-soft-deleted) membership links for a batch of items."""
+        if not work_item_ids:
+            return []
+        stmt = select(SprintItemModel).where(
+            SprintItemModel.work_item_id.in_(list(work_item_ids)),
+            SprintItemModel.deleted_at.is_(None),
+        )
+        rows = list((await self._s.execute(stmt)).scalars().all())
+        return [sprint_item_to_domain(r) for r in rows]
+
     async def active_link_for_item(self, work_item_id: str) -> SprintItem | None:
         """Live (non-soft-deleted) membership link of an item, across all sprints.
 

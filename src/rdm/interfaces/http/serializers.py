@@ -178,7 +178,10 @@ def work_item_out(item: WorkItem, project: Project, users: dict[str, User] | Non
 
 
 def work_item_summary_out(
-    item: WorkItem, project: Project, users: dict[str, User] | None = None
+    item: WorkItem,
+    project: Project,
+    users: dict[str, User] | None = None,
+    sprint: Sprint | None = None,
 ) -> dict:
     full = work_item_out(item, project, users)
     return {
@@ -190,6 +193,9 @@ def work_item_summary_out(
         "title": full["title"],
         "status": full["status"],
         "priority": full["priority"],
+        "planned_start_date": full["planned_start_date"],
+        "planned_end_date": full["planned_end_date"],
+        "sprint": {"id": sprint.id, "name": sprint.name} if sprint is not None else None,
         "rank": full["rank"],
         "parent_id": full["parent_id"],
         "assignee": full["assignee"],

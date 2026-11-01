@@ -8,6 +8,7 @@ from fastmcp import FastMCP
 
 from rdm.application.services.attachment_service import AttachmentService
 from rdm.application.services.membership_service import MembershipService
+from rdm.application.services.sprint_service import SprintService
 from rdm.application.services.step_service import StepService
 from rdm.application.services.workitem_service import (
     WorkItemService,
@@ -74,7 +75,12 @@ def register(mcp: FastMCP, container: Container) -> None:
                 offset=offset,
             )
             members = await _users(uow, proj.id)
-            return ok([work_item_summary_out(i, proj, members) for i in items])
+            sprints = await SprintService(uow).sprint_map_for_items(
+                proj.id, [item.id for item in items]
+            )
+            return ok(
+                [work_item_summary_out(i, proj, members, sprint=sprints.get(i.id)) for i in items]
+            )
 
         return await run_tool(container, run)
 
@@ -96,6 +102,7 @@ def register(mcp: FastMCP, container: Container) -> None:
             service = WorkItemService(uow)
             items = await service.my_items(actor, status=status, project_key=project)
             users_by_project: dict[str, dict] = {}
+            sprints_by_project: dict[str, dict] = {}
             out: list[dict] = []
             for item in items:
                 item_project = await uow.projects.get(item.project_id)
@@ -103,8 +110,17 @@ def register(mcp: FastMCP, container: Container) -> None:
                     continue
                 if item.project_id not in users_by_project:
                     users_by_project[item.project_id] = await _users(uow, item.project_id)
+                    item_ids = [i.id for i in items if i.project_id == item.project_id]
+                    sprints_by_project[item.project_id] = await SprintService(
+                        uow
+                    ).sprint_map_for_items(item.project_id, item_ids)
                 out.append(
-                    work_item_summary_out(item, item_project, users_by_project[item.project_id])
+                    work_item_summary_out(
+                        item,
+                        item_project,
+                        users_by_project[item.project_id],
+                        sprint=sprints_by_project[item.project_id].get(item.id),
+                    )
                 )
             if not include_steps:
                 return ok(out)

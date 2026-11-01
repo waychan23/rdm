@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 
 from rdm.application.services.history_service import HistoryService
 from rdm.application.services.membership_service import MembershipService
+from rdm.application.services.sprint_service import SprintService
 from rdm.application.services.step_service import StepService
 from rdm.application.services.workflow_version_service import WorkflowVersionService
 from rdm.application.services.workitem_service import (
@@ -83,8 +84,13 @@ async def list_work_items(
             offset=offset,
         )
         members = await _users_map(uow, project.id)
+        sprints = await SprintService(uow).sprint_map_for_items(
+            project.id, [item.id for item in items]
+        )
     return {
-        "data": [work_item_summary_out(i, project, members) for i in items],
+        "data": [
+            work_item_summary_out(i, project, members, sprint=sprints.get(i.id)) for i in items
+        ],
         "meta": {"total": total, "limit": min(limit, 100), "offset": offset},
     }
 

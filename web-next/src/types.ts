@@ -68,6 +68,8 @@ export interface WorkItem {
   fields?: Record<string, unknown> | null;
   workflow_version?: number;
   workflow_def_id?: string | null;
+  /** Sprint the item currently belongs to (list/board summaries, RDM-59). */
+  sprint?: { id: string; name: string } | null;
   row_version: number;
   created_at: string;
   updated_at?: string | null;
