@@ -384,7 +384,7 @@ export default function ReleasesPage() {
                 </Text>
               ) : (
                 <table
-                  className="rdm-table"
+                  className="rdm-table rdm-table--contained"
                   aria-label={t("itemsTableLabel")}
                   data-testid="release-detail-items"
                 >

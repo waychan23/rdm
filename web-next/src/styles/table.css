@@ -49,6 +49,18 @@
   outline-offset: -2px;
 }
 
+/* Tables embedded in fixed-width drawers: fixed layout keeps the table inside
+   its container; long cells truncate with an ellipsis instead of pushing the
+   last columns beyond the drawer edge. */
+.rdm-table--contained {
+  table-layout: fixed;
+}
+
+.rdm-table--contained tbody td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Column widths used by the tables (kept here so pages stay layout-free). */
 .rdm-table .col-title {
   min-width: 280px;

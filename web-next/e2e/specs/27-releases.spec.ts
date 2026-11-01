@@ -7,7 +7,9 @@ test("release publishes its completed stories", async ({ api, app, page }) => {
   const projectKey = await api.createSandboxProject(["alice"]);
   const story = await api.createItemIn(projectKey, {
     kind: "story",
-    title: `release-story-${Date.now()}`,
+    // Long title: the detail drawer table must truncate instead of overflowing
+    // its container (RDM-25).
+    title: `release-story-${Date.now()}-${"长标题".repeat(20)}`,
     assignee: "alice",
     status: "DONE",
   });
@@ -27,6 +29,12 @@ test("release publishes its completed stories", async ({ api, app, page }) => {
   await page.getByRole("option", { name: new RegExp(story.display_id) }).click();
   await page.getByTestId("release-item-add").click();
   await expect(page.getByTestId(`release-item-row-${story.display_id}`)).toBeVisible();
+  // RDM-25: the items table stays inside the drawer instead of being clipped.
+  expect(
+    await page
+      .getByTestId("release-detail-items")
+      .evaluate((el) => el.scrollWidth - el.clientWidth),
+  ).toBe(0);
   await expect(page.getByTestId("release-publish")).toBeEnabled();
 
   await page.getByTestId("release-publish").click();
