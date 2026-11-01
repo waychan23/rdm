@@ -9,6 +9,7 @@ import { api } from "./api";
 import { clearTokens, getAccessToken } from "./oauth";
 import { clearPageCache } from "./pageCache";
 import { clearScrollMemory } from "./scrollMemory";
+import { clearViewMemory } from "../workitems/viewMemory";
 import type { Whoami } from "../types";
 
 let currentUser: Whoami | null = null;
@@ -87,6 +88,7 @@ export async function logout() {
   } finally {
     clearPageCache();
     clearScrollMemory();
+    clearViewMemory();
     clearTokens();
     currentUser = null;
     readiness = null;
@@ -97,6 +99,7 @@ export async function logout() {
 export function clearSession() {
   clearPageCache();
   clearScrollMemory();
+  clearViewMemory();
   currentUser = null;
   readiness = null;
   emit();

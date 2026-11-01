@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 
@@ -29,6 +29,12 @@ import { logout, refreshSession, useCurrentUser } from "../lib/auth";
 import { safePostLoginPath } from "../lib/oauth";
 import { startEventStream } from "../lib/stream";
 import { userLabel } from "../lib/users";
+import {
+  subscribeViewMemory,
+  viewMemoryVersion,
+  viewPath,
+  type WorkView,
+} from "../workitems/viewMemory";
 import "../styles/shell.css";
 
 const styles = cssMap({
@@ -106,12 +112,14 @@ interface NavEntry {
   labelKey: NavKey;
   testId: string;
   icon: (props: { label: string }) => ReactNode;
+  /** Work item pages re-open with their remembered filters (RDM-80). */
+  view?: WorkView;
 }
 
 const PROJECT_NAV: NavEntry[] = [
-  { to: (k) => `/projects/${k}/board`, labelKey: "project.board", testId: "board", icon: BoardIcon },
-  { to: (k) => `/projects/${k}/backlog`, labelKey: "project.backlog", testId: "backlog", icon: BacklogIcon },
-  { to: (k) => `/projects/${k}/issues`, labelKey: "project.issues", testId: "issues", icon: BugIcon },
+  { to: (k) => `/projects/${k}/board`, view: "board", labelKey: "project.board", testId: "board", icon: BoardIcon },
+  { to: (k) => `/projects/${k}/backlog`, view: "backlog", labelKey: "project.backlog", testId: "backlog", icon: BacklogIcon },
+  { to: (k) => `/projects/${k}/issues`, view: "issues", labelKey: "project.issues", testId: "issues", icon: BugIcon },
   { to: (k) => `/projects/${k}/sprints`, labelKey: "project.sprints", testId: "sprints", icon: CalendarIcon },
   { to: (k) => `/projects/${k}/releases`, labelKey: "project.releases", testId: "releases", icon: ReleaseIcon },
   { to: (k) => `/projects/${k}/mailbox`, labelKey: "project.mailbox", testId: "mailbox", icon: EmailIcon },
@@ -132,6 +140,21 @@ export default function AppShell() {
   const location = useLocation();
   const who = useCurrentUser();
   const { t } = useTranslation("nav");
+  // Recompute the work item nav targets whenever a page remembers new filters
+  // (RDM-80 keepalive / board-list sync).
+  const viewMemory = useSyncExternalStore(
+    subscribeViewMemory,
+    viewMemoryVersion,
+    viewMemoryVersion,
+  );
+  const projectNav = useMemo(
+    () =>
+      PROJECT_NAV.map((entry) => ({
+        ...entry,
+        href: entry.view ? viewPath(projectKey, entry.view) : entry.to(projectKey),
+      })),
+    [projectKey, viewMemory],
+  );
 
   useEffect(() => {
     void refreshSession();
@@ -268,10 +291,10 @@ export default function AppShell() {
                 data-testid="rail-divider"
               />
               <div className="rdm-rail-group" data-testid="rail-group-project" data-project={projectKey}>
-                {PROJECT_NAV.map((entry) => (
+                {projectNav.map((entry) => (
                   <RailItem
                     key={entry.labelKey}
-                    to={entry.to(projectKey)}
+                    to={entry.href}
                     label={t(entry.labelKey)}
                     testId={`project-${entry.testId}`}
                     icon={entry.icon}

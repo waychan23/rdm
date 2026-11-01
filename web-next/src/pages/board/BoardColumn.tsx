@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cssMap } from "@atlaskit/css";
@@ -8,9 +8,12 @@ import { Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { token } from "@atlaskit/tokens";
 
 import StatusLozenge from "../../workitems/status";
+import { readColumnPosition, rememberColumnPosition } from "../../lib/scrollMemory";
 
 interface Props {
   status: string;
+  /** Per-project/request key for restoring the column's scroll offset. */
+  scrollKey: string;
   /** Unpaginated count for the column header. */
   count: number;
   /** More pages can be fetched when the column scrolls to the bottom. */
@@ -23,6 +26,7 @@ interface Props {
 
 export default function BoardColumn({
   status,
+  scrollKey,
   count,
   hasMore = false,
   loadingMore = false,
@@ -32,7 +36,17 @@ export default function BoardColumn({
 }: Props) {
   const { t } = useTranslation("projects");
   const ref = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const [isOver, setIsOver] = useState(false);
+
+  // Board remounts on a menu switch; restore the column body offset once the
+  // cached cards are on screen (RDM-80).
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const top = readColumnPosition(scrollKey);
+    if (top !== null) body.scrollTop = top;
+  }, [scrollKey]);
 
   useEffect(() => {
     const el = ref.current;
@@ -47,8 +61,9 @@ export default function BoardColumn({
   }, [status]);
 
   const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
-    if (!hasMore || loadingMore || !onLoadMore) return;
     const el = event.currentTarget;
+    rememberColumnPosition(scrollKey, el.scrollTop);
+    if (!hasMore || loadingMore || !onLoadMore) return;
     // Fetch the next page just before the bottom is reached.
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) onLoadMore();
   };
@@ -81,6 +96,7 @@ export default function BoardColumn({
         </Text>
       </Inline>
       <div
+        ref={bodyRef}
         data-testid={`board-column-body-${status}`}
         onScroll={handleScroll}
         style={{

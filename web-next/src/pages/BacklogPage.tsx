@@ -12,12 +12,14 @@ import { Page, PageHeader } from "../components/Page";
 import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";
+import { useRememberViewScroll } from "../hooks/useRememberViewScroll";
 import { useListOrigin, useListSearchParams } from "../lib/originSearch";
 import { recall, remember } from "../lib/pageCache";
 import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
 import type { WorkItem, WorkflowDto } from "../types";
 import { PAGE_SIZE } from "../workitems/constants";
 import { buildWorkItemTree } from "../workitems/hierarchy";
+import { useWorkItemViewMemory } from "../workitems/viewMemory";
 import WorkItemTable, { type WorkItemRowView } from "../workitems/WorkItemTable";
 import CreateWorkItemDialog from "../workitems/CreateWorkItemDialog";
 import WorkItemToolbar, { type WorkItemView } from "../workitems/WorkItemToolbar";
@@ -115,11 +117,13 @@ function BacklogView({ projectKey }: { projectKey: string }) {
   const [searchParams, setSearchParams] = useListSearchParams();
   const listOrigin = useListOrigin();
   useRestoreScroll();
+  useRememberViewScroll();
 
   // `/issues` is the same list pinned to the issue kind, with the kind filter
   // hidden (sidebar "缺陷" entry).
   const pagePath = listOrigin ? listOrigin.split("?")[0] : location.pathname;
   const issuesOnly = pagePath.endsWith("/issues");
+  useWorkItemViewMemory(projectKey, issuesOnly ? "issues" : "backlog");
   const defaults: FilterDefaults = {
     kinds: issuesOnly ? ["issue"] : DEFAULT_KINDS,
     rootOnly: false,

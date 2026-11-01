@@ -14,11 +14,13 @@ import { api, errorCause } from "../lib/api";
 import { statusLabel } from "../lib/labels";
 import { useNotify } from "../lib/flags";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";
+import { useRememberViewScroll } from "../hooks/useRememberViewScroll";
 import { useListOrigin, useListSearchParams } from "../lib/originSearch";
 import { recall, remember } from "../lib/pageCache";
 import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
 import type { WorkItem, WorkflowDto } from "../types";
 import { KIND_VALUES, PAGE_SIZE } from "../workitems/constants";
+import { useWorkItemViewMemory } from "../workitems/viewMemory";
 import BoardCard from "./board/BoardCard";
 import BoardColumn from "./board/BoardColumn";
 import CreateWorkItemDialog from "../workitems/CreateWorkItemDialog";
@@ -93,6 +95,8 @@ export default function BoardPage() {
   const location = useLocation();
   const notify = useNotify();
   useRestoreScroll();
+  useRememberViewScroll();
+  useWorkItemViewMemory(projectKey, "board");
 
   // Reads the item-drawer origin URL when this page renders as its backdrop.
   const [searchParams, setSearchParams] = useListSearchParams();
@@ -440,6 +444,7 @@ export default function BoardPage() {
                 <BoardColumn
                   key={status}
                   status={status}
+                  scrollKey={`${projectKey}|${filterParams}|${status}`}
                   count={column?.total ?? 0}
                   hasMore={items.length < (column?.total ?? 0)}
                   loadingMore={column?.loadingMore ?? false}
