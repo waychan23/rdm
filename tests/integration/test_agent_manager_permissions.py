@@ -12,10 +12,10 @@ import pyjson5
 import rdm.application.services.step_service as step_service_module
 import rdm.application.services.workitem_service as workitem_service_module
 from rdm.domain.workflow.engine import WorkflowEngine
-from rdm.domain.workflow.loader import load_spec_text
 from rdm.domain.workflow.schema import WorkflowSpec
 from tests.conftest import auth
 from tests.support import add_to_project, create_agent, create_human, login_pat
+from tests.workflow_support import load_test_spec_text
 
 API = "/api/v1"
 
@@ -204,7 +204,7 @@ async def test_task_mode_step_agent_executor_operated_by_manager(
     The managing human completes the child task on the agent's behalf; the
     parent step advances with the human as the event actor.
     """
-    raw = pyjson5.loads(load_spec_text())
+    raw = pyjson5.loads(load_test_spec_text())
     # task uses the named task_standard definition, so mutate the definition.
     raw["workflow_defs"]["task_standard"]["steps"]["IN_PROGRESS"].append(
         {

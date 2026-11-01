@@ -58,9 +58,9 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 ## 5. 完成工作
 
 1. task 完成后先回填实际工时（`work_item_update` 改 `actual_work_hours` 等特型字段）。
-2. 按工作流推进到 `TO_REVIEW`（direct 步骤）。
-3. **agent 可以作为 DONE 步骤的执行人**（§17.102）：DONE 目标不再按身份类型过滤候选人。只要 `actors`（assignee/participants/reviewers）解析到你，就可以发起并执行 `CODE_REVIEW`/任务式步骤收口到 `DONE`；需要人类验收时，由负责人把 reviewer/执行人配置为 human，或由该 agent 的 human manager 代操作（操作历史仍记实际操作身份）。
-4. story 在 TO_TEST、task 在 TO_REVIEW 后用 `mailbox_send` 通知 accountable_human 验收。issue 的 CLOSED_DONE 是 QA 关单语义。
+2. 按工作流推进：以 `work_item_get.meta.available_steps` 为准。开发类 task（frontend/backend/fullstack）先 `SUBMIT_REVIEW` 到 `TO_REVIEW`；其他 task 直接 `COMPLETE` 到 `DONE`。
+3. **agent 可以作为 DONE 步骤的执行人**（§17.102）：DONE 目标不再按身份类型过滤候选人。只要 `actors`（assignee/participants/managers/reviewers/project_members）解析到你，就可以发起并执行 `CODE_REVIEW`/任务式步骤收口到 `DONE`；需要人类验收时，由负责人把 reviewer/执行人配置为 human，或由该 agent 的 human manager 代操作（操作历史仍记实际操作身份）。
+4. story 在 TO_TEST、开发类 task 在 TO_REVIEW 后用 `mailbox_send` 通知 accountable_human 验收。issue 的 CLOSED_DONE 是 QA 关单语义。
 5. Story/Issue/Epic 进入终态有 gate：所有直接子项必须先终态；issue 关闭还要求至少 1 个子任务。
 ## 6. 版本发布（Release）
 

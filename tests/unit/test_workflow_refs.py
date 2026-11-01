@@ -148,8 +148,16 @@ def test_engine_runs_steps_from_referenced_definition() -> None:
 
 def test_packaged_spec_uses_named_definition_for_task() -> None:
     spec = load_spec()
-    assert "task_standard" in spec.workflow_defs
+    assert {"task_standard", "dev_standard", "qa_standard"} <= set(spec.workflow_defs)
     assert "use:" in load_spec_text().split("workflow_defs", 1)[1]
+    # Plain tasks and non-overridden subtypes follow the lean task flow.
     resolved = spec.resolve("task")
-    assert "TO_REVIEW" in resolved.states
-    assert [step.key for step in resolved.steps_from("TO_REVIEW")][0] == "CODE_REVIEW"
+    assert "TO_REVIEW" not in resolved.states
+    assert list(resolved.states) == list(spec.workflow_defs["task_standard"].states)
+    # Dev subtypes use the review flow; QA subtypes complete directly.
+    backend = spec.resolve("task", "backend")
+    assert "TO_REVIEW" in backend.states
+    assert "CODE_REVIEW" in [step.key for step in backend.steps_from("TO_REVIEW")]
+    testing = spec.resolve("task", "testing")
+    assert "TO_REVIEW" not in testing.states
+    assert testing.states == spec.resolve("task").states

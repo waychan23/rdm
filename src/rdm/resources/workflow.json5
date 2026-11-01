@@ -9,7 +9,7 @@
   // 配置修订号：修改任意配置语义内容（含结构变更）时必须 +1（注释/排版除外）。
   // 它仅随定义快照记录为 config_version；是否产生新的 work_item_workflow_version
   // 仍由生效定义的相等性判断决定，单独改 revision 不强制升版本。
-  revision: 1,
+  revision: 2,
   // 任务类型目录：code -> 中文标签；子类型 key 必须出现在这里。
   task_types: {
     other: "其他",
@@ -43,13 +43,89 @@
   workflow_defs: {
     // 标准任务流程：任务及其未单独定义流程的子类型共用。
     task_standard: {
-      states: ["TODO", "IN_PROGRESS", "BLOCKED", "TO_REVIEW", "DONE", "PUBLISHED", "CANCELLED"],
+      states: ["TODO", "IN_PROGRESS", "BLOCKED", "DONE", "CANCELLED"],
       initial: "TODO",
-      terminal: ["DONE", "PUBLISHED", "CANCELLED"],
+      terminal: ["DONE", "CANCELLED"],
       // 可选字段：reviewer/review_content 可检索；custom 不检索。
       fields: {
-        reviewer: true,
-        review_content: true,
+        reviewer: false,
+        review_content: false,
+        custom: [],
+      },
+      // 命名步骤：mode=direct|approval|task；actors 是执行人类型，具体执行人由负责人指派。
+      steps: {
+        TODO: [
+          {
+            key: "START",
+            name: "开始",
+            name_en: "Start",
+            to: "IN_PROGRESS",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            name_en: "Cancel",
+            to: "CANCELLED",
+          },
+        ],
+        IN_PROGRESS: [
+          {
+            key: "COMPLETE",
+            name: "完成",
+            name_en: "Complete",
+            to: "DONE",
+          },
+          {
+            key: "BLOCK",
+            name: "标记阻塞",
+            name_en: "Mark blocked",
+            to: "BLOCKED",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            name_en: "Cancel",
+            to: "CANCELLED",
+          },
+        ],
+        BLOCKED: [
+          {
+            key: "RESUME",
+            name: "恢复",
+            name_en: "Resume",
+            to: "IN_PROGRESS",
+          },
+          {
+            key: "REQUEUE",
+            name: "重新排队",
+            name_en: "Requeue",
+            to: "TODO",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            name_en: "Cancel",
+            to: "CANCELLED",
+          },
+        ],
+        DONE: [],
+        CANCELLED: [],
+      },
+      gates: {
+        DONE: {
+          children_all_terminal: true,
+        },
+      },
+    },
+    // 标准开发流程
+    dev_standard: {
+      states: ["TODO", "IN_PROGRESS", "BLOCKED", "TO_REVIEW", "DONE", "CANCELLED"],
+      initial: "TODO",
+      terminal: ["DONE", "CANCELLED"],
+      // 可选字段：reviewer/review_content 可检索；custom 不检索。
+      fields: {
+        reviewer: false,
+        review_content: false,
         custom: [],
       },
       // 命名步骤：mode=direct|approval|task；actors 是执行人类型，具体执行人由负责人指派。
@@ -115,7 +191,7 @@
             name_en: "Code Review",
             to: "DONE",
             mode: "approval", // direct | approval | task
-            actors: ["assignee", "reviewers"],
+            actors: ["assignee", "project_members"],
             executors: {
               min: 1,
               max: 3,
@@ -123,9 +199,12 @@
             note: "required", // optional | required
             // 按目标状态的默认 gate；step.gates 按字段覆盖。
             gates: {
-              required_fields: ["review_content"],
+              // required_fields: ["review_content"], // example
+              required_fields: [],
             },
           },
+          /*
+          // Example of step by sub-task
           {
             key: "CODE_REVIEW_TASKS",
             name: "Code Review Task",
@@ -143,6 +222,7 @@
               complete_on: "DONE", // 必须是该 task type 工作流的终态
             },
           },
+          */
           {
             key: "SEND_BACK",
             name: "打回修改",
@@ -157,16 +237,91 @@
             to: "CANCELLED",
           },
         ],
-        DONE: [
+        DONE: [],
+        CANCELLED: [],
+      },
+      gates: {
+        DONE: {
+          children_all_terminal: true,
+        },
+      },
+    },
+
+    // 标准测试流程
+
+    qa_standard: {
+      states: ["TODO", "IN_PROGRESS", "BLOCKED", "DONE", "CANCELLED"],
+      initial: "TODO",
+      terminal: ["DONE", "CANCELLED"],
+      // 可选字段：reviewer/review_content 可检索；custom 不检索。
+      fields: {
+        reviewer: false,
+        review_content: false,
+        custom: [],
+      },
+      // 命名步骤：mode=direct|approval|task；actors 是执行人类型，具体执行人由负责人指派。
+      steps: {
+        TODO: [
           {
-            key: "PUBLISH",
-            name: "发布",
-            name_en: "Publish",
-            to: "PUBLISHED",
+            key: "START",
+            name: "开始",
+            name_en: "Start",
+            to: "IN_PROGRESS",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            name_en: "Cancel",
+            to: "CANCELLED",
           },
         ],
-        PUBLISHED: [],
+        IN_PROGRESS: [
+          {
+            key: "COMPLETE",
+            name: "完成",
+            name_en: "Complete",
+            to: "DONE",
+          },
+          {
+            key: "BLOCK",
+            name: "标记阻塞",
+            name_en: "Mark blocked",
+            to: "BLOCKED",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            name_en: "Cancel",
+            to: "CANCELLED",
+          },
+        ],
+        BLOCKED: [
+          {
+            key: "RESUME",
+            name: "恢复",
+            name_en: "Resume",
+            to: "IN_PROGRESS",
+          },
+          {
+            key: "REQUEUE",
+            name: "重新排队",
+            name_en: "Requeue",
+            to: "TODO",
+          },
+          {
+            key: "CANCEL",
+            name: "取消",
+            name_en: "Cancel",
+            to: "CANCELLED",
+          },
+        ],
+        DONE: [],
         CANCELLED: [],
+      },
+      gates: {
+        DONE: {
+          children_all_terminal: true,
+        },
       },
     },
   },
@@ -352,7 +507,7 @@
         TO_CONFIRM: [
           {
             key: "ACCEPT",
-            name: "确认修复",
+            name: "确认缺陷",
             name_en: "Confirm fix",
             to: "TO_FIX",
           },
@@ -495,15 +650,17 @@
       // 任务子类型：可定义自己的 states/steps/fields；未声明 states 时继承 task。
       subtypes: {
         code_review: {
-          label: "Code Review",
+          label: "代码评审",
           label_en: "Code Review",
-          states: ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"],
+          states: ["TODO", "IN_PROGRESS", "DONE", "CANCELLED"],
           initial: "TODO",
           terminal: ["DONE", "CANCELLED"],
           fields: {
-            reviewer: true,
-            review_content: true,
+            reviewer: false,
+            review_content: false,
             custom: [
+              /*
+              // example of custom fields
               {
                 key: "review_scope",
                 label: "评审范围",
@@ -523,6 +680,7 @@
                 type: "user",
                 multiple: true,
               },
+              */
             ],
           },
           steps: {
@@ -542,31 +700,10 @@
             ],
             IN_PROGRESS: [
               {
-                key: "SUBMIT",
-                name: "提交评审结果",
-                name_en: "Submit review result",
-                to: "IN_REVIEW",
-              },
-              {
-                key: "CANCEL",
-                name: "取消",
-                name_en: "Cancel",
-                to: "CANCELLED",
-              },
-            ],
-            IN_REVIEW: [
-              {
-                key: "APPROVE",
-                name: "评审通过",
-                name_en: "Approve review",
+                key: "COMPLETE",
+                name: "完成",
+                name_en: "Complete",
                 to: "DONE",
-                note: "required",
-              },
-              {
-                key: "SEND_BACK",
-                name: "打回修改",
-                name_en: "Send back for changes",
-                to: "IN_PROGRESS",
               },
               {
                 key: "CANCEL",
@@ -578,6 +715,26 @@
             DONE: [],
             CANCELLED: [],
           },
+        },
+        frontend: {
+          label: "前端开发",
+          label_en: "Frontend Dev", 
+          use: "dev_standard"
+        },
+        backend: {
+          label: "后端开发",
+          label_en: "Backend Dev", 
+          "use": "dev_standard"
+        },
+        fullstack: {
+          label: "全栈开发",
+          label_en: "Fullstack Dev", 
+          "use": "dev_standard"
+        },
+        testing: {
+          label: "测试",
+          label_en: "QA", 
+          "use": "qa_standard"
         },
       },
     },

@@ -197,9 +197,9 @@
   "kinds": {
     "task": {
       "label": "任务",
-      "states": ["TODO", "IN_PROGRESS", "BLOCKED", "TO_REVIEW", "DONE", "PUBLISHED", "CANCELLED"],
+      "states": ["TODO", "IN_PROGRESS", "BLOCKED", "DONE", "CANCELLED"],
       "initial": "TODO",
-      "terminal": ["DONE", "PUBLISHED", "CANCELLED"],
+      "terminal": ["DONE", "CANCELLED"],
 
       // 可选：开启 reviewer/review_content 与自定义字段
       "fields": {},
@@ -212,13 +212,11 @@
         "TODO": [],
         "IN_PROGRESS": [],
         "BLOCKED": [],
-        "TO_REVIEW": [],
         "DONE": [],
-        "PUBLISHED": [],
         "CANCELLED": []
       },
 
-      // 可选：task 子类型工作流
+      // 可选：task 子类型工作流（可用 use 引用命名定义）
       "subtypes": {}
     }
   }
@@ -499,13 +497,14 @@ Owner/Manager **不能越权执行**未指派给自己的步骤。接管方式�
 {
   "subtypes": {
     "code_review": {
-      "label": "Code Review",
-      "states": ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"],
+      "label": "代码评审",
+      "label_en": "Code Review",
+      "states": ["TODO", "IN_PROGRESS", "DONE", "CANCELLED"],
       "initial": "TODO",
       "terminal": ["DONE", "CANCELLED"],
       "fields": {
-        "reviewer": true,
-        "review_content": true,
+        "reviewer": false,
+        "review_content": false,
         "custom": [
           {"key": "review_scope", "label": "评审范围", "type": "text"}
         ]
@@ -516,12 +515,7 @@ Owner/Manager **不能越权执行**未指派给自己的步骤。接管方式�
           {"key": "CANCEL", "name": "取消", "to": "CANCELLED"}
         ],
         "IN_PROGRESS": [
-          {"key": "SUBMIT", "name": "提交评审结果", "to": "IN_REVIEW"},
-          {"key": "CANCEL", "name": "取消", "to": "CANCELLED"}
-        ],
-        "IN_REVIEW": [
-          {"key": "APPROVE", "name": "评审通过", "to": "DONE", "note": "required"},
-          {"key": "SEND_BACK", "name": "打回修改", "to": "IN_PROGRESS"},
+          {"key": "COMPLETE", "name": "完成", "to": "DONE"},
           {"key": "CANCEL", "name": "取消", "to": "CANCELLED"}
         ],
         "DONE": [],
@@ -599,7 +593,8 @@ Owner/Manager **不能越权执行**未指派给自己的步骤。接管方式�
 ```
 
 使用：负责人先维护 `reviewer`，再发起步骤选 1-3 名执行人；每人提交备注；全部完成后
-自动 DONE。
+自动 DONE。打包定义的开发流程（`dev_standard`）当前关闭了 reviewer/review_content，
+改用 `actors: ["assignee", "project_members"]`，即从全体项目成员中选执行人。
 
 ### 10.3 Code Review：每人一个评审子任务
 

@@ -7,9 +7,9 @@ import pyjson5
 import rdm.application.services.step_service as step_service_module
 import rdm.application.services.workitem_service as workitem_service_module
 from rdm.domain.workflow.engine import WorkflowEngine
-from rdm.domain.workflow.loader import load_spec_text
 from rdm.domain.workflow.schema import WorkflowSpec
 from tests.support import create_agent, make_member
+from tests.workflow_support import load_test_spec_text
 
 API = "/api/v1"
 
@@ -571,7 +571,7 @@ async def test_project_members_actor_source(server, owner_token: str, monkeypatc
     Replaces the task IN_PROGRESS step with one acceptance-style step open to
     any member; humans and agents auto-joined by their manager both qualify.
     """
-    raw = pyjson5.loads(load_spec_text())
+    raw = pyjson5.loads(load_test_spec_text())
     raw["workflow_defs"]["task_standard"]["steps"]["IN_PROGRESS"].append(
         {
             "key": "ANY_MEMBER_REVIEW",

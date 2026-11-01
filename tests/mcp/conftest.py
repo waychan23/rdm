@@ -5,10 +5,19 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import httpx
+import pytest
 import pytest_asyncio
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
 from httpx import ASGITransport
+
+from tests.workflow_support import install_test_engine
+
+
+@pytest.fixture(autouse=True)
+def _test_workflow_definition(monkeypatch):
+    """MCP behavior tests use the dedicated test workflow contract."""
+    install_test_engine(monkeypatch)
 
 
 def _client_factory(app) -> Callable[..., httpx.AsyncClient]:

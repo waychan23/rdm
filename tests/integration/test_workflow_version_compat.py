@@ -8,9 +8,9 @@ import rdm.application.services.step_service as step_service_module
 import rdm.application.services.workitem_service as workitem_service_module
 import rdm.interfaces.http.workitem as http_workitem_module
 from rdm.domain.workflow.engine import WorkflowEngine
-from rdm.domain.workflow.loader import load_spec_text
 from rdm.domain.workflow.schema import WorkflowSpec
 from tests.support import make_member
+from tests.workflow_support import load_test_spec_text
 
 API = "/api/v1"
 
@@ -20,7 +20,7 @@ def auth(token: str) -> dict[str, str]:
 
 
 def _renamed_spec() -> WorkflowSpec:
-    raw = pyjson5.loads(load_spec_text())
+    raw = pyjson5.loads(load_test_spec_text())
     steps = raw["workflow_defs"]["task_standard"]["steps"]
     steps["IN_PROGRESS"] = [
         {**step, "key": "SUBMIT_QA"} if step["key"] == "SUBMIT_REVIEW" else step

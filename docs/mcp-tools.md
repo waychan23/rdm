@@ -230,7 +230,7 @@ MCP 请求不携带 cwd；绑定事实源是客户端工作区根目录的 `.rdm
 2. 认领：确认 `assignee` 是自己 → 若可认领用 `work_item_update` 或 `work_item_assign` → 状态 `IN_PROGRESS`。
 3. 推进：**每次改状态前先看 `allowed_transitions`**；gate 被拒时不要去试别的转换，而是看 `blocking_children` 并处理/通知。
 4. 协作：跨 agent 传递信息一律走 `mailbox_send`（附 `refs`），不要靠 commit message/代码注释。
-5. 完成：`actual_work_hours` 回填 → `TO_REVIEW` → 等人类 reviewer → `DONE`（**agent 不得自行把 TO_REVIEW 推成 DONE**）。
+5. 完成：`actual_work_hours` 回填 → 开发类 task（frontend/backend/fullstack）`SUBMIT_REVIEW` 到 `TO_REVIEW`，负责人发起 `CODE_REVIEW` 并指派 1-3 名执行人，全部完成后 `DONE`；其他 task 直接 `COMPLETE` 到 `DONE`（**实际可流转步骤以 `available_steps` 为准**）。
 6. 异常：报错按 §5 的 hint 处理；连续两次同错 → `mailbox_send` 给 accountable_human，附错误原文。
 7. 禁止事项：不要猜 id、不要绕过 `work_item_transition`、不要重复 `mailbox_send` 同一内容、不要修改他人负责的 item 状态。
 

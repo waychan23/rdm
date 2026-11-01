@@ -50,11 +50,13 @@ def test_illegal_transition_carries_allowed(engine: WorkflowEngine) -> None:
 
 
 def test_terminal_states_have_no_or_only_named_exits(engine: WorkflowEngine) -> None:
-    # task DONE may only publish; CANCELLED is frozen.
-    assert engine.allowed("task", "DONE") == ("PUBLISHED",)
+    # task DONE is frozen; CANCELLED is frozen.
+    assert engine.allowed("task", "DONE") == ()
     assert engine.allowed("task", "CANCELLED") == ()
     with pytest.raises(WorkflowIllegalTransition):
         engine.check("task", "CANCELLED", "TODO")
+    # story DONE may only publish.
+    assert engine.allowed("story", "DONE") == ("PUBLISHED",)
     # issue terminal CLOSED_DONE allows REOPEN explicitly.
     assert engine.allowed("issue", "CLOSED_DONE") == ("REOPEN",)
 
@@ -142,23 +144,20 @@ def test_sprint_gate_passes_when_items_terminal(engine: WorkflowEngine) -> None:
     engine.check("sprint", "ACTIVE", "CLOSED", item="Sprint-1", context=ctx)
 
 
-def test_task_code_review_requires_review_content(engine: WorkflowEngine) -> None:
-    with pytest.raises(WorkflowGateBlocked) as exc:
-        engine.check(
-            "task",
-            "TO_REVIEW",
-            "DONE",
-            context=GateContext(children=[]),
-            step_key="CODE_REVIEW",
-        )
-    assert [m["key"] for m in exc.value.details["missing_fields"]] == ["review_content"]
-
+def test_task_code_review_step_open_to_project_members(engine: WorkflowEngine) -> None:
+    # Dev subtypes use the review flow: CODE_REVIEW is an approval step open to
+    # any project member, and the shipped config no longer requires
+    # review_content, so an empty context passes the step's field gate.
+    step = engine.resolve_step("task", "TO_REVIEW", key="CODE_REVIEW", task_type="backend")
+    assert step.mode == "approval"
+    assert step.actors == ("assignee", "project_members")
     engine.check(
         "task",
         "TO_REVIEW",
         "DONE",
-        context=GateContext(children=[], field_values={"review_content": "ok"}),
+        context=GateContext(children=[]),
         step_key="CODE_REVIEW",
+        task_type="backend",
     )
 
 
