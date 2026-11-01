@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from tests.support import make_member
+import pyjson5
+
+import rdm.application.services.step_service as step_service_module
+import rdm.application.services.workitem_service as workitem_service_module
+from rdm.domain.workflow.engine import WorkflowEngine
+from rdm.domain.workflow.loader import load_spec_text
+from rdm.domain.workflow.schema import WorkflowSpec
+from tests.support import create_agent, make_member
 
 API = "/api/v1"
 
@@ -556,3 +563,62 @@ async def test_approval_reject_stops_step_and_notifies_assignee(server, owner_to
     # The second executor was cancelled with the step.
     r = await client.get(f"{API}/work-items/{task['display_id']}", headers=auth(rev2_token))
     assert r.status_code == 200
+
+
+async def test_project_members_actor_source(server, owner_token: str, monkeypatch) -> None:
+    """``actors=["project_members"]`` offers every active project member.
+
+    Replaces the task IN_PROGRESS step with one acceptance-style step open to
+    any member; humans and agents auto-joined by their manager both qualify.
+    """
+    raw = pyjson5.loads(load_spec_text())
+    raw["workflow_defs"]["task_standard"]["steps"]["IN_PROGRESS"].append(
+        {
+            "key": "ANY_MEMBER_REVIEW",
+            "name": "任意成员评审",
+            "to": "TO_REVIEW",
+            "mode": "approval",
+            "actors": ["project_members"],
+            "executors": {"min": 1, "max": None},
+        }
+    )
+    engine = WorkflowEngine(WorkflowSpec.model_validate(raw))
+    monkeypatch.setattr(step_service_module, "load_engine", lambda: engine)
+    monkeypatch.setattr(workitem_service_module, "load_engine", lambda: engine)
+
+    client, _settings, _app = server
+    await _project(client, owner_token)
+    owner_id = (await client.get(f"{API}/whoami", headers=auth(owner_token))).json()["data"][
+        "user"
+    ]["id"]
+    dev_id, dev_token = await make_member(client, owner_token, "DEMO", "dev", ["worker"])
+    rev_id, _rev_token = await make_member(client, owner_token, "DEMO", "rev1", ["worker"])
+    agent_id = await create_agent(client, dev_token, "dev-agent")
+
+    task = await _item(client, owner_token, {"kind": "task", "title": "t", "assignee": "dev"})
+    r = await _move(client, dev_token, task["display_id"], "IN_PROGRESS", task["row_version"])
+    assert r.status_code == 200, r.text
+    task = r.json()["data"]
+
+    detail = await _detail(client, dev_token, task["display_id"])
+    step = next(s for s in detail["meta"]["available_steps"] if s["key"] == "ANY_MEMBER_REVIEW")
+    assert step["actor_sources"] == ["project_members"]
+    assert {c["id"] for c in step["candidates"]} == {
+        owner_id,
+        dev_id,
+        rev_id,
+        agent_id,
+    }
+    assert step["can_start"] is True
+
+    # Any member may be assigned as executor, including the agent.
+    started = await _start_step(
+        client,
+        dev_token,
+        task,
+        "ANY_MEMBER_REVIEW",
+        executors=[rev_id, agent_id],
+    )
+    assert started.status_code == 200, started.text
+    executors = started.json()["meta"]["active_step"]["executors"]
+    assert {e["user"]["id"] for e in executors} == {rev_id, agent_id}

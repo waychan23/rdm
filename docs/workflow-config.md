@@ -280,7 +280,7 @@
 | `name_en` | 否 | 英文展示名；`Accept-Language: en` 时使用，缺省回退 `name` |
 | `to` | 必填 | 目标状态，必须在 `states` 中 |
 | `mode` | `"direct"` | `"direct"` / `"approval"` / `"task"`，见 §8 |
-| `actors` | `["assignee"]` | 执行人**类型**集合：`assignee`、`participants`、`managers`、`reviewers`；不可重复、不可为空 |
+| `actors` | `["assignee"]` | 执行人**类型**集合：`assignee`、`participants`、`managers`、`reviewers`、`project_members`；不可重复、不可为空 |
 | `executors` | `{"min": 1, "max": 1}` | 指派人数范围；`"max": null` 表示不超过候选人数。实际被指派的人**全部**完成后才流转 |
 | `note` | `"optional"` | `"optional"` / `"required"`；每个执行人各写一条备注。`mode="task"` 时禁止 `"required"` |
 | `gates` | 继承 kind 级同目标 gate | 按字段覆盖 kind 默认；见 §5 |
@@ -390,8 +390,10 @@
 | `participants` | participant 行 ∪ 负责人 |
 | `managers` | 项目内 human 成员中 roles 含 `manager` 或 `project_owner` 的人 |
 | `reviewers` | `reviewer` 字段的人 |
+| `project_members` | 项目内全部启用成员（human 与随 manager 入项的 agent） |
 
 - 只保留仍在本项目、启用的成员。
+- `project_members` 是全体成员，因此包含负责人、参与人、评审人与 Owner/Manager，通常用于「任意成员都可执行」的审批类步骤；`mode="direct"` 要求唯一候选，配 `project_members` 时一般无法执行。
 - 候选执行人不按目标状态过滤 agent（§17.102）：agent 只要是 `actors` 来源解析出的候选人，就可以作为 `DONE` 步骤的执行人；其 human manager 也可代操作（§17.101）。
 - `reviewers` 为空且 `actors` 只有 `reviewers` 时，该步骤没有候选人，无法发起。
 

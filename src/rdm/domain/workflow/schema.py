@@ -23,7 +23,7 @@ from pydantic import (
 )
 
 StepMode = Literal["direct", "approval", "task"]
-ActorSource = Literal["assignee", "participants", "managers", "reviewers"]
+ActorSource = Literal["assignee", "participants", "managers", "reviewers", "project_members"]
 NoteRequirement = Literal["optional", "required"]
 CustomFieldType = Literal["text", "number", "user"]
 

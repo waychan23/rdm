@@ -259,6 +259,10 @@ class StepService:
         if "reviewers" in step.actors:
             for user_id in item.reviewer_user_ids:
                 add(user_id)
+        if "project_members" in step.actors:
+            # Any active member of the project, humans and agents alike (§17.123).
+            for user_id in members:
+                add(user_id)
 
         # Agents are valid candidates for every target, including DONE (§17.102).
         return [members[user_id][0] for user_id in ids]
