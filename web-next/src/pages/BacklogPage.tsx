@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { cssMap } from "@atlaskit/css";
@@ -17,6 +17,7 @@ import { api } from "../lib/api";
 import { statusLabel } from "../lib/labels";
 import { useAsync } from "../hooks/useAsync";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";
+import { useListOrigin, useListSearchParams } from "../lib/originSearch";
 import { recall, remember } from "../lib/pageCache";
 import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
 import type { ProjectMemberRow, WorkItem, WorkflowDto } from "../types";
@@ -123,7 +124,9 @@ function BacklogView({ projectKey }: { projectKey: string }) {
   const { t } = useTranslation("projects");
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  // Reads the item-drawer origin URL when this page renders as its backdrop.
+  const [searchParams, setSearchParams] = useListSearchParams();
+  const listOrigin = useListOrigin();
   useRestoreScroll();
 
   const kindsParam = searchParams.get("kind");
@@ -278,7 +281,8 @@ function BacklogView({ projectKey }: { projectKey: string }) {
   };
 
   const openItem = (item: WorkItem) => {
-    const from = location.pathname + location.search;
+    // From the drawer backdrop the list URL (not the item route) is the origin.
+    const from = listOrigin ?? location.pathname + location.search;
     // The backdrop copy receives the item path; only a real list route owns
     // the shell scroll position.
     if (!from.includes("/items/")) rememberScroll(from, appContentScrollTop());

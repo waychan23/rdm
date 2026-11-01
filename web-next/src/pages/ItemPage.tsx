@@ -2,6 +2,7 @@ import type { MouseEvent } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { itemPath, originFor } from "../lib/navigation";
+import { OriginSearchProvider } from "../lib/originSearch";
 import BacklogPage from "./BacklogPage";
 import BoardPage from "./BoardPage";
 import SprintsPage from "./SprintsPage";
@@ -51,7 +52,9 @@ export default function ItemPage() {
         data-testid="item-backdrop"
         onClick={dismissFromBackdrop}
       >
-        {backdrop}
+        {/* The drawer route owns the address bar; the backdrop keeps the list
+            URL (filters included) it was opened from. */}
+        <OriginSearchProvider origin={origin}>{backdrop}</OriginSearchProvider>
       </div>
       <ItemPanel
         projectKey={projectKey}

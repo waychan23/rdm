@@ -31,6 +31,45 @@ test.describe("URL-backed filter state", () => {
     await expect(page.getByRole("checkbox", { name: "任务" })).not.toBeChecked();
   });
 
+  test("the list behind an open drawer keeps its filters (RDM-51)", async ({
+    api,
+    app,
+    page,
+  }) => {
+    const projectKey = await api.createSandboxProject();
+    const stamp = Date.now();
+    const story = await api.createItemIn(projectKey, {
+      kind: "story",
+      title: `drawer-filter-${stamp}`,
+    });
+    await api.createItemIn(projectKey, { kind: "issue", title: `drawer-filter-issue-${stamp}` });
+
+    await page.goto(`${app.baseURL}/projects/${projectKey}/backlog`);
+    await page.getByTestId("work-item-search").fill(story.title);
+    await page.getByTestId("work-item-search").press("Enter");
+    // Story only: the issue/epic/task checkboxes go unchecked.
+    await page.getByRole("checkbox", { name: "Epic" }).click();
+    await page.getByRole("checkbox", { name: "缺陷" }).click();
+    await page.getByRole("checkbox", { name: "任务" }).click();
+    await expect(page).toHaveURL(/kind=story/);
+    const row = page.getByTestId(`work-item-row-${story.display_id}`);
+    await expect(row).toBeVisible();
+
+    await row.click();
+    await expect(page.getByTestId("item-panel")).toBeVisible();
+
+    // The list still rendered behind the drawer keeps the query and filters.
+    await expect(page.getByTestId("work-item-search")).toHaveValue(story.title);
+    await expect(page.getByRole("checkbox", { name: "需求" })).toBeChecked();
+    await expect(page.getByRole("checkbox", { name: "Epic" })).not.toBeChecked();
+    await expect(row).toBeVisible();
+
+    await page.getByTestId("item-backdrop").click({ position: { x: 12, y: 12 } });
+    await expect(page.getByTestId("item-panel")).toHaveCount(0);
+    await expect(page).toHaveURL(/kind=story/);
+    await expect(page.getByTestId("work-item-search")).toHaveValue(story.title);
+  });
+
   test("board, mailbox and inbox read their controls from the URL", async ({
     app,
     page,
