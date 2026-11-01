@@ -29,6 +29,7 @@ import { buildRequestParams } from "../workitems/filterState";
 import { priorityOptions } from "../workitems/priority";
 import PriorityMark from "./PriorityMark";
 import PersonCell from "./PersonCell";
+import TruncatedText from "./TruncatedText";
 import StatusLozenge from "../workitems/status";
 import TypeKindIcon from "./TypeKindIcon";
 import "../styles/table.css";
@@ -413,7 +414,7 @@ export default function WorkItemPickerDialog({
                         <th scope="col" className="col-id">
                           ID
                         </th>
-                        <th scope="col">{t("workItemPicker.kind")}</th>
+                        <th scope="col">{t("workItemPicker.itemTitle")}</th>
                         <th scope="col">{t("workItemPicker.status")}</th>
                         <th scope="col">{t("workItemPicker.priority")}</th>
                         <th scope="col">{t("workItemPicker.assignee")}</th>
@@ -449,7 +450,7 @@ export default function WorkItemPickerDialog({
                               </Inline>
                             </td>
                             <td>
-                              <Text size="small">{item.title}</Text>
+                              <TruncatedText className="title-text" text={item.title} />
                             </td>
                             <td>
                               <StatusLozenge status={item.status} />

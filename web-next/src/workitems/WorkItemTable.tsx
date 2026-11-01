@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 
 import PersonCell from "../components/PersonCell";
 import PriorityMark from "../components/PriorityMark";
+import TruncatedText from "../components/TruncatedText";
 import TypeKindIcon from "../components/TypeKindIcon";
 import { formatDate } from "../lib/format";
 import { userLabel } from "../lib/users";
@@ -184,7 +185,7 @@ export default function WorkItemTable({
                   ) : null}
                   <TypeKindIcon kind={row.kind} />
                   <span className="display-id">{row.display_id}</span>
-                  <span className="title-text">{row.title}</span>
+                  <TruncatedText className="title-text" text={row.title} />
                 </span>
               </td>
               <td>

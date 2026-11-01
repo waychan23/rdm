@@ -6,6 +6,8 @@ import { cssMap } from "@atlaskit/css";
 import IconButton from "@atlaskit/button/icon/button";
 import Badge from "@atlaskit/badge";
 import { Box, Inline, Text } from "@atlaskit/primitives/compiled";
+
+import TruncatedText from "../components/TruncatedText";
 import NotificationIcon from "@atlaskit/icon/core/notification";
 import SearchIcon from "@atlaskit/icon/core/search";
 import InboxIcon from "@atlaskit/icon/core/inbox";
@@ -303,7 +305,7 @@ function RailItem({
   return (
     <NavLink to={to} end={end} className="rdm-rail-item" data-testid={`rail-item-${testId}`}>
       <Icon label={label} />
-      <span className="rdm-rail-label">{label}</span>
+      <TruncatedText className="rdm-rail-label" text={label} />
     </NavLink>
   );
 }

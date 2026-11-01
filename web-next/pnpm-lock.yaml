@@ -86,6 +86,9 @@ importers:
       '@atlaskit/tokens':
         specifier: ^20.8.2
         version: 20.8.2(react@18.3.1)
+      '@atlaskit/tooltip':
+        specifier: ^24.4.3
+        version: 24.4.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@compiled/react':
         specifier: ^1.0.2
         version: 1.0.2(react@18.3.1)
@@ -396,6 +399,12 @@ packages:
 
   '@atlaskit/tooltip@24.4.2':
     resolution: {integrity: sha512-z1h10TeuajGT/dGnTdCLSH4vx2w5Tm6RW9affXkDxL/Mzar/cmGUSSjiIE1i4N/Jik8MqRVzMcejvZuXoKQEug==}
+    peerDependencies:
+      react: ^18.2.0 || ^19.0.0
+      react-dom: ^18.2.0 || ^19.0.0
+
+  '@atlaskit/tooltip@24.4.3':
+    resolution: {integrity: sha512-fKqfqhKr1QP9GG6q91p5JE8Uk6H+wSCCEv2G55XpXevqKLFyeUI3KMx81cC+qItvOB5kBy8x+dYViJc26NQJlg==}
     peerDependencies:
       react: ^18.2.0 || ^19.0.0
       react-dom: ^18.2.0 || ^19.0.0
@@ -2593,6 +2602,27 @@ snapshots:
       '@atlaskit/theme': 28.2.5(react@18.3.1)
       '@atlaskit/tokens': 20.8.2(react@18.3.1)
       '@atlaskit/top-layer': 6.7.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@babel/runtime': 7.29.10
+      '@compiled/react': 1.0.2(react@18.3.1)
+      bind-event-listener: 3.0.0
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@atlaskit/tooltip@24.4.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@atlaskit/analytics-next': 12.6.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@atlaskit/ds-lib': 8.0.1(react@18.3.1)
+      '@atlaskit/layering': 6.1.0(react@18.3.1)
+      '@atlaskit/motion': 9.5.0(react@18.3.1)
+      '@atlaskit/platform-feature-flags': 2.2.1(react@18.3.1)
+      '@atlaskit/popper': 9.4.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@atlaskit/portal': 7.1.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@atlaskit/react-compiler-gating': 0.2.5(react@18.3.1)
+      '@atlaskit/theme': 28.2.5(react@18.3.1)
+      '@atlaskit/tokens': 20.8.2(react@18.3.1)
+      '@atlaskit/top-layer': 7.0.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@babel/runtime': 7.29.10
       '@compiled/react': 1.0.2(react@18.3.1)
       bind-event-listener: 3.0.0

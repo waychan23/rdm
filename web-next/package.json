@@ -38,6 +38,7 @@
     "@atlaskit/textarea": "^10.2.7",
     "@atlaskit/textfield": "^10.2.6",
     "@atlaskit/tokens": "^20.8.2",
+    "@atlaskit/tooltip": "^24.4.3",
     "@compiled/react": "^1.0.2",
     "dompurify": "^3.4.17",
     "i18next": "^26.5.11",

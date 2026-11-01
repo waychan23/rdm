@@ -20,6 +20,7 @@ import ImagePreviewDialog from "../../components/ImagePreviewDialog";
 import MarkdownEditor from "../../components/MarkdownEditor";
 import MarkdownText from "../../components/MarkdownText";
 import PersonCell from "../../components/PersonCell";
+import TruncatedText from "../../components/TruncatedText";
 import TextButton from "../../components/TextButton";
 import TypeKindIcon from "../../components/TypeKindIcon";
 import WorkItemPicker, {
@@ -976,7 +977,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                     data-testid={`item-attachment-${a.id}`}
                   >
                     <TextButton onClick={() => api.download(a.download_url, a.filename)}>
-                      <span className="rdm-item-att-name">{a.filename}</span>
+                      <TruncatedText className="rdm-item-att-name" text={a.filename} />
                     </TextButton>
                     <Text size="small" color="color.text.subtlest">
                       {formatSize(a.size_bytes)}

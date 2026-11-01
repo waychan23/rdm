@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 
 import FormField from "../../components/FormField";
 import PersonCell from "../../components/PersonCell";
+import TruncatedText from "../../components/TruncatedText";
 import WorkItemPicker, {
   toWorkItemOption,
   type WorkItemOption,
@@ -197,7 +198,7 @@ export default function ChildrenSection({
               }}
             >
               <span className="rdm-item-child-id">{child.display_id}</span>
-              <span className="rdm-item-child-title">{child.title}</span>
+              <TruncatedText className="rdm-item-child-title" text={child.title} />
               <span className="rdm-item-child-status">
                 <StatusLozenge status={child.status} />
               </span>

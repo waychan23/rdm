@@ -10,6 +10,7 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import ImagePreviewDialog from "../../components/ImagePreviewDialog";
 import MarkdownText from "../../components/MarkdownText";
 import TextButton from "../../components/TextButton";
+import TruncatedText from "../../components/TruncatedText";
 import WorkItemPickerDialog from "../../components/WorkItemPickerDialog";
 import { api, errorCause } from "../../lib/api";
 import { useNotify } from "../../lib/flags";
@@ -192,7 +193,9 @@ export default function SprintDetailDrawer({
                         <td>
                           <Text color="color.link">{row.display_id}</Text>
                         </td>
-                        <td>{row.title}</td>
+                        <td>
+                          <TruncatedText className="title-text" text={row.title} />
+                        </td>
                         <td>
                           <StatusLozenge status={row.status} />
                         </td>

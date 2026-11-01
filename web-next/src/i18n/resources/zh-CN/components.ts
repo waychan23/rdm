@@ -32,6 +32,7 @@ const components = {
     title: "选择工作项",
     search: "搜索标题/评审意见",
     kind: "类型",
+    itemTitle: "标题",
     assignee: "负责人",
     priority: "优先级",
     status: "状态",

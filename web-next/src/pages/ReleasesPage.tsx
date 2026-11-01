@@ -17,6 +17,7 @@ import ImagePreviewDialog from "../components/ImagePreviewDialog";
 import MarkdownText from "../components/MarkdownText";
 import { Page, PageHeader } from "../components/Page";
 import TextButton from "../components/TextButton";
+import TruncatedText from "../components/TruncatedText";
 import WorkItemPickerDialog from "../components/WorkItemPickerDialog";
 import { useAsync } from "../hooks/useAsync";
 import { api, errorCause } from "../lib/api";
@@ -408,7 +409,9 @@ export default function ReleasesPage() {
                         <td>
                           <Text color="color.link">{row.display_id}</Text>
                         </td>
-                        <td>{row.title}</td>
+                        <td>
+                          <TruncatedText className="title-text" text={row.title} />
+                        </td>
                         <td>
                           <StatusLozenge status={row.status} />
                         </td>

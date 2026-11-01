@@ -150,9 +150,11 @@
 }
 
 .rdm-table .title-text {
+  display: block;
   color: var(--ds-text);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .rdm-table .cell-meta {

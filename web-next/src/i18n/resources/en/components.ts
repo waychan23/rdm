@@ -32,6 +32,7 @@ const components = {
     title: "Select work items",
     search: "Search title or review comment",
     kind: "Type",
+    itemTitle: "Title",
     assignee: "Assignee",
     priority: "Priority",
     status: "Status",
