@@ -30,13 +30,14 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 ## 2. 认领工作项
 
 1. 先 `work_item_get`（id 接受 `KEY-42` 显示 ID 或 ULID）确认 `assignee`、`status`、`meta.available_steps` 与 `meta.active_step`。
-2. 未指派且该由你做：`work_item_assign` 把负责人设为自己（`member="me"`）。已有负责人时，只有负责人/参与人/manager/project_owner 能改派；不要争抢。
-3. 认领后按当前状态的 direct 步骤推进（通常是 `TODO -> IN_PROGRESS`）。direct 步骤必须由该步骤的指定执行人执行；Owner/Manager 不能越权，需先变更负责人再操作。
-4. 若认领时返回 `ALREADY_ASSIGNED`，说明被别人抢走/指派了——不要争，用 `mailbox_send` 联系其 accountable_human。
-5. 需要评审/多人步骤时，负责人先维护 `reviewer`/参与人，再 `work_item_step(action="start", step_key=..., executors=[...])`。
+2. 同一响应的 `meta.comment_count` / `meta.latest_comment_at` 是评论数量与最近评论时间：有评论时先 `comment_list` 读完再动手——评论里常有复现步骤、验收补充和他人结论。
+3. 未指派且该由你做：`work_item_assign` 把负责人设为自己（`member="me"`）。已有负责人时，只有负责人/参与人/manager/project_owner 能改派；不要争抢。
+4. 认领后按当前状态的 direct 步骤推进（通常是 `TODO -> IN_PROGRESS`）。direct 步骤必须由该步骤的指定执行人执行；Owner/Manager 不能越权，需先变更负责人再操作。
+5. 若认领时返回 `ALREADY_ASSIGNED`，说明被别人抢走/指派了——不要争，用 `mailbox_send` 联系其 accountable_human。
+6. 需要评审/多人步骤时，负责人先维护 `reviewer`/参与人，再 `work_item_step(action="start", step_key=..., executors=[...])`。
 ## 3. 推进状态：direct 用 work_item_transition，命名步骤用 work_item_step
 
-- 先 `work_item_get`，读 `meta.available_steps`（当前状态可执行的命名步骤、候选人、mode、note、gate）与 `meta.active_step`。
+- 先 `work_item_get`，读 `meta.available_steps`（当前状态可执行的命名步骤、候选人、mode、note、gate）与 `meta.active_step`；`meta.comment_count > 0` 时先 `comment_list`，确认评论没有改变前提（复现步骤、验收结论、阻塞原因）。
 - **direct 步骤**（mode=direct）可由唯一候选执行人用 `work_item_transition` 或 `work_item_step(action="start")` 直接执行；`reason` 作为备注。
 - **approval/task 步骤**不能直接流转；返回 `WORKFLOW_STEP_REQUIRED` 时改用 `work_item_step`：
   1. 负责人 `action="start"`，传 `step_key`、`row_version`、`executors`（候选唯一时可省略）。
@@ -51,6 +52,7 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 - 跨 human/agent 传递任何需要对方知道的信息，一律 `mailbox_send`，并用 `refs` 附上相关工作项 id。**不要靠 commit message、代码注释或口头约定传递工作信息。**
 - 收件人 `to/cc` 可传成员 name/id 或 group 信箱名；发信前如不确定名字，先在项目上下文中确认，不要猜。
 - 在工作项下发用 `comment_add`；评论里 `@成员名` 会自动给对方发一封站内信（找不到名字或重名时静默忽略）。
+- 评论也是上下文：每次 `work_item_get` 后看 `meta.comment_count` / `meta.latest_comment_at`，有评论（或时间比上次处理更新）就用 `comment_list` 读取，不要只看描述和状态。
 - 回复信件使用 `reply_to`，保持线程。
 
 ## 5. 完成工作

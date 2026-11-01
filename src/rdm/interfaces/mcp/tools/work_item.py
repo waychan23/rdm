@@ -168,6 +168,8 @@ def register(mcp: FastMCP, container: Container) -> None:
         流转/修改前必读（拿最新 row_version）。可用步骤在 meta.available_steps；
         已发起步骤用 meta.active_step 查看执行进度。不要用 ULID 之外的猜测 id；
         id 接受 KEY-42 显示 ID 或 ULID。
+        meta.comment_count / meta.latest_comment_at 是评论数量与最近评论时间；
+        处理工作项前先看这两个值，非 0 或时间较新时用 comment_list 读评论。
         """
 
         async def run(uow, actor):
@@ -207,6 +209,8 @@ def register(mcp: FastMCP, container: Container) -> None:
                 attachments.append(attachment_mcp_out(container, attachment, members))
             data = work_item_out(item, proj, members)
             step_meta = await StepService(uow, container.file_store).describe(item, actor)
+            assert uow.comments is not None
+            comment_count, latest_comment_at = await uow.comments.stats_for_item(item.id)
             return ok(
                 data,
                 allowed_transitions=list(allowed),
@@ -217,6 +221,10 @@ def register(mcp: FastMCP, container: Container) -> None:
                 allowed_parent_kinds=allowed_parent_kinds(item.kind),
                 allowed_child_kinds=allowed_child_kinds(item.kind),
                 attachments=attachments,
+                comment_count=comment_count,
+                latest_comment_at=(
+                    latest_comment_at.isoformat() if latest_comment_at is not None else None
+                ),
                 **step_meta,
             )
 

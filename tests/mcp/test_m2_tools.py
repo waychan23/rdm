@@ -168,6 +168,9 @@ async def test_member_comment_artifact_attachment_tools(server, mcp_clients) -> 
             {"kind": "task", "title": "附件任务", "project": "DEMO", "task_type": "backend"},
         )
         display_id = item["data"]["display_id"]
+        detail = await call(c, "work_item_get", {"id": display_id})
+        assert detail["meta"]["comment_count"] == 0
+        assert detail["meta"]["latest_comment_at"] is None
 
         # artifact_add on item and project
         art = await call(
@@ -228,6 +231,9 @@ async def test_member_comment_artifact_attachment_tools(server, mcp_clients) -> 
         assert not posted["_is_error"], posted
         comments = await call(c, "comment_list", {"work_item_id": display_id})
         assert comments["data"][0]["attachments"][0]["id"] == att_id
+        detail = await call(c, "work_item_get", {"id": display_id})
+        assert detail["meta"]["comment_count"] == 1
+        assert detail["meta"]["latest_comment_at"] is not None
 
 
 async def test_mailbox_mark_read_tool(server, mcp_clients) -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Sequence
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rdm.domain.entities import Artifact, Attachment, Comment, Workspace
@@ -62,6 +62,18 @@ class CommentRepository:
         )
         rows = list((await self._s.execute(stmt)).scalars().all())
         return [comment_to_domain(r) for r in rows]
+
+    async def stats_for_item(self, work_item_id: str) -> tuple[int, dt.datetime | None]:
+        """Live comment count and latest activity time (edit included)."""
+        stmt = select(
+            func.count(CommentModel.id),
+            func.max(func.coalesce(CommentModel.updated_at, CommentModel.created_at)),
+        ).where(
+            CommentModel.work_item_id == work_item_id,
+            CommentModel.deleted_at.is_(None),
+        )
+        count, latest = (await self._s.execute(stmt)).one()
+        return int(count), latest
 
     async def update_body(self, comment_id: str, body_md: str, when: dt.datetime) -> bool:
         result = await self._s.execute(
