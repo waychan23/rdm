@@ -87,7 +87,10 @@ export default function BoardColumn({
           flex: 1,
           minHeight: 0,
           overflowY: "auto",
-          overscrollBehavior: "contain",
+          // Do not contain wheel/trackpad scrolling: horizontal swipes over a
+          // column must chain to the board's horizontal scroller (RDM-73).
+          overflowX: "hidden",
+          paddingBlockEnd: token("space.150"),
         }}
       >
         <Stack space="space.100">{children}</Stack>
