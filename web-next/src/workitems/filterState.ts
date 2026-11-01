@@ -14,6 +14,7 @@ export const ALL_KINDS_PARAM = "all";
 
 export type WorkItemOrder = "composite" | "created_desc" | "created_asc";
 export type CompletedFilter = "" | "true" | "false";
+export type HasChildrenFilter = "" | "true" | "false";
 
 export interface WorkItemFilters {
   sprint: string;
@@ -21,6 +22,8 @@ export interface WorkItemFilters {
   kinds: string[];
   subtypes: string[];
   rootOnly: boolean;
+  /** Empty means "no constraint"; true=has children, false=no children. */
+  hasChildren: HasChildrenFilter;
   completed: CompletedFilter;
   statuses: string[];
   assignees: string[];
@@ -60,11 +63,15 @@ export function parseFilters(
   const completedParam = params.get("completed");
   const completed: CompletedFilter =
     completedParam === "true" || completedParam === "false" ? completedParam : "";
+  const hasChildrenParam = params.get("hasChildren");
+  const hasChildren: HasChildrenFilter =
+    hasChildrenParam === "true" || hasChildrenParam === "false" ? hasChildrenParam : "";
   return {
     sprint: params.get("sprint") ?? "",
     kinds,
     subtypes: csv(params.get("subtype")),
     rootOnly,
+    hasChildren,
     completed,
     statuses: csv(params.get("status")),
     assignees: csv(params.get("assignee")),
@@ -113,6 +120,9 @@ export function applyFilterPatch(
         if ((value as boolean) === defaults.rootOnly) next.delete("rootOnly");
         else next.set("rootOnly", value ? "true" : "false");
         break;
+      case "hasChildren":
+        setOrDelete(next, "hasChildren", (value as HasChildrenFilter) || null);
+        break;
       case "completed":
         setOrDelete(next, "completed", (value as CompletedFilter) || null);
         break;
@@ -154,6 +164,7 @@ export function buildRequestParams(filters: WorkItemFilters): URLSearchParams {
   if (filters.subtypes.length > 0) params.set("subtype", filters.subtypes.join(","));
   if (filters.sprint) params.set("sprint", filters.sprint);
   if (filters.rootOnly) params.set("root_only", "true");
+  if (filters.hasChildren) params.set("has_children", filters.hasChildren);
   if (filters.completed) params.set("completed", filters.completed);
   if (filters.statuses.length > 0) params.set("status", filters.statuses.join(","));
   if (filters.assignees.length > 0) params.set("assignee", filters.assignees.join(","));

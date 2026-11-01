@@ -82,6 +82,39 @@ test.describe("backlog filters and board terminal columns", () => {
     await expect(doneRow).toHaveCount(0);
   });
 
+  test("has-children filter narrows the list (RDM-82)", async ({ api, app, page }) => {
+    const projectKey = await api.createSandboxProject();
+    const stamp = Date.now();
+    const story = await api.createItemIn(projectKey, {
+      kind: "story",
+      title: `parent-${stamp}`,
+    });
+    const child = await api.createItemIn(projectKey, {
+      kind: "task",
+      title: `child-${stamp}`,
+      parent: story.display_id,
+    });
+
+    await page.goto(`${app.baseURL}/projects/${projectKey}/backlog`);
+    const storyRow = page.getByTestId(`work-item-row-${story.display_id}`);
+    const childRow = page.getByTestId(`work-item-row-${child.display_id}`);
+    await expect(storyRow).toBeVisible();
+    await expect(childRow).toBeVisible();
+
+    const filter = page.getByTestId("work-item-filter-has-children");
+    await filter.getByRole("combobox").click();
+    await page.getByRole("option", { name: "有子项", exact: true }).click();
+    await expect(page).toHaveURL(/hasChildren=true/);
+    await expect(storyRow).toBeVisible();
+    await expect(childRow).toHaveCount(0);
+
+    await filter.getByRole("combobox").click();
+    await page.getByRole("option", { name: "无子项", exact: true }).click();
+    await expect(page).toHaveURL(/hasChildren=false/);
+    await expect(childRow).toBeVisible();
+    await expect(storyRow).toHaveCount(0);
+  });
+
   test("list sorts by creation time, newest first by default (RDM-46)", async ({
     api,
     app,

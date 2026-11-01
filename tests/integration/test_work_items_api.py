@@ -497,6 +497,30 @@ async def test_list_multi_value_filters_and_root_only(server, owner_token: str) 
     }
     assert await ids("status=DONE") == set()
 
+    # RDM-82: has_children filters on direct, non-deleted children.
+    assert await ids("has_children=true") == {epic["display_id"], story["display_id"]}
+    assert await ids("has_children=false") == {frontend["display_id"], backend["display_id"]}
+    assert await ids("has_children=true&kind=story") == {story["display_id"]}
+    r = await client.get(
+        f"{API}/projects/DEMO/work-items/filter-options?has_children=false",
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+
+    # The sprint list is filtered in memory; has_children must still apply.
+    r = await client.post(
+        f"{API}/projects/DEMO/sprints", json={"name": "S1"}, headers=auth(owner_token)
+    )
+    sprint = r.json()["data"]
+    r = await client.post(
+        f"{API}/sprints/{sprint['id']}/items",
+        json={"items": [story["display_id"], frontend["display_id"]]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+    assert await ids(f"sprint={sprint['id']}&has_children=true") == {story["display_id"]}
+    assert await ids(f"sprint={sprint['id']}&has_children=false") == {frontend["display_id"]}
+
     # Completed + status combine.
     await _complete_task(client, dev_token, frontend)
     assert await ids("status=TODO") == {

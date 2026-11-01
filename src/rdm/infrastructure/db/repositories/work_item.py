@@ -12,6 +12,7 @@ from collections.abc import Sequence
 
 from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from rdm.domain.entities import (
     IssueFields,
@@ -102,6 +103,7 @@ class WorkItemRepository:
         reviewer_user_id: str | None = None,
         parent_id: str | None = None,
         root_only: bool = False,
+        has_children: bool | None = None,
         subtypes: Sequence[str] | None = None,
         priorities: Sequence[int] | None = None,
         exclude_ids: Sequence[str] | None = None,
@@ -115,6 +117,7 @@ class WorkItemRepository:
 
         `subtypes` follows the product rule for the task subtype filter: it
         only narrows `kind=task` rows; every other selected kind is untouched.
+        `has_children` counts direct, non-deleted children (RDM-82).
         """
         stmt = stmt.where(WorkItemModel.project_id == project_id)
         if not include_deleted:
@@ -168,6 +171,17 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.parent_id == parent_id)
         if root_only:
             stmt = stmt.where(WorkItemModel.parent_id.is_(None))
+        if has_children is not None:
+            child = aliased(WorkItemModel)
+            child_exists = (
+                select(child.id)
+                .where(
+                    child.parent_id == WorkItemModel.id,
+                    child.deleted_at.is_(None),
+                )
+                .exists()
+            )
+            stmt = stmt.where(child_exists if has_children else ~child_exists)
         if priorities:
             stmt = stmt.where(WorkItemModel.priority.in_(list(priorities)))
         if exclude_ids:
@@ -208,6 +222,7 @@ class WorkItemRepository:
         reviewer_user_id: str | None = None,
         parent_id: str | None = None,
         root_only: bool = False,
+        has_children: bool | None = None,
         subtypes: Sequence[str] | None = None,
         priorities: Sequence[int] | None = None,
         exclude_ids: Sequence[str] | None = None,
@@ -234,6 +249,7 @@ class WorkItemRepository:
             reviewer_user_id=reviewer_user_id,
             parent_id=parent_id,
             root_only=root_only,
+            has_children=has_children,
             subtypes=subtypes,
             priorities=priorities,
             exclude_ids=exclude_ids,
@@ -281,6 +297,7 @@ class WorkItemRepository:
         reviewer_user_id: str | None = None,
         parent_id: str | None = None,
         root_only: bool = False,
+        has_children: bool | None = None,
         subtypes: Sequence[str] | None = None,
         priorities: Sequence[int] | None = None,
         exclude_ids: Sequence[str] | None = None,
@@ -303,6 +320,7 @@ class WorkItemRepository:
             reviewer_user_id=reviewer_user_id,
             parent_id=parent_id,
             root_only=root_only,
+            has_children=has_children,
             subtypes=subtypes,
             priorities=priorities,
             exclude_ids=exclude_ids,
@@ -400,6 +418,23 @@ class WorkItemRepository:
         rows = list((await self._s.execute(stmt)).scalars().all())
         fields_map = await self._assemble_fields(rows) if rows else {}
         return [work_item_to_domain(r, fields_map.get(r.id)) for r in rows]
+
+    async def parent_ids_with_children(
+        self, project_id: str, parent_ids: Sequence[str]
+    ) -> set[str]:
+        """Ids among ``parent_ids`` that have at least one live direct child.
+
+        Used by the in-memory sprint filter, which cannot push ``has_children``
+        into SQL (RDM-82).
+        """
+        if not parent_ids:
+            return set()
+        stmt = select(WorkItemModel.parent_id).where(
+            WorkItemModel.project_id == project_id,
+            WorkItemModel.parent_id.in_(list(parent_ids)),
+            WorkItemModel.deleted_at.is_(None),
+        )
+        return {str(value) for value in (await self._s.execute(stmt)).scalars().all()}
 
     async def save(self, item: WorkItem) -> None:
         """Optimistic-lock update; 0 matched rows -> CONFLICT_VERSION."""

@@ -304,6 +304,7 @@ class WorkItemService:
         backlog: bool = False,
         completed: bool | None = None,
         root_only: bool = False,
+        has_children: bool | None = None,
         subtypes: Sequence[str] | None = None,
         priorities: Sequence[int] | None = None,
         exclude_ids: Sequence[str] | None = None,
@@ -390,6 +391,7 @@ class WorkItemService:
                 reviewer_id=reviewer_id,
                 parent_id=parent_id,
                 root_only=root_only,
+                has_children=has_children,
                 subtypes=subtypes,
                 priorities=priorities,
                 exclude_ids=exclude_ids,
@@ -415,6 +417,7 @@ class WorkItemService:
             reviewer_user_id=reviewer_id,
             parent_id=parent_id,
             root_only=root_only,
+            has_children=has_children,
             subtypes=subtypes,
             priorities=priorities,
             exclude_ids=exclude_ids,
@@ -436,6 +439,7 @@ class WorkItemService:
             reviewer_user_id=reviewer_id,
             parent_id=parent_id,
             root_only=root_only,
+            has_children=has_children,
             subtypes=subtypes,
             priorities=priorities,
             exclude_ids=exclude_ids,
@@ -475,6 +479,7 @@ class WorkItemService:
         reviewer_id: str | None,
         parent_id: str | None,
         root_only: bool = False,
+        has_children: bool | None = None,
         subtypes: Sequence[str] | None = None,
         priorities: Sequence[int] | None = None,
         exclude_ids: Sequence[str] | None = None,
@@ -503,6 +508,13 @@ class WorkItemService:
             if links
             else []
         )
+        parents_with_children = (
+            await self.uow.work_items.parent_ids_with_children(
+                project.id, [item.id for item in items]
+            )
+            if has_children is not None
+            else set()
+        )
 
         def keep(item: WorkItem) -> bool:
             if kind is not None and item.kind != kind:
@@ -528,6 +540,8 @@ class WorkItemService:
             if parent_id is not None and item.parent_id != parent_id:
                 return False
             if root_only and item.parent_id is not None:
+                return False
+            if has_children is not None and (item.id in parents_with_children) != has_children:
                 return False
             if subtypes and item.kind == "task" and item_task_type(item) not in subtypes:
                 return False
@@ -583,6 +597,7 @@ class WorkItemService:
         q: str | None = None,
         completed: bool | None = None,
         root_only: bool = False,
+        has_children: bool | None = None,
         statuses: Sequence[str] | None = None,
         assignee_refs: Sequence[str] | None = None,
         participant_refs: Sequence[str] | None = None,
@@ -633,6 +648,7 @@ class WorkItemService:
             "kind": kind,
             "kinds": kinds,
             "root_only": root_only,
+            "has_children": has_children,
             "subtypes": subtypes or None,
             "q": q,
             "include_statuses": include_statuses,
@@ -659,6 +675,7 @@ class WorkItemService:
                     reviewer_id=None,
                     parent_id=None,
                     root_only=bool(merged.get("root_only")),
+                    has_children=merged.get("has_children"),  # type: ignore[arg-type]
                     subtypes=merged.get("subtypes"),  # type: ignore[arg-type]
                     q=merged.get("q"),  # type: ignore[arg-type]
                     limit=100_000,

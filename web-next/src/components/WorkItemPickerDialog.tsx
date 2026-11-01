@@ -166,6 +166,7 @@ export default function WorkItemPickerDialog({
       kinds: kindFilter,
       subtypes: [],
       rootOnly: false,
+      hasChildren: "",
       completed: "",
       statuses: filters.statuses,
       assignees: filters.assignees,

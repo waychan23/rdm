@@ -17,7 +17,11 @@ import { kindOptions } from "./constants";
 import { sprintLozenge } from "../pages/sprints/sprintStatus";
 import SprintDetailDrawer from "../pages/sprints/SprintDetailDrawer";
 import TextButton from "../components/TextButton";
-import type { WorkItemFilters, WorkItemOrder } from "./filterState";
+import type {
+  HasChildrenFilter,
+  WorkItemFilters,
+  WorkItemOrder,
+} from "./filterState";
 import { buildRequestParams } from "./filterState";
 
 export type WorkItemView = "flat" | "tree";
@@ -58,6 +62,7 @@ const styles = cssMap({
   sprint: { width: "230px" },
   kind: { width: "300px" },
   subtype: { width: "180px" },
+  hasChildren: { width: "150px" },
   completed: { width: "150px" },
   status: { width: "200px" },
   person: { width: "200px" },
@@ -175,6 +180,13 @@ export default function WorkItemToolbar({
   );
 
   const kindSelectOptions = useMemo(() => kindOptions(), []);
+  const hasChildrenOptions: Option[] = useMemo(
+    () => [
+      { label: t("workItemFilters.hasChildrenYes"), value: "true" },
+      { label: t("workItemFilters.hasChildrenNo"), value: "false" },
+    ],
+    [t],
+  );
   const completedOptions: Option[] = useMemo(
     () => [
       { label: t("workItemFilters.completedYes"), value: "true" },
@@ -292,6 +304,27 @@ export default function WorkItemToolbar({
           testId="work-item-filter-root-only"
           onChange={(event) => onFilterChange({ rootOnly: event.currentTarget.checked })}
         />
+
+        <Box xcss={styles.hasChildren} testId="work-item-filter-has-children">
+          <Select<Option>
+            options={hasChildrenOptions}
+            value={
+              hasChildrenOptions.find(
+                (option) => option.value === filters.hasChildren,
+              ) ?? null
+            }
+            onChange={(option) =>
+              onFilterChange({
+                hasChildren: ((option as Option | null)?.value ??
+                  "") as HasChildrenFilter,
+              })
+            }
+            isClearable
+            spacing="compact"
+            placeholder={t("workItemFilters.hasChildrenPlaceholder")}
+            testId="work-item-has-children-select"
+          />
+        </Box>
 
         <Box xcss={styles.completed} testId="work-item-filter-completed">
           <Select<Option>
