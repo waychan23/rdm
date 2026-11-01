@@ -31,13 +31,27 @@ interface BoardSnapshot {
 const boardCacheKey = (projectKey: string, kind: string) => `board|${projectKey}|${kind}`;
 
 const styles = cssMap({
+  // Scroll container. The board row inside grows with its tallest column, so
+  // the whole board scrolls vertically while every column keeps an equal,
+  // content-following height (see boardRow).
   board: {
     display: "flex",
+    flexDirection: "column",
     flex: "1",
     minHeight: "0",
+    overflow: "auto",
+  },
+  // `flex: 1 0 auto` fills the viewport when columns are short, and lets the
+  // row (so: every stretched column's grey background) grow with the tallest
+  // column when its cards overflow. Column widths stay fixed, so the row is
+  // max-content wide and the scroll container handles horizontal overflow.
+  boardRow: {
+    display: "flex",
+    flex: "1 0 auto",
     gap: "var(--ds-space-150)",
-    overflowX: "auto",
     alignItems: "stretch",
+    width: "max-content",
+    minWidth: "100%",
   },
   loading: {
     display: "flex",
@@ -265,15 +279,17 @@ export default function BoardPage() {
         ) : columns.length === 0 ? (
           <EmptyState header={t("board.empty")} />
         ) : (
-          columns.map((col) => (
-            <BoardColumn key={col.status} status={col.status} count={col.items.length}>
-              {col.items.length === 0 ? null : (
-                col.items.map((item) => (
-                  <BoardCard key={item.id} item={item} onOpen={openItem} />
-                ))
-              )}
-            </BoardColumn>
-          ))
+          <Box xcss={styles.boardRow}>
+            {columns.map((col) => (
+              <BoardColumn key={col.status} status={col.status} count={col.items.length}>
+                {col.items.length === 0 ? null : (
+                  col.items.map((item) => (
+                    <BoardCard key={item.id} item={item} onOpen={openItem} />
+                  ))
+                )}
+              </BoardColumn>
+            ))}
+          </Box>
         )}
       </Box>
     </Page>
