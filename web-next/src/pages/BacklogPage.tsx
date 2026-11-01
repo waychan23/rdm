@@ -256,10 +256,11 @@ function BacklogView({ projectKey }: { projectKey: string }) {
     if (assignee) params.set("assignee", assignee.value === "me" ? "me" : assignee.value);
     if (reviewer) params.set("reviewer", reviewer.value === "me" ? "me" : reviewer.value);
     if (q) params.set("q", q);
-    // The tree view groups by display_no, so it keeps the server default order.
-    if (!treeMode) params.set("order", order);
+    // Both views sort: buildWorkItemTree keeps the server order for roots and
+    // children, so the tree simply nests by creation order.
+    params.set("order", order);
     return params.toString();
-  }, [kinds, status, completed, assignee, reviewer, q, order, treeMode]);
+  }, [kinds, status, completed, assignee, reviewer, q, order]);
 
   // Re-fetch only when the request actually changes: the tree loads the whole
   // filtered set once, so paging its roots must not hit the network again.
@@ -432,17 +433,15 @@ function BacklogView({ projectKey }: { projectKey: string }) {
             placeholder={t("backlog.filter.reviewer")}
           />
         </Box>
-        {!treeMode && (
-          <Box xcss={pageStyles.sortWidth} testId="work-item-filter-order">
-            <Select<Option>
-              options={orderOptions}
-              value={orderOptions.find((o) => o.value === order) ?? null}
-              onChange={(opt) => patchParams({ order: (opt as Option | null)?.value ?? null })}
-              spacing="compact"
-              placeholder={t("backlog.sort.label")}
-            />
-          </Box>
-        )}
+        <Box xcss={pageStyles.sortWidth} testId="work-item-filter-order">
+          <Select<Option>
+            options={orderOptions}
+            value={orderOptions.find((o) => o.value === order) ?? null}
+            onChange={(opt) => patchParams({ order: (opt as Option | null)?.value ?? null })}
+            spacing="compact"
+            placeholder={t("backlog.sort.label")}
+          />
+        </Box>
         <Box xcss={pageStyles.searchWidth}>
           <Textfield
             placeholder={t("backlog.filter.search")}
@@ -493,6 +492,8 @@ function BacklogView({ projectKey }: { projectKey: string }) {
               onPageChange={(p) => patchParams({ page: String(p) }, false)}
               onToggle={treeMode ? toggleNode : undefined}
               countNote={tree ? t("backlog.rootCount", { n: tree.rootCount }) : undefined}
+              order={order}
+              onOrderChange={(next) => patchParams({ order: next })}
             />
           </>
         )}

@@ -1,8 +1,10 @@
+import type { CSSProperties } from "react";
+
 import Pagination from "@atlaskit/pagination";
 import IconButton from "@atlaskit/button/icon/button";
 import ChevronDownIcon from "@atlaskit/icon/core/chevron-down";
 import ChevronRightIcon from "@atlaskit/icon/core/chevron-right";
-import { Text } from "@atlaskit/primitives/compiled";
+import { Inline, Text } from "@atlaskit/primitives/compiled";
 import { useTranslation } from "react-i18next";
 
 import PersonCell from "../components/PersonCell";
@@ -13,6 +15,16 @@ import { userLabel } from "../lib/users";
 import type { WorkItem } from "../types";
 import StatusLozenge from "./status";
 import "../styles/table.css";
+
+// Sort toggle lives inside the column header; keep the button visually flat.
+const sortHeader: CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  font: "inherit",
+  color: "inherit",
+  cursor: "pointer",
+};
 
 export interface WorkItemRowView {
   item: WorkItem;
@@ -32,6 +44,9 @@ interface Props {
   /** Present in the hierarchical view; renders expand/collapse toggles. */
   onToggle?: (item: WorkItem) => void;
   countNote?: string;
+  /** Creation-time sort; the header toggles it (mirrors the filter select). */
+  order?: "created_desc" | "created_asc";
+  onOrderChange?: (next: "created_desc" | "created_asc") => void;
 }
 
 export default function WorkItemTable({
@@ -43,6 +58,8 @@ export default function WorkItemTable({
   onPageChange,
   onToggle,
   countNote,
+  order,
+  onOrderChange,
 }: Props) {
   const { t } = useTranslation("workitems");
   return (
@@ -65,8 +82,37 @@ export default function WorkItemTable({
             <th scope="col" className="col-person">
               {t("table.colAssignee")}
             </th>
-            <th scope="col" className="col-date">
-              {t("table.colCreated")}
+            <th
+              scope="col"
+              className="col-date"
+              aria-sort={order === "created_asc" ? "ascending" : order ? "descending" : undefined}
+            >
+              {onOrderChange ? (
+                <button
+                  type="button"
+                  data-testid="work-item-sort-created"
+                  onClick={() =>
+                    onOrderChange(order === "created_asc" ? "created_desc" : "created_asc")
+                  }
+                  style={sortHeader}
+                >
+                  <Inline space="space.025" alignBlock="center">
+                    {t("table.colCreated")}
+                    <span
+                      aria-hidden
+                      style={{
+                        display: "inline-flex",
+                        // Point up when the oldest items come first.
+                        transform: order === "created_asc" ? "rotate(180deg)" : undefined,
+                      }}
+                    >
+                      <ChevronDownIcon label="" size="small" />
+                    </span>
+                  </Inline>
+                </button>
+              ) : (
+                t("table.colCreated")
+              )}
             </th>
           </tr>
         </thead>

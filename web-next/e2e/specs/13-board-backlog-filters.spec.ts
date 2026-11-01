@@ -104,6 +104,22 @@ test.describe("backlog filters and board terminal columns", () => {
       "data-testid",
       `work-item-row-${older.display_id}`,
     );
+
+    // The sort control also exists in the tree view (RDM-50 feedback).
+    await page.getByTestId("work-item-view-tree").click();
+    await expect(page.getByTestId("work-item-filter-order")).toBeVisible();
+    await expect(rows.nth(0)).toHaveAttribute(
+      "data-testid",
+      `work-item-row-${older.display_id}`,
+    );
+
+    // Clicking the creation-time header flips the order.
+    await page.getByTestId("work-item-sort-created").click();
+    await expect(page).toHaveURL(/order=created_desc/);
+    await expect(rows.nth(0)).toHaveAttribute(
+      "data-testid",
+      `work-item-row-${newer.display_id}`,
+    );
   });
 
   test("the issues entry pins the list to issue kind (RDM-47)", async ({ api, app, page }) => {
