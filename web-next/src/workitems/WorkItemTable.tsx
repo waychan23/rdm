@@ -14,6 +14,7 @@ import { formatDate } from "../lib/format";
 import { userLabel } from "../lib/users";
 import type { WorkItem } from "../types";
 import StatusLozenge from "./status";
+import type { WorkItemOrder } from "./filterState";
 import "../styles/table.css";
 
 // Sort toggle lives inside the column header; keep the button visually flat.
@@ -45,8 +46,8 @@ interface Props {
   onToggle?: (item: WorkItem) => void;
   countNote?: string;
   /** Creation-time sort; the header toggles it (mirrors the filter select). */
-  order?: "created_desc" | "created_asc";
-  onOrderChange?: (next: "created_desc" | "created_asc") => void;
+  order?: WorkItemOrder;
+  onOrderChange?: (next: WorkItemOrder) => void;
 }
 
 export default function WorkItemTable({
@@ -94,14 +95,20 @@ export default function WorkItemTable({
             <th
               scope="col"
               className="col-date"
-              aria-sort={order === "created_asc" ? "ascending" : order ? "descending" : undefined}
+              aria-sort={
+                order === "created_asc"
+                  ? "ascending"
+                  : order === "created_desc"
+                    ? "descending"
+                    : undefined
+              }
             >
               {onOrderChange ? (
                 <button
                   type="button"
                   data-testid="work-item-sort-created"
                   onClick={() =>
-                    onOrderChange(order === "created_asc" ? "created_desc" : "created_asc")
+                    onOrderChange(order === "created_desc" ? "created_asc" : "created_desc")
                   }
                   style={sortHeader}
                 >

@@ -40,7 +40,8 @@ test.describe("work item drawer sprint section", () => {
       title: `epic-${Date.now()}`,
     });
 
-    await page.goto(`${app.baseURL}/projects/${projectKey}/backlog`);
+    // The list's default kinds are story+issue+task (RDM-63); ask for epics.
+    await page.goto(`${app.baseURL}/projects/${projectKey}/backlog?kind=epic`);
     await page.getByTestId(`work-item-row-${epic.display_id}`).click();
     await expect(page.getByTestId("item-panel")).toBeVisible();
     await expect(page.getByTestId("item-section-metadata")).toBeVisible();

@@ -48,6 +48,25 @@ const projects = {
   issues: {
     title: "Issues",
   },
+  workItemFilters: {
+    sprint: "Sprint",
+    sprintPlaceholder: "Not selected",
+    kindPlaceholder: "All types",
+    subtypePlaceholder: "All subtypes",
+    rootOnly: "Top-level items only",
+    completedYes: "Completed",
+    completedNo: "Open",
+    completionPlaceholder: "Completion",
+    statusPlaceholder: "All statuses",
+    assigneePlaceholder: "All assignees",
+    participantPlaceholder: "All participants",
+    search: "Search title or review comment",
+    orderComposite: "Smart order",
+    orderCreatedDesc: "Created (newest)",
+    orderCreatedAsc: "Created (oldest)",
+    refresh: "Refresh",
+    create: "New",
+  },
   backlog: {
     title: "Work items",
     view: {

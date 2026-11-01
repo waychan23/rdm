@@ -46,6 +46,25 @@ const projects = {
   issues: {
     title: "缺陷",
   },
+  workItemFilters: {
+    sprint: "迭代",
+    sprintPlaceholder: "未选择",
+    kindPlaceholder: "全部类型",
+    subtypePlaceholder: "全部子类型",
+    rootOnly: "仅一级工作项",
+    completedYes: "已完结",
+    completedNo: "未完结",
+    completionPlaceholder: "完结状态",
+    statusPlaceholder: "全部状态",
+    assigneePlaceholder: "全部负责人",
+    participantPlaceholder: "全部参与人",
+    search: "搜索标题/评审意见",
+    orderComposite: "综合排序",
+    orderCreatedDesc: "创建时间（最新在前）",
+    orderCreatedAsc: "创建时间（最早在前）",
+    refresh: "刷新",
+    create: "新建",
+  },
   backlog: {
     title: "工作项",
     view: {

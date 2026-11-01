@@ -19,8 +19,7 @@ const BACKDROP_INTERACTIVE =
   "[role='dialog'], [data-testid='sprint-detail-drawer'], " +
   // Page chrome around the list/board (headings, filters) is not "blank".
   "[data-testid='backlog-header'], [data-testid='work-item-filters'], " +
-  "[data-testid='board-header'], [data-testid='board-kind-filter'], " +
-  "[data-testid='sprints-header']";
+  "[data-testid='board-header'], [data-testid='sprints-header']";
 
 // P2 overlay: the list stays visible and usable behind the detail aside
 // (no scrim, no focus trap) — blank backdrop clicks close the panel.

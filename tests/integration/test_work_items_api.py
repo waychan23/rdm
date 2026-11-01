@@ -435,6 +435,147 @@ async def test_list_includes_sprint_and_planned_dates(server, owner_token: str) 
     assert linked["sprint"] == {"id": sprint["id"], "name": "S1"}
 
 
+async def test_list_multi_value_filters_and_root_only(server, owner_token: str) -> None:
+    """RDM-63: multi status/assignee/participant, subtype and root-only filters."""
+    client, _settings, _app = server
+    await _create_project(client, owner_token)
+    dev_id, dev_token = await _make_member(client, owner_token, "DEMO", "dev", ["worker"])
+
+    async def create(body: dict) -> dict:
+        r = await client.post(
+            f"{API}/projects/DEMO/work-items", json=body, headers=auth(owner_token)
+        )
+        assert r.status_code == 201, r.text
+        return r.json()["data"]
+
+    epic = await create({"kind": "epic", "title": "epic"})
+    story = await create({"kind": "story", "title": "story", "parent": epic["display_id"]})
+    frontend = await create(
+        {
+            "kind": "task",
+            "title": "frontend task",
+            "task_type": "frontend",
+            "parent": story["display_id"],
+            "assignee": "dev",
+        }
+    )
+    backend = await create(
+        {
+            "kind": "task",
+            "title": "backend task",
+            "task_type": "backend",
+            "participants": ["dev"],
+        }
+    )
+
+    async def ids(query: str) -> set[str]:
+        r = await client.get(f"{API}/projects/DEMO/work-items?{query}", headers=auth(owner_token))
+        assert r.status_code == 200, r.text
+        return {item["display_id"] for item in r.json()["data"]}
+
+    # Subtype narrows tasks only; the non-task kinds selected alongside remain.
+    assert await ids("kind=story,task&subtype=frontend") == {
+        story["display_id"],
+        frontend["display_id"],
+    }
+    assert await ids("subtype=frontend") == {
+        epic["display_id"],
+        story["display_id"],
+        frontend["display_id"],
+    }
+    # Root only drops every item with a parent.
+    assert await ids("root_only=true") == {epic["display_id"], backend["display_id"]}
+    # Multi assignee and participant filters accept comma lists.
+    assert await ids(f"assignee=dev,{dev_id}") == {frontend["display_id"]}
+    assert await ids("participant=dev") == {backend["display_id"]}
+    # Multi status filter.
+    assert await ids("status=TODO,DONE") == {
+        epic["display_id"],
+        story["display_id"],
+        frontend["display_id"],
+        backend["display_id"],
+    }
+    assert await ids("status=DONE") == set()
+
+    # Completed + status combine.
+    await _complete_task(client, dev_token, frontend)
+    assert await ids("status=TODO") == {
+        epic["display_id"],
+        story["display_id"],
+        backend["display_id"],
+    }
+    assert await ids("status=TODO&completed=false") == {
+        epic["display_id"],
+        story["display_id"],
+        backend["display_id"],
+    }
+
+
+async def test_list_composite_order(server, owner_token: str) -> None:
+    """RDM-63: priority -> planned end -> planned start -> created desc."""
+    client, _settings, _app = server
+    await _create_project(client, owner_token)
+
+    async def create(title: str, priority: int, end: str | None = None) -> None:
+        body: dict = {"kind": "task", "title": title, "priority": priority}
+        if end is not None:
+            body["planned_end_date"] = end
+        r = await client.post(
+            f"{API}/projects/DEMO/work-items", json=body, headers=auth(owner_token)
+        )
+        assert r.status_code == 201, r.text
+
+    await create("low-priority", 4, "2026-01-01")
+    await create("urgent-late", 1, "2026-03-01")
+    await create("urgent-early", 1, "2026-01-05")
+    await create("urgent-undated", 1)
+
+    r = await client.get(
+        f"{API}/projects/DEMO/work-items?order=composite", headers=auth(owner_token)
+    )
+    assert r.status_code == 200, r.text
+    assert [item["title"] for item in r.json()["data"]] == [
+        "urgent-early",
+        "urgent-late",
+        "urgent-undated",
+        "low-priority",
+    ]
+
+
+async def test_filter_options_exclude_own_dimension(server, owner_token: str) -> None:
+    """RDM-63: facets come from the unpaginated filtered set, each excluding itself."""
+    client, _settings, _app = server
+    await _create_project(client, owner_token)
+    _dev_id, dev_token = await _make_member(client, owner_token, "DEMO", "dev", ["worker"])
+
+    async def create(title: str, assignee: str | None, participants: list[str]) -> dict:
+        body: dict = {"kind": "task", "title": title, "participants": participants}
+        if assignee is not None:
+            body["assignee"] = assignee
+        r = await client.post(
+            f"{API}/projects/DEMO/work-items", json=body, headers=auth(owner_token)
+        )
+        assert r.status_code == 201, r.text
+        return r.json()["data"]
+
+    done = await create("done", "dev", [])
+    await create("open", None, ["dev"])
+    await _complete_task(client, dev_token, done)
+
+    r = await client.get(
+        f"{API}/projects/DEMO/work-items/filter-options?kind=task&status=TODO",
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    options = r.json()["data"]
+    # The status facet ignores the active status filter.
+    assert set(options["statuses"]) == {"TODO", "DONE"}
+    # Assignees/participants only come from the TODO subset (done is excluded).
+    assert [user["name"] for user in options["assignees"]] == []
+    # The creator is auto-added as a participant (§17.89), so owner stays.
+    assert {user["name"] for user in options["participants"]} == {"dev", "owner"}
+
+
 async def test_permissions_worker_and_cross_project(server, owner_token: str) -> None:
     client, _settings, _app = server
     await _create_project(client, owner_token, "DEMO")

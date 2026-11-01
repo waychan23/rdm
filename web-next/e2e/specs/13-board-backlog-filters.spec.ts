@@ -25,16 +25,20 @@ test.describe("backlog filters and board terminal columns", () => {
     await expect(page.getByTestId(`work-item-row-${story.display_id}`)).toBeVisible();
     await expect(page.getByTestId(`work-item-row-${issue.display_id}`)).toBeVisible();
 
-    // Only story: the issue row must disappear.
-    await page.getByRole("checkbox", { name: "Epic" }).click();
-    await page.getByRole("checkbox", { name: "缺陷" }).click();
-    await page.getByRole("checkbox", { name: "任务" }).click();
-    await expect(page.getByRole("checkbox", { name: "需求" })).toBeChecked();
+    // The default selection is story+issue+task. Drop issue and task: only
+    // story remains, so the issue row must disappear.
+    const kindFilter = page.getByTestId("work-item-filter-kind");
+    for (const name of ["缺陷", "任务"]) {
+      await kindFilter.getByRole("combobox").click();
+      await page.getByRole("option", { name, exact: true }).click();
+    }
+    await expect(page).toHaveURL(/kind=story/);
     await expect(page.getByTestId(`work-item-row-${story.display_id}`)).toBeVisible();
     await expect(page.getByTestId(`work-item-row-${issue.display_id}`)).toHaveCount(0);
 
     // Story + issue: both kinds travel in one request (kind=story,issue).
-    await page.getByRole("checkbox", { name: "缺陷" }).click();
+    await kindFilter.getByRole("combobox").click();
+    await page.getByRole("option", { name: "缺陷", exact: true }).click();
     await expect(page.getByTestId(`work-item-row-${story.display_id}`)).toBeVisible();
     await expect(page.getByTestId(`work-item-row-${issue.display_id}`)).toBeVisible();
   });
@@ -91,6 +95,7 @@ test.describe("backlog filters and board terminal columns", () => {
     await page.goto(`${app.baseURL}/projects/${projectKey}/backlog`);
     const rows = page.locator('[data-testid^="work-item-row-"]');
     await expect(rows).toHaveCount(2);
+    // The default "smart order" falls back to newest-created for equal priority.
     await expect(rows.nth(0)).toHaveAttribute(
       "data-testid",
       `work-item-row-${newer.display_id}`,
@@ -98,16 +103,20 @@ test.describe("backlog filters and board terminal columns", () => {
 
     const sort = page.getByTestId("work-item-filter-order");
     await sort.getByRole("combobox").click();
-    await page.getByRole("option", { name: "创建时间（旧→新）", exact: true }).click();
+    await page.getByRole("option", { name: "创建时间（最早在前）", exact: true }).click();
     await expect(page).toHaveURL(/order=created_asc/);
     await expect(rows.nth(0)).toHaveAttribute(
       "data-testid",
       `work-item-row-${older.display_id}`,
     );
 
-    // The sort control also exists in the tree view (RDM-50 feedback).
-    await page.getByTestId("work-item-view-tree").click();
+    // The sort control also exists in the flat view; switch back to tree after.
+    const viewSelect = page.getByTestId("work-item-filter-view");
+    await viewSelect.getByRole("combobox").click();
+    await page.getByRole("option", { name: "扁平", exact: true }).click();
     await expect(page.getByTestId("work-item-filter-order")).toBeVisible();
+    await viewSelect.getByRole("combobox").click();
+    await page.getByRole("option", { name: "层级", exact: true }).click();
     await expect(rows.nth(0)).toHaveAttribute(
       "data-testid",
       `work-item-row-${older.display_id}`,
@@ -134,7 +143,7 @@ test.describe("backlog filters and board terminal columns", () => {
     await expect(page.getByTestId(`work-item-row-${issue.display_id}`)).toBeVisible();
     await expect(page.getByTestId(`work-item-row-${story.display_id}`)).toHaveCount(0);
     // The kind filter is hidden on the issues page.
-    await expect(page.getByTestId("work-item-filter-kind-issue")).toHaveCount(0);
+    await expect(page.getByTestId("work-item-filter-kind")).toHaveCount(0);
     await expect(page.getByTestId("rail-item-project-issues")).toHaveAttribute(
       "aria-current",
       "page",
@@ -147,15 +156,11 @@ test.describe("backlog filters and board terminal columns", () => {
     await expect(page.getByTestId(`work-item-row-${story.display_id}`)).toHaveCount(0);
   });
 
-  test("board terminal-column toggle actually hides terminal columns", async ({ app, page }) => {
+  test("board always shows terminal columns (RDM-63)", async ({ app, page }) => {
     await page.goto(`${app.baseURL}${boardPath(app)}`);
     await expect(page.getByTestId("page-board")).toBeVisible();
     await expect(page.getByTestId("board-column-DONE")).toBeVisible();
-
-    await page.getByRole("checkbox", { name: "显示终态列" }).click();
-    await expect(page.getByTestId("board-column-DONE")).toHaveCount(0);
-
-    await page.getByRole("checkbox", { name: "显示终态列" }).click();
-    await expect(page.getByTestId("board-column-DONE")).toBeVisible();
+    // The former "show terminal columns" toggle is gone; terminal is fixed.
+    await expect(page.getByRole("checkbox", { name: "显示终态列" })).toHaveCount(0);
   });
 });

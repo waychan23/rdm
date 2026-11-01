@@ -19,7 +19,9 @@ from decimal import Decimal
 from typing import Any
 
 from rdm.application import security
+from rdm.application.dto import user_brief
 from rdm.application.services.attachment_commit import commit_inline_images
+from rdm.application.services.membership_service import MembershipService
 from rdm.application.services.notification_service import NotificationService
 from rdm.application.services.workflow_version_service import WorkflowVersionService
 from rdm.domain.actor import Actor
@@ -291,13 +293,18 @@ class WorkItemService:
         project_key: str | None = None,
         kind: str | None = None,
         status: str | None = None,
+        statuses: Sequence[str] | None = None,
         assignee_ref: str | None = None,
+        assignee_refs: Sequence[str] | None = None,
+        participant_refs: Sequence[str] | None = None,
         reviewer_ref: str | None = None,
         parent_ref: str | None = None,
         sprint_ref: str | None = None,
         q: str | None = None,
         backlog: bool = False,
         completed: bool | None = None,
+        root_only: bool = False,
+        subtypes: Sequence[str] | None = None,
         order: str | None = None,
         include_deleted: bool = False,
         limit: int = 20,
@@ -327,6 +334,17 @@ class WorkItemService:
                 if assignee_ref == "me"
                 else (await self.resolve_member(project.id, assignee_ref)).id
             )
+        assignee_ids = (
+            [await self._resolve_people_ref(actor, project.id, ref) for ref in assignee_refs]
+            if assignee_refs is not None
+            else None
+        )
+        participant_ids = (
+            [await self._resolve_people_ref(actor, project.id, ref) for ref in participant_refs]
+            if participant_refs is not None
+            else None
+        )
+        statuses = [part for part in (statuses or []) if part]
         reviewer_id = None
         if reviewer_ref is not None:
             reviewer_id = (
@@ -361,9 +379,14 @@ class WorkItemService:
                 kind=kind,
                 kinds=kinds,
                 status=status,
+                statuses=statuses,
                 assignee_id=assignee_id,
+                assignee_ids=assignee_ids,
+                participant_ids=participant_ids,
                 reviewer_id=reviewer_id,
                 parent_id=parent_id,
+                root_only=root_only,
+                subtypes=subtypes,
                 q=q,
                 include_statuses=include_statuses,
                 exclude_statuses=exclude_statuses,
@@ -379,9 +402,14 @@ class WorkItemService:
             kind=kind,
             kinds=kinds,
             status=status,
+            statuses=statuses,
             assignee_user_id=assignee_id,
+            assignee_user_ids=assignee_ids,
+            participant_user_ids=participant_ids,
             reviewer_user_id=reviewer_id,
             parent_id=parent_id,
+            root_only=root_only,
+            subtypes=subtypes,
             q=q,
             include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,
@@ -393,9 +421,14 @@ class WorkItemService:
             kind=kind,
             kinds=kinds,
             status=status,
+            statuses=statuses,
             assignee_user_id=assignee_id,
+            assignee_user_ids=assignee_ids,
+            participant_user_ids=participant_ids,
             reviewer_user_id=reviewer_id,
             parent_id=parent_id,
+            root_only=root_only,
+            subtypes=subtypes,
             q=q,
             include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,
@@ -425,9 +458,14 @@ class WorkItemService:
         kind: str | None,
         kinds: list[str] | None = None,
         status: str | None,
+        statuses: Sequence[str] | None = None,
         assignee_id: str | None,
+        assignee_ids: Sequence[str] | None = None,
+        participant_ids: Sequence[str] | None = None,
         reviewer_id: str | None,
         parent_id: str | None,
+        root_only: bool = False,
+        subtypes: Sequence[str] | None = None,
         q: str | None,
         limit: int,
         offset: int,
@@ -461,15 +499,25 @@ class WorkItemService:
                 return False
             if status is not None and item.status != status:
                 return False
+            if statuses and item.status not in statuses:
+                return False
             if include_statuses is not None and item.status not in include_statuses:
                 return False
             if exclude_statuses and item.status in exclude_statuses:
                 return False
             if assignee_id is not None and item.assignee_user_id != assignee_id:
                 return False
+            if assignee_ids is not None and item.assignee_user_id not in assignee_ids:
+                return False
+            if participant_ids and not set(participant_ids) & set(item.participant_user_ids):
+                return False
             if reviewer_id is not None and reviewer_id not in item.reviewer_user_ids:
                 return False
             if parent_id is not None and item.parent_id != parent_id:
+                return False
+            if root_only and item.parent_id is not None:
+                return False
+            if subtypes and item.kind == "task" and item_task_type(item) not in subtypes:
                 return False
             if q:
                 haystack = f"{item.title}\n{item.review_content_md or ''}".lower()
@@ -482,9 +530,187 @@ class WorkItemService:
             items.sort(key=lambda i: (i.created_at, i.display_no), reverse=True)
         elif order == "created_asc":
             items.sort(key=lambda i: (i.created_at, i.display_no))
+        elif order == "composite":
+            # Stable sorts, least significant key first (mirrors the SQL order).
+            items.sort(key=lambda i: (i.created_at, i.display_no), reverse=True)
+            items.sort(
+                key=lambda i: (
+                    i.planned_start_date is None,
+                    i.planned_start_date or dt.date.min,
+                )
+            )
+            items.sort(
+                key=lambda i: (
+                    i.planned_end_date is None,
+                    i.planned_end_date or dt.date.min,
+                )
+            )
+            items.sort(key=lambda i: i.priority)
         else:
             items.sort(key=lambda i: i.display_no)
         return project, items[offset : offset + min(limit, 100)]
+
+    async def _resolve_people_ref(self, actor: Actor, project_id: str, ref: str) -> str:
+        """Resolve a member ref (including ``me``) to a user id for list filters."""
+        if ref == "me":
+            return actor.id
+        return (await self.resolve_member(project_id, ref)).id
+
+    async def filter_options(
+        self,
+        actor: Actor,
+        *,
+        project_key: str | None = None,
+        kind: str | None = None,
+        subtype: str | None = None,
+        sprint_ref: str | None = None,
+        q: str | None = None,
+        completed: bool | None = None,
+        root_only: bool = False,
+        statuses: Sequence[str] | None = None,
+        assignee_refs: Sequence[str] | None = None,
+        participant_refs: Sequence[str] | None = None,
+    ) -> dict[str, list[Any]]:
+        """Values selectable for the status/assignee/participant filters.
+
+        Each dimension excludes its own selection so a multi-select keeps every
+        option visible while the user toggles values.
+        """
+        project = await self.resolve_project(actor, project_key)
+        assert self.uow.work_items is not None
+        kinds: list[str] | None = None
+        if kind is not None:
+            parsed = [part.strip() for part in kind.split(",") if part.strip()]
+            for part in parsed:
+                if part not in VALID_KINDS:
+                    raise ValidationError(
+                        tr("errors.unknown_kind", default="未知 kind {kind!r}", kind=part),
+                        details={"field": "kind"},
+                    )
+            if len(parsed) > 1:
+                kinds = parsed
+                kind = None
+            elif parsed:
+                kind = parsed[0]
+        subtypes = [part.strip() for part in (subtype or "").split(",") if part.strip()]
+        status_filter = [part.strip() for part in (statuses or []) if part.strip()]
+        assignee_ids = (
+            [await self._resolve_people_ref(actor, project.id, ref) for ref in assignee_refs]
+            if assignee_refs
+            else []
+        )
+        participant_ids = (
+            [await self._resolve_people_ref(actor, project.id, ref) for ref in participant_refs]
+            if participant_refs
+            else []
+        )
+        include_statuses: list[str] | None = None
+        exclude_statuses: list[str] | None = None
+        if completed is not None:
+            terminal = sorted(load_engine().all_terminal_states())
+            if completed:
+                include_statuses = terminal
+            else:
+                exclude_statuses = terminal
+
+        common: dict[str, object] = {
+            "kind": kind,
+            "kinds": kinds,
+            "root_only": root_only,
+            "subtypes": subtypes or None,
+            "q": q,
+            "include_statuses": include_statuses,
+            "exclude_statuses": exclude_statuses,
+        }
+        status_values: list[str]
+        assignee_values: list[str]
+        participant_values: list[str]
+        if sprint_ref is not None:
+            # Sprint membership is not a column; reuse the in-memory filter.
+            async def fetch(**overrides: object) -> list[WorkItem]:
+                merged = {**common, **overrides}
+                _, rows = await self._list_in_sprint(
+                    actor,
+                    project,
+                    sprint_ref,
+                    kind=merged.get("kind"),  # type: ignore[arg-type]
+                    kinds=merged.get("kinds"),  # type: ignore[arg-type]
+                    status=None,
+                    statuses=None,
+                    assignee_id=None,
+                    assignee_ids=merged.get("assignee_ids"),  # type: ignore[arg-type]
+                    participant_ids=merged.get("participant_ids"),  # type: ignore[arg-type]
+                    reviewer_id=None,
+                    parent_id=None,
+                    root_only=bool(merged.get("root_only")),
+                    subtypes=merged.get("subtypes"),  # type: ignore[arg-type]
+                    q=merged.get("q"),  # type: ignore[arg-type]
+                    limit=100_000,
+                    offset=0,
+                    include_statuses=merged.get("include_statuses"),  # type: ignore[arg-type]
+                    exclude_statuses=merged.get("exclude_statuses"),  # type: ignore[arg-type]
+                    order="composite",
+                )
+                return rows
+
+            status_values = sorted(
+                {
+                    item.status
+                    for item in await fetch(
+                        assignee_ids=assignee_ids or None, participant_ids=participant_ids or None
+                    )
+                }
+            )
+            assignee_values = sorted(
+                {
+                    item.assignee_user_id
+                    for item in await fetch(
+                        statuses=status_filter or None,
+                        participant_ids=participant_ids or None,
+                    )
+                    if item.assignee_user_id
+                }
+            )
+            participant_values = sorted(
+                {
+                    user_id
+                    for item in await fetch(
+                        statuses=status_filter or None,
+                        assignee_ids=assignee_ids or None,
+                    )
+                    for user_id in item.participant_user_ids
+                }
+            )
+        else:
+            status_values = await self.uow.work_items.distinct_statuses(
+                project.id,
+                **common,
+                assignee_user_ids=assignee_ids or None,
+                participant_user_ids=participant_ids or None,
+            )
+            assignee_values = await self.uow.work_items.distinct_assignee_ids(
+                project.id,
+                **common,
+                statuses=status_filter or None,
+                participant_user_ids=participant_ids or None,
+            )
+            participant_values = await self.uow.work_items.distinct_participant_ids(
+                project.id,
+                **common,
+                statuses=status_filter or None,
+                assignee_user_ids=assignee_ids or None,
+            )
+
+        users = await MembershipService(self.uow).users_index(project.id)
+        return {
+            "statuses": status_values,
+            "assignees": [
+                user_brief(users[user_id]) for user_id in assignee_values if user_id in users
+            ],
+            "participants": [
+                user_brief(users[user_id]) for user_id in participant_values if user_id in users
+            ],
+        }
 
     async def backlog_items(
         self,

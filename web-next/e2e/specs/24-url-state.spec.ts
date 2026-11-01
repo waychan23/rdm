@@ -15,9 +15,11 @@ test.describe("URL-backed filter state", () => {
     await page.getByTestId("work-item-search").press("Enter");
     await expect(page.getByTestId(`work-item-row-${story.display_id}`)).toBeVisible();
 
-    await page.getByRole("checkbox", { name: "Epic" }).click();
-    await page.getByRole("checkbox", { name: "缺陷" }).click();
-    await page.getByRole("checkbox", { name: "任务" }).click();
+    const kindFilter = page.getByTestId("work-item-filter-kind");
+    for (const name of ["缺陷", "任务"]) {
+      await kindFilter.getByRole("combobox").click();
+      await page.getByRole("option", { name, exact: true }).click();
+    }
     await expect(page).toHaveURL(/kind=story/);
 
     await page.getByTestId(`work-item-row-${story.display_id}`).click();
@@ -25,10 +27,10 @@ test.describe("URL-backed filter state", () => {
     await page.goBack();
 
     await expect(page).toHaveURL(/kind=story/);
-    await expect(page.getByRole("checkbox", { name: "需求" })).toBeChecked();
-    await expect(page.getByRole("checkbox", { name: "Epic" })).not.toBeChecked();
+    await expect(page.getByTestId("work-item-filter-kind")).toContainText("需求");
+    await expect(page.getByTestId("work-item-filter-kind")).not.toContainText("缺陷");
     await expect(page.getByTestId("work-item-search")).toHaveValue(story.title);
-    await expect(page.getByRole("checkbox", { name: "任务" })).not.toBeChecked();
+    await expect(page.getByTestId("work-item-filter-kind")).not.toContainText("任务");
   });
 
   test("the list behind an open drawer keeps its filters (RDM-51)", async ({
@@ -47,10 +49,12 @@ test.describe("URL-backed filter state", () => {
     await page.goto(`${app.baseURL}/projects/${projectKey}/backlog`);
     await page.getByTestId("work-item-search").fill(story.title);
     await page.getByTestId("work-item-search").press("Enter");
-    // Story only: the issue/epic/task checkboxes go unchecked.
-    await page.getByRole("checkbox", { name: "Epic" }).click();
-    await page.getByRole("checkbox", { name: "缺陷" }).click();
-    await page.getByRole("checkbox", { name: "任务" }).click();
+    // Story only: issue and task go unchecked in the kind multi-select.
+    const kindFilter = page.getByTestId("work-item-filter-kind");
+    for (const name of ["缺陷", "任务"]) {
+      await kindFilter.getByRole("combobox").click();
+      await page.getByRole("option", { name, exact: true }).click();
+    }
     await expect(page).toHaveURL(/kind=story/);
     const row = page.getByTestId(`work-item-row-${story.display_id}`);
     await expect(row).toBeVisible();
@@ -60,8 +64,8 @@ test.describe("URL-backed filter state", () => {
 
     // The list still rendered behind the drawer keeps the query and filters.
     await expect(page.getByTestId("work-item-search")).toHaveValue(story.title);
-    await expect(page.getByRole("checkbox", { name: "需求" })).toBeChecked();
-    await expect(page.getByRole("checkbox", { name: "Epic" })).not.toBeChecked();
+    await expect(page.getByTestId("work-item-filter-kind")).toContainText("需求");
+    await expect(page.getByTestId("work-item-filter-kind")).not.toContainText("缺陷");
     await expect(row).toBeVisible();
 
     await page.getByTestId("item-backdrop").click({ position: { x: 12, y: 12 } });
@@ -76,19 +80,17 @@ test.describe("URL-backed filter state", () => {
   }) => {
     await page.goto(`${app.baseURL}/projects/${app.projectKey}/board`);
     // Kinds are a multi-select; leaving only story writes kind=story.
-    const kindFilter = page.getByTestId("board-kind-filter");
+    const kindFilter = page.getByTestId("work-item-filter-kind");
     await kindFilter.getByRole("combobox").click();
     await page.getByRole("option", { name: "缺陷", exact: true }).click();
     // Atlaskit closes the multi menu after each pick.
     await kindFilter.getByRole("combobox").click();
     await page.getByRole("option", { name: "任务", exact: true }).click();
-    await page.getByRole("checkbox", { name: "显示终态列" }).click();
     await expect(page).toHaveURL(/kind=story/);
-    await expect(page).toHaveURL(/showTerminal=false/);
     await page.reload();
     await expect(page).toHaveURL(/kind=story/);
-    await expect(page.getByTestId("board-kind-filter")).toContainText("需求");
-    await expect(page.getByRole("checkbox", { name: "显示终态列" })).not.toBeChecked();
+    await expect(page.getByTestId("work-item-filter-kind")).toContainText("需求");
+    await expect(page.getByTestId("work-item-filter-kind")).not.toContainText("缺陷");
 
     await page.goto(`${app.baseURL}/projects/${app.projectKey}/mailbox`);
     await page.getByTestId("mailbox-folder-archived").click();

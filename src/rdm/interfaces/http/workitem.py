@@ -46,38 +46,54 @@ async def _users_map(uow, project_id: str) -> dict:
     return await MembershipService(uow).users_index(project_id)
 
 
+def _split_csv(value: str | None) -> list[str]:
+    return [part.strip() for part in (value or "").split(",") if part.strip()]
+
+
 @router.get("/projects/{key}/work-items")
 async def list_work_items(
     key: str,
     kind: str | None = None,
+    subtype: str | None = None,
     status: str | None = None,
     assignee: str | None = None,
+    participant: str | None = None,
     reviewer: str | None = None,
     parent: str | None = None,
     sprint: str | None = None,
+    root_only: bool = False,
     q: str | None = None,
     backlog: bool = False,
     completed: bool | None = None,
-    order: Literal["created_asc", "created_desc"] | None = None,
+    order: Literal["composite", "created_asc", "created_desc"] | None = None,
     include_deleted: bool = False,
     limit: int = 20,
     offset: int = 0,
     container: Container = Depends(get_container),
     actor: Actor = Depends(get_actor),
 ) -> dict:
+    statuses = _split_csv(status)
+    assignees = _split_csv(assignee)
+    participants = _split_csv(participant)
+    subtypes = _split_csv(subtype)
     async with container.uow() as uow:
         project, items, total = await WorkItemService(uow).list_items_paginated(
             actor,
             project_key=key,
             kind=kind,
-            status=status,
-            assignee_ref=assignee,
+            status=None,
+            statuses=statuses or None,
+            assignee_ref=None,
+            assignee_refs=assignees or None,
+            participant_refs=participants or None,
             reviewer_ref=reviewer,
             parent_ref=parent,
             sprint_ref=sprint,
             q=q,
             backlog=backlog,
             completed=completed,
+            root_only=root_only,
+            subtypes=subtypes or None,
             order=order,
             include_deleted=include_deleted,
             limit=limit,
@@ -93,6 +109,43 @@ async def list_work_items(
         ],
         "meta": {"total": total, "limit": min(limit, 100), "offset": offset},
     }
+
+
+@router.get("/projects/{key}/work-items/filter-options")
+async def work_item_filter_options(
+    key: str,
+    kind: str | None = None,
+    subtype: str | None = None,
+    status: str | None = None,
+    assignee: str | None = None,
+    participant: str | None = None,
+    sprint: str | None = None,
+    root_only: bool = False,
+    q: str | None = None,
+    completed: bool | None = None,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    """Selectable status / assignee / participant values under the active filters.
+
+    The unpaginated filtered set is used, per the RDM-63 product rule. Each
+    dimension excludes its own selection so multi-selects keep all options.
+    """
+    async with container.uow() as uow:
+        options = await WorkItemService(uow).filter_options(
+            actor,
+            project_key=key,
+            kind=kind,
+            subtype=subtype,
+            sprint_ref=sprint,
+            q=q,
+            completed=completed,
+            root_only=root_only,
+            statuses=_split_csv(status),
+            assignee_refs=_split_csv(assignee),
+            participant_refs=_split_csv(participant),
+        )
+    return {"data": options}
 
 
 @router.post("/projects/{key}/work-items", status_code=201)

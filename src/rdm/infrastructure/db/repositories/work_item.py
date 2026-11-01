@@ -10,7 +10,7 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Sequence
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rdm.domain.entities import (
@@ -87,27 +87,34 @@ class WorkItemRepository:
             reviewer_user_ids=reviewers.get(row.id),
         )
 
-    async def list(
+    def _apply_filters(
         self,
+        stmt,
         project_id: str,
         *,
         kind: str | None = None,
         kinds: Sequence[str] | None = None,
         status: str | None = None,
+        statuses: Sequence[str] | None = None,
         assignee_user_id: str | None = None,
+        assignee_user_ids: Sequence[str] | None = None,
+        participant_user_ids: Sequence[str] | None = None,
         reviewer_user_id: str | None = None,
         parent_id: str | None = None,
+        root_only: bool = False,
+        subtypes: Sequence[str] | None = None,
         q: str | None = None,
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
         backlog_only: bool = False,
-        order: str | None = None,
-        expand: bool = False,
         include_deleted: bool = False,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> list[WorkItem]:
-        stmt = select(WorkItemModel).where(WorkItemModel.project_id == project_id)
+    ):
+        """Apply the shared work-item list/count/facet predicates.
+
+        `subtypes` follows the product rule for the task subtype filter: it
+        only narrows `kind=task` rows; every other selected kind is untouched.
+        """
+        stmt = stmt.where(WorkItemModel.project_id == project_id)
         if not include_deleted:
             stmt = stmt.where(WorkItemModel.deleted_at.is_(None))
         if kind is not None:
@@ -116,6 +123,8 @@ class WorkItemRepository:
             stmt = stmt.where(WorkItemModel.kind.in_(list(kinds)))
         if status is not None:
             stmt = stmt.where(WorkItemModel.status == status)
+        if statuses:
+            stmt = stmt.where(WorkItemModel.status.in_(list(statuses)))
         if include_statuses is not None:
             stmt = stmt.where(WorkItemModel.status.in_(list(include_statuses)))
         if exclude_statuses:
@@ -131,6 +140,18 @@ class WorkItemRepository:
             )
         if assignee_user_id is not None:
             stmt = stmt.where(WorkItemModel.assignee_user_id == assignee_user_id)
+        if assignee_user_ids:
+            stmt = stmt.where(WorkItemModel.assignee_user_id.in_(list(assignee_user_ids)))
+        if participant_user_ids:
+            stmt = stmt.where(
+                select(WorkItemParticipantModel.id)
+                .where(
+                    WorkItemParticipantModel.work_item_id == WorkItemModel.id,
+                    WorkItemParticipantModel.user_id.in_(list(participant_user_ids)),
+                    WorkItemParticipantModel.deleted_at.is_(None),
+                )
+                .exists()
+            )
         if reviewer_user_id is not None:
             stmt = stmt.where(
                 select(WorkItemReviewerModel.id)
@@ -143,6 +164,20 @@ class WorkItemRepository:
             )
         if parent_id is not None:
             stmt = stmt.where(WorkItemModel.parent_id == parent_id)
+        if root_only:
+            stmt = stmt.where(WorkItemModel.parent_id.is_(None))
+        if subtypes:
+            stmt = stmt.where(
+                or_(
+                    WorkItemModel.kind != "task",
+                    select(WorkItemTaskModel.work_item_id)
+                    .where(
+                        WorkItemTaskModel.work_item_id == WorkItemModel.id,
+                        WorkItemTaskModel.task_type.in_(list(subtypes)),
+                    )
+                    .exists(),
+                )
+            )
         if q:
             pattern = f"%{q}%"
             stmt = stmt.where(
@@ -151,11 +186,70 @@ class WorkItemRepository:
                     WorkItemModel.review_content_md.ilike(pattern),
                 )
             )
+        return stmt
+
+    async def list(
+        self,
+        project_id: str,
+        *,
+        kind: str | None = None,
+        kinds: Sequence[str] | None = None,
+        status: str | None = None,
+        statuses: Sequence[str] | None = None,
+        assignee_user_id: str | None = None,
+        assignee_user_ids: Sequence[str] | None = None,
+        participant_user_ids: Sequence[str] | None = None,
+        reviewer_user_id: str | None = None,
+        parent_id: str | None = None,
+        root_only: bool = False,
+        subtypes: Sequence[str] | None = None,
+        q: str | None = None,
+        include_statuses: Sequence[str] | None = None,
+        exclude_statuses: Sequence[str] | None = None,
+        backlog_only: bool = False,
+        order: str | None = None,
+        expand: bool = False,
+        include_deleted: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[WorkItem]:
+        stmt = self._apply_filters(
+            select(WorkItemModel),
+            project_id,
+            kind=kind,
+            kinds=kinds,
+            status=status,
+            statuses=statuses,
+            assignee_user_id=assignee_user_id,
+            assignee_user_ids=assignee_user_ids,
+            participant_user_ids=participant_user_ids,
+            reviewer_user_id=reviewer_user_id,
+            parent_id=parent_id,
+            root_only=root_only,
+            subtypes=subtypes,
+            q=q,
+            include_statuses=include_statuses,
+            exclude_statuses=exclude_statuses,
+            backlog_only=backlog_only,
+            include_deleted=include_deleted,
+        )
         # display_no is the tiebreaker so equal timestamps keep a stable order.
         if order == "created_desc":
             stmt = stmt.order_by(WorkItemModel.created_at.desc(), WorkItemModel.display_no.desc())
         elif order == "created_asc":
             stmt = stmt.order_by(WorkItemModel.created_at.asc(), WorkItemModel.display_no.asc())
+        elif order == "composite":
+            # Priority 1 is the most urgent, so ascending puts urgent first.
+            # Undated items sort after dated ones at each date level.
+            stmt = stmt.order_by(
+                WorkItemModel.priority.asc(),
+                case((WorkItemModel.planned_end_date.is_(None), 1), else_=0),
+                WorkItemModel.planned_end_date.asc(),
+                case((WorkItemModel.planned_start_date.is_(None), 1), else_=0),
+                WorkItemModel.planned_start_date.asc(),
+                WorkItemModel.created_at.desc(),
+                WorkItemModel.display_no.desc(),
+            )
         else:
             stmt = stmt.order_by(WorkItemModel.display_no)
         stmt = stmt.limit(limit).offset(offset)
@@ -170,64 +264,65 @@ class WorkItemRepository:
         kind: str | None = None,
         kinds: Sequence[str] | None = None,
         status: str | None = None,
+        statuses: Sequence[str] | None = None,
         assignee_user_id: str | None = None,
+        assignee_user_ids: Sequence[str] | None = None,
+        participant_user_ids: Sequence[str] | None = None,
         reviewer_user_id: str | None = None,
         parent_id: str | None = None,
+        root_only: bool = False,
+        subtypes: Sequence[str] | None = None,
         q: str | None = None,
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
         backlog_only: bool = False,
         include_deleted: bool = False,
     ) -> int:
-        stmt = (
-            select(func.count())
-            .select_from(WorkItemModel)
-            .where(WorkItemModel.project_id == project_id)
+        stmt = self._apply_filters(
+            select(func.count()).select_from(WorkItemModel),
+            project_id,
+            kind=kind,
+            kinds=kinds,
+            status=status,
+            statuses=statuses,
+            assignee_user_id=assignee_user_id,
+            assignee_user_ids=assignee_user_ids,
+            participant_user_ids=participant_user_ids,
+            reviewer_user_id=reviewer_user_id,
+            parent_id=parent_id,
+            root_only=root_only,
+            subtypes=subtypes,
+            q=q,
+            include_statuses=include_statuses,
+            exclude_statuses=exclude_statuses,
+            backlog_only=backlog_only,
+            include_deleted=include_deleted,
         )
-        if not include_deleted:
-            stmt = stmt.where(WorkItemModel.deleted_at.is_(None))
-        if kind is not None:
-            stmt = stmt.where(WorkItemModel.kind == kind)
-        if kinds:
-            stmt = stmt.where(WorkItemModel.kind.in_(list(kinds)))
-        if status is not None:
-            stmt = stmt.where(WorkItemModel.status == status)
-        if include_statuses is not None:
-            stmt = stmt.where(WorkItemModel.status.in_(list(include_statuses)))
-        if exclude_statuses:
-            stmt = stmt.where(WorkItemModel.status.notin_(list(exclude_statuses)))
-        if backlog_only:
-            stmt = stmt.where(
-                ~select(SprintItemModel.id)
-                .where(
-                    SprintItemModel.work_item_id == WorkItemModel.id,
-                    SprintItemModel.deleted_at.is_(None),
-                )
-                .exists()
-            )
-        if assignee_user_id is not None:
-            stmt = stmt.where(WorkItemModel.assignee_user_id == assignee_user_id)
-        if reviewer_user_id is not None:
-            stmt = stmt.where(
-                select(WorkItemReviewerModel.id)
-                .where(
-                    WorkItemReviewerModel.work_item_id == WorkItemModel.id,
-                    WorkItemReviewerModel.user_id == reviewer_user_id,
-                    WorkItemReviewerModel.deleted_at.is_(None),
-                )
-                .exists()
-            )
-        if parent_id is not None:
-            stmt = stmt.where(WorkItemModel.parent_id == parent_id)
-        if q:
-            pattern = f"%{q}%"
-            stmt = stmt.where(
-                or_(
-                    WorkItemModel.title.ilike(pattern),
-                    WorkItemModel.review_content_md.ilike(pattern),
-                )
-            )
         return int((await self._s.execute(stmt)).scalar_one())
+
+    async def distinct_statuses(self, project_id: str, **filters) -> list[str]:
+        stmt = self._apply_filters(select(WorkItemModel.status).distinct(), project_id, **filters)
+        return sorted(str(value) for value in (await self._s.execute(stmt)).scalars().all())
+
+    async def distinct_assignee_ids(self, project_id: str, **filters) -> list[str]:
+        stmt = self._apply_filters(
+            select(WorkItemModel.assignee_user_id).distinct(), project_id, **filters
+        ).where(WorkItemModel.assignee_user_id.is_not(None))
+        return sorted(str(value) for value in (await self._s.execute(stmt)).scalars().all())
+
+    async def distinct_participant_ids(self, project_id: str, **filters) -> list[str]:
+        stmt = self._apply_filters(
+            select(WorkItemParticipantModel.user_id)
+            .join(
+                WorkItemModel,
+                WorkItemModel.id == WorkItemParticipantModel.work_item_id,
+            )
+            .where(WorkItemParticipantModel.deleted_at.is_(None))
+            .distinct(),
+            project_id,
+            **filters,
+        )
+        return sorted(str(value) for value in (await self._s.execute(stmt)).scalars().all())
 
     async def count_by_status(self, project_id: str) -> dict[str, int]:
         stmt = (

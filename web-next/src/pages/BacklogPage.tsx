@@ -3,37 +3,32 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { cssMap } from "@atlaskit/css";
-import Button from "@atlaskit/button/default/button";
-import Checkbox from "@atlaskit/checkbox";
 import EmptyState from "@atlaskit/empty-state";
 import SectionMessage from "@atlaskit/section-message";
-import Select from "@atlaskit/select";
 import Spinner from "@atlaskit/spinner";
-import Textfield from "@atlaskit/textfield";
-import { Box, Inline } from "@atlaskit/primitives/compiled";
+import { Box } from "@atlaskit/primitives/compiled";
 
 import { Page, PageHeader } from "../components/Page";
 import { api } from "../lib/api";
-import { statusLabel } from "../lib/labels";
 import { useAsync } from "../hooks/useAsync";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";
 import { useListOrigin, useListSearchParams } from "../lib/originSearch";
 import { recall, remember } from "../lib/pageCache";
 import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
-import type { ProjectMemberRow, WorkItem, WorkflowDto } from "../types";
-import { flattenMembers } from "../lib/members";
-import { userLabel } from "../lib/users";
-import { kindOptions, PAGE_SIZE } from "../workitems/constants";
+import type { WorkItem, WorkflowDto } from "../types";
+import { PAGE_SIZE } from "../workitems/constants";
 import { buildWorkItemTree } from "../workitems/hierarchy";
 import WorkItemTable, { type WorkItemRowView } from "../workitems/WorkItemTable";
 import CreateWorkItemDialog from "../workitems/CreateWorkItemDialog";
-
-interface Option {
-  label: string;
-  value: string;
-}
-
-type ViewMode = "flat" | "tree";
+import WorkItemToolbar, { type WorkItemView } from "../workitems/WorkItemToolbar";
+import {
+  applyFilterPatch,
+  buildRequestParams,
+  DEFAULT_KINDS,
+  parseFilters,
+  type FilterDefaults,
+  type WorkItemFilters,
+} from "../workitems/filterState";
 
 /** The tree view needs every filtered item to nest children under parents. */
 const TREE_BATCH = 100;
@@ -42,11 +37,11 @@ const TREE_LIMIT = 1000;
 const VIEW_KEY = (projectKey: string) => `rdm.work-items.view.${projectKey}`;
 const COLLAPSED_KEY = (projectKey: string) => `rdm.work-items.collapsed.${projectKey}`;
 
-function readView(projectKey: string): ViewMode {
+function readView(projectKey: string): WorkItemView {
   try {
-    return localStorage.getItem(VIEW_KEY(projectKey)) === "tree" ? "tree" : "flat";
+    return localStorage.getItem(VIEW_KEY(projectKey)) === "flat" ? "flat" : "tree";
   } catch {
-    return "flat";
+    return "tree";
   }
 }
 
@@ -81,18 +76,6 @@ const pageStyles = cssMap({
     display: "flex",
     justifyContent: "center",
     padding: "var(--ds-space-400)",
-  },
-
-  filterWidth: {
-    width: "140px",
-  },
-
-  searchWidth: {
-    width: "180px",
-  },
-
-  sortWidth: {
-    width: "180px",
   },
 });
 
@@ -137,37 +120,27 @@ function BacklogView({ projectKey }: { projectKey: string }) {
   // hidden (sidebar "缺陷" entry).
   const pagePath = listOrigin ? listOrigin.split("?")[0] : location.pathname;
   const issuesOnly = pagePath.endsWith("/issues");
-  const kindsParam = searchParams.get("kind");
-  const kinds = issuesOnly
-    ? ["issue"]
-    : kindsParam
-      ? kindsParam.split(",").filter(Boolean)
-      : ["epic", "story", "issue", "task"];
-  const statusValue = searchParams.get("status") ?? "";
-  const completedValue = searchParams.get("completed");
-  // Terminal states differ per workflow, so "completed" is resolved server-side.
-  const completed: boolean | null =
-    completedValue === "true" ? true : completedValue === "false" ? false : null;
-  const assigneeValue = searchParams.get("assignee") ?? "";
-  const reviewerValue = searchParams.get("reviewer") ?? "";
-  const q = searchParams.get("q") ?? "";
-  // Newest first is the default; the flat list asks the server for it explicitly.
-  const order: "created_desc" | "created_asc" =
-    searchParams.get("order") === "created_asc" ? "created_asc" : "created_desc";
-  const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
-  const view: ViewMode =
-    searchParams.get("view") === "tree"
-      ? "tree"
-      : searchParams.get("view") === "flat"
-        ? "flat"
+  const defaults: FilterDefaults = {
+    kinds: issuesOnly ? ["issue"] : DEFAULT_KINDS,
+    rootOnly: false,
+  };
+  const parsedFilters = parseFilters(searchParams, defaults);
+  // The /issues route owns the kind regardless of a stale URL parameter.
+  const filters: WorkItemFilters = issuesOnly
+    ? { ...parsedFilters, kinds: ["issue"] }
+    : parsedFilters;
+
+  const view: WorkItemView =
+    searchParams.get("view") === "flat"
+      ? "flat"
+      : searchParams.get("view") === "tree"
+        ? "tree"
         : readView(projectKey);
-  const [qInput, setQInput] = useState(q);
+  const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
   const [showCreate, setShowCreate] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => readCollapsed(projectKey));
   const treeMode = view === "tree";
-
-  useEffect(() => setQInput(q), [q]);
 
   const patchParams = (patch: Record<string, string | null>, resetPage = true) => {
     const next = new URLSearchParams(searchParams);
@@ -179,88 +152,16 @@ function BacklogView({ projectKey }: { projectKey: string }) {
     setSearchParams(next, { replace: true });
   };
 
-  const membersState = useAsync<ProjectMemberRow[]>(
-    async () => (await api.get<ProjectMemberRow[]>(`/projects/${projectKey}/members`)).data,
-    [projectKey],
-  );
+  const patchFilters = (patch: Partial<WorkItemFilters>) => {
+    setSearchParams(applyFilterPatch(searchParams, patch, defaults), { replace: true });
+  };
+
   const workflowState = useAsync<WorkflowDto>(
     async () => (await api.get<WorkflowDto>("/workflow")).data,
     [projectKey],
   );
 
-  const statusOptions = useMemo<Option[]>(() => {
-    const states = new Set<string>();
-    Object.values(workflowState.data?.kinds ?? {}).forEach((k) => {
-      k.states.forEach((s) => states.add(s));
-      Object.values(k.subtypes ?? {}).forEach((subtype) =>
-        subtype.states.forEach((s) => states.add(s)),
-      );
-    });
-    return [...states].map((s) => ({ label: statusLabel(s), value: s }));
-  }, [workflowState.data, t]);
-
-  const orderOptions = useMemo<Option[]>(
-    () => [
-      { label: t("backlog.sort.newest"), value: "created_desc" },
-      { label: t("backlog.sort.oldest"), value: "created_asc" },
-    ],
-    [t],
-  );
-
-  const completedOptions = useMemo<Option[]>(
-    () => [
-      { label: t("backlog.filter.uncompleted"), value: "false" },
-      { label: t("backlog.filter.completed"), value: "true" },
-    ],
-    [t],
-  );
-
-  const assigneeOptions = useMemo<Option[]>(() => {
-    return [
-      { label: t("backlog.filter.mine"), value: "me" },
-      ...flattenMembers(membersState.data ?? []).map((m) => ({
-        label: userLabel(m),
-        value: m.id,
-      })),
-    ];
-  }, [membersState.data, t]);
-
-  const status = statusValue
-    ? (statusOptions.find((o) => o.value === statusValue) ?? {
-        label: statusValue,
-        value: statusValue,
-      })
-    : null;
-  const assignee = assigneeValue
-    ? (assigneeOptions.find((o) => o.value === assigneeValue) ?? {
-        label: assigneeValue,
-        value: assigneeValue,
-      })
-    : null;
-  const completedOption =
-    completed === null
-      ? null
-      : (completedOptions.find((o) => o.value === String(completed)) ?? null);
-  const reviewer = reviewerValue
-    ? (assigneeOptions.find((o) => o.value === reviewerValue) ?? {
-        label: reviewerValue,
-        value: reviewerValue,
-      })
-    : null;
-
-  const filterParams = useMemo(() => {
-    const params = new URLSearchParams();
-    if (kinds.length > 0) params.set("kind", kinds.join(","));
-    if (status) params.set("status", status.value);
-    if (completed !== null) params.set("completed", String(completed));
-    if (assignee) params.set("assignee", assignee.value === "me" ? "me" : assignee.value);
-    if (reviewer) params.set("reviewer", reviewer.value === "me" ? "me" : reviewer.value);
-    if (q) params.set("q", q);
-    // Both views sort: buildWorkItemTree keeps the server order for roots and
-    // children, so the tree simply nests by creation order.
-    params.set("order", order);
-    return params.toString();
-  }, [kinds, status, completed, assignee, reviewer, q, order]);
+  const filterParams = buildRequestParams(filters).toString();
 
   // Re-fetch only when the request actually changes: the tree loads the whole
   // filtered set once, so paging its roots must not hit the network again.
@@ -300,14 +201,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
     return buildWorkItemTree(itemsData.items, collapsed, page, PAGE_SIZE);
   }, [treeMode, itemsData, collapsed, page]);
 
-  const toggleKind = (value: string, checked: boolean) => {
-    // Zero selected kinds means "all"; multiple kinds travel as one comma list.
-    const next = checked ? [...kinds, value] : kinds.filter((k) => k !== value);
-    const ordered = ["epic", "story", "issue", "task"].filter((k) => next.includes(k));
-    patchParams({ kind: ordered.join(",") });
-  };
-
-  const changeView = (next: ViewMode) => {
+  const changeView = (next: WorkItemView) => {
     if (next === view) return;
     writeStorage(VIEW_KEY(projectKey), next);
     patchParams({ view: next });
@@ -343,120 +237,19 @@ function BacklogView({ projectKey }: { projectKey: string }) {
       <PageHeader
         title={issuesOnly ? t("issues.title") : t("backlog.title")}
         testId="backlog-header"
-        actions={
-          <>
-            <Inline space="space.050" alignBlock="center" testId="work-item-view-switch">
-              <Button
-                spacing="compact"
-                isSelected={view === "flat"}
-                aria-pressed={view === "flat"}
-                testId="work-item-view-flat"
-                onClick={() => changeView("flat")}
-              >
-                {t("backlog.view.flat")}
-              </Button>
-              <Button
-                spacing="compact"
-                isSelected={view === "tree"}
-                aria-pressed={view === "tree"}
-                testId="work-item-view-tree"
-                onClick={() => changeView("tree")}
-              >
-                {t("backlog.view.tree")}
-              </Button>
-            </Inline>
-            <Button
-              appearance="primary"
-              testId="work-item-create-button"
-              onClick={() => setShowCreate(true)}
-            >
-              {t("backlog.create")}
-            </Button>
-          </>
-        }
       />
 
-      <Inline
-        space="space.150"
-        alignBlock="center"
-        shouldWrap
-        testId="work-item-filters"
-      >
-        {!issuesOnly &&
-          kindOptions().map((k) => (
-          <Checkbox
-            key={k.value}
-            label={k.label}
-            value={k.value}
-            isChecked={kinds.includes(k.value)}
-            testId={`work-item-filter-kind-${k.value}`}
-            onChange={(e) => toggleKind(k.value, e.currentTarget.checked)}
-          />
-        ))}
-        <Box xcss={pageStyles.filterWidth} testId="work-item-filter-completed">
-          <Select<Option>
-            options={completedOptions}
-            value={completedOption}
-            onChange={(opt) => patchParams({ completed: (opt as Option | null)?.value ?? null })}
-            isClearable
-            spacing="compact"
-            placeholder={t("backlog.filter.completion")}
-          />
-        </Box>
-        <Box xcss={pageStyles.filterWidth} testId="work-item-filter-status">
-          <Select<Option>
-            options={statusOptions}
-            value={status}
-            onChange={(opt) => patchParams({ status: (opt as Option | null)?.value ?? null })}
-            isClearable
-            spacing="compact"
-            placeholder={t("backlog.filter.status")}
-          />
-        </Box>
-        <Box xcss={pageStyles.filterWidth} testId="work-item-filter-assignee">
-          <Select<Option>
-            options={assigneeOptions}
-            value={assignee}
-            onChange={(opt) => patchParams({ assignee: (opt as Option | null)?.value ?? null })}
-            isClearable
-            spacing="compact"
-            placeholder={t("backlog.filter.assignee")}
-          />
-        </Box>
-        <Box xcss={pageStyles.filterWidth} testId="work-item-filter-reviewer">
-          <Select<Option>
-            options={assigneeOptions}
-            value={reviewer}
-            onChange={(opt) => patchParams({ reviewer: (opt as Option | null)?.value ?? null })}
-            isClearable
-            spacing="compact"
-            placeholder={t("backlog.filter.reviewer")}
-          />
-        </Box>
-        <Box xcss={pageStyles.sortWidth} testId="work-item-filter-order">
-          <Select<Option>
-            options={orderOptions}
-            value={orderOptions.find((o) => o.value === order) ?? null}
-            onChange={(opt) => patchParams({ order: (opt as Option | null)?.value ?? null })}
-            spacing="compact"
-            placeholder={t("backlog.sort.label")}
-          />
-        </Box>
-        <Box xcss={pageStyles.searchWidth}>
-          <Textfield
-            placeholder={t("backlog.filter.search")}
-            value={qInput}
-            testId="work-item-search"
-            onChange={(e) => setQInput(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") patchParams({ q: qInput.trim() });
-            }}
-            onBlur={() => {
-              if (q !== qInput.trim()) patchParams({ q: qInput.trim() });
-            }}
-          />
-        </Box>
-      </Inline>
+      <WorkItemToolbar
+        projectKey={projectKey}
+        filters={filters}
+        workflow={workflowState.data}
+        onFilterChange={patchFilters}
+        kindFixed={issuesOnly}
+        view={view}
+        onViewChange={changeView}
+        onCreate={() => setShowCreate(true)}
+        onRefresh={() => setReloadNonce((n) => n + 1)}
+      />
 
       <Box xcss={pageStyles.content} testId="backlog-content">
         {listLoading ? (
@@ -492,8 +285,8 @@ function BacklogView({ projectKey }: { projectKey: string }) {
               onPageChange={(p) => patchParams({ page: String(p) }, false)}
               onToggle={treeMode ? toggleNode : undefined}
               countNote={tree ? t("backlog.rootCount", { n: tree.rootCount }) : undefined}
-              order={order}
-              onOrderChange={(next) => patchParams({ order: next })}
+              order={filters.order}
+              onOrderChange={(next) => patchFilters({ order: next })}
             />
           </>
         )}

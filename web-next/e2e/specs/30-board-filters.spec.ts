@@ -25,8 +25,9 @@ test.describe("board filters", () => {
     await expect(insideCard).toBeVisible();
     await expect(outsideCard).toBeVisible();
 
-    await page.getByTestId("board-sprint-filter").getByRole("combobox").click();
-    await page.getByRole("option", { name: sprint.name, exact: true }).click();
+    await page.getByTestId("work-item-filter-sprint").getByRole("combobox").click();
+    // Options also render the sprint status and dates, so match the name only.
+    await page.getByRole("option", { name: new RegExp(sprint.name) }).click();
     await expect(page).toHaveURL(new RegExp(`sprint=${sprint.id}`));
     await expect(insideCard).toBeVisible();
     await expect(outsideCard).toHaveCount(0);
@@ -43,9 +44,9 @@ test.describe("board filters", () => {
     await expect(page.getByTestId(`board-card-${story.display_id}`)).toBeVisible();
     await expect(page.getByTestId(`board-card-${issue.display_id}`)).toBeVisible();
     await expect(page.getByTestId(`board-card-${task.display_id}`)).toHaveCount(0);
-    await expect(page.getByTestId("board-kind-filter")).toContainText("需求");
-    await expect(page.getByTestId("board-kind-filter")).toContainText("缺陷");
-    await expect(page.getByTestId("board-kind-filter")).not.toContainText("任务");
+    await expect(page.getByTestId("work-item-filter-kind")).toContainText("需求");
+    await expect(page.getByTestId("work-item-filter-kind")).toContainText("缺陷");
+    await expect(page.getByTestId("work-item-filter-kind")).not.toContainText("任务");
   });
 
   test("board hides child items unless top-level-only is off (RDM-40)", async ({
@@ -70,7 +71,7 @@ test.describe("board filters", () => {
     await expect(page.getByTestId(`board-card-${story.display_id}`)).toBeVisible();
     await expect(childCard).toHaveCount(0);
 
-    await page.getByRole("checkbox", { name: "仅展示一级工作项" }).click();
+    await page.getByRole("checkbox", { name: "仅一级工作项" }).click();
     await expect(page).toHaveURL(/rootOnly=false/);
     await expect(childCard).toBeVisible();
   });
@@ -93,11 +94,11 @@ test.describe("board filters", () => {
     await page.goto(
       `${app.baseURL}/projects/${projectKey}/board?kind=story&sprint=${sprint.id}`,
     );
-    const info = page.getByTestId("board-sprint-info");
+    const info = page.getByTestId("work-item-sprint-info");
     await expect(info).toContainText(sprint.name);
     await expect(info).toContainText("2026-01-01 ~ 2026-01-14");
 
-    await info.getByTestId("board-sprint-open").click();
+    await info.getByTestId("work-item-sprint-open").click();
     await expect(page.getByTestId("sprint-detail")).toContainText(sprint.name);
   });
 });
