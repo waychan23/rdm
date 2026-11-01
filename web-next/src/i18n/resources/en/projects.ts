@@ -106,6 +106,9 @@ const projects = {
     rootOnly: "Top-level items only",
     showTerminal: "Show terminal columns",
     empty: "No workflow columns for this type",
+    loadingMore: "Loading…",
+    noMore: "No more items",
+    columnLoadFailed: "Couldn't load this column",
     stepRequiredTitle: "Use the work item detail to run this step",
     stepRequiredBody:
       "Moving {{id}} from {{from}} to {{to}} requires choosing a named step or adding a note.",

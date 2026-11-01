@@ -6,7 +6,7 @@ import { cssMap } from "@atlaskit/css";
 import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import EmptyState from "@atlaskit/empty-state";
 import Spinner from "@atlaskit/spinner";
-import { Box } from "@atlaskit/primitives/compiled";
+import { Box, Inline } from "@atlaskit/primitives/compiled";
 
 import { Page, PageHeader } from "../components/Page";
 import ErrorState from "../components/ErrorState";
@@ -18,7 +18,7 @@ import { useListOrigin, useListSearchParams } from "../lib/originSearch";
 import { recall, remember } from "../lib/pageCache";
 import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
 import type { WorkItem, WorkflowDto } from "../types";
-import { KIND_VALUES } from "../workitems/constants";
+import { KIND_VALUES, PAGE_SIZE } from "../workitems/constants";
 import BoardCard from "./board/BoardCard";
 import BoardColumn from "./board/BoardColumn";
 import CreateWorkItemDialog from "../workitems/CreateWorkItemDialog";
@@ -32,8 +32,19 @@ import {
   type WorkItemFilters,
 } from "../workitems/filterState";
 
-interface BoardSnapshot {
+interface ColumnState {
   items: WorkItem[];
+  /** Unpaginated match count for the column header. */
+  total: number;
+  loading: boolean;
+  loadingMore: boolean;
+  error: unknown;
+}
+
+type ColumnMap = Record<string, ColumnState>;
+
+interface BoardSnapshot {
+  columns: ColumnMap;
   workflow: WorkflowDto;
 }
 
@@ -43,23 +54,20 @@ const boardCacheKey = (projectKey: string, requestParams: string) =>
 const DEFAULT_BOARD_KINDS = DEFAULT_KINDS;
 
 const styles = cssMap({
-  // Scroll container. The board row inside grows with its tallest column, so
-  // the whole board scrolls vertically while every column keeps an equal,
-  // content-following height (see boardRow).
+  // The board itself only scrolls horizontally; every column owns its
+  // vertical scrollbar (RDM-58).
   board: {
     display: "flex",
     flexDirection: "column",
     flex: "1",
     minHeight: "0",
-    overflow: "auto",
+    overflowX: "auto",
+    overflowY: "hidden",
   },
-  // `flex: 1 0 auto` fills the viewport when columns are short, and lets the
-  // row (so: every stretched column's grey background) grow with the tallest
-  // column when its cards overflow. Column widths stay fixed, so the row is
-  // max-content wide and the scroll container handles horizontal overflow.
   boardRow: {
     display: "flex",
-    flex: "1 0 auto",
+    flex: "1",
+    minHeight: "0",
     gap: "var(--ds-space-150)",
     alignItems: "stretch",
     width: "max-content",
@@ -70,6 +78,11 @@ const styles = cssMap({
     alignItems: "center",
     justifyContent: "center",
     flex: "1",
+  },
+  columnLoading: {
+    display: "flex",
+    justifyContent: "center",
+    paddingBlock: "var(--ds-space-150)",
   },
 });
 
@@ -87,69 +100,202 @@ export default function BoardPage() {
   const defaults: FilterDefaults = { kinds: DEFAULT_BOARD_KINDS, rootOnly: true };
   const filters: WorkItemFilters = parseFilters(searchParams, defaults);
   const filterParams = buildRequestParams(filters).toString();
-  const kinds = filters.kinds.length > 0 ? filters.kinds : [...KIND_VALUES];
-  const kindsKey = kinds.join(",");
-
+  const cacheKey = boardCacheKey(projectKey, filterParams);
+  const kindsKey = filters.kinds.join(",");
+  const kinds = useMemo(
+    () => (kindsKey ? kindsKey.split(",") : [...KIND_VALUES]),
+    [kindsKey],
+  );
   const patchFilters = (patch: Partial<WorkItemFilters>) => {
     setSearchParams(applyFilterPatch(searchParams, patch, defaults), { replace: true });
   };
 
   const [showCreate, setShowCreate] = useState(false);
-  const initialSnapshot = recall<BoardSnapshot>(boardCacheKey(projectKey, filterParams));
-  const [items, setItems] = useState<WorkItem[]>(initialSnapshot?.items ?? []);
+  const initialSnapshot = recall<BoardSnapshot>(cacheKey);
+  const [columns, setColumns] = useState<ColumnMap>(initialSnapshot?.columns ?? {});
+  // Cache key the current `columns` belong to (guards the snapshot write).
+  const [columnsKey, setColumnsKey] = useState(cacheKey);
   const [workflow, setWorkflow] = useState<WorkflowDto | null>(
     initialSnapshot?.workflow ?? null,
   );
-  const [loading, setLoading] = useState(!initialSnapshot);
-  const [error, setError] = useState<unknown>(null);
+  const [workflowError, setWorkflowError] = useState<unknown>(null);
+  const [workflowNonce, setWorkflowNonce] = useState(0);
 
-  // Latest values for the (mount-once) drop monitor.
-  const stateRef = useRef({ items, workflow, filterParams, projectKey });
-  stateRef.current = { items, workflow, filterParams, projectKey };
+  // Latest values for the (mount-once) drop monitor and load-more handlers.
+  const stateRef = useRef({ columns, workflow, filterParams, projectKey });
+  stateRef.current = { columns, workflow, filterParams, projectKey };
+  // Bumped on every filter change so stale column responses are dropped.
+  const generationRef = useRef(0);
 
-  const load = useCallback(
-    async (nextParams: string, initial = false) => {
-      const cacheKey = boardCacheKey(projectKey, nextParams);
-      const snapshot = initial ? recall<BoardSnapshot>(cacheKey) : undefined;
-      if (snapshot) {
-        setWorkflow(snapshot.workflow);
-        setItems(snapshot.items);
+  useEffect(() => {
+    let alive = true;
+    api
+      .get<WorkflowDto>("/workflow")
+      .then((res) => {
+        if (alive) {
+          setWorkflow(res.data);
+          setWorkflowError(null);
+        }
+      })
+      .catch((e) => {
+        if (alive) setWorkflowError(e);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [projectKey, workflowNonce]);
+
+  // Columns are the merged state list of every selected kind (first kind
+  // first, duplicates collapsed). Terminal columns are always shown (RDM-63).
+  const statuses = useMemo(() => {
+    if (!workflow) return [];
+    const out: string[] = [];
+    for (const kind of kinds) {
+      const spec = workflow.kinds[kind];
+      if (!spec) continue;
+      const subtypes = Object.values(spec.subtypes ?? {});
+      const collected =
+        subtypes.length > 0
+          ? [...spec.states, ...subtypes.flatMap((subtype) => subtype.states)]
+          : spec.states;
+      for (const state of collected) {
+        if (!out.includes(state)) out.push(state);
       }
-      setLoading(initial ? !snapshot : true);
-      setError(null);
+    }
+    return out;
+    // kindsKey stands in for the kinds array identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflow, kindsKey]);
+
+  const loadColumn = useCallback(
+    async (status: string, offset: number, generation: number, silent = false) => {
+      const params = new URLSearchParams(stateRef.current.filterParams);
+      params.set("status", status);
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String(offset));
+      setColumns((prev) => {
+        const current = prev[status];
+        if (!current) return prev;
+        return {
+          ...prev,
+          [status]: {
+            ...current,
+            loading: !silent && offset === 0,
+            loadingMore: !silent && offset > 0,
+            error: null,
+          },
+        };
+      });
       try {
-        const params = new URLSearchParams(nextParams);
-        params.set("limit", "200");
-        const [wf, list] = await Promise.all([
-          initial || !stateRef.current.workflow
-            ? api.get<WorkflowDto>("/workflow")
-            : Promise.resolve({ data: stateRef.current.workflow! }),
-          api.get<WorkItem[]>(
-            `/projects/${projectKey}/work-items?${params.toString()}`,
-          ),
-        ]);
-        setWorkflow(wf.data);
-        setItems(list.data);
-        remember(cacheKey, { items: list.data, workflow: wf.data });
+        const res = await api.get<WorkItem[]>(
+          `/projects/${projectKey}/work-items?${params.toString()}`,
+        );
+        if (generationRef.current !== generation) return;
+        const total = Number(res.meta?.total ?? res.data.length);
+        setColumns((prev) => {
+          const current = prev[status];
+          if (!current) return prev;
+          const items =
+            offset === 0
+              ? res.data
+              : [
+                  ...current.items,
+                  ...res.data.filter(
+                    (item) => !current.items.some((existing) => existing.id === item.id),
+                  ),
+                ];
+          return {
+            ...prev,
+            [status]: { items, total, loading: false, loadingMore: false, error: null },
+          };
+        });
       } catch (e) {
-        setError(e);
-      } finally {
-        setLoading(false);
+        if (generationRef.current !== generation) return;
+        setColumns((prev) => {
+          const current = prev[status];
+          if (!current) return prev;
+          return {
+            ...prev,
+            [status]: { ...current, loading: false, loadingMore: false, error: e },
+          };
+        });
       }
     },
     [projectKey],
   );
 
+  // Reset/populate the columns whenever the filter request or workflow
+  // changes, then revalidate the first page of every column.
   useEffect(() => {
-    load(filterParams, true);
-    // load identity is stable; reload when the filter/sort request changes.
+    if (!workflow) return;
+    const generation = ++generationRef.current;
+    const snapshot = recall<BoardSnapshot>(cacheKey);
+    const next: ColumnMap = {};
+    for (const status of statuses) {
+      next[status] =
+        snapshot?.columns[status] ?? {
+          items: [],
+          total: 0,
+          loading: true,
+          loadingMore: false,
+          error: null,
+        };
+    }
+    setColumns(next);
+    setColumnsKey(cacheKey);
+    const hasSnapshot = snapshot !== null;
+    for (const status of statuses) {
+      void loadColumn(status, 0, generation, hasSnapshot);
+    }
+    // statuses is derived from workflow + kindsKey.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterParams]);
+  }, [cacheKey, workflow, kindsKey, loadColumn]);
+
+  // Persist fully-settled columns so reopening the board behind the item
+  // drawer renders immediately instead of remounting into a spinner.
+  const statusesJoined = statuses.join(",");
+  useEffect(() => {
+    // Only persist columns that were loaded for this request; when the filter
+    // just changed, `columns` still holds the previous request's data.
+    if (!workflow || statuses.length === 0 || columnsKey !== cacheKey) return;
+    const settled = statuses.every((status) => {
+      const column = columns[status];
+      return column && !column.loading && !column.loadingMore;
+    });
+    if (settled) remember(cacheKey, { columns, workflow });
+    // statusesJoined stands in for the statuses identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columns, columnsKey, workflow, cacheKey, statusesJoined]);
+
+  const refreshAll = useCallback(() => {
+    const generation = generationRef.current;
+    statuses.forEach((status) => void loadColumn(status, 0, generation, true));
+    // statusesJoined stands in for the statuses identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadColumn, statusesJoined]);
+
+  const loadMore = useCallback(
+    (status: string) => {
+      const current = stateRef.current.columns[status];
+      if (
+        !current ||
+        current.loading ||
+        current.loadingMore ||
+        current.items.length >= current.total
+      ) {
+        return;
+      }
+      void loadColumn(status, current.items.length, generationRef.current);
+    },
+    [loadColumn],
+  );
 
   const handleDrop = useCallback(
     async (itemId: string, target: string) => {
-      const { items: current, workflow: wf } = stateRef.current;
-      const item = current.find((i) => i.id === itemId);
+      const { columns: current, workflow: wf } = stateRef.current;
+      const item = Object.values(current)
+        .flatMap((column) => column.items)
+        .find((candidate) => candidate.id === itemId);
       if (!item || item.status === target) return;
       const base = wf?.kinds[item.kind];
       const spec =
@@ -177,20 +323,39 @@ export default function BoardPage() {
         return;
       }
       const previous = item.status;
-      setItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, status: target } : i)),
-      );
+      const generation = generationRef.current;
+      // Optimistic move between the two column buckets.
+      setColumns((prev) => {
+        const next = { ...prev };
+        const source = next[previous];
+        if (source) {
+          next[previous] = {
+            ...source,
+            items: source.items.filter((candidate) => candidate.id !== item.id),
+            total: Math.max(0, source.total - 1),
+          };
+        }
+        const destination = next[target];
+        if (destination) {
+          next[target] = {
+            ...destination,
+            items: [{ ...item, status: target }, ...destination.items],
+            total: destination.total + 1,
+          };
+        }
+        return next;
+      });
       try {
         await api.post(`/work-items/${item.display_id}/steps/${step.key}`, {
           row_version: item.row_version,
           note_md: null,
         });
         notify.success(`${item.display_id} → ${target}`);
-        await load(stateRef.current.filterParams);
+        void loadColumn(previous, 0, generation, true);
+        void loadColumn(target, 0, generation, true);
       } catch (e) {
-        setItems((prev) =>
-          prev.map((i) => (i.id === item.id ? { ...i, status: previous } : i)),
-        );
+        void loadColumn(previous, 0, generation, true);
+        void loadColumn(target, 0, generation, true);
         const cause = errorCause(e);
         // Engine emits display-id strings in details.blocking_children.
         const blocking = ((cause?.details?.blocking_children as unknown) as
@@ -206,7 +371,7 @@ export default function BoardPage() {
         );
       }
     },
-    [load, notify, t],
+    [loadColumn, notify, t],
   );
 
   useEffect(() => {
@@ -221,29 +386,16 @@ export default function BoardPage() {
     });
   }, [handleDrop]);
 
-  // Columns are the merged state list of every selected kind (first kind
-  // first, duplicates collapsed), so a multi-kind board lines items up by
-  // their shared status names. Terminal columns are always shown (RDM-63).
-  const columns = useMemo(() => {
-    if (!workflow) return [];
-    const states: string[] = [];
-    for (const kind of kinds) {
-      const spec = workflow.kinds[kind];
-      if (!spec) continue;
-      const subtypes = Object.values(spec.subtypes ?? {});
-      const collected =
-        subtypes.length > 0
-          ? [...spec.states, ...subtypes.flatMap((subtype) => subtype.states)]
-          : spec.states;
-      for (const state of collected) {
-        if (!states.includes(state)) states.push(state);
-      }
-    }
-    return states.map((status) => ({
-      status,
-      items: items.filter((item) => item.status === status),
-    }));
-  }, [workflow, kindsKey, items]);
+  // Surface a single board-level error when every column's first page failed.
+  const firstColumnError = statuses
+    .map((status) => columns[status]?.error)
+    .find((error) => Boolean(error));
+  const allColumnsFailed =
+    statuses.length > 0 &&
+    statuses.every((status) => {
+      const column = columns[status];
+      return column?.error && column.items.length === 0;
+    });
 
   const openItem = (item: WorkItem) => {
     // From the drawer backdrop the board URL (not the item route) is the origin.
@@ -262,33 +414,50 @@ export default function BoardPage() {
         workflow={workflow}
         onFilterChange={patchFilters}
         onCreate={() => setShowCreate(true)}
-        onRefresh={() => load(filterParams)}
+        onRefresh={refreshAll}
       />
 
       <Box xcss={styles.board} testId="board-columns">
-        {error ? (
+        {workflowError || (allColumnsFailed && firstColumnError) ? (
           <ErrorState
-            error={error}
-            onRetry={() => load(filterParams, true)}
+            error={workflowError ?? firstColumnError}
+            onRetry={() => {
+              if (workflowError) setWorkflowNonce((nonce) => nonce + 1);
+              else refreshAll();
+            }}
             testId="board-error"
           />
-        ) : loading ? (
+        ) : !workflow || statuses.length === 0 ? (
           <Box xcss={styles.loading} testId="board-loading">
-            <Spinner size="large" />
+            {workflow ? <EmptyState header={t("board.empty")} /> : <Spinner size="large" />}
           </Box>
-        ) : columns.length === 0 ? (
-          <EmptyState header={t("board.empty")} />
         ) : (
           <Box xcss={styles.boardRow}>
-            {columns.map((col) => (
-              <BoardColumn key={col.status} status={col.status} count={col.items.length}>
-                {col.items.length === 0 ? null : (
-                  col.items.map((item) => (
-                    <BoardCard key={item.id} item={item} onOpen={openItem} />
-                  ))
-                )}
-              </BoardColumn>
-            ))}
+            {statuses.map((status) => {
+              const column = columns[status];
+              const items = column?.items ?? [];
+              return (
+                <BoardColumn
+                  key={status}
+                  status={status}
+                  count={column?.total ?? 0}
+                  hasMore={items.length < (column?.total ?? 0)}
+                  loadingMore={column?.loadingMore ?? false}
+                  loadFailed={Boolean(column?.error)}
+                  onLoadMore={() => loadMore(status)}
+                >
+                  {column?.loading && items.length === 0 ? (
+                    <Inline alignBlock="center" xcss={styles.columnLoading}>
+                      <Spinner size="small" />
+                    </Inline>
+                  ) : (
+                    items.map((item) => (
+                      <BoardCard key={item.id} item={item} onOpen={openItem} />
+                    ))
+                  )}
+                </BoardColumn>
+              );
+            })}
           </Box>
         )}
       </Box>
@@ -298,7 +467,7 @@ export default function BoardPage() {
         projectKey={projectKey}
         onClose={() => setShowCreate(false)}
         onCreated={(item) => {
-          void load(filterParams);
+          refreshAll();
           openItem(item);
         }}
       />
