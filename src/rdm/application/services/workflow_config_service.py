@@ -154,8 +154,14 @@ class WorkflowConfigService:
         *,
         content_text: str,
         base_version_id: str,
-    ) -> tuple[WorkflowConfig, WorkflowConfigVersion]:
-        """Create a new version on top of the current active one."""
+    ) -> tuple[WorkflowConfig, WorkflowConfigVersion, bool]:
+        """Create a new version on top of the current active one.
+
+        Returns ``(config, version, created)``. When the canonical document is
+        identical to the active version, no row is written and the existing
+        active version is returned with ``created=False`` (RDM-85 feedback):
+        re-saving without semantic changes must not accumulate versions.
+        """
         security.require_user_manager(actor)
         config = await self.get_config(key)
         if config.is_builtin:
@@ -200,6 +206,12 @@ class WorkflowConfigService:
                 details={"expected": config.key, "actual": document.key},
             )
 
+        digest = definition_hash(document.raw)
+        if digest == active.content_hash:
+            # Comments/formatting only, or a plain re-save: keep the current
+            # active version instead of creating a byte-identical copy.
+            return config, active, False
+
         version = WorkflowConfigVersion(
             id=new_id(),
             config_id=config.id,
@@ -208,7 +220,7 @@ class WorkflowConfigService:
             revision=document.revision,
             content_text=content_text,
             content=dict(document.raw),
-            content_hash=definition_hash(document.raw),
+            content_hash=digest,
             source_version_id=active.id,
             is_active=True,
             created_by=actor.id,
@@ -219,7 +231,7 @@ class WorkflowConfigService:
         config.current_version_id = version.id
         config.updated_by = actor.id
         await self._repo.update_config(config)
-        return config, version
+        return config, version, True
 
     async def fork(
         self,
@@ -352,6 +364,13 @@ class WorkflowConfigService:
         config = await self._repo.get_config(version.config_id)
         if config is None:
             return None
+        latest = await self._repo.active_version(config.id)
+        has_update = bool(
+            config.enabled
+            and latest is not None
+            and latest.id != version.id
+            and latest.version > version.version
+        )
         return {
             "config_id": config.id,
             "key": config.key,
@@ -363,6 +382,9 @@ class WorkflowConfigService:
             "schema_version": version.schema_version,
             "revision": version.revision,
             "is_active": version.is_active,
+            "latest_version_id": latest.id if latest is not None else None,
+            "latest_version": latest.version if latest is not None else None,
+            "has_update": has_update,
         }
 
     async def engine_for_version_ids(self, version_ids: Sequence[str]) -> dict[str, WorkflowEngine]:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, Field
 
 from rdm.application.services.workflow_config_service import (
@@ -124,23 +124,29 @@ class SaveVersionIn(BaseModel):
 async def save_workflow_config_version(
     key: str,
     body: SaveVersionIn,
+    response: Response,
     container: Container = Depends(get_container),
     actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
-        config, version = await WorkflowConfigService(uow).save_version(
+        service = WorkflowConfigService(uow)
+        config, version, created = await service.save_version(
             actor,
             key,
             content_text=body.content_text,
             base_version_id=body.base_version_id,
         )
+        version_count = len(await service.list_versions(config.id))
+    # A semantic no-op returns the active version instead of creating a copy.
+    response.status_code = 201 if created else 200
     return {
         "data": {
+            "created": created,
             "config": _config_out(
                 WorkflowConfigView(
                     config=config,
                     active_version=version,
-                    version_count=version.version,
+                    version_count=version_count,
                 )
             ),
             "version": _version_out(version, include_content=True),

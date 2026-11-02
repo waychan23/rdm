@@ -54,6 +54,8 @@ export default function SettingsPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [workflowVersionId, setWorkflowVersionId] = useState<string>("");
+  const [confirmUpgrade, setConfirmUpgrade] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -153,8 +155,30 @@ export default function SettingsPage() {
      }
   };
 
-  const reassignOwner = async () => {
-    if (!pendingOwnerId || reassigning) return;
+  const upgradeWorkflow = async () => {
+    const selection = data?.project.workflow_config;
+    if (!selection?.latest_version_id || upgrading) return;
+    setUpgrading(true);
+    try {
+      await api.patch(`/projects/${projectKey}`, {
+        workflow_config_version_id: selection.latest_version_id,
+      });
+      setWorkflowVersionId(selection.latest_version_id);
+      setConfirmUpgrade(false);
+      reload();
+      notify.success(
+        t("projectSettings.workflow.upgradeSuccess", {
+          version: selection.latest_version ?? "",
+        }),
+      );
+    } catch (e) {
+      notify.error(t("projectSettings.workflow.upgradeFailed"), errorCause(e)?.message);
+    } finally {
+      setUpgrading(false);
+    }
+  };
+
+  const reassignOwner = async () => {    if (!pendingOwnerId || reassigning) return;
     if (pendingOwnerId === data?.project.owner_user_id) {
       setPendingOwnerId(null);
       return;
@@ -272,6 +296,22 @@ export default function SettingsPage() {
                }
                isClearable={false}
              />
+             {currentWorkflow?.has_update && currentWorkflow.latest_version != null ? (
+               <Inline space="space.100" alignBlock="center">
+                 <Text size="small" weight="medium" color="color.text.subtle">
+                   {t("projectSettings.workflow.newVersion", {
+                     version: currentWorkflow.latest_version,
+                   })}
+                 </Text>
+                 <Button
+                   appearance="subtle"
+                   testId="project-workflow-upgrade"
+                   onClick={() => setConfirmUpgrade(true)}
+                 >
+                   {t("projectSettings.workflow.upgrade")}
+                 </Button>
+               </Inline>
+             ) : null}
            </FormField>
            <Inline space="space.100">
              <Button
@@ -344,7 +384,24 @@ export default function SettingsPage() {
        </ConfirmDialog>
 
        <ConfirmDialog
-         open={confirmArchive}
+        open={confirmUpgrade}
+        title={t("projectSettings.workflow.upgradeTitle")}
+        confirmLabel={t("projectSettings.workflow.upgradeConfirm")}
+        busy={upgrading}
+        testId="project-workflow-upgrade-dialog"
+        onClose={() => {
+          if (!upgrading) setConfirmUpgrade(false);
+        }}
+        onConfirm={() => void upgradeWorkflow()}
+      >
+        {t("projectSettings.workflow.upgradeBody", {
+          from: currentWorkflow?.version ?? "",
+          to: currentWorkflow?.latest_version ?? "",
+        })}
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirmArchive}
          title={t("projectSettings.archive.title")}
          confirmLabel={t("projectSettings.archive.confirm")}
          danger

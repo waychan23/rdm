@@ -119,6 +119,14 @@ const org = {
       unknown: "Unknown version",
       currentDisabledHint:
         "The current version is disabled or no longer active. It is shown for reference; pick another version to save a change.",
+      newVersion: "New version v{{version}} available",
+      upgrade: "Upgrade",
+      upgradeTitle: "Upgrade workflow config",
+      upgradeConfirm: "Upgrade",
+      upgradeBody:
+        "Upgrade the project workflow from v{{from}} to v{{to}}? Only newly created work items use it; existing items keep their pinned workflow.",
+      upgradeSuccess: "Upgraded to v{{version}}",
+      upgradeFailed: "Failed to upgrade",
     },
     owner: {
       heading: "Project owner",

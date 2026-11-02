@@ -33,6 +33,7 @@ const workflows = {
     forkName: "展示名称",
     forkSource: "来源：{{key}} v{{version}}",
     saveSuccess: "已保存新版本 v{{version}}",
+    noChange: "内容与当前活跃版本一致，未创建新版本",
     saveFailed: "保存失败",
     forkSuccess: "已创建副本 {{key}}",
     forkFailed: "Fork 失败",
@@ -48,6 +49,10 @@ const workflows = {
     createdAt: "创建时间",
     active: "活跃",
     none: "—",
+    actions: "操作",
+    view: "查看",
+    viewing: "正在查看历史版本 v{{version}}（只读）",
+    back: "返回当前版本",
   },
 };
 

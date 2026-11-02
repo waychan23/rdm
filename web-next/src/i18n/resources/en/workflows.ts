@@ -34,6 +34,7 @@ const workflows = {
     forkName: "Display name",
     forkSource: "Source: {{key}} v{{version}}",
     saveSuccess: "Saved as v{{version}}",
+    noChange: "Content is identical to the active version; no new version created",
     saveFailed: "Failed to save",
     forkSuccess: "Created copy {{key}}",
     forkFailed: "Failed to fork",
@@ -49,6 +50,10 @@ const workflows = {
     createdAt: "Created",
     active: "Active",
     none: "—",
+    actions: "Actions",
+    view: "View",
+    viewing: "Viewing historical v{{version}} (read-only)",
+    back: "Back to active",
   },
 };
 

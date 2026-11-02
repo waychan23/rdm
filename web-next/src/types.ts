@@ -10,6 +10,9 @@ export interface ProjectWorkflowConfig {
   schema_version: number;
   revision: number;
   is_active: boolean;
+  latest_version_id?: string | null;
+  latest_version?: number | null;
+  has_update?: boolean;
 }
 
 export interface Project {

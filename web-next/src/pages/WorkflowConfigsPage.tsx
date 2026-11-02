@@ -85,6 +85,7 @@ export default function WorkflowConfigsPage() {
   const [nonce, setNonce] = useState(0);
   const [selected, setSelected] = useState<WorkflowConfig | null>(null);
   const [content, setContent] = useState("");
+  const [viewing, setViewing] = useState<WorkflowConfigVersion | null>(null);
   const [saving, setSaving] = useState(false);
   const [forkOpen, setForkOpen] = useState(false);
   const [forkForm, setForkForm] = useState<ForkForm>(EMPTY_FORK);
@@ -99,6 +100,7 @@ export default function WorkflowConfigsPage() {
 
   useEffect(() => {
     if (!selected) return;
+    setViewing(null);
     setContent(selected.active_version?.content_text ?? "");
   }, [selected]);
 
@@ -111,15 +113,38 @@ export default function WorkflowConfigsPage() {
     }
   };
 
+  const viewVersion = async (version: WorkflowConfigVersion) => {
+    try {
+      const detail = (
+        await api.get<WorkflowConfigVersion>(
+          `/workflow-configs/versions/${encodeURIComponent(version.id)}`,
+        )
+      ).data;
+      setContent(detail.content_text ?? "");
+      setViewing(detail);
+    } catch (e) {
+      notify.error(t("loadFailed"), errorCause(e)?.message);
+    }
+  };
+
+  const backToActive = () => {
+    setViewing(null);
+    setContent(selected?.active_version?.content_text ?? "");
+  };
+
   const save = async () => {
-    if (!selected?.active_version || saving) return;
+    if (!selected?.active_version || saving || viewing) return;
     setSaving(true);
     try {
-      const result = await api.post<{ version: WorkflowConfigVersion }>(
+      const result = await api.post<{ created: boolean; version: WorkflowConfigVersion }>(
         `/workflow-configs/${encodeURIComponent(selected.key)}/versions`,
         { content_text: content, base_version_id: selected.active_version.id },
       );
-      notify.success(t("editor.saveSuccess", { version: result.data.version.version }));
+      if (result.data.created) {
+        notify.success(t("editor.saveSuccess", { version: result.data.version.version }));
+      } else {
+        notify.success(t("editor.noChange"));
+      }
       setSelected(null);
       reload();
     } catch (e) {
@@ -259,13 +284,27 @@ export default function WorkflowConfigsPage() {
                 {selected.is_builtin ? (
                   <SectionMessage appearance="information">{t("editor.readonly")}</SectionMessage>
                 ) : null}
+                {viewing ? (
+                  <Inline space="space.100" alignBlock="center" spread="space-between">
+                    <SectionMessage appearance="information">
+                      {t("history.viewing", { version: viewing.version })}
+                    </SectionMessage>
+                    <Button
+                      appearance="subtle"
+                      testId="workflow-config-back-active"
+                      onClick={backToActive}
+                    >
+                      {t("history.back")}
+                    </Button>
+                  </Inline>
+                ) : null}
 
                 <FormField label={t("editor.content")} htmlFor="workflow-config-content">
                   <TextArea
                     id="workflow-config-content"
                     value={content}
                     minimumRows={18}
-                    isReadOnly={selected.is_builtin || !canEdit}
+                    isReadOnly={!!viewing || selected.is_builtin || !canEdit}
                     testId="workflow-config-content"
                     style={CODE_STYLE}
                     onChange={(e) => setContent(e.currentTarget.value)}
@@ -283,6 +322,7 @@ export default function WorkflowConfigsPage() {
                           <th style={HISTORY_CELL_STYLE}>{t("history.revision")}</th>
                           <th style={HISTORY_CELL_STYLE}>{t("history.source")}</th>
                           <th style={HISTORY_CELL_STYLE}>{t("history.createdAt")}</th>
+                          <th style={HISTORY_CELL_STYLE}>{t("history.actions")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -298,6 +338,15 @@ export default function WorkflowConfigsPage() {
                               {version.source_version_id ? version.source_version_id : t("history.none")}
                             </td>
                             <td style={HISTORY_CELL_STYLE}>{version.created_at}</td>
+                            <td style={HISTORY_CELL_STYLE}>
+                              <Button
+                                appearance="subtle"
+                                testId={`workflow-config-version-view-${version.version}`}
+                                onClick={() => void viewVersion(version)}
+                              >
+                                {t("history.view")}
+                              </Button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -310,7 +359,7 @@ export default function WorkflowConfigsPage() {
               <Button appearance="subtle" onClick={() => setSelected(null)}>
                 {t("editor.cancel")}
               </Button>
-              {selected.is_builtin || !canEdit ? (
+              {viewing ? null : selected.is_builtin || !canEdit ? (
                 canEdit ? (
                   <Button
                     appearance="primary"

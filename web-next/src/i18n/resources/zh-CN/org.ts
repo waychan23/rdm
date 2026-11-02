@@ -118,6 +118,13 @@ const org = {
       default: "系统默认（未显式选择）",
       unknown: "未知版本",
       currentDisabledHint: "当前版本已停用或不是活跃版本；仅用于回显，改选后才能保存。",
+      newVersion: "有新版本 v{{version}} 可用",
+      upgrade: "升级",
+      upgradeTitle: "升级工作流配置",
+      upgradeConfirm: "升级",
+      upgradeBody: "将项目工作流从 v{{from}} 升级到 v{{to}}？升级只影响之后新建的工作项，已有工作项保持原流程。",
+      upgradeSuccess: "已升级到 v{{version}}",
+      upgradeFailed: "升级失败",
     },
     owner: {
       heading: "项目经理（Project Owner）",

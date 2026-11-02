@@ -412,6 +412,9 @@ async def test_project_detail_echoes_old_disabled_config(server, owner_token: st
         "schema_version": 4,
         "revision": pyjson5.loads(load_spec_text())["revision"],
         "is_active": False,
+        "latest_version_id": v2,
+        "latest_version": 2,
+        "has_update": False,
     }
 
     # Renaming the project must not try to re-select the disabled pinned
@@ -423,3 +426,71 @@ async def test_project_detail_echoes_old_disabled_config(server, owner_token: st
     )
     assert r.status_code == 200, r.text
     assert r.json()["data"]["workflow_config_version_id"] == v1
+
+
+async def test_saving_identical_content_does_not_create_a_version(server, owner_token: str) -> None:
+    client, _settings, _app = server
+    custom = await _fork(client, owner_token, "default", "noop_flow", "Noop Flow")
+    version_id = custom["version"]["id"]
+    content_text = custom["version"]["content_text"]
+
+    r = await _save(
+        client,
+        owner_token,
+        "noop_flow",
+        content_text=content_text,
+        base_version_id=version_id,
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()["data"]
+    assert body["created"] is False
+    assert body["version"]["id"] == version_id
+    assert body["config"]["version_count"] == 1
+
+    detail = await _detail(client, owner_token, "noop_flow")
+    assert [v["version"] for v in detail["versions"]] == [1]
+
+    # Historical version content is still readable by id (RDM-85 feedback).
+    r = await client.get(f"{API}/workflow-configs/versions/{version_id}", headers=auth(owner_token))
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["content_text"] == content_text
+
+
+async def test_project_selection_reports_available_update(server, owner_token: str) -> None:
+    client, _settings, _app = server
+    custom = await _fork(client, owner_token, "default", "update_flow", "Update Flow")
+    v1 = custom["version"]["id"]
+
+    r = await client.post(
+        f"{API}/projects",
+        json={"key": "UPD", "name": "Update", "workflow_config_version_id": v1},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+
+    r = await _save(
+        client,
+        owner_token,
+        "update_flow",
+        content_text=_custom_config_text(key="update_flow", name="Update Flow", label="Updated"),
+        base_version_id=v1,
+    )
+    assert r.status_code == 201, r.text
+    v2 = r.json()["data"]["version"]["id"]
+
+    r = await client.get(f"{API}/projects/UPD", headers=auth(owner_token))
+    selection = r.json()["data"]["workflow_config"]
+    assert selection["version_id"] == v1
+    assert selection["latest_version_id"] == v2
+    assert selection["latest_version"] == 2
+    assert selection["has_update"] is True
+
+    # Disabled configs cannot be upgraded to (new projects may not select them).
+    r = await client.patch(
+        f"{API}/workflow-configs/update_flow",
+        json={"enabled": False},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    r = await client.get(f"{API}/projects/UPD", headers=auth(owner_token))
+    assert r.json()["data"]["workflow_config"]["has_update"] is False
