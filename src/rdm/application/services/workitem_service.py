@@ -55,7 +55,12 @@ from rdm.domain.events import (
 from rdm.domain.workflow.engine import WorkflowEngine
 from rdm.domain.workflow.loader import load_engine
 from rdm.domain.workflow.names import localized_name, step_display_name
-from rdm.domain.workflow.schema import ResolvedKindWorkflow, TriggerTarget, TriggerWhen
+from rdm.domain.workflow.schema import (
+    ResolvedKindWorkflow,
+    StatusFlags,
+    TriggerTarget,
+    TriggerWhen,
+)
 from rdm.domain.workflow.task_types import item_task_type, normalize_task_type
 from rdm.i18n import current_locale, tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
@@ -1718,10 +1723,18 @@ class WorkItemService:
         child_task_type = item_task_type(item)
         child_workflow = child_engine.resolve(item.kind, child_task_type)
         child_rules = child_workflow.parent_triggers
-        from_is_start = old_status == child_workflow.initial
-        from_is_terminal = old_status in child_workflow.terminal
-        to_is_start = new_status == child_workflow.initial
-        to_is_terminal = new_status in child_workflow.terminal
+        from_flags = StatusFlags(
+            start=old_status == child_workflow.initial,
+            terminal=old_status in child_workflow.terminal,
+            main_terminal=old_status in child_workflow.main_terminal,
+            side_terminal=old_status in child_workflow.side_terminal,
+        )
+        to_flags = StatusFlags(
+            start=new_status == child_workflow.initial,
+            terminal=new_status in child_workflow.terminal,
+            main_terminal=new_status in child_workflow.main_terminal,
+            side_terminal=new_status in child_workflow.side_terminal,
+        )
         project = await self.uow.projects.get(item.project_id)
         if project is None:
             return
@@ -1745,10 +1758,8 @@ class WorkItemService:
                 child_task_type,
                 old_status,
                 new_status,
-                from_is_start=from_is_start,
-                from_is_terminal=from_is_terminal,
-                to_is_start=to_is_start,
-                to_is_terminal=to_is_terminal,
+                from_flags=from_flags,
+                to_flags=to_flags,
             ):
                 continue
             if child_rule.when is not None and not self._when_matches(
@@ -1778,10 +1789,8 @@ class WorkItemService:
                 child_task_type,
                 old_status,
                 new_status,
-                from_is_start=from_is_start,
-                from_is_terminal=from_is_terminal,
-                to_is_start=to_is_start,
-                to_is_terminal=to_is_terminal,
+                from_flags=from_flags,
+                to_flags=to_flags,
             ):
                 continue
             if parent_rule.when is not None and not self._when_matches(
@@ -1862,21 +1871,24 @@ class WorkItemService:
     def _when_matches(
         when: TriggerWhen,
         siblings: Sequence[WorkItem],
-        flags: Mapping[str, tuple[bool, bool]],
+        flags: Mapping[str, StatusFlags],
     ) -> bool:
         """Evaluate the any/all clauses over their selected direct children.
 
-        ``flags`` maps each child id to ``(is_initial, is_terminal)`` under its
+        ``flags`` maps each child id to its workflow status flags under the
         pinned definition. ``any`` = at least one child selected by that clause
-        matches; ``all`` = every child selected by that clause matches. An empty
-        selected set never satisfies a clause.
+        matches its predicate chain; ``all`` = every selected child matches. An
+        empty selected set never satisfies a clause.
         """
         if when.any is not None:
             selected = [
                 child for child in siblings if when.any.selects(child.kind, item_task_type(child))
             ]
             if not selected or not any(
-                when.any.matches(child.status, *flags[child.id]) for child in selected
+                when.any.matches_chain(
+                    child.kind, item_task_type(child), child.status, flags[child.id]
+                )
+                for child in selected
             ):
                 return False
         if when.all is not None:
@@ -1884,7 +1896,10 @@ class WorkItemService:
                 child for child in siblings if when.all.selects(child.kind, item_task_type(child))
             ]
             if not selected or not all(
-                when.all.matches(child.status, *flags[child.id]) for child in selected
+                when.all.matches_chain(
+                    child.kind, item_task_type(child), child.status, flags[child.id]
+                )
+                for child in selected
             ):
                 return False
         return True

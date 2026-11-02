@@ -233,6 +233,8 @@
 | `states` | 是 | 状态全集；大写字符串，DB/API 原样存储 |
 | `initial` | 是 | 初始状态，必须在 `states` 中 |
 | `terminal` | 是 | 终态集合，必须在 `states` 中；可为空数组 |
+| `main_terminal` | 否 | 主终态（正常流程），必须是 `terminal` 子集；与 `side_terminal` 不交 |
+| `side_terminal` | 否 | 旁终态（非正常流程，如 CANCELLED），必须是 `terminal` 子集 |
 | `steps` | 是 | 必须为**每个状态**声明一条（可为 `[]`） |
 | `gates` | 否 | `{"目标状态": GateSpec}`，作为所有进入该状态步骤的默认 gate |
 | `fields` | 否 | 开启 reviewer/review_content 与自定义字段 |
@@ -240,6 +242,14 @@
 | `parent_triggers` | 否 | 子项侧触发器：我变了 → 父项变；任意 kind/subtype 可用，见 3.1（v4 新增） |
 | `child_triggers` | 否 | 父项侧触发器：直接子项变了 → 我变；可匹配不同 kind/subtype，见 3.1（v4 新增） |
 | `use` | 否 | 引用 `workflow_defs` 中的命名定义；见 2.1 |
+
+终态分类规则（v4 新增）：
+
+- `main_terminal` / `side_terminal` 必须是 `terminal` 的子集，且二者不交。
+- 只写一个时，另一个取 `terminal` 的剩余部分；都不写时全部终态视为主终态。
+- 都写时必须恰好覆盖全部 `terminal`。
+- 也接受 camelCase 别名 `mainTerminal` / `sideTerminal`。
+- 子类型可覆盖分类；未声明 `states` 时分类按生效的继承 `terminal` 校验。
 
 兼容输入：也可以用旧式 `"transitions": {"TODO": ["IN_PROGRESS"]}` 代替 `steps`。
 加载时会转换为 `key=TO_<TARGET>`、`name=<TARGET>`、`mode=direct`、`actors=["assignee"]`
@@ -286,18 +296,24 @@ kind/subtype**（不只 task）：
   "from": {
     "statuses": ["TODO"],                  // 变化前状态集合（任一）
     "start": true,                         // 变化前是否处于初始状态
-    "terminal": false                      // 变化前是否终态
+    "terminal": false,                     // 变化前是否终态
+    "main_terminal": false,                // 变化前是否主终态（正常流程）
+    "side_terminal": false                 // 变化前是否旁终态（CANCELLED 等）
   },
   "to": {
     "statuses": ["DONE", "CLOSED_DONE"],   // 变化后状态集合（任一）
-    "terminal": true                       // 变化后是否终态
+    "terminal": true,
+    "main_terminal": true,                 // 变化后是主终态
+    "side_terminal": false
   }
 }
 ```
 
-- `statuses` / `start` / `terminal` 之间是 AND；省略表示不限制。
-- `start` / `terminal` 按**变化子项自己的固定定义**判断（§17.120），因此一条规则可以
-  同时覆盖不同 kind/tasktypes 的不同状态名。
+- `statuses` / `start` / `terminal` / `main_terminal` / `side_terminal` 之间是 AND；
+  省略表示不限制。
+- `start` / `terminal` / `main_terminal` / `side_terminal` 按**变化子项自己的固定定义**
+  判断（§17.120），因此一条规则可以同时覆盖不同 kind/tasktypes 的不同状态名。
+- `main_terminal` / `side_terminal` 也接受 camelCase 别名 `mainTerminal` / `sideTerminal`。
 - 兼容简写：`from: ["TODO"]`、`to: "DONE"` 会自动归一化为 `statuses`。
 - 跨 kind 只关心“进入终态”时可以写：
   ```json5
@@ -320,7 +336,9 @@ kind/subtype**（不只 task）：
     "tasktypes": ["frontend"],   // 也接受 task_types
     "statuses": ["IN_PROGRESS", "IN_REVIEW"],
     "start": false,              // 是否处于该子项工作流的初始状态
-    "terminal": false            // 是否终态
+    "terminal": false,           // 是否终态
+    "main_terminal": false,      // 是否主终态
+    "side_terminal": false       // 是否旁终态
   },
   "all": {
     "kinds": ["task", "issue"],
@@ -329,12 +347,38 @@ kind/subtype**（不只 task）：
 }
 ```
 
-- `any`：按自己的选择器选出子项，**至少一个**满足 `statuses`/`start`/`terminal`。
+- `any`：按自己的选择器选出子项，**至少一个**满足谓词。
 - `all`：按自己的选择器选出子项，**所有**都满足。
 - `any` 与 `all` 可同时出现，选择器各自独立，二者 AND；至少要声明一个。
-- `statuses` / `start` / `terminal` 之间也是 AND；省略表示不限制。
+- `statuses` / `start` / `terminal` / `main_terminal` / `side_terminal` 之间也是 AND；
+  省略表示不限制。
 - 某个量词选中的集合为空时，该量词视为**不满足**（不做空集真值）。
-- `start` / `terminal` 按子项**自己的固定定义**判断（§17.120）。
+- `start` / `terminal` / `main_terminal` / `side_terminal` 按子项**自己的固定定义**判断
+  （§17.120）。
+
+##### `and`：同一子项的级联合取
+
+`when.any` / `when.all` 子句下可再写 `and`，对**同一个选中的子项**追加一组谓词；
+`and` 内还可以继续写 `and`，逐层 AND：
+
+```json5
+"when": {
+  "any": {
+    "kinds": ["task"],
+    "statuses": ["CANCELLED"],
+    "and": {
+      "terminal": true,
+      "and": {
+        "side_terminal": true
+      }
+    }
+  }
+}
+```
+
+- 外层选择器先挑选子项；选中的子项必须同时满足外层谓词、`and` 谓词、`and.and` 谓词……
+- `and` 内的 `kinds` / `tasktypes` 也会对该子项再做一次筛选（通常省略）。
+- `and` 只影响谓词合取，不改变 `any` / `all` 的量词范围。
 
 ```json5
 {
@@ -475,11 +519,12 @@ kind/subtype**（不只 task）：
 1. 规则至少要声明 `trigger` 或 `when` 之一。`trigger` 存在时先匹配本次变化的子项
    事件（`kinds` / `tasktypes` / `from` / `to`）；省略 `trigger` 时任一直接子项状态
    变化都会触发评估。
-2. `trigger` 与每个 `any`/`all` 子句的 `kinds` / `tasktypes` 必须是已知值；
-   `tasktypes` 要求 `kinds` 为空或包含 `task`。`from`/`to`/`statuses` 是子项状态，
-   不在加载期跨 kind 校验；`start`/`terminal` 按子项 pinned 定义在运行时判断。
+2. `trigger`、每个 `any`/`all` 子句及其 `and` 链上的 `kinds` / `tasktypes` 必须是
+   已知值；`tasktypes` 要求 `kinds` 为空或包含 `task`。`from`/`to`/`statuses` 是子项
+   状态，不在加载期跨 kind 校验；`start`/`terminal`/`main_terminal`/`side_terminal`
+   按子项 pinned 定义在运行时判断。
 3. `when` 存在时，每个子句先按自己的 `kinds`/`tasktypes` 选出直接子项；`any` =
-   至少一个满足，`all` = 所有选中项都满足。`statuses`/`start`/`terminal` 之间 AND；
+   至少一个满足，`all` = 所有选中项都满足。谓词字段之间 AND，`and` 链递归 AND；
    选中集合为空时该子句不满足。`trigger` 与 `when` 之间也是 AND。
 4. 目标项（`parent` 或 `self`）当前状态必须满足 `from`；省略 `from` 时只允许非终态，且不会重复进入目标状态。
 5. 动作按 `step` 或 `to` 解析：
@@ -498,7 +543,7 @@ kind/subtype**（不只 task）：
      向上抛出并回滚整个事务；`ignore` 只回滚该规则并记录 ERROR 日志，主操作继续；
    - 级联深度上限 10，超过后静默停止。
 
-注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 13`，**没有声明任何规则**；
+注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 14`，**没有声明任何规则**；
 按实际场景配置后需递增 `revision`，并在合并前跑 `rdm workflow validate`。
 
 ---
@@ -1061,7 +1106,7 @@ owner/manager 的 sprint 规则。
    只能从 `TO_TEST` 到达。省略 `from` 时由父项自己的步骤决定可达性，不可达则跳过。
 6. **既有工作项不会自动获得新规则**：每个工作项固定创建时的定义快照（§17.120），
    规则只对**改配置后新建**的工作项生效；在途工作项仍按旧快照运行。
-7. 改完必须递增 `revision`（当前 13）、重启服务，并跑 `rdm workflow validate`。
+7. 改完必须递增 `revision`（当前 14）、重启服务，并跑 `rdm workflow validate`。
 
 可直接运行的契约示例见 `tests/integration/test_parent_triggers.py`（父项侧混合
 task+issue 聚合、kind 过滤、两级级联与“状态不匹配则不动作”）；字段/校验单测见

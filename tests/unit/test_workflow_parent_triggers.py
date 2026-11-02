@@ -8,10 +8,26 @@ import pyjson5
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
-from rdm.domain.workflow.schema import WorkflowSpec
+from rdm.domain.workflow.schema import StatusFlags, WorkflowSpec
 from rdm.domain.workflow.schema_versions import latest_schema_version
 from rdm.domain.workflow.versioning import deserialize_definition, serialize_definition
 from tests.workflow_support import load_test_spec_text
+
+
+def _flags(
+    *,
+    start: bool = False,
+    terminal: bool = False,
+    main_terminal: bool = False,
+    side_terminal: bool = False,
+) -> StatusFlags:
+    return StatusFlags(
+        start=start,
+        terminal=terminal,
+        main_terminal=main_terminal,
+        side_terminal=side_terminal,
+    )
+
 
 TRIGGERS = [
     {
@@ -71,10 +87,12 @@ def test_trigger_matches_the_changed_child_event() -> None:
             task_type,
             old,
             new,
-            from_is_start=old == "TODO",
-            from_is_terminal=False,
-            to_is_start=new == "TODO",
-            to_is_terminal=new == "DONE",
+            from_flags=_flags(start=old == "TODO"),
+            to_flags=_flags(
+                start=new == "TODO",
+                terminal=new == "DONE",
+                main_terminal=new == "DONE",
+            ),
         )
 
     assert matches("task", "fullstack", "TODO", "IN_PROGRESS")
@@ -86,8 +104,8 @@ def test_trigger_matches_the_changed_child_event() -> None:
 def test_when_quantifies_current_child_state() -> None:
     when = _spec().resolve("task").parent_triggers[0].when
     assert when is not None and when.any is not None
-    assert when.any.matches("IN_PROGRESS", False, False)
-    assert not when.any.matches("DONE", False, True)
+    assert when.any.matches("IN_PROGRESS", _flags())
+    assert not when.any.matches("DONE", _flags(terminal=True, main_terminal=True))
     assert when.any.selects("task", "fullstack")
     assert not when.any.selects("task", "testing")
 
@@ -102,9 +120,9 @@ def test_start_and_terminal_predicates() -> None:
     ]
     clause = WorkflowSpec.model_validate(raw).resolve("story").child_triggers[0].when
     assert clause is not None and clause.any is not None
-    assert clause.any.matches("IN_PROGRESS", False, False)
-    assert not clause.any.matches("TODO", True, False)
-    assert not clause.any.matches("DONE", False, True)
+    assert clause.any.matches("IN_PROGRESS", _flags())
+    assert not clause.any.matches("TODO", _flags(start=True))
+    assert not clause.any.matches("DONE", _flags(terminal=True, main_terminal=True))
 
 
 def test_v4_roundtrip_keeps_parent_triggers() -> None:
@@ -183,10 +201,8 @@ def test_child_triggers_support_trigger_when_and_self() -> None:
         "frontend",
         "TODO",
         "IN_PROGRESS",
-        from_is_start=True,
-        from_is_terminal=False,
-        to_is_start=False,
-        to_is_terminal=False,
+        from_flags=_flags(start=True),
+        to_flags=_flags(),
     )
     assert first.when is not None and first.when.any is not None
     assert first.when.any.selects("task", "frontend")
@@ -279,10 +295,8 @@ def test_legacy_event_when_and_children_migrate() -> None:
         None,
         "TODO",
         "DONE",
-        from_is_start=True,
-        from_is_terminal=False,
-        to_is_start=False,
-        to_is_terminal=True,
+        from_flags=_flags(start=True),
+        to_flags=_flags(terminal=True, main_terminal=True),
     )
     assert rule.when is not None and rule.when.any is not None
     assert rule.when.any.kinds == ("task",)
@@ -404,20 +418,16 @@ def test_trigger_from_to_support_start_and_terminal_predicates() -> None:
         None,
         "FIXING",
         "CLOSED_DONE",
-        from_is_start=False,
-        from_is_terminal=False,
-        to_is_start=False,
-        to_is_terminal=True,
+        from_flags=_flags(),
+        to_flags=_flags(terminal=True, main_terminal=True),
     )
     assert not trigger.matches(
         "task",
         "frontend",
         "DONE",
         "CANCELLED",
-        from_is_start=False,
-        from_is_terminal=True,
-        to_is_start=False,
-        to_is_terminal=True,
+        from_flags=_flags(terminal=True, main_terminal=True),
+        to_flags=_flags(terminal=True, main_terminal=True),
     )
 
 
@@ -426,3 +436,95 @@ def test_trigger_shorthand_string_and_list_normalize_to_statuses() -> None:
     assert trigger is not None
     assert trigger.from_.statuses == ("TODO",)
     assert trigger.to.statuses == ("IN_PROGRESS",)
+
+
+def test_terminal_classification_defaults_to_all_main() -> None:
+    resolved = _spec().resolve("task")
+    assert resolved.main_terminal == resolved.terminal
+    assert resolved.side_terminal == ()
+
+
+def test_terminal_classification_explicit_side() -> None:
+    raw = _raw()
+    raw["workflow_defs"]["task_standard"]["side_terminal"] = ["CANCELLED"]
+    resolved = WorkflowSpec.model_validate(raw).resolve("task")
+    assert "CANCELLED" not in resolved.main_terminal
+    assert resolved.side_terminal == ("CANCELLED",)
+
+
+def test_terminal_classification_rejects_overlap() -> None:
+    raw = _raw()
+    raw["workflow_defs"]["task_standard"]["main_terminal"] = ["DONE", "CANCELLED"]
+    raw["workflow_defs"]["task_standard"]["side_terminal"] = ["CANCELLED"]
+    with pytest.raises(PydanticValidationError, match="disjoint"):
+        WorkflowSpec.model_validate(raw)
+
+
+def test_main_and_side_terminal_predicates() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [
+        {
+            "trigger": {
+                "kinds": ["task"],
+                "to": {"main_terminal": True},
+            },
+            "self": {"to": "DONE"},
+        }
+    ]
+    trigger = WorkflowSpec.model_validate(raw).resolve("story").child_triggers[0].trigger
+    assert trigger is not None
+    assert trigger.matches(
+        "task",
+        None,
+        "IN_PROGRESS",
+        "DONE",
+        from_flags=_flags(),
+        to_flags=_flags(terminal=True, main_terminal=True),
+    )
+    assert not trigger.matches(
+        "task",
+        None,
+        "TODO",
+        "CANCELLED",
+        from_flags=_flags(start=True),
+        to_flags=_flags(terminal=True, side_terminal=True),
+    )
+
+
+def test_when_and_cascades_predicates() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [
+        {
+            "when": {
+                "any": {
+                    "kinds": ["task"],
+                    "statuses": ["DONE"],
+                    "and": {
+                        "terminal": True,
+                        "and": {"main_terminal": True},
+                    },
+                }
+            },
+            "self": {"to": "DONE"},
+        }
+    ]
+    clause = WorkflowSpec.model_validate(raw).resolve("story").child_triggers[0].when
+    assert clause is not None and clause.any is not None
+    assert clause.any.matches_chain(
+        "task", "frontend", "DONE", _flags(terminal=True, main_terminal=True)
+    )
+    assert not clause.any.matches_chain(
+        "task", "frontend", "CANCELLED", _flags(terminal=True, side_terminal=True)
+    )
+
+
+def test_when_and_validation_is_recursive() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [
+        {
+            "when": {"any": {"and": {"kinds": ["mystery"]}}},
+            "self": {"to": "DONE"},
+        }
+    ]
+    with pytest.raises(PydanticValidationError, match=r"any\.and: unknown child kinds"):
+        WorkflowSpec.model_validate(raw)

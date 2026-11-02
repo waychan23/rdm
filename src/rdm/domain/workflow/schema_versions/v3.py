@@ -56,6 +56,9 @@ class SchemaV3(DefinitionSchema):
             states=tuple(payload["states"]),
             initial=str(payload["initial"]),
             terminal=tuple(payload["terminal"]),
+            # Historical schema has no classification: treat every terminal
+            # state as a normal (main) terminal (§17.148).
+            main_terminal=tuple(payload["terminal"]),
             steps={
                 state: tuple(StepSpec.model_validate(step) for step in steps)
                 for state, steps in payload["steps"].items()

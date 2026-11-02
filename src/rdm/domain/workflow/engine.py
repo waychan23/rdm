@@ -119,6 +119,12 @@ class WorkflowEngine:
     def is_terminal(self, kind: str, status: str, task_type: str | None = None) -> bool:
         return status in self.resolve(kind, task_type).terminal
 
+    def is_main_terminal(self, kind: str, status: str, task_type: str | None = None) -> bool:
+        return status in self.resolve(kind, task_type).main_terminal
+
+    def is_side_terminal(self, kind: str, status: str, task_type: str | None = None) -> bool:
+        return status in self.resolve(kind, task_type).side_terminal
+
     def terminal_states(self, kind: str, task_type: str | None = None) -> tuple[str, ...]:
         return tuple(self.resolve(kind, task_type).terminal)
 

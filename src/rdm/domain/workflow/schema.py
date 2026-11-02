@@ -9,6 +9,7 @@ loading.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -118,6 +119,16 @@ class TriggerTarget(BaseModel):
         return self
 
 
+@dataclass(frozen=True)
+class StatusFlags:
+    """Workflow-derived flags for one item's current status (§17.148)."""
+
+    start: bool
+    terminal: bool
+    main_terminal: bool
+    side_terminal: bool
+
+
 class StatusPredicate(BaseModel):
     """Current-status predicate for trigger.from / trigger.to (§17.147)."""
 
@@ -129,6 +140,14 @@ class StatusPredicate(BaseModel):
     start: bool | None = None
     # None means any terminality; true/false pins it.
     terminal: bool | None = None
+    main_terminal: bool | None = Field(
+        default=None,
+        validation_alias=AliasChoices("main_terminal", "mainTerminal"),
+    )
+    side_terminal: bool | None = Field(
+        default=None,
+        validation_alias=AliasChoices("side_terminal", "sideTerminal"),
+    )
 
     @model_validator(mode="after")
     def _validate(self) -> StatusPredicate:
@@ -136,12 +155,16 @@ class StatusPredicate(BaseModel):
             raise ValueError("status predicate statuses must be unique")
         return self
 
-    def matches(self, status: str, is_start: bool, is_terminal: bool) -> bool:
+    def matches(self, status: str, flags: StatusFlags) -> bool:
         if self.statuses and status not in self.statuses:
             return False
-        if self.start is not None and is_start != self.start:
+        if self.start is not None and flags.start != self.start:
             return False
-        if self.terminal is not None and is_terminal != self.terminal:
+        if self.terminal is not None and flags.terminal != self.terminal:
+            return False
+        if self.main_terminal is not None and flags.main_terminal != self.main_terminal:
+            return False
+        if self.side_terminal is not None and flags.side_terminal != self.side_terminal:
             return False
         return True
 
@@ -193,18 +216,16 @@ class TriggerEvent(BaseModel):
         from_state: str,
         to_state: str,
         *,
-        from_is_start: bool,
-        from_is_terminal: bool,
-        to_is_start: bool,
-        to_is_terminal: bool,
+        from_flags: StatusFlags,
+        to_flags: StatusFlags,
     ) -> bool:
         if self.kinds and child_kind not in self.kinds:
             return False
         if self.task_types and (child_task_type is None or child_task_type not in self.task_types):
             return False
-        if not self.from_.matches(from_state, from_is_start, from_is_terminal):
+        if not self.from_.matches(from_state, from_flags):
             return False
-        if not self.to.matches(to_state, to_is_start, to_is_terminal):
+        if not self.to.matches(to_state, to_flags):
             return False
         return True
 
@@ -230,6 +251,16 @@ class ChildQuantifier(BaseModel):
     start: bool | None = None
     # None means any terminality; true/false pins it.
     terminal: bool | None = None
+    main_terminal: bool | None = Field(
+        default=None,
+        validation_alias=AliasChoices("main_terminal", "mainTerminal"),
+    )
+    side_terminal: bool | None = Field(
+        default=None,
+        validation_alias=AliasChoices("side_terminal", "sideTerminal"),
+    )
+    # Additional conjunction applied to the same selected child; recursive.
+    and_: ChildQuantifier | None = Field(default=None, alias="and")
 
     @model_validator(mode="after")
     def _validate(self) -> ChildQuantifier:
@@ -248,12 +279,31 @@ class ChildQuantifier(BaseModel):
             return False
         return True
 
-    def matches(self, status: str, is_start: bool, is_terminal: bool) -> bool:
+    def matches(self, status: str, flags: StatusFlags) -> bool:
         if self.statuses and status not in self.statuses:
             return False
-        if self.start is not None and is_start != self.start:
+        if self.start is not None and flags.start != self.start:
             return False
-        if self.terminal is not None and is_terminal != self.terminal:
+        if self.terminal is not None and flags.terminal != self.terminal:
+            return False
+        if self.main_terminal is not None and flags.main_terminal != self.main_terminal:
+            return False
+        if self.side_terminal is not None and flags.side_terminal != self.side_terminal:
+            return False
+        return True
+
+    def matches_chain(
+        self,
+        kind: str,
+        task_type: str | None,
+        status: str,
+        flags: StatusFlags,
+    ) -> bool:
+        if not self.selects(kind, task_type):
+            return False
+        if not self.matches(status, flags):
+            return False
+        if self.and_ is not None and not self.and_.matches_chain(kind, task_type, status, flags):
             return False
         return True
 
@@ -556,6 +606,41 @@ def _validate_graph(
             raise ValueError(f"gate for {target} must declare at least one condition")
 
 
+def classify_terminal(
+    terminal: Sequence[str],
+    main: Sequence[str] | None,
+    side: Sequence[str] | None,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Split terminal states into normal (main) and abnormal (side) (§17.148).
+
+    Neither list declared -> every terminal state is main. Only one declared ->
+    the other is the remainder. Both declared -> must be disjoint and cover all
+    terminal states. Order follows ``terminal``.
+    """
+    terminal_list = list(terminal)
+    terminal_set = set(terminal_list)
+    main_set = set(main) if main is not None else None
+    side_set = set(side) if side is not None else None
+    if main_set is None and side_set is None:
+        return tuple(terminal_list), ()
+    if main_set is None:
+        assert side_set is not None
+        main_set = terminal_set - side_set
+    elif side_set is None:
+        side_set = terminal_set - main_set
+    assert main_set is not None and side_set is not None
+    if not main_set <= terminal_set or not side_set <= terminal_set:
+        raise ValueError("main_terminal/side_terminal must be subsets of terminal")
+    if main_set & side_set:
+        raise ValueError("main_terminal and side_terminal must be disjoint")
+    if main_set | side_set != terminal_set:
+        raise ValueError("main_terminal and side_terminal must cover all terminal states")
+    return (
+        tuple(state for state in terminal_list if state in main_set),
+        tuple(state for state in terminal_list if state in side_set),
+    )
+
+
 class SubtypeWorkflow(BaseModel):
     """Partial workflow override for a task type; resolved against its parent."""
 
@@ -566,6 +651,14 @@ class SubtypeWorkflow(BaseModel):
     states: tuple[str, ...] | None = None
     initial: str | None = None
     terminal: tuple[str, ...] | None = None
+    main_terminal: tuple[str, ...] | None = Field(
+        default=None,
+        validation_alias=AliasChoices("main_terminal", "mainTerminal"),
+    )
+    side_terminal: tuple[str, ...] | None = Field(
+        default=None,
+        validation_alias=AliasChoices("side_terminal", "sideTerminal"),
+    )
     steps: dict[str, tuple[StepSpec, ...]] | None = None
     gates: dict[str, GateSpec] | None = None
     fields: FieldsSpec | None = None
@@ -598,6 +691,7 @@ class SubtypeWorkflow(BaseModel):
                 raise ValueError(
                     "subtype declaring states must declare steps for exactly those states"
                 )
+            classify_terminal(self.terminal, self.main_terminal, self.side_terminal)
         return self
 
 
@@ -609,6 +703,14 @@ class KindWorkflow(BaseModel):
     states: tuple[str, ...]
     initial: str
     terminal: tuple[str, ...]
+    main_terminal: tuple[str, ...] | None = Field(
+        default=None,
+        validation_alias=AliasChoices("main_terminal", "mainTerminal"),
+    )
+    side_terminal: tuple[str, ...] | None = Field(
+        default=None,
+        validation_alias=AliasChoices("side_terminal", "sideTerminal"),
+    )
     steps: dict[str, tuple[StepSpec, ...]]
     gates: dict[str, GateSpec] = {}
     fields: FieldsSpec = Field(default_factory=FieldsSpec)
@@ -630,6 +732,7 @@ class KindWorkflow(BaseModel):
             steps=self.steps,
             gates=self.gates,
         )
+        classify_terminal(self.terminal, self.main_terminal, self.side_terminal)
         return self
 
 
@@ -646,6 +749,14 @@ class NamedWorkflow(BaseModel):
     states: tuple[str, ...]
     initial: str
     terminal: tuple[str, ...]
+    main_terminal: tuple[str, ...] | None = Field(
+        default=None,
+        validation_alias=AliasChoices("main_terminal", "mainTerminal"),
+    )
+    side_terminal: tuple[str, ...] | None = Field(
+        default=None,
+        validation_alias=AliasChoices("side_terminal", "sideTerminal"),
+    )
     steps: dict[str, tuple[StepSpec, ...]]
     gates: dict[str, GateSpec] = {}
     fields: FieldsSpec = Field(default_factory=FieldsSpec)
@@ -666,6 +777,7 @@ class NamedWorkflow(BaseModel):
             steps=self.steps,
             gates=self.gates,
         )
+        classify_terminal(self.terminal, self.main_terminal, self.side_terminal)
         return self
 
 
@@ -746,6 +858,8 @@ class ResolvedKindWorkflow:
     steps: dict[str, tuple[StepSpec, ...]]
     gates: dict[str, GateSpec]
     fields: FieldsSpec
+    main_terminal: tuple[str, ...] = ()
+    side_terminal: tuple[str, ...] = ()
     label_en: str | None = None
     parent_triggers: tuple[ParentTriggerSpec, ...] = ()
     child_triggers: tuple[ChildTriggerSpec, ...] = ()
@@ -889,6 +1003,9 @@ class WorkflowSpec(BaseModel):
         if key in _seen:
             raise ValueError(f"workflow resolution cycle at {key}")
         base = self.kinds[kind]
+        base_main, base_side = classify_terminal(
+            base.terminal, base.main_terminal, base.side_terminal
+        )
         subtype_key = key[1]
         subtype = base.subtypes.get(subtype_key) if subtype_key is not None else None
         if subtype is None:
@@ -900,6 +1017,8 @@ class WorkflowSpec(BaseModel):
                 states=base.states,
                 initial=base.initial,
                 terminal=base.terminal,
+                main_terminal=base_main,
+                side_terminal=base_side,
                 steps=dict(base.steps),
                 gates=dict(base.gates),
                 fields=base.fields,
@@ -926,6 +1045,14 @@ class WorkflowSpec(BaseModel):
         child_triggers = (
             subtype.child_triggers if subtype.child_triggers is not None else base.child_triggers
         )
+        if subtype.states is not None or (
+            subtype.main_terminal is not None or subtype.side_terminal is not None
+        ):
+            subtype_main, subtype_side = classify_terminal(
+                tuple(terminal), subtype.main_terminal, subtype.side_terminal
+            )
+        else:
+            subtype_main, subtype_side = base_main, base_side
         resolved = ResolvedKindWorkflow(
             kind=kind,
             task_type=key[1],
@@ -934,6 +1061,8 @@ class WorkflowSpec(BaseModel):
             states=tuple(states),
             initial=initial,
             terminal=tuple(terminal),
+            main_terminal=subtype_main,
+            side_terminal=subtype_side,
             steps=steps,
             gates=gates,
             fields=fields,
@@ -1038,16 +1167,17 @@ class WorkflowSpec(BaseModel):
     def _validate_when(self, when: TriggerWhen, where: str) -> None:
         for key in ("any", "all"):
             clause = getattr(when, key)
-            if clause is None:
-                continue
-            clause_where = f"{where}.{key}"
-            unknown_kinds = sorted(set(clause.kinds) - set(self.kinds))
-            if unknown_kinds:
-                raise ValueError(f"{clause_where}: unknown child kinds {unknown_kinds}")
-            unknown_types = sorted(set(clause.task_types) - set(self.task_types))
-            if unknown_types:
-                raise ValueError(f"{clause_where}: unknown task types {unknown_types}")
-            if clause.task_types and clause.kinds and "task" not in clause.kinds:
-                raise ValueError(
-                    f"{clause_where}: tasktypes requires kinds to be empty or include 'task'"
-                )
+            if clause is not None:
+                self._validate_quantifier(clause, f"{where}.{key}")
+
+    def _validate_quantifier(self, clause: ChildQuantifier, where: str) -> None:
+        unknown_kinds = sorted(set(clause.kinds) - set(self.kinds))
+        if unknown_kinds:
+            raise ValueError(f"{where}: unknown child kinds {unknown_kinds}")
+        unknown_types = sorted(set(clause.task_types) - set(self.task_types))
+        if unknown_types:
+            raise ValueError(f"{where}: unknown task types {unknown_types}")
+        if clause.task_types and clause.kinds and "task" not in clause.kinds:
+            raise ValueError(f"{where}: tasktypes requires kinds to be empty or include 'task'")
+        if clause.and_ is not None:
+            self._validate_quantifier(clause.and_, f"{where}.and")

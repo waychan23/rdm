@@ -531,3 +531,59 @@ async def test_trigger_terminal_predicate_spans_different_kinds(
     story, issue = await _story_with_child(client, owner_token, "TERMINAL", "issue")
     await _move(client, owner_token, issue["display_id"], "CANCELLED")
     assert await _status(client, owner_token, story["display_id"]) == "DONE"
+
+
+def _side_terminal_spec(rule: dict) -> WorkflowSpec:
+    raw = pyjson5.loads(load_test_spec_text())
+    raw["version"] = 4
+    raw["workflow_defs"]["task_standard"]["side_terminal"] = ["CANCELLED"]
+    raw["kinds"]["story"]["child_triggers"] = [rule]
+    return WorkflowSpec.model_validate(raw)
+
+
+async def test_trigger_side_terminal_predicate(server, owner_token: str, monkeypatch):
+    client, _settings, _app = server
+    engine = WorkflowEngine(
+        _side_terminal_spec(
+            {
+                "trigger": {
+                    "kinds": ["task"],
+                    "to": {"side_terminal": True},
+                },
+                "self": {"from": ["TO_TEST"], "to": "IN_PROGRESS"},
+            }
+        )
+    )
+    _install_engine(monkeypatch, engine)
+    await _project(client, owner_token)
+
+    story, child = await _story_with_child(client, owner_token, "SIDE", "task")
+    await _move(client, owner_token, child["display_id"], "CANCELLED")
+    assert await _status(client, owner_token, story["display_id"]) == "IN_PROGRESS"
+
+
+async def test_when_and_cascades_main_side_predicates(server, owner_token: str, monkeypatch):
+    client, _settings, _app = server
+    engine = WorkflowEngine(
+        _side_terminal_spec(
+            {
+                "when": {
+                    "any": {
+                        "kinds": ["task"],
+                        "statuses": ["CANCELLED"],
+                        "and": {
+                            "terminal": True,
+                            "and": {"side_terminal": True},
+                        },
+                    }
+                },
+                "self": {"from": ["TO_TEST"], "to": "IN_PROGRESS"},
+            }
+        )
+    )
+    _install_engine(monkeypatch, engine)
+    await _project(client, owner_token)
+
+    story, child = await _story_with_child(client, owner_token, "AND", "task")
+    await _move(client, owner_token, child["display_id"], "CANCELLED")
+    assert await _status(client, owner_token, story["display_id"]) == "IN_PROGRESS"

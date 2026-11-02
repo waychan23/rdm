@@ -18,6 +18,7 @@ from rdm.domain.workflow.schema import (
     ParentTriggerSpec,
     ResolvedKindWorkflow,
     StepSpec,
+    classify_terminal,
 )
 from rdm.domain.workflow.schema_versions.base import DefinitionSchema, normalized_subtype
 
@@ -36,6 +37,8 @@ class SchemaV4(DefinitionSchema):
             "states": list(resolved.states),
             "initial": resolved.initial,
             "terminal": list(resolved.terminal),
+            "main_terminal": list(resolved.main_terminal),
+            "side_terminal": list(resolved.side_terminal),
             "steps": {
                 state: [step.model_dump(mode="json") for step in steps]
                 for state, steps in resolved.steps.items()
@@ -60,6 +63,12 @@ class SchemaV4(DefinitionSchema):
         subtype: str | None,
         payload: Mapping[str, Any],
     ) -> ResolvedKindWorkflow:
+        terminal = tuple(payload["terminal"])
+        main_terminal, side_terminal = classify_terminal(
+            terminal,
+            payload.get("main_terminal"),
+            payload.get("side_terminal"),
+        )
         return ResolvedKindWorkflow(
             kind=kind,
             task_type=normalized_subtype(kind, subtype),
@@ -67,7 +76,9 @@ class SchemaV4(DefinitionSchema):
             label_en=payload.get("label_en"),
             states=tuple(payload["states"]),
             initial=str(payload["initial"]),
-            terminal=tuple(payload["terminal"]),
+            terminal=terminal,
+            main_terminal=main_terminal,
+            side_terminal=side_terminal,
             steps={
                 state: tuple(StepSpec.model_validate(step) for step in steps)
                 for state, steps in payload["steps"].items()

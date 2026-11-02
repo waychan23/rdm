@@ -10,7 +10,7 @@ from functools import lru_cache
 from rdm.domain.entities import WorkflowVersion, WorkItem
 from rdm.domain.workflow.engine import WorkflowEngine
 from rdm.domain.workflow.loader import load_engine
-from rdm.domain.workflow.schema import ResolvedKindWorkflow
+from rdm.domain.workflow.schema import ResolvedKindWorkflow, StatusFlags
 from rdm.domain.workflow.task_types import item_task_type
 from rdm.domain.workflow.versioning import (
     canonical_json,
@@ -153,15 +153,17 @@ class WorkflowVersionService:
             for item in items
         }
 
-    async def status_flags_map(self, items: Sequence[WorkItem]) -> dict[str, tuple[bool, bool]]:
-        """Map each item to ``(is_initial, is_terminal)`` under its pinned flow."""
+    async def status_flags_map(self, items: Sequence[WorkItem]) -> dict[str, StatusFlags]:
+        """Map each item to its workflow status flags under its pinned flow."""
         engines = await self.engines_for(items)
-        flags: dict[str, tuple[bool, bool]] = {}
+        flags: dict[str, StatusFlags] = {}
         for item in items:
             resolved = engines[item.id].resolve(item.kind, item_task_type(item))
-            flags[item.id] = (
-                item.status == resolved.initial,
-                item.status in resolved.terminal,
+            flags[item.id] = StatusFlags(
+                start=item.status == resolved.initial,
+                terminal=item.status in resolved.terminal,
+                main_terminal=item.status in resolved.main_terminal,
+                side_terminal=item.status in resolved.side_terminal,
             )
         return flags
 
