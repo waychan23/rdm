@@ -1819,25 +1819,27 @@ class WorkItemService:
         siblings: Sequence[WorkItem],
         terminal_map: Mapping[str, bool],
     ) -> bool:
-        """Evaluate any/all/min over the selected direct children.
+        """Evaluate the any/all clauses over their selected direct children.
 
-        ``any`` = at least one selected child matches; ``all`` = every selected
-        child matches. An empty selected set never satisfies a quantifier.
+        ``any`` = at least one child selected by that clause matches;
+        ``all`` = every child selected by that clause matches. An empty selected
+        set never satisfies a clause.
         """
-        selected = [child for child in siblings if when.selects(child.kind, item_task_type(child))]
-        if not selected:
-            return False
-        if when.any is not None and not any(
-            when.any.matches(child.status, terminal_map[child.id]) for child in selected
-        ):
-            return False
-        if when.all is not None and not all(
-            when.all.matches(child.status, terminal_map[child.id]) for child in selected
-        ):
-            return False
-        if when.min_terminal is not None:
-            terminal_count = sum(1 for child in selected if terminal_map[child.id])
-            if terminal_count < when.min_terminal:
+        if when.any is not None:
+            selected = [
+                child for child in siblings if when.any.selects(child.kind, item_task_type(child))
+            ]
+            if not selected or not any(
+                when.any.matches(child.status, terminal_map[child.id]) for child in selected
+            ):
+                return False
+        if when.all is not None:
+            selected = [
+                child for child in siblings if when.all.selects(child.kind, item_task_type(child))
+            ]
+            if not selected or not all(
+                when.all.matches(child.status, terminal_map[child.id]) for child in selected
+            ):
                 return False
         return True
 

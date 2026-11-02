@@ -105,21 +105,39 @@ class TriggerTarget(BaseModel):
         return self
 
 
-class ChildPredicate(BaseModel):
-    """Predicate over one direct child's current state (§17.143)."""
+class ChildQuantifier(BaseModel):
+    """Selector + predicate for one any/all clause (§17.143).
+
+    A clause first selects direct children by ``kinds`` / ``task_types``, then
+    checks their current status against ``statuses`` / ``terminal``. All fields
+    are optional; an empty clause selects every child and matches all of them.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    kinds: tuple[str, ...] = ()
+    task_types: tuple[str, ...] = ()
     # Empty means any status.
     statuses: tuple[str, ...] = ()
     # None means any terminality; true/false pins it.
     terminal: bool | None = None
 
     @model_validator(mode="after")
-    def _validate(self) -> ChildPredicate:
+    def _validate(self) -> ChildQuantifier:
+        if len(set(self.kinds)) != len(self.kinds):
+            raise ValueError("quantifier kinds must be unique")
+        if len(set(self.task_types)) != len(self.task_types):
+            raise ValueError("quantifier task_types must be unique")
         if len(set(self.statuses)) != len(self.statuses):
-            raise ValueError("child predicate statuses must be unique")
+            raise ValueError("quantifier statuses must be unique")
         return self
+
+    def selects(self, kind: str, task_type: str | None) -> bool:
+        if self.kinds and kind not in self.kinds:
+            return False
+        if self.task_types and (task_type is None or task_type not in self.task_types):
+            return False
+        return True
 
     def matches(self, status: str, is_terminal: bool) -> bool:
         if self.statuses and status not in self.statuses:
@@ -132,41 +150,28 @@ class ChildPredicate(BaseModel):
 class TriggerWhen(BaseModel):
     """Quantified condition over the direct children of the item that changes.
 
-    ``kinds`` / ``task_types`` select which children take part (empty kinds =
-    all direct children). ``any`` = at least one selected child matches;
-    ``all`` = every selected child matches; ``min_terminal`` = at least N
-    selected children are terminal. The conditions are AND-ed. An empty
-    selected set never satisfies a quantifier (no vacuous truth).
+    ``any`` = at least one child selected by that clause matches;
+    ``all`` = every child selected by that clause matches. The clauses are
+    AND-ed; an empty selected set never satisfies a clause.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    kinds: tuple[str, ...] = ()
-    task_types: tuple[str, ...] = ()
-    any: ChildPredicate | None = None
-    all: ChildPredicate | None = None
-    min_terminal: int | None = Field(default=None, ge=1)
+    any: ChildQuantifier | None = None
+    all: ChildQuantifier | None = None
 
     @model_validator(mode="after")
     def _validate(self) -> TriggerWhen:
-        if len(set(self.kinds)) != len(self.kinds):
-            raise ValueError("when.kinds must be unique")
-        if len(set(self.task_types)) != len(self.task_types):
-            raise ValueError("when.task_types must be unique")
-        if self.any is None and self.all is None and self.min_terminal is None:
-            raise ValueError("when requires any, all or min_terminal")
+        if self.any is None and self.all is None:
+            raise ValueError("when requires any or all")
         return self
 
-    def selects(self, kind: str, task_type: str | None) -> bool:
-        if self.kinds and kind not in self.kinds:
-            return False
-        if self.task_types and (task_type is None or task_type not in self.task_types):
-            return False
-        return True
+
+_SELECTOR_KEYS = ("kinds", "task_types")
 
 
 def _migrate_trigger_data(data: Any) -> Any:
-    """Map pre-release trigger shapes onto the children quantifier (§17.143)."""
+    """Map pre-release trigger shapes onto the any/all clauses (§17.143)."""
     if not isinstance(data, dict):
         return data
     when = data.get("when")
@@ -184,18 +189,31 @@ def _migrate_trigger_data(data: Any) -> Any:
         if legacy_any:
             when["any"] = {**(when.get("any") or {}), "terminal": True}
         if legacy_min is not None:
-            when["min_terminal"] = legacy_min
+            raise ValueError("min_children_terminal was removed; use any/all clauses")
     if when is not None:
         if not isinstance(when, dict):
             raise ValueError("when must be an object")
         if "from" in when or "to" in when:
             raise ValueError(
-                "when.from/to event matching was replaced by the children quantifier; "
+                "when.from/to event matching was replaced by any/all child quantifiers; "
                 "use when.any/all with statuses"
             )
+        if "min_terminal" in when:
+            raise ValueError("when.min_terminal was removed; use any/all clauses")
         for key in ("any", "all"):
-            if isinstance(when.get(key), list):
-                raise ValueError("when.any/all are quantifier predicates, not clause lists")
+            value = when.get(key)
+            if isinstance(value, list):
+                raise ValueError("when.any/all are quantifier objects, not clause lists")
+            if value is not None and not isinstance(value, dict):
+                raise ValueError(f"when.{key} must be an object")
+        # Previous shape had one shared selector at the when level; move it
+        # into each clause so the agreed any/all shape stays canonical.
+        selectors = {key: when.pop(key) for key in _SELECTOR_KEYS if key in when}
+        if selectors:
+            for key in ("any", "all"):
+                clause = when.get(key)
+                if clause is not None:
+                    when[key] = {**selectors, **clause}
         data["when"] = when
     return data
 
@@ -869,11 +887,18 @@ class WorkflowSpec(BaseModel):
                 raise ValueError(f"{where}: self states {unknown_self} not in states")
 
     def _validate_when(self, when: TriggerWhen, where: str) -> None:
-        unknown_kinds = sorted(set(when.kinds) - set(self.kinds))
-        if unknown_kinds:
-            raise ValueError(f"{where}: unknown child kinds {unknown_kinds}")
-        unknown_types = sorted(set(when.task_types) - set(self.task_types))
-        if unknown_types:
-            raise ValueError(f"{where}: unknown task types {unknown_types}")
-        if when.task_types and when.kinds and "task" not in when.kinds:
-            raise ValueError(f"{where}: task_types requires kinds to be empty or include 'task'")
+        for key in ("any", "all"):
+            clause = getattr(when, key)
+            if clause is None:
+                continue
+            clause_where = f"{where}.{key}"
+            unknown_kinds = sorted(set(clause.kinds) - set(self.kinds))
+            if unknown_kinds:
+                raise ValueError(f"{clause_where}: unknown child kinds {unknown_kinds}")
+            unknown_types = sorted(set(clause.task_types) - set(self.task_types))
+            if unknown_types:
+                raise ValueError(f"{clause_where}: unknown task types {unknown_types}")
+            if clause.task_types and clause.kinds and "task" not in clause.kinds:
+                raise ValueError(
+                    f"{clause_where}: task_types requires kinds to be empty or include 'task'"
+                )

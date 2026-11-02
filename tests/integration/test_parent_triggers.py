@@ -37,21 +37,25 @@ def _trigger_spec() -> WorkflowSpec:
     raw["workflow_defs"]["task_standard"]["parent_triggers"] = [
         {
             "when": {
-                "task_types": ["frontend", "backend", "fullstack"],
-                "any": {"statuses": ["IN_PROGRESS"]},
+                "any": {
+                    "task_types": ["frontend", "backend", "fullstack"],
+                    "statuses": ["IN_PROGRESS"],
+                }
             },
             "parent": {"from": ["TODO"], "to": "IN_PROGRESS"},
         },
         {
             "when": {
-                "kinds": ["task"],
-                "task_types": ["code_review"],
-                "any": {"statuses": ["DONE"]},
+                "any": {
+                    "kinds": ["task"],
+                    "task_types": ["code_review"],
+                    "statuses": ["DONE"],
+                }
             },
             "parent": {"from": ["TO_REVIEW"], "to": "DONE"},
         },
         {
-            "when": {"kinds": ["task", "issue"], "all": {"terminal": True}},
+            "when": {"all": {"kinds": ["task", "issue"], "terminal": True}},
             "parent": {"from": ["TO_TEST"], "to": "DONE"},
         },
     ]
@@ -193,7 +197,7 @@ def _child_trigger_spec(kinds: list[str]) -> WorkflowSpec:
     raw["version"] = 4
     raw["kinds"]["story"]["child_triggers"] = [
         {
-            "when": {"kinds": kinds, "all": {"terminal": True}},
+            "when": {"all": {"kinds": kinds, "terminal": True}},
             "self": {"from": ["TO_TEST"], "to": "DONE"},
         }
     ]
@@ -279,17 +283,11 @@ async def test_any_matches_either_child_kind(server, owner_token: str, monkeypat
         _child_rules_spec(
             [
                 {
-                    "when": {
-                        "kinds": ["task"],
-                        "any": {"statuses": ["CANCELLED"]},
-                    },
+                    "when": {"any": {"kinds": ["task"], "statuses": ["CANCELLED"]}},
                     "self": {"from": ["TO_TEST"], "to": "DONE"},
                 },
                 {
-                    "when": {
-                        "kinds": ["issue"],
-                        "any": {"statuses": ["CANCELLED"]},
-                    },
+                    "when": {"any": {"kinds": ["issue"], "statuses": ["CANCELLED"]}},
                     "self": {"from": ["TO_TEST"], "to": "DONE"},
                 },
             ]
@@ -317,10 +315,7 @@ async def test_any_children_terminal_fires_on_first_terminal_child(
     engine = WorkflowEngine(
         _child_rule_spec(
             {
-                "when": {
-                    "kinds": ["task", "issue"],
-                    "any": {"terminal": True},
-                },
+                "when": {"any": {"kinds": ["task", "issue"], "terminal": True}},
                 "self": {"from": ["TO_TEST"], "to": "IN_PROGRESS"},
             }
         )
@@ -333,33 +328,12 @@ async def test_any_children_terminal_fires_on_first_terminal_child(
     assert await _status(client, owner_token, story["display_id"]) == "IN_PROGRESS"
 
 
-async def test_min_children_terminal_waits_for_the_threshold(server, owner_token: str, monkeypatch):
-    client, _settings, _app = server
-    engine = WorkflowEngine(
-        _child_rule_spec(
-            {
-                "when": {"kinds": ["task", "issue"], "min_terminal": 2},
-                "self": {"from": ["TO_TEST"], "to": "DONE"},
-            }
-        )
-    )
-    _install_engine(monkeypatch, engine)
-    await _project(client, owner_token)
-
-    story, task, issue = await _story_with_task_and_issue(client, owner_token, "MIN")
-    await _move(client, owner_token, task["display_id"], "CANCELLED")
-    assert await _status(client, owner_token, story["display_id"]) == "TO_TEST"
-
-    await _move(client, owner_token, issue["display_id"], "CANCELLED")
-    assert await _status(client, owner_token, story["display_id"]) == "DONE"
-
-
 def _on_error_spec(policy: str) -> WorkflowSpec:
     raw = pyjson5.loads(load_test_spec_text())
     raw["version"] = 4
     raw["workflow_defs"]["task_standard"]["parent_triggers"] = [
         {
-            "when": {"kinds": ["task"], "any": {"statuses": ["IN_PROGRESS"]}},
+            "when": {"any": {"kinds": ["task"], "statuses": ["IN_PROGRESS"]}},
             "parent": {"from": ["TODO"], "to": "IN_PROGRESS"},
             "on_error": policy,
         }
@@ -436,10 +410,7 @@ async def test_any_status_predicate_respects_the_kind_selector(
     engine = WorkflowEngine(
         _child_rule_spec(
             {
-                "when": {
-                    "kinds": ["task"],
-                    "any": {"statuses": ["CANCELLED"]},
-                },
+                "when": {"any": {"kinds": ["task"], "statuses": ["CANCELLED"]}},
                 "self": {"from": ["TO_TEST"], "to": "IN_PROGRESS"},
             }
         )
