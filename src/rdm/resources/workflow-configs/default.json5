@@ -19,7 +19,7 @@
   // 配置修订号：修改任意配置语义内容（含结构变更）时必须 +1（注释/排版除外）。
   // 它仅随定义快照记录为 config_version；是否产生新的 work_item_workflow_version
   // 仍由生效定义的相等性判断决定，单独改 revision 不强制升版本。
-  revision: 17,
+  revision: 18,
   // 任务类型目录：code -> 中文标签；子类型 key 必须出现在这里。
   task_types: {
     other: "其他",
@@ -515,6 +515,32 @@
           self: {
             from: ["TODO"],
             to: "IN_PROGRESS"
+          },
+          on_error: "ignore"
+        },
+        {
+          trigger: {
+            kinds: ["task"],
+            tasktypes: ["frontend", "backend", "fullstack"],
+            to: {
+              terminal: true
+            }
+          },
+          when: {
+            all: {
+              kinds: ["task"],
+              tasktypes: ["frontend", "backend", "fullstack"],
+              terminal: true,
+              and: {
+                any: {
+                  main_terminal: true
+                }
+              }
+            }
+          },
+          self: {
+            from: ["IN_PROGRESS"],
+            to: "TO_TEST"
           },
           on_error: "ignore"
         },
