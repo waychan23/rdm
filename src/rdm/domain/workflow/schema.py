@@ -24,6 +24,7 @@ from pydantic import (
 )
 
 StepMode = Literal["direct", "approval", "task"]
+TriggerErrorPolicy = Literal["fail", "ignore"]
 ActorSource = Literal["assignee", "participants", "managers", "reviewers", "project_members"]
 NoteRequirement = Literal["optional", "required"]
 CustomFieldType = Literal["text", "number", "user"]
@@ -185,6 +186,9 @@ class ParentTriggerSpec(BaseModel):
     any_children_terminal: bool = False
     # At least N direct siblings terminal after this change (N >= 1).
     min_children_terminal: int | None = Field(default=None, ge=1)
+    # Unexpected errors: "fail" rolls back the main operation; "ignore" logs
+    # the error and rolls back only this rule's partial work (savepoint).
+    on_error: TriggerErrorPolicy = "fail"
 
 
 class ChildTriggerWhen(BaseModel):
@@ -263,6 +267,7 @@ class ChildTriggerSpec(BaseModel):
     all_children_terminal: bool = False
     any_children_terminal: bool = False
     min_children_terminal: int | None = Field(default=None, ge=1)
+    on_error: TriggerErrorPolicy = "fail"
 
 
 class ExecutorRange(BaseModel):

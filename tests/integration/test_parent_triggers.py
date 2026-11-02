@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+
 import pyjson5
+import pytest
 
 import rdm.application.services.step_service as step_service_module
 import rdm.application.services.workflow_version_service as workflow_version_module
@@ -333,3 +336,78 @@ async def test_min_children_terminal_waits_for_the_threshold(server, owner_token
 
     await _move(client, owner_token, issue["display_id"], "CANCELLED")
     assert await _status(client, owner_token, story["display_id"]) == "DONE"
+
+
+def _on_error_spec(policy: str) -> WorkflowSpec:
+    raw = pyjson5.loads(load_test_spec_text())
+    raw["version"] = 4
+    raw["workflow_defs"]["task_standard"]["parent_triggers"] = [
+        {
+            "when": {"from": ["TODO"], "to": "IN_PROGRESS"},
+            "parent": {"from": ["TODO"], "to": "IN_PROGRESS"},
+            "on_error": policy,
+        }
+    ]
+    return WorkflowSpec.model_validate(raw)
+
+
+def _install_failing_after_apply(monkeypatch) -> None:
+    """Apply the real transition, then fail, to prove savepoint rollback."""
+    original = workitem_service_module.WorkItemService._apply_trigger_target
+
+    async def fail_after_apply(self, actor, parent, parent_workflow, target_spec, **kwargs):
+        await original(self, actor, parent, parent_workflow, target_spec, **kwargs)
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        workitem_service_module.WorkItemService,
+        "_apply_trigger_target",
+        fail_after_apply,
+    )
+
+
+async def test_on_error_ignore_logs_and_keeps_main_operation(
+    server, owner_token: str, monkeypatch, caplog
+):
+    client, _settings, _app = server
+    _install_engine(monkeypatch, WorkflowEngine(_on_error_spec("ignore")))
+    _install_failing_after_apply(monkeypatch)
+    caplog.set_level(logging.ERROR, logger="rdm.application.services.workitem_service")
+
+    await _project(client, owner_token)
+    story = await _create(client, owner_token, kind="story", title="IGNORE")
+    task = await _create(client, owner_token, kind="task", title="IGNORE-T", parent=story)
+
+    detail = await _detail(client, owner_token, task["display_id"])
+    r = await client.post(
+        f"{API}/work-items/{task['display_id']}/transition",
+        json={"to": "IN_PROGRESS", "row_version": detail["data"]["row_version"]},
+        headers=_auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["status"] == "IN_PROGRESS"
+    assert await _status(client, owner_token, story["display_id"]) == "TODO"
+    assert any("trigger failure ignored" in record.message for record in caplog.records)
+
+
+async def test_on_error_fail_rolls_back_main_operation(server, owner_token: str, monkeypatch):
+    client, _settings, _app = server
+    _install_engine(monkeypatch, WorkflowEngine(_on_error_spec("fail")))
+    _install_failing_after_apply(monkeypatch)
+
+    await _project(client, owner_token)
+    story = await _create(client, owner_token, kind="story", title="FAIL")
+    task = await _create(client, owner_token, kind="task", title="FAIL-T", parent=story)
+
+    detail = await _detail(client, owner_token, task["display_id"])
+    # The ASGI test transport re-raises unhandled errors instead of returning
+    # the 500 envelope; the service still propagates and rolls back.
+    with pytest.raises(RuntimeError, match="boom"):
+        await client.post(
+            f"{API}/work-items/{task['display_id']}/transition",
+            json={"to": "IN_PROGRESS", "row_version": detail["data"]["row_version"]},
+            headers=_auth(owner_token),
+        )
+    # The child transition and its event were rolled back with the trigger.
+    assert await _status(client, owner_token, task["display_id"]) == "TODO"
+    assert await _status(client, owner_token, story["display_id"]) == "TODO"

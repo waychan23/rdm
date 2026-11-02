@@ -267,3 +267,32 @@ async def test_projection_and_event_rollback_together(session_factory) -> None:
             ).scalar_one()
     assert (item_count, event_count, project_count) == (0, 0, 0)
     assert project_id and item_id
+
+
+async def test_savepoint_rolls_back_only_nested_writes(uow: SqlAlchemyUnitOfWork) -> None:
+    p = make_project("SP")
+    await uow.projects.add(p)
+    item = make_work_item(p.id, 1, kind="task")
+    await uow.work_items.add(item)
+
+    outer_calls: list[str] = []
+    inner_calls: list[str] = []
+    uow.defer_after_commit(lambda: outer_calls.append("outer"))
+
+    with pytest.raises(RuntimeError):
+        async with uow.savepoint():
+            uow.defer_after_commit(lambda: inner_calls.append("inner"))
+            item.title = "changed"
+            await uow.work_items.save(item)
+            raise RuntimeError("boom")
+
+    # Only the nested write was rolled back; the outer transaction is usable.
+    loaded = await uow.work_items.get(item.id)
+    assert loaded is not None and loaded.title != "changed"
+    loaded.title = "outer-change"
+    await uow.work_items.save(loaded)
+    assert (await uow.work_items.get(item.id)).title == "outer-change"
+
+    await uow.commit()
+    assert outer_calls == ["outer"]
+    assert inner_calls == []

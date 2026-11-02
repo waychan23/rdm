@@ -13,6 +13,7 @@ Business rules (docs/architecture.md §3.2, §5; rulings §16.22-26, §17 M6):
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from decimal import Decimal
@@ -60,6 +61,8 @@ from rdm.i18n import current_locale, tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.events.bus import StreamEvent, get_bus
 from rdm.infrastructure.id import new_id
+
+logger = logging.getLogger(__name__)
 
 DISPLAY_ID_RE = re.compile(r"^(?P<key>[A-Z0-9]{2,12})-(?P<no>\d+)$")
 
@@ -1730,16 +1733,22 @@ class WorkItemService:
                 terminal_count=terminal_count,
             ):
                 continue
-            await self._apply_trigger_target(
+            failed = await self._run_trigger_rule(
                 actor,
                 parent,
                 parent_workflow,
                 child_rule.parent,
+                on_error=child_rule.on_error,
                 child_display_id=child_display_id,
                 old_status=old_status,
                 new_status=new_status,
                 depth=depth,
             )
+            if failed:
+                refreshed = await self.uow.work_items.get(parent.id, include_deleted=True)
+                if refreshed is None or refreshed.deleted_at is not None:
+                    return
+                parent = refreshed
 
         for parent_rule in parent_rules:
             if not parent_rule.when.matches(item.kind, child_task_type, old_status, new_status):
@@ -1752,16 +1761,75 @@ class WorkItemService:
                 terminal_count=terminal_count,
             ):
                 continue
-            await self._apply_trigger_target(
+            failed = await self._run_trigger_rule(
                 actor,
                 parent,
                 parent_workflow,
                 parent_rule.self_,
+                on_error=parent_rule.on_error,
                 child_display_id=child_display_id,
                 old_status=old_status,
                 new_status=new_status,
                 depth=depth,
             )
+            if failed:
+                refreshed = await self.uow.work_items.get(parent.id, include_deleted=True)
+                if refreshed is None or refreshed.deleted_at is not None:
+                    return
+                parent = refreshed
+
+    async def _run_trigger_rule(
+        self,
+        actor: Actor,
+        parent: WorkItem,
+        parent_workflow: ResolvedKindWorkflow,
+        target_spec: TriggerTarget,
+        *,
+        on_error: str,
+        child_display_id: str,
+        old_status: str,
+        new_status: str,
+        depth: int,
+    ) -> bool:
+        """Apply one rule, returning True when its failure was ignored.
+
+        ``ignore`` wraps the rule in a savepoint so its partial writes (parent
+        status, events, notifications, outbox rows) are rolled back and the
+        main operation can continue. ``fail`` keeps the strict behaviour.
+        """
+        if on_error == "ignore":
+            try:
+                async with self.uow.savepoint():
+                    await self._apply_trigger_target(
+                        actor,
+                        parent,
+                        parent_workflow,
+                        target_spec,
+                        child_display_id=child_display_id,
+                        old_status=old_status,
+                        new_status=new_status,
+                        depth=depth,
+                    )
+            except Exception:
+                logger.exception(
+                    "trigger failure ignored (child=%s parent=%s target=%s)",
+                    child_display_id,
+                    parent.id,
+                    target_spec.to,
+                )
+                return True
+            return False
+        await self._apply_trigger_target(
+            actor,
+            parent,
+            parent_workflow,
+            target_spec,
+            child_display_id=child_display_id,
+            old_status=old_status,
+            new_status=new_status,
+            depth=depth,
+        )
+        return False
 
     @staticmethod
     def _children_condition_matches(

@@ -303,3 +303,28 @@ def test_when_to_rejects_multiple_states() -> None:
     ]
     with pytest.raises(PydanticValidationError, match="single state"):
         WorkflowSpec.model_validate(raw)
+
+
+def test_on_error_defaults_to_fail_and_accepts_ignore() -> None:
+    raw = _raw()
+    raw["workflow_defs"]["task_standard"]["parent_triggers"] = [
+        {"when": {"from": ["TODO"], "to": "IN_PROGRESS"}, "parent": {"to": "IN_PROGRESS"}},
+        {"when": {"to": "DONE"}, "parent": {"to": "DONE"}, "on_error": "ignore"},
+    ]
+    resolved = WorkflowSpec.model_validate(raw).resolve("task")
+    assert resolved.parent_triggers[0].on_error == "fail"
+    assert resolved.parent_triggers[1].on_error == "ignore"
+
+    payload = serialize_definition(resolved, schema_version=4)
+    assert payload["parent_triggers"][0]["on_error"] == "fail"
+    assert payload["parent_triggers"][1]["on_error"] == "ignore"
+    assert deserialize_definition("task", None, payload).parent_triggers == resolved.parent_triggers
+
+
+def test_on_error_rejects_unknown_policy() -> None:
+    raw = _raw()
+    raw["workflow_defs"]["task_standard"]["parent_triggers"] = [
+        {"when": {"to": "DONE"}, "parent": {"to": "DONE"}, "on_error": "warn"}
+    ]
+    with pytest.raises(PydanticValidationError):
+        WorkflowSpec.model_validate(raw)

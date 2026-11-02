@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from types import TracebackType
 from weakref import WeakKeyDictionary
 
@@ -172,6 +173,24 @@ class SqlAlchemyUnitOfWork:
         finally:
             await self.session.close()
             self._write_lock().release()
+
+    @asynccontextmanager
+    async def savepoint(self) -> AsyncIterator[None]:
+        """Scope best-effort work to a nested transaction (§17.141).
+
+        A failure rolls back only the statements and after-commit callbacks
+        created inside the block; the outer transaction stays usable.
+        """
+        assert self.session is not None
+        callback_mark = len(self._after_commit)
+        try:
+            async with self.session.begin_nested():
+                yield
+        except BaseException:
+            # Callbacks queued before the failure must not fire for work that
+            # was rolled back (SSE fan-out).
+            del self._after_commit[callback_mark:]
+            raise
 
     def defer_after_commit(self, callback: Callable[[], None]) -> None:
         """Run a CPU-only callback after the transaction commits (SSE fan-out)."""

@@ -348,6 +348,32 @@ kind/subtype**（不只 task）：
 三个条件可同时使用。`any_children_terminal` / `min_children_terminal` 统计的是
 本次变更**之后**的子项状态，包含刚变化的那个子项。
 
+#### 错误处理：on_error
+
+每条规则可选 `on_error`，默认 `"fail"`：
+
+```json5
+{
+  "when": {"kinds": ["task", "issue"]},
+  "all_children_terminal": true,
+  "self": {"from": ["TO_TEST"], "to": "DONE"},
+  "on_error": "ignore"   // fail（默认）| ignore
+}
+```
+
+| 值 | 行为 |
+|---|---|
+| `fail`（默认） | 预期外异常（数据库/校验/通知等）向上抛出，**整个主操作回滚**；调用方收到错误 |
+| `ignore` | 该规则包在 SAVEPOINT 中；预期外异常只记 ERROR 日志，回滚该规则的局部写入（父项状态、事件、站内通知、webhook outbox、SSE 回调），**主操作照常成功**；后续规则继续按回滚后的目标状态评估 |
+
+注意：
+
+- `on_error` 只影响**预期外异常**。条件不匹配、目标不可达/多个步骤、gate 不满足、
+  目标项有活动步骤这些“正常不触发”的情况始终静默跳过，不记错误日志。
+- `ignore` 的隔离粒度是**单条规则**；同一事件的其他规则不受影响。
+- 日志 logger 为 `rdm.application.services.workitem_service`，包含子项 display id、
+  父项 id 与目标状态。
+
 #### parent_triggers（子项侧，适合专属规则）
 
 ```json5
@@ -389,11 +415,11 @@ kind/subtype**（不只 task）：
    commit；不会异步延后，也不会出现“子项成功、父项稍后变”的中间态。
    - 预期内的不触发（条件不匹配、目标不可达/多个步骤、gate 不满足、目标项有活动步骤）
      静默跳过，子项操作照常成功；
-   - 预期外的异常（数据库冲突、校验/写库错误等）向上抛出并回滚整个事务：子项流转、
-     父级流转、事件、站内通知、webhook outbox 都不生效；SSE 在 commit 后发送，也不会发出；
+   - 预期外的异常（数据库冲突、校验/写库错误等）按规则的 `on_error` 处理：`fail`
+     向上抛出并回滚整个事务；`ignore` 只回滚该规则并记录 ERROR 日志，主操作继续；
    - 级联深度上限 10，超过后静默停止。
 
-注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 6`，**没有声明任何规则**；
+注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 7`，**没有声明任何规则**；
 按实际场景配置后需递增 `revision`，并在合并前跑 `rdm workflow validate`。
 
 ---
