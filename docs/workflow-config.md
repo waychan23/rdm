@@ -740,7 +740,8 @@ kind/subtype**（不只 task）：
 检索能力：
 
 - `reviewer`：`GET /projects/{key}/work-items?reviewer=me|成员名|ULID`。
-- `review_content`：列表 `q=` 同时匹配 title 与 review_content。
+- `review_content`：列表 `q=` 同时匹配 title 与 review_content；`q` 也接受编号
+  （Display ID `KEY-42`，大小写不敏感）或其数字部分（`42`），命中对应工作项。
 - 自定义字段：**不参与检索**，只在详情/编辑中读写。
 - `reviewer`/`review_content` 是独立轻量字段，不天然绑定状态流转；步骤要使用 reviewer
   作为执行人时，负责人需先维护 reviewer，再在步骤里从其中选执行人（不回写）。

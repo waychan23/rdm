@@ -66,7 +66,7 @@ const styles = cssMap({
   completed: { width: "150px" },
   status: { width: "200px" },
   person: { width: "200px" },
-  search: { width: "220px" },
+  search: { width: "260px" },
   order: { width: "200px" },
   view: { width: "120px" },
 });

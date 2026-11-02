@@ -74,6 +74,26 @@ logger = logging.getLogger(__name__)
 
 DISPLAY_ID_RE = re.compile(r"^(?P<key>[A-Z0-9]{2,12})-(?P<no>\d+)$")
 
+
+def _display_no_from_query(project: Project, q: str | None) -> int | None:
+    """Parse a work-item display id out of the list search box (RDM-88).
+
+    Besides free text the search accepts the project display id ("RDM-42") or
+    its bare number ("42"); either narrows the result to that work item.
+    """
+    value = (q or "").strip()
+    if not value:
+        return None
+    match = DISPLAY_ID_RE.fullmatch(value.upper())
+    if match:
+        if match["key"] != project.key.upper():
+            return None
+        return int(match["no"])
+    if value.isdigit():
+        return int(value)
+    return None
+
+
 # A child change may cascade through parents; the parent chain is acyclic, but
 # cap the walk so a misconfigured trigger set cannot loop (§17.137).
 MAX_PARENT_TRIGGER_DEPTH = 10
@@ -332,6 +352,7 @@ class WorkItemService:
     ) -> tuple[Project, list[WorkItem], int]:
         """Like list_items but also returns the unpaginated match count."""
         project = await self.resolve_project(actor, project_key)
+        search_display_no = _display_no_from_query(project, q)
         assert self.uow.work_items is not None
         kinds: list[str] | None = None
         if kind is not None:
@@ -412,6 +433,7 @@ class WorkItemService:
                 priorities=priorities,
                 exclude_ids=exclude_ids,
                 q=q,
+                display_no=search_display_no,
                 include_statuses=include_statuses,
                 exclude_statuses=exclude_statuses,
                 order=order,
@@ -438,6 +460,7 @@ class WorkItemService:
             priorities=priorities,
             exclude_ids=exclude_ids,
             q=q,
+            display_no=search_display_no,
             include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,
             backlog_only=backlog,
@@ -460,6 +483,7 @@ class WorkItemService:
             priorities=priorities,
             exclude_ids=exclude_ids,
             q=q,
+            display_no=search_display_no,
             include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,
             backlog_only=backlog,
@@ -505,6 +529,7 @@ class WorkItemService:
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
         order: str | None = None,
+        display_no: int | None = None,
     ) -> tuple[Project, list[WorkItem]]:
         assert (
             self.uow.sprints is not None
@@ -567,7 +592,8 @@ class WorkItemService:
                 return False
             if q:
                 haystack = f"{item.title}\n{item.review_content_md or ''}".lower()
-                if q.lower() not in haystack:
+                matches_id = display_no is not None and item.display_no == display_no
+                if not matches_id and q.lower() not in haystack:
                     return False
             return True
 
@@ -667,6 +693,7 @@ class WorkItemService:
             "has_children": has_children,
             "subtypes": subtypes or None,
             "q": q,
+            "display_no": _display_no_from_query(project, q),
             "include_statuses": include_statuses,
             "exclude_statuses": exclude_statuses,
         }
@@ -694,6 +721,7 @@ class WorkItemService:
                     has_children=merged.get("has_children"),  # type: ignore[arg-type]
                     subtypes=merged.get("subtypes"),  # type: ignore[arg-type]
                     q=merged.get("q"),  # type: ignore[arg-type]
+                    display_no=merged.get("display_no"),  # type: ignore[arg-type]
                     limit=100_000,
                     offset=0,
                     include_statuses=merged.get("include_statuses"),  # type: ignore[arg-type]

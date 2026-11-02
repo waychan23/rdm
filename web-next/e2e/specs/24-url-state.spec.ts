@@ -33,6 +33,27 @@ test.describe("URL-backed filter state", () => {
     await expect(page.getByTestId("work-item-filter-kind")).not.toContainText("任务");
   });
 
+  test("search box accepts a work item display id (RDM-88)", async ({
+    api,
+    app,
+    page,
+  }) => {
+    const story = await api.createItem({
+      kind: "story",
+      title: `id-search-${Date.now()}`,
+    });
+    const bareId = story.display_id.split("-").pop()!;
+    await page.goto(`${app.baseURL}/projects/${app.projectKey}/backlog`);
+
+    await page.getByTestId("work-item-search").fill(story.display_id);
+    await page.getByTestId("work-item-search").press("Enter");
+    await expect(page.getByTestId(`work-item-row-${story.display_id}`)).toBeVisible();
+
+    await page.getByTestId("work-item-search").fill(bareId);
+    await page.getByTestId("work-item-search").press("Enter");
+    await expect(page.getByTestId(`work-item-row-${story.display_id}`)).toBeVisible();
+  });
+
   test("the list behind an open drawer keeps its filters (RDM-51)", async ({
     api,
     app,

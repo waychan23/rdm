@@ -288,6 +288,64 @@ async def test_list_filters_and_q(server, owner_token: str) -> None:
     assert r.status_code == 200
     assert {i["display_id"] for i in r.json()["data"]} == {"DEMO-1", "DEMO-2"}
 
+    # The search box accepts the display id or its bare number (RDM-88).
+    r = await client.get(f"{API}/projects/DEMO/work-items?q=DEMO-2", headers=auth(owner_token))
+    assert r.status_code == 200
+    assert [i["display_id"] for i in r.json()["data"]] == ["DEMO-2"]
+
+    r = await client.get(f"{API}/projects/DEMO/work-items?q=demo-2", headers=auth(owner_token))
+    assert r.status_code == 200
+    assert [i["display_id"] for i in r.json()["data"]] == ["DEMO-2"]
+
+    r = await client.get(f"{API}/projects/DEMO/work-items?q=3", headers=auth(owner_token))
+    assert r.status_code == 200
+    assert [i["display_id"] for i in r.json()["data"]] == ["DEMO-3"]
+
+    # Another project's key is neither a display id nor a text match here.
+    r = await client.get(f"{API}/projects/DEMO/work-items?q=OTHER-2", headers=auth(owner_token))
+    assert r.status_code == 200
+    assert r.json()["data"] == []
+
+
+async def test_list_q_accepts_display_id_in_sprint_scope(server, owner_token: str) -> None:
+    """Sprint-scoped lists filter in memory; the id match must work there too."""
+    client, _settings, _app = server
+    await _create_project(client, owner_token)
+    for kind, title in [("task", "登录 bug"), ("task", "支付回调")]:
+        r = await client.post(
+            f"{API}/projects/DEMO/work-items",
+            json={"kind": kind, "title": title},
+            headers=auth(owner_token),
+        )
+        assert r.status_code == 201, r.text
+
+    r = await client.post(
+        f"{API}/projects/DEMO/sprints", json={"name": "S1"}, headers=auth(owner_token)
+    )
+    assert r.status_code == 201, r.text
+    sprint_id = r.json()["data"]["id"]
+    r = await client.post(
+        f"{API}/sprints/{sprint_id}/items",
+        json={"items": ["DEMO-1"]},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+
+    r = await client.get(
+        f"{API}/projects/DEMO/work-items?sprint={sprint_id}&q=DEMO-1",
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200
+    assert [i["display_id"] for i in r.json()["data"]] == ["DEMO-1"]
+
+    # DEMO-2 is not in the sprint even though the number matches its id.
+    r = await client.get(
+        f"{API}/projects/DEMO/work-items?sprint={sprint_id}&q=2",
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200
+    assert r.json()["data"] == []
+
 
 async def _complete_task(client: httpx.AsyncClient, token: str, item: dict) -> dict:
     """Drive a task through the workflow to DONE."""

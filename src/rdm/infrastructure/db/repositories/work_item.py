@@ -108,6 +108,7 @@ class WorkItemRepository:
         priorities: Sequence[int] | None = None,
         exclude_ids: Sequence[str] | None = None,
         q: str | None = None,
+        display_no: int | None = None,
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
         backlog_only: bool = False,
@@ -200,12 +201,15 @@ class WorkItemRepository:
             )
         if q:
             pattern = f"%{q}%"
-            stmt = stmt.where(
-                or_(
-                    WorkItemModel.title.ilike(pattern),
-                    WorkItemModel.review_content_md.ilike(pattern),
-                )
-            )
+            # The search box also accepts a display id ("RDM-42"/"42"): the
+            # service parses it into display_no and ORs it with the text match.
+            matches = [
+                WorkItemModel.title.ilike(pattern),
+                WorkItemModel.review_content_md.ilike(pattern),
+            ]
+            if display_no is not None:
+                matches.append(WorkItemModel.display_no == display_no)
+            stmt = stmt.where(or_(*matches))
         return stmt
 
     async def list(
@@ -227,6 +231,7 @@ class WorkItemRepository:
         priorities: Sequence[int] | None = None,
         exclude_ids: Sequence[str] | None = None,
         q: str | None = None,
+        display_no: int | None = None,
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
         backlog_only: bool = False,
@@ -254,6 +259,7 @@ class WorkItemRepository:
             priorities=priorities,
             exclude_ids=exclude_ids,
             q=q,
+            display_no=display_no,
             include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,
             backlog_only=backlog_only,
@@ -302,6 +308,7 @@ class WorkItemRepository:
         priorities: Sequence[int] | None = None,
         exclude_ids: Sequence[str] | None = None,
         q: str | None = None,
+        display_no: int | None = None,
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
         backlog_only: bool = False,
@@ -325,6 +332,7 @@ class WorkItemRepository:
             priorities=priorities,
             exclude_ids=exclude_ids,
             q=q,
+            display_no=display_no,
             include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,
             backlog_only=backlog_only,
