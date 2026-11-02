@@ -6,9 +6,11 @@ import json
 import sqlite3
 from pathlib import Path
 
+import pyjson5
 from typer.testing import CliRunner
 
 from rdm.config import Settings
+from rdm.domain.workflow.loader import load_spec_text
 from rdm.interfaces.cli.doctor import (
     FAIL,
     OK,
@@ -155,7 +157,8 @@ def test_workflow_validate_cli(tmp_path) -> None:
     assert runner.invoke(app, ["init", "--data-dir", str(data_dir)]).exit_code == 0
     result = runner.invoke(app, ["workflow", "validate", "--data-dir", str(data_dir)])
     assert result.exit_code == 0, result.output
-    assert "revision 17" in result.output
+    expected_revision = pyjson5.loads(load_spec_text())["revision"]
+    assert f"revision {expected_revision}" in result.output
     assert "workflow-data" in result.output
 
 

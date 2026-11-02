@@ -6,6 +6,10 @@ it can be selected by projects and forked in the web UI, but not edited there.
 A changed ``(version, revision)`` pair is imported as a new active version;
 re-importing the same pair is idempotent.
 
+Packaged configs are canonical for their key: an upgraded bundled file is
+imported on the next startup even when the data-dir copy is stale, and the
+copy is refreshed so operators inspect the content that was imported.
+
 Files must use the newest schema version. A stale schema or malformed document
 fails startup instead of silently serving a half-imported config set.
 """
@@ -15,6 +19,7 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass, field
 from importlib.resources import files
+from importlib.resources.abc import Traversable
 from pathlib import Path
 
 from sqlalchemy import create_engine, inspect, select, update
@@ -33,16 +38,27 @@ class WorkflowConfigSyncReport:
     unchanged: list[str] = field(default_factory=list)
     activated: list[str] = field(default_factory=list)
     seeded_files: list[str] = field(default_factory=list)
+    updated_files: list[str] = field(default_factory=list)
+    shadowed_files: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
 
 def sync_workflow_configs(settings: Settings) -> WorkflowConfigSyncReport:
-    """Seed the data-dir config directory, then import every ``*.json5``."""
+    """Sync packaged builtins, then import every ``*.json5``.
+
+    Packaged configs are canonical for their key: changing a bundled file and
+    restarting appends a new version even when the data-dir copy is stale. The
+    data-dir copy is refreshed from the package so operators inspect the same
+    content the server imports.
+    """
     report = WorkflowConfigSyncReport()
     directory = settings.workflow_configs_dir
-    _seed_packaged_configs(directory, report)
+    package_dir = _packaged_config_dir()
+    packaged = _parse_packaged(package_dir, report)
+    _seed_packaged_configs(directory, package_dir, report)
 
-    documents = _read_documents(directory, report)
+    documents = _read_documents(directory, report, packaged_keys=set(packaged))
+    documents.extend(packaged.values())
     if not documents:
         return report
 
@@ -64,21 +80,59 @@ def sync_workflow_configs(settings: Settings) -> WorkflowConfigSyncReport:
     return report
 
 
-def _seed_packaged_configs(directory: Path, report: WorkflowConfigSyncReport) -> None:
+def _packaged_config_dir() -> Traversable:
+    return files("rdm.resources").joinpath("workflow-configs")
+
+
+def _parse_packaged(
+    package: Traversable, report: WorkflowConfigSyncReport
+) -> dict[str, WorkflowConfigDocument]:
+    documents: dict[str, WorkflowConfigDocument] = {}
+    sources: dict[str, str] = {}
+    for entry in sorted(package.iterdir(), key=lambda item: item.name):
+        if not entry.name.endswith(".json5"):
+            continue
+        text = entry.read_text(encoding="utf-8")
+        try:
+            document = parse_config_document(text)
+        except ValueError as exc:
+            report.errors.append(f"{entry.name}: {exc}")
+            raise ValueError(f"{entry.name}: {exc}") from exc
+        if document.key in documents:
+            raise ValueError(
+                f"{entry.name}: 工作流 key {document.key!r} 与 {sources[document.key]} 重复"
+            )
+        documents[document.key] = document
+        sources[document.key] = entry.name
+    return documents
+
+
+def _seed_packaged_configs(
+    directory: Path, package: Traversable, report: WorkflowConfigSyncReport
+) -> None:
     directory.mkdir(parents=True, exist_ok=True)
-    package = files("rdm.resources").joinpath("workflow-configs")
     for entry in package.iterdir():
         if not entry.name.endswith(".json5"):
             continue
+        text = entry.read_text(encoding="utf-8")
         target = directory / entry.name
         if target.exists():
+            if target.read_text(encoding="utf-8") == text:
+                continue
+            # Builtin keys are canonical in the package; refresh the copy so
+            # the data dir never shows a stale definition (RDM-111).
+            target.write_text(text, encoding="utf-8")
+            report.updated_files.append(entry.name)
             continue
-        target.write_text(entry.read_text(encoding="utf-8"), encoding="utf-8")
+        target.write_text(text, encoding="utf-8")
         report.seeded_files.append(entry.name)
 
 
 def _read_documents(
-    directory: Path, report: WorkflowConfigSyncReport
+    directory: Path,
+    report: WorkflowConfigSyncReport,
+    *,
+    packaged_keys: set[str],
 ) -> list[WorkflowConfigDocument]:
     documents: list[WorkflowConfigDocument] = []
     seen: dict[str, Path] = {}
@@ -89,6 +143,11 @@ def _read_documents(
         except ValueError as exc:
             report.errors.append(f"{path.name}: {exc}")
             raise ValueError(f"{path.name}: {exc}") from exc
+        if document.key in packaged_keys:
+            # The packaged definition wins; keep the data-dir file only as a
+            # refreshed copy (it may lag if the package was upgraded).
+            report.shadowed_files.append(path.name)
+            continue
         if document.key in seen:
             raise ValueError(
                 f"{path.name}: 工作流 key {document.key!r} 与 {seen[document.key].name} 重复"

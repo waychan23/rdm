@@ -494,3 +494,53 @@ async def test_project_selection_reports_available_update(server, owner_token: s
     assert r.status_code == 200, r.text
     r = await client.get(f"{API}/projects/UPD", headers=auth(owner_token))
     assert r.json()["data"]["workflow_config"]["has_update"] is False
+
+
+async def test_packaged_builtin_change_is_appended_on_restart(
+    server, owner_token: str, tmp_path, monkeypatch
+) -> None:
+    import rdm.infrastructure.db.workflow_config_sync as sync_module
+
+    client, settings, _app = server
+    before = await _default_config(client, owner_token)
+    assert before["active_version"]["version"] == 1
+
+    # Simulate upgrading the bundled file (the data-dir copy stays stale).
+    raw = pyjson5.loads(load_spec_text())
+    raw["revision"] = before["active_version"]["revision"] + 1
+    raw["kinds"]["story"]["label"] = "升级后的需求"
+    package = tmp_path / "package"
+    package.mkdir()
+    (package / "default.json5").write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(sync_module, "_packaged_config_dir", lambda: package)
+
+    report = sync_workflow_configs(settings)
+    assert any(item.startswith("default v2") for item in report.imported)
+    assert "default.json5" in report.updated_files
+
+    detail = await _detail(client, owner_token, "default")
+    assert detail["active_version"]["version"] == 2
+    assert detail["active_version"]["revision"] == raw["revision"]
+    # The data-dir copy is refreshed for operators inspecting it.
+    copied = pyjson5.loads(
+        (settings.workflow_configs_dir / "default.json5").read_text(encoding="utf-8")
+    )
+    assert copied["revision"] == raw["revision"]
+
+
+async def test_data_dir_copy_cannot_override_packaged_builtin(server, owner_token: str) -> None:
+    client, settings, _app = server
+    before = await _default_config(client, owner_token)
+    path = settings.workflow_configs_dir / "default.json5"
+    raw = pyjson5.loads(path.read_text(encoding="utf-8"))
+    raw["revision"] = before["active_version"]["revision"] + 5
+    raw["kinds"]["story"]["label"] = "本地篡改"
+    path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+
+    report = sync_workflow_configs(settings)
+    assert "default.json5" in report.shadowed_files
+    assert "default.json5" in report.updated_files
+
+    detail = await _detail(client, owner_token, "default")
+    assert detail["active_version"]["revision"] == before["active_version"]["revision"]
+    assert len(detail["versions"]) == 1
