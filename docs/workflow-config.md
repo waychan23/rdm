@@ -963,9 +963,8 @@ owner/manager 的 sprint 规则。
    生产 `dev_standard` 当前只有 `CODE_REVIEW` 一条，可直接使用。
 4. **gate 仍然生效**：父项 DONE 的 `children_all_terminal`、步骤 `required_fields` 不满足时，
    规则跳过而不是强行流转；父项有进行中步骤时也跳过。
-5. **父项状态限制**：规则 3 的 `self.to: "DONE"` 不写 `from`，由父项自己的步骤决定可达性。
-   生产 story 只有 `TO_TEST → DONE`，因此需求在 `IN_PROGRESS` 时不会被直接推到 DONE；
-   若想更严格，可显式写 `"self": {"from": ["TO_TEST"], "to": "DONE"}`。
+5. **父项状态限制**：规则 3 显式写了 `self.from: ["TO_TEST"]`；生产 story 的 DONE
+   只能从 `TO_TEST` 到达。省略 `from` 时由父项自己的步骤决定可达性，不可达则跳过。
 6. **既有工作项不会自动获得新规则**：每个工作项固定创建时的定义快照（§17.120），
    规则只对**改配置后新建**的工作项生效；在途工作项仍按旧快照运行。
 7. 改完必须递增 `revision`（当前 9）、重启服务，并跑 `rdm workflow validate`。
