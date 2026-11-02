@@ -49,7 +49,7 @@ def _trigger_spec() -> WorkflowSpec:
         },
         {
             "when": {"to": "DONE"},
-            "all_children_terminal": True,
+            "children": {"all": {"terminal": True}},
             "parent": {"from": ["TO_TEST"], "to": "DONE"},
         },
     ]
@@ -192,7 +192,7 @@ def _child_trigger_spec(kinds: list[str]) -> WorkflowSpec:
     raw["kinds"]["story"]["child_triggers"] = [
         {
             "when": {"kinds": kinds},
-            "all_children_terminal": True,
+            "children": {"all": {"terminal": True}},
             "self": {"from": ["TO_TEST"], "to": "DONE"},
         }
     ]
@@ -248,11 +248,15 @@ async def test_child_trigger_kind_filter_skips_other_kinds(server, owner_token: 
     assert await _status(client, owner_token, story["display_id"]) == "TO_TEST"
 
 
-def _child_rule_spec(rule: dict) -> WorkflowSpec:
+def _child_rules_spec(rules: list[dict]) -> WorkflowSpec:
     raw = pyjson5.loads(load_test_spec_text())
     raw["version"] = 4
-    raw["kinds"]["story"]["child_triggers"] = [rule]
+    raw["kinds"]["story"]["child_triggers"] = rules
     return WorkflowSpec.model_validate(raw)
+
+
+def _child_rule_spec(rule: dict) -> WorkflowSpec:
+    return _child_rules_spec([rule])
 
 
 async def _story_with_child(client, token: str, title: str, child_kind: str) -> tuple[dict, dict]:
@@ -265,19 +269,20 @@ async def _story_with_child(client, token: str, title: str, child_kind: str) -> 
     return story, child
 
 
-async def test_when_any_matches_either_child_kind(server, owner_token: str, monkeypatch):
+async def test_any_matches_either_child_kind(server, owner_token: str, monkeypatch):
     client, _settings, _app = server
     engine = WorkflowEngine(
-        _child_rule_spec(
-            {
-                "when": {
-                    "any": [
-                        {"kinds": ["task"], "to": "CANCELLED"},
-                        {"kinds": ["issue"], "to": "CANCELLED"},
-                    ]
+        _child_rules_spec(
+            [
+                {
+                    "when": {"kinds": ["task"], "to": "CANCELLED"},
+                    "self": {"from": ["TO_TEST"], "to": "DONE"},
                 },
-                "self": {"from": ["TO_TEST"], "to": "DONE"},
-            }
+                {
+                    "when": {"kinds": ["issue"], "to": "CANCELLED"},
+                    "self": {"from": ["TO_TEST"], "to": "DONE"},
+                },
+            ]
         )
     )
     _install_engine(monkeypatch, engine)
@@ -303,7 +308,7 @@ async def test_any_children_terminal_fires_on_first_terminal_child(
         _child_rule_spec(
             {
                 "when": {"kinds": ["task", "issue"]},
-                "any_children_terminal": True,
+                "children": {"kinds": ["task", "issue"], "any": {"terminal": True}},
                 "self": {"from": ["TO_TEST"], "to": "IN_PROGRESS"},
             }
         )
@@ -322,7 +327,7 @@ async def test_min_children_terminal_waits_for_the_threshold(server, owner_token
         _child_rule_spec(
             {
                 "when": {"kinds": ["task", "issue"]},
-                "min_children_terminal": 2,
+                "children": {"kinds": ["task", "issue"], "min_terminal": 2},
                 "self": {"from": ["TO_TEST"], "to": "DONE"},
             }
         )
@@ -411,3 +416,31 @@ async def test_on_error_fail_rolls_back_main_operation(server, owner_token: str,
     # The child transition and its event were rolled back with the trigger.
     assert await _status(client, owner_token, task["display_id"]) == "TODO"
     assert await _status(client, owner_token, story["display_id"]) == "TODO"
+
+
+async def test_any_status_predicate_respects_the_kind_selector(
+    server, owner_token: str, monkeypatch
+):
+    client, _settings, _app = server
+    engine = WorkflowEngine(
+        _child_rule_spec(
+            {
+                "when": {"kinds": ["task", "issue"]},
+                "children": {
+                    "kinds": ["task"],
+                    "any": {"statuses": ["CANCELLED"]},
+                },
+                "self": {"from": ["TO_TEST"], "to": "IN_PROGRESS"},
+            }
+        )
+    )
+    _install_engine(monkeypatch, engine)
+    await _project(client, owner_token)
+
+    story, task, issue = await _story_with_task_and_issue(client, owner_token, "ANYSTATUS")
+    # The issue matches the status, but not the selected kind.
+    await _move(client, owner_token, issue["display_id"], "CANCELLED")
+    assert await _status(client, owner_token, story["display_id"]) == "TO_TEST"
+
+    await _move(client, owner_token, task["display_id"], "CANCELLED")
+    assert await _status(client, owner_token, story["display_id"]) == "IN_PROGRESS"

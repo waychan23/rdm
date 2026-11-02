@@ -286,7 +286,7 @@ kind/subtype**（不只 task）：
         },
         {
           // 任一子项变更后，如果所有直接子项都已终态 → 本项 DONE。
-          "all_children_terminal": true,
+          "children": {"all": {"terminal": true}},
           "self": { "from": ["TO_TEST"], "to": "DONE" }
         }
       ]
@@ -300,53 +300,51 @@ kind/subtype**（不只 task）：
 子项定义里重复声明。
 
 `when.from` 可以写多个前置状态（任一命中）；`when.to` 是**单值**——一次状态变更只有
-一个目标状态。需要匹配多个目标时用 `when.any` 分支（见下）。
+一个目标状态。需要匹配多个目标状态时写多条规则；规则列表之间是 OR。
 
-#### 条件组：when.any / when.all
+#### 子项量词：children.any / children.all
 
-`when` 的扁平字段之间是 **AND**；需要 OR 或嵌套组合时，加 `any` / `all` 子句组。
-它们与扁平字段、彼此之间都是 **AND** 关系，组内可继续嵌套 `any` / `all`：
+`children` 对目标项（`parent` 或 `self`）的**直接子项集合**做量词判断，与 `when`
+之间是 AND：
+
+- `kinds` / `task_types`：选择参与量化的子项；空 `kinds` 表示所有直接子项。
+- `any`：至少一个被选中的子项满足谓词 → 触发。
+- `all`：所有被选中的子项都满足谓词 → 触发。
+- `min_terminal`：被选中且处于终态的子项数 >= N（N >= 1）。
+- 谓词字段：`statuses`（状态集合，任一命中）与 `terminal`（是否终态），二者 AND。
 
 ```json5
 {
-  "when": {
-    // 扁平字段仍然参与 AND
-    "kinds": ["task", "issue"],
-
-    // 任一子句命中即可
-    "any": [
-      {"kinds": ["task"], "task_types": ["frontend"], "to": "DONE"},
-      {"kinds": ["issue"], "to": "CLOSED_DONE"}
-    ],
-
-    // 所有子句都必须命中
-    "all": [
-      {"from": ["IN_PROGRESS", "FIXING"]},
-      {"kinds": ["task", "issue"]}
-    ]
+  // 任一 task 子项 DONE：触发
+  "children": {
+    "kinds": ["task"],
+    "any": {"statuses": ["DONE"]}
   },
-  "self": {"to": "DONE"}
-}
-```
-
-等价于：`(kinds ∈ {task,issue}) AND (子句A OR 子句B) AND (子句C AND 子句D)`。
-空数组视为“未声明”，不施加条件。
-
-#### 子项聚合条件
-
-规则还可按**当前父项的直接子项集合**判断；以下条件与 `when` 之间是 AND：
-
-```json5
-{
-  "all_children_terminal": true,   // 所有直接子项终态（无子项时视为 false）
-  "any_children_terminal": true,   // 至少一个直接子项终态
-  "min_children_terminal": 2,      // 终态子项数 >= 2（必须 >= 1）
   "self": {"from": ["TO_TEST"], "to": "DONE"}
 }
 ```
 
-三个条件可同时使用。`any_children_terminal` / `min_children_terminal` 统计的是
-本次变更**之后**的子项状态，包含刚变化的那个子项。
+```json5
+{
+  // 所有 task 子项都终态：触发（issue 子项不参与统计）
+  "children": {
+    "kinds": ["task"],
+    "all": {"terminal": true}
+  },
+  "self": {"from": ["TO_TEST"], "to": "DONE"}
+}
+```
+
+```json5
+{
+  // 所有直接子项（task + issue）都终态，且至少 2 个终态
+  "children": {"all": {"terminal": true}, "min_terminal": 2},
+  "self": {"from": ["TO_TEST"], "to": "DONE"}
+}
+```
+
+`any` / `all` / `min_terminal` 可同时使用（AND）。被选中的子项集合为空时，三者都视为
+**不满足**（不做空集真值），避免没有子项时误触发。
 
 #### 错误处理：on_error
 
@@ -355,7 +353,7 @@ kind/subtype**（不只 task）：
 ```json5
 {
   "when": {"kinds": ["task", "issue"]},
-  "all_children_terminal": true,
+  "children": {"all": {"terminal": true}},
   "self": {"from": ["TO_TEST"], "to": "DONE"},
   "on_error": "ignore"   // fail（默认）| ignore
 }
@@ -398,13 +396,13 @@ kind/subtype**（不只 task）：
 
 执行规则（`WorkItemService._apply_parent_triggers`）：
 
-1. `parent_triggers` 的 `when.from`（可多值）与 `when.to`（单值，含嵌套 `any`/`all` 子句）
-   必须是该子项定义里存在的状态；`when.task_types` 只能用于 task 定义，值必须在
-   `task_types` 目录中。
-2. `child_triggers` 的 `when.kinds` / `task_types`（含嵌套子句）必须是已知值；
-   `when.from/to` 是**子项**状态，不在加载期跨 kind 校验（不匹配时自然不命中）。
-3. 子项聚合条件：`all_children_terminal=true` 要求全部直接子项终态（无子项时为 false）；
-   `any_children_terminal=true` 要求至少一个终态；`min_children_terminal=N` 要求终态子项数 >= N。
+1. `parent_triggers` 的 `when.from`（可多值）与 `when.to`（单值）必须是该子项定义里
+   存在的状态；`when.task_types` 只能用于 task 定义，值必须在 `task_types` 目录中。
+2. `child_triggers` 的 `when.kinds` / `task_types` 必须是已知值；`when.from/to` 是
+   **子项**状态，不在加载期跨 kind 校验（不匹配时自然不命中）。
+3. `children` 量词：先按 `kinds`/`task_types` 选出直接子项；`any` = 至少一个匹配，
+   `all` = 所有选中项都匹配，`min_terminal` = 选中项中终态数 >= N；三者与 `when`
+   之间 AND。选中集合为空时三者都不满足。
 4. 目标项（`parent` 或 `self`）当前状态必须满足 `from`；省略 `from` 时只允许非终态，且不会重复进入目标状态。
 5. 目标项必须能从当前状态经**唯一**一步到达 `to`；同名目标有多个步骤时不自动选择，规则跳过。
 6. 自动流转仍走目标项自己的 gate（`required_fields`、`children_all_terminal` 等）；
@@ -419,7 +417,7 @@ kind/subtype**（不只 task）：
      向上抛出并回滚整个事务；`ignore` 只回滚该规则并记录 ERROR 日志，主操作继续；
    - 级联深度上限 10，超过后静默停止。
 
-注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 7`，**没有声明任何规则**；
+注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 8`，**没有声明任何规则**；
 按实际场景配置后需递增 `revision`，并在合并前跑 `rdm workflow validate`。
 
 ---
@@ -920,7 +918,7 @@ owner/manager 的 sprint 规则。
         // 规则 3：task 与 issue 子项混用；任一子项变更后，若全部子项终态 → 需求 DONE。
         {
           "when": {"kinds": ["task", "issue"]},
-          "all_children_terminal": true,
+          "children": {"all": {"terminal": true}},
           "self": {"from": ["TO_TEST"], "to": "DONE"}
         }
       ]

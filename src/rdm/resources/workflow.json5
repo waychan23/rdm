@@ -7,13 +7,13 @@
   // SchemaVn 策略；旧策略必须保留，供已固定该 schema 版本的历史工作项读取（§17.120）。
   // v4 新增可选 parent_triggers（子项侧：我变了，父项跟着变）与
   // child_triggers（父项侧：我的子项变了，我跟着变，可混用不同 kind/subtype），
-  // 支持 when.any/when.all 条件组、any/min 子项聚合与 on_error 策略，见 §17.137–141；
+  // 支持 children.any/all 子项量词、children.min_terminal 与 on_error 策略，见 §17.137–142；
   // 具体规则待人工按实际场景配置，本文件暂时不声明。
   version: 4,
   // 配置修订号：修改任意配置语义内容（含结构变更）时必须 +1（注释/排版除外）。
   // 它仅随定义快照记录为 config_version；是否产生新的 work_item_workflow_version
   // 仍由生效定义的相等性判断决定，单独改 revision 不强制升版本。
-  revision: 7,
+  revision: 8,
   // 任务类型目录：code -> 中文标签；子类型 key 必须出现在这里。
   task_types: {
     other: "其他",
