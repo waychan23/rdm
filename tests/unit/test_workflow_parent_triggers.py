@@ -528,3 +528,41 @@ def test_when_and_validation_is_recursive() -> None:
     ]
     with pytest.raises(PydanticValidationError, match=r"any\.and: unknown child kinds"):
         WorkflowSpec.model_validate(raw)
+
+
+def test_and_can_contain_nested_any_all() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [
+        {
+            "when": {
+                "all": {
+                    "kinds": ["task"],
+                    "terminal": True,
+                    "and": {"any": {"main_terminal": True}},
+                }
+            },
+            "self": {"to": "DONE"},
+        }
+    ]
+    when = WorkflowSpec.model_validate(raw).resolve("story").child_triggers[0].when
+    assert when is not None and when.all is not None
+    assert when.all.and_ is not None
+    assert when.all.and_.any is not None
+    assert when.all.and_.any.main_terminal is True
+
+
+def test_nested_any_inside_and_is_validated() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [
+        {
+            "when": {
+                "all": {
+                    "terminal": True,
+                    "and": {"any": {"kinds": ["mystery"]}},
+                }
+            },
+            "self": {"to": "DONE"},
+        }
+    ]
+    with pytest.raises(PydanticValidationError, match=r"when\.all\.and\.any: unknown child kinds"):
+        WorkflowSpec.model_validate(raw)

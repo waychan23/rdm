@@ -356,10 +356,31 @@ kind/subtype**（不只 task）：
 - `start` / `terminal` / `main_terminal` / `side_terminal` 按子项**自己的固定定义**判断
   （§17.120）。
 
-##### `and`：同一子项的级联合取
+##### `and`：谓词链与嵌套 any/all
 
-`when.any` / `when.all` 子句下可再写 `and`，对**同一个选中的子项**追加一组谓词；
-`and` 内还可以继续写 `and`，逐层 AND：
+`when.any` / `when.all` 子句下可再写 `and`。`and` 里可以：
+
+- 写谓词字段（`statuses`/`start`/`terminal`/`main_terminal`/`side_terminal` 等）：
+  对**当前被外层量词选中的子项**追加合取；
+- 写嵌套 `any` / `all`：在**外层选中的子项集合内**再做一次量化；
+- 继续写 `and`：递归合取。
+
+```json5
+"when": {
+  "all": {
+    "kinds": ["task"],
+    "terminal": true,
+    "and": {
+      "any": {
+        "main_terminal": true
+      }
+    }
+  }
+}
+```
+
+含义：所有选中的 task 子项都终态，**且**这些子项中至少有一个是主终态（正常完成）。
+嵌套量词也可以继续带自己的 `and` / `any` / `all`：
 
 ```json5
 "when": {
@@ -376,9 +397,10 @@ kind/subtype**（不只 task）：
 }
 ```
 
-- 外层选择器先挑选子项；选中的子项必须同时满足外层谓词、`and` 谓词、`and.and` 谓词……
-- `and` 内的 `kinds` / `tasktypes` 也会对该子项再做一次筛选（通常省略）。
-- `and` 只影响谓词合取，不改变 `any` / `all` 的量词范围。
+- 外层选择器先挑选子项；这些子项必须满足外层谓词以及整条 `and` 谓词链。
+- `and` 内嵌套的 `any`/`all` 以**外层选中的集合**为范围；其自身的 `kinds`/`tasktypes`
+  会在该范围内再筛选。
+- 嵌套 `any`/`all` 同样可以继续嵌套任意层。
 
 ```json5
 {
@@ -524,8 +546,9 @@ kind/subtype**（不只 task）：
    状态，不在加载期跨 kind 校验；`start`/`terminal`/`main_terminal`/`side_terminal`
    按子项 pinned 定义在运行时判断。
 3. `when` 存在时，每个子句先按自己的 `kinds`/`tasktypes` 选出直接子项；`any` =
-   至少一个满足，`all` = 所有选中项都满足。谓词字段之间 AND，`and` 链递归 AND；
-   选中集合为空时该子句不满足。`trigger` 与 `when` 之间也是 AND。
+   至少一个满足，`all` = 所有选中项都满足。谓词字段之间 AND；`and` 里的谓词作用于
+   当前子项，`and` 里的嵌套 `any`/`all` 在外层选中集合内再次量化并递归；选中集合
+   为空时该子句不满足。`trigger` 与 `when` 之间也是 AND。
 4. 目标项（`parent` 或 `self`）当前状态必须满足 `from`；省略 `from` 时只允许非终态，且不会重复进入目标状态。
 5. 动作按 `step` 或 `to` 解析：
    - `step`：必须是当前状态可达的 step key，且 `mode=direct`；approval/task 步骤跳过并记 WARNING；
@@ -543,7 +566,7 @@ kind/subtype**（不只 task）：
      向上抛出并回滚整个事务；`ignore` 只回滚该规则并记录 ERROR 日志，主操作继续；
    - 级联深度上限 10，超过后静默停止。
 
-注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 14`，**没有声明任何规则**；
+注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 15`，**没有声明任何规则**；
 按实际场景配置后需递增 `revision`，并在合并前跑 `rdm workflow validate`。
 
 ---
@@ -1106,7 +1129,7 @@ owner/manager 的 sprint 规则。
    只能从 `TO_TEST` 到达。省略 `from` 时由父项自己的步骤决定可达性，不可达则跳过。
 6. **既有工作项不会自动获得新规则**：每个工作项固定创建时的定义快照（§17.120），
    规则只对**改配置后新建**的工作项生效；在途工作项仍按旧快照运行。
-7. 改完必须递增 `revision`（当前 14）、重启服务，并跑 `rdm workflow validate`。
+7. 改完必须递增 `revision`（当前 15）、重启服务，并跑 `rdm workflow validate`。
 
 可直接运行的契约示例见 `tests/integration/test_parent_triggers.py`（父项侧混合
 task+issue 聚合、kind 过滤、两级级联与“状态不匹配则不动作”）；字段/校验单测见

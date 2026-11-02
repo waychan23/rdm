@@ -259,7 +259,11 @@ class ChildQuantifier(BaseModel):
         default=None,
         validation_alias=AliasChoices("side_terminal", "sideTerminal"),
     )
-    # Additional conjunction applied to the same selected child; recursive.
+    # Nested set-level quantifiers over the enclosing selection (recursive).
+    any: ChildQuantifier | None = None
+    all: ChildQuantifier | None = None
+    # Additional conjunction; predicate fields apply to the current child,
+    # nested any/all apply to the enclosing selection.
     and_: ChildQuantifier | None = Field(default=None, alias="and")
 
     @model_validator(mode="after")
@@ -1179,5 +1183,7 @@ class WorkflowSpec(BaseModel):
             raise ValueError(f"{where}: unknown task types {unknown_types}")
         if clause.task_types and clause.kinds and "task" not in clause.kinds:
             raise ValueError(f"{where}: tasktypes requires kinds to be empty or include 'task'")
-        if clause.and_ is not None:
-            self._validate_quantifier(clause.and_, f"{where}.and")
+        for key in ("any", "all", "and"):
+            nested = clause.and_ if key == "and" else getattr(clause, key)
+            if nested is not None:
+                self._validate_quantifier(nested, f"{where}.{key}")

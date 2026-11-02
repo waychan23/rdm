@@ -587,3 +587,44 @@ async def test_when_and_cascades_main_side_predicates(server, owner_token: str, 
     story, child = await _story_with_child(client, owner_token, "AND", "task")
     await _move(client, owner_token, child["display_id"], "CANCELLED")
     assert await _status(client, owner_token, story["display_id"]) == "IN_PROGRESS"
+
+
+async def test_and_can_require_any_main_terminal(server, owner_token: str, monkeypatch):
+    client, _settings, _app = server
+    raw = pyjson5.loads(load_test_spec_text())
+    raw["version"] = 4
+    raw["kinds"]["task"]["subtypes"]["code_review"]["side_terminal"] = ["CANCELLED"]
+    raw["kinds"]["story"]["child_triggers"] = [
+        {
+            "when": {
+                "all": {
+                    "kinds": ["task"],
+                    "terminal": True,
+                    "and": {"any": {"main_terminal": True}},
+                }
+            },
+            "self": {"from": ["TO_TEST"], "to": "DONE"},
+        }
+    ]
+    _install_engine(monkeypatch, WorkflowEngine(WorkflowSpec.model_validate(raw)))
+    await _project(client, owner_token)
+
+    story = await _create(client, owner_token, kind="story", title="NESTED")
+    main_task = await _create(
+        client, owner_token, kind="task", title="NESTED-MAIN", parent=story, task_type="code_review"
+    )
+    side_task = await _create(
+        client, owner_token, kind="task", title="NESTED-SIDE", parent=story, task_type="code_review"
+    )
+    await _move(client, owner_token, story["display_id"], "IN_PROGRESS")
+    await _move(client, owner_token, story["display_id"], "TO_TEST")
+
+    await _move(client, owner_token, side_task["display_id"], "CANCELLED")
+    assert await _status(client, owner_token, story["display_id"]) == "TO_TEST"
+
+    await _move(client, owner_token, main_task["display_id"], "IN_PROGRESS")
+    await _move(client, owner_token, main_task["display_id"], "IN_REVIEW")
+    await _move(client, owner_token, main_task["display_id"], "DONE", reason="approved")
+
+    # all children terminal AND at least one main terminal -> story DONE.
+    assert await _status(client, owner_token, story["display_id"]) == "DONE"

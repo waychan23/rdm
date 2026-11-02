@@ -155,7 +155,7 @@ def test_workflow_validate_cli(tmp_path) -> None:
     assert runner.invoke(app, ["init", "--data-dir", str(data_dir)]).exit_code == 0
     result = runner.invoke(app, ["workflow", "validate", "--data-dir", str(data_dir)])
     assert result.exit_code == 0, result.output
-    assert "revision 14" in result.output
+    assert "revision 15" in result.output
     assert "workflow-data" in result.output
 
 

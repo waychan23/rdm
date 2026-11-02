@@ -56,6 +56,7 @@ from rdm.domain.workflow.engine import WorkflowEngine
 from rdm.domain.workflow.loader import load_engine
 from rdm.domain.workflow.names import localized_name, step_display_name
 from rdm.domain.workflow.schema import (
+    ChildQuantifier,
     ResolvedKindWorkflow,
     StatusFlags,
     TriggerTarget,
@@ -1867,41 +1868,75 @@ class WorkItemService:
         )
         return False
 
-    @staticmethod
+    @classmethod
     def _when_matches(
+        cls,
         when: TriggerWhen,
         siblings: Sequence[WorkItem],
         flags: Mapping[str, StatusFlags],
     ) -> bool:
-        """Evaluate the any/all clauses over their selected direct children.
+        """Evaluate the when tree over the target's direct children."""
+        if when.any is not None and not cls._evaluate_quantifier("any", when.any, siblings, flags):
+            return False
+        if when.all is not None and not cls._evaluate_quantifier("all", when.all, siblings, flags):
+            return False
+        return True
 
-        ``flags`` maps each child id to its workflow status flags under the
-        pinned definition. ``any`` = at least one child selected by that clause
-        matches its predicate chain; ``all`` = every selected child matches. An
-        empty selected set never satisfies a clause.
-        """
-        if when.any is not None:
-            selected = [
-                child for child in siblings if when.any.selects(child.kind, item_task_type(child))
-            ]
-            if not selected or not any(
-                when.any.matches_chain(
-                    child.kind, item_task_type(child), child.status, flags[child.id]
-                )
-                for child in selected
-            ):
+    @classmethod
+    def _evaluate_quantifier(
+        cls,
+        mode: str,
+        condition: ChildQuantifier,
+        candidates: Sequence[WorkItem],
+        flags: Mapping[str, StatusFlags],
+    ) -> bool:
+        """Run one any/all node over ``candidates`` (the enclosing selection)."""
+        selected = [
+            child for child in candidates if condition.selects(child.kind, item_task_type(child))
+        ]
+        if not selected:
+            return False
+        if mode == "any":
+            if not any(cls._child_chain_matches(condition, child, flags) for child in selected):
                 return False
-        if when.all is not None:
-            selected = [
-                child for child in siblings if when.all.selects(child.kind, item_task_type(child))
-            ]
-            if not selected or not all(
-                when.all.matches_chain(
-                    child.kind, item_task_type(child), child.status, flags[child.id]
-                )
-                for child in selected
-            ):
+        elif not all(cls._child_chain_matches(condition, child, flags) for child in selected):
+            return False
+        return cls._set_chain_matches(condition, selected, flags)
+
+    @classmethod
+    def _child_chain_matches(
+        cls,
+        condition: ChildQuantifier,
+        child: WorkItem,
+        flags: Mapping[str, StatusFlags],
+    ) -> bool:
+        """Per-child predicate chain (``and`` fields apply to this child)."""
+        if not condition.selects(child.kind, item_task_type(child)):
+            return False
+        if not condition.matches(child.status, flags[child.id]):
+            return False
+        if condition.and_ is not None and not cls._child_chain_matches(
+            condition.and_, child, flags
+        ):
+            return False
+        return True
+
+    @classmethod
+    def _set_chain_matches(
+        cls,
+        condition: ChildQuantifier,
+        selection: Sequence[WorkItem],
+        flags: Mapping[str, StatusFlags],
+    ) -> bool:
+        """Set-level chain: nested any/all and ``and`` over the same selection."""
+        for key in ("any", "all"):
+            nested = getattr(condition, key)
+            if nested is not None and not cls._evaluate_quantifier(key, nested, selection, flags):
                 return False
+        if condition.and_ is not None and not cls._set_chain_matches(
+            condition.and_, selection, flags
+        ):
+            return False
         return True
 
     async def _apply_trigger_target(
