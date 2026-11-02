@@ -254,69 +254,29 @@
 引擎支持两个方向，规则都来自工作项的**固定定义快照**（§17.120），并且**适用于任意
 kind/subtype**（不只 task）：
 
-| 键 | 声明位置 | 语义 | 适用场景 |
-|---|---|---|---|
-| `parent_triggers` | 子项定义 | 我变了 → 父项跟着变 | 某类子项的专属规则 |
-| `child_triggers` | 父项定义 | 我的直接子项变了 → 我跟着变 | 聚合规则；可同时匹配 task/issue 等不同 kind |
+| 键 | 声明位置 | 语义 |
+|---|---|---|
+| `parent_triggers` | 子项定义 | 父项的直接子项满足 `when` 量词 → 父项流转 |
+| `child_triggers` | 父项定义 | 本项的直接子项满足 `when` 量词 → 本项流转 |
 
-子项状态变化后，引擎先执行子项的 `parent_triggers`，再执行父项的 `child_triggers`；
-命中且目标条件满足时自动流转。每次自动流转都会再次评估，因此可以沿父链级联（最多 10 层）。
+每当直接子项发生状态变化，引擎就重新评估规则；`when` 只描述“子项集合**当前**的满足
+情况”，不再匹配“本次变化的那个子项”。命中的规则再检查目标项（`parent` / `self`）的
+状态守卫与 gate，满足才自动流转。每次自动流转都会再次评估，因此可以沿父链级联（最多 10 层）。
 
-#### child_triggers（推荐：聚合不同 kind/subtype 的子项）
+#### when：子项集合量词
 
-```json5
-{
-  "kinds": {
-    "story": {
-      // ... states / steps ...
-      "child_triggers": [
-        {
-          // 子项匹配器：所有维度都可省略，省略表示“任意”。
-          "when": {
-            "kinds": ["task", "issue"],       // 直接子项的 kind，可混用
-            "task_types": ["frontend"],        // 可选，仅当子项是 task 时生效
-            "from": ["TODO"],                  // 子项变更前状态
-            "to": "IN_PROGRESS"              // 子项变更后状态
-          },
-          // 本项（父项）的条件与目标。
-          "self": {
-            "from": ["TODO"],                  // 省略=任意非终态
-            "to": "IN_PROGRESS"
-          }
-        },
-        {
-          // 任一子项变更后，如果所有直接子项都已终态 → 本项 DONE。
-          "children": {"all": {"terminal": true}},
-          "self": { "from": ["TO_TEST"], "to": "DONE" }
-        }
-      ]
-    }
-  }
-}
-```
-
-`when.kinds` 为空表示匹配所有 kind；`when.task_types` 要求 `kinds` 为空或包含
-`task`。这样一条聚合规则就能覆盖“需求包含 task 和 issue 子项”的场景，无需在每个
-子项定义里重复声明。
-
-`when.from` 可以写多个前置状态（任一命中）；`when.to` 是**单值**——一次状态变更只有
-一个目标状态。需要匹配多个目标状态时写多条规则；规则列表之间是 OR。
-
-#### 子项量词：children.any / children.all
-
-`children` 对目标项（`parent` 或 `self`）的**直接子项集合**做量词判断，与 `when`
-之间是 AND：
+`when` 对“将要变化的那个项”的直接子项集合做量词判断：
 
 - `kinds` / `task_types`：选择参与量化的子项；空 `kinds` 表示所有直接子项。
-- `any`：至少一个被选中的子项满足谓词 → 触发。
-- `all`：所有被选中的子项都满足谓词 → 触发。
+- `any`：至少一个被选中的子项满足谓词 → 条件成立。
+- `all`：所有被选中的子项都满足谓词 → 条件成立。
 - `min_terminal`：被选中且处于终态的子项数 >= N（N >= 1）。
-- 谓词字段：`statuses`（状态集合，任一命中）与 `terminal`（是否终态），二者 AND。
+- 谓词字段：`statuses`（当前状态集合，任一命中）与 `terminal`（是否终态），二者 AND。
 
 ```json5
 {
-  // 任一 task 子项 DONE：触发
-  "children": {
+  // 任一 task 子项当前是 DONE → 触发
+  "when": {
     "kinds": ["task"],
     "any": {"statuses": ["DONE"]}
   },
@@ -326,8 +286,8 @@ kind/subtype**（不只 task）：
 
 ```json5
 {
-  // 所有 task 子项都终态：触发（issue 子项不参与统计）
-  "children": {
+  // 所有 task 子项都终态 → 触发（issue 子项不参与统计）
+  "when": {
     "kinds": ["task"],
     "all": {"terminal": true}
   },
@@ -338,13 +298,49 @@ kind/subtype**（不只 task）：
 ```json5
 {
   // 所有直接子项（task + issue）都终态，且至少 2 个终态
-  "children": {"all": {"terminal": true}, "min_terminal": 2},
+  "when": {"all": {"terminal": true}, "min_terminal": 2},
   "self": {"from": ["TO_TEST"], "to": "DONE"}
 }
 ```
 
 `any` / `all` / `min_terminal` 可同时使用（AND）。被选中的子项集合为空时，三者都视为
-**不满足**（不做空集真值），避免没有子项时误触发。
+**不满足**（不做空集真值），避免没有子项时误触发。`when` 至少要声明 `any`、`all`、
+`min_terminal` 之一。
+
+> 说明：`when` 判定的是**当前状态**，不回溯历史。因此“某子项从 A 流转到 B”不会作为
+> 独立事件条件；实际效果是“该子项当前为 B，且这次状态变化触发了重新评估”。
+
+#### child_triggers（推荐：聚合不同 kind/subtype 的子项）
+
+```json5
+{
+  "kinds": {
+    "story": {
+      // ... states / steps ...
+      "child_triggers": [
+        {
+          // 任一 task 子项当前 IN_PROGRESS → 需求 TODO -> IN_PROGRESS
+          "when": {
+            "kinds": ["task"],
+            "task_types": ["frontend", "backend", "fullstack"],
+            "any": {"statuses": ["IN_PROGRESS"]}
+          },
+          "self": {"from": ["TODO"], "to": "IN_PROGRESS"}
+        },
+        {
+          // 所有直接子项终态 → 需求 TO_TEST -> DONE
+          "when": {"kinds": ["task", "issue"], "all": {"terminal": true}},
+          "self": {"from": ["TO_TEST"], "to": "DONE"}
+        }
+      ]
+    }
+  }
+}
+```
+
+`when.kinds` 为空表示统计所有 kind；`when.task_types` 要求 `kinds` 为空或包含
+`task`。这样一条规则就能覆盖“需求包含 task 和 issue 子项”的场景，无需在每个子项
+定义里重复声明。规则列表之间是 OR；每条规则内部各条件是 AND。
 
 #### 错误处理：on_error
 
@@ -352,8 +348,7 @@ kind/subtype**（不只 task）：
 
 ```json5
 {
-  "when": {"kinds": ["task", "issue"]},
-  "children": {"all": {"terminal": true}},
+  "when": {"kinds": ["task", "issue"], "all": {"terminal": true}},
   "self": {"from": ["TO_TEST"], "to": "DONE"},
   "on_error": "ignore"   // fail（默认）| ignore
 }
@@ -396,13 +391,13 @@ kind/subtype**（不只 task）：
 
 执行规则（`WorkItemService._apply_parent_triggers`）：
 
-1. `parent_triggers` 的 `when.from`（可多值）与 `when.to`（单值）必须是该子项定义里
-   存在的状态；`when.task_types` 只能用于 task 定义，值必须在 `task_types` 目录中。
-2. `child_triggers` 的 `when.kinds` / `task_types` 必须是已知值；`when.from/to` 是
-   **子项**状态，不在加载期跨 kind 校验（不匹配时自然不命中）。
-3. `children` 量词：先按 `kinds`/`task_types` 选出直接子项；`any` = 至少一个匹配，
-   `all` = 所有选中项都匹配，`min_terminal` = 选中项中终态数 >= N；三者与 `when`
-   之间 AND。选中集合为空时三者都不满足。
+1. 每次直接子项状态变化都会重新评估规则；`when` 只做子项集合量词，不匹配“本次变化
+   的子项”。`when` 至少要声明 `any`、`all`、`min_terminal` 之一。
+2. `when.kinds` / `task_types` 必须是已知值；`task_types` 要求 `kinds` 为空或包含
+   `task`。`when` 的 `statuses` 是**子项**状态，不在加载期跨 kind 校验。
+3. 量词语义：先按 `kinds`/`task_types` 选出直接子项；`any` = 至少一个匹配，
+   `all` = 所有选中项都匹配，`min_terminal` = 选中项中终态数 >= N；三者 AND。
+   选中集合为空时三者都不满足。
 4. 目标项（`parent` 或 `self`）当前状态必须满足 `from`；省略 `from` 时只允许非终态，且不会重复进入目标状态。
 5. 目标项必须能从当前状态经**唯一**一步到达 `to`；同名目标有多个步骤时不自动选择，规则跳过。
 6. 自动流转仍走目标项自己的 gate（`required_fields`、`children_all_terminal` 等）；
@@ -417,7 +412,7 @@ kind/subtype**（不只 task）：
      向上抛出并回滚整个事务；`ignore` 只回滚该规则并记录 ERROR 日志，主操作继续；
    - 级联深度上限 10，超过后静默停止。
 
-注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 8`，**没有声明任何规则**；
+注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 9`，**没有声明任何规则**；
 按实际场景配置后需递增 `revision`，并在合并前跑 `rdm workflow validate`。
 
 ---
@@ -873,10 +868,13 @@ owner/manager 的 sprint 规则。
 
 目标（对应 RDM-71 的示例，并覆盖 task/issue 混合子项）：
 
-- 需求下的开发类子任务（frontend/backend/fullstack）由 `TODO → IN_PROGRESS` 时，需求 `TODO → IN_PROGRESS`；
-- 开发任务的 code_review 子任务进入 `DONE` 时，开发任务若在 `TO_REVIEW`，自动 `TO_REVIEW → DONE`；不在则不动作；
-- 需求非终态、且本次变更后所有直接子项（**task 或 issue 均可**）都已终态时，需求自动进入 `DONE`；
+- 需求下开发类子任务当前处于 `IN_PROGRESS` 时，需求 `TODO → IN_PROGRESS`；
+- 开发任务的 code_review 子任务当前处于 `DONE` 时，开发任务若在 `TO_REVIEW`，自动 `TO_REVIEW → DONE`；不在则不动作；
+- 需求非终态、且所有直接子项（**task 或 issue 均可**）都已终态时，需求自动进入 `DONE`；
 - 级联：子项 → 父任务 → 父需求。
+
+注意：`when` 判定**当前状态**，不是“本次事件恰好发生了某个 transition”。任一直接子项
+状态变化都会重新评估；目标项的 `from` 守卫保证已处于目标状态或不在前置状态时不会重复流转。
 
 聚合规则写在**父项**定义上（`child_triggers`），一条规则即可同时匹配不同 kind：
 
@@ -887,12 +885,12 @@ owner/manager 的 sprint 规则。
       // ...原有 states / initial / terminal / steps / gates / fields...
 
       "child_triggers": [
-        // 规则 2：自己的 code_review 子任务 DONE → 自己 TO_REVIEW → DONE。
+        // 规则 2：自己的 code_review 子任务当前 DONE → 自己 TO_REVIEW → DONE。
         {
           "when": {
             "kinds": ["task"],
             "task_types": ["code_review"],
-            "to": "DONE"
+            "any": {"statuses": ["DONE"]}
           },
           "self": {"from": ["TO_REVIEW"], "to": "DONE"}
         }
@@ -905,20 +903,18 @@ owner/manager 的 sprint 规则。
       // ...原有 states / steps / gates / fields...
 
       "child_triggers": [
-        // 规则 1：开发类子任务开始 → 需求开始。
+        // 规则 1：开发类子任务当前 IN_PROGRESS → 需求开始。
         {
           "when": {
             "kinds": ["task"],
             "task_types": ["frontend", "backend", "fullstack"],
-            "from": ["TODO"],
-            "to": "IN_PROGRESS"
+            "any": {"statuses": ["IN_PROGRESS"]}
           },
           "self": {"from": ["TODO"], "to": "IN_PROGRESS"}
         },
-        // 规则 3：task 与 issue 子项混用；任一子项变更后，若全部子项终态 → 需求 DONE。
+        // 规则 3：task 与 issue 子项混用；所有选中子项终态 → 需求 DONE。
         {
-          "when": {"kinds": ["task", "issue"]},
-          "children": {"all": {"terminal": true}},
+          "when": {"kinds": ["task", "issue"], "all": {"terminal": true}},
           "self": {"from": ["TO_TEST"], "to": "DONE"}
         }
       ]
@@ -938,7 +934,7 @@ owner/manager 的 sprint 规则。
 ```
 
 如果规则只针对某一种子项、且不想把它放在父项定义里，也可以继续用子项侧的
-`parent_triggers`（任意 kind 都可以声明；`when.task_types` 仅 task 定义可用）：
+`parent_triggers`；它的 `when` 同样是对**父项直接子项集合**的量词：
 
 ```json5
 {
@@ -946,8 +942,9 @@ owner/manager 的 sprint 规则。
     "issue": {
       "parent_triggers": [
         {
-          "when": {"from": ["TO_FIX"], "to": "FIXING"},
-          "parent": {"from": ["IN_PROGRESS"], "to": "IN_PROGRESS"}
+          // 父项的直接子项中存在 DONE 的 task → 父项 IN_PROGRESS -> TO_TEST
+          "when": {"kinds": ["task"], "any": {"statuses": ["DONE"]}},
+          "parent": {"from": ["IN_PROGRESS"], "to": "TO_TEST"}
         }
       ]
     }
@@ -958,8 +955,8 @@ owner/manager 的 sprint 规则。
 放置与生效说明：
 
 1. **规则作用域**：`story.child_triggers` 只对直接父项是 story 的关系生效；
-   `dev_standard.child_triggers` 只对使用该定义的父任务生效。`when.kinds` 为空表示匹配所有子项 kind。
-2. **混合 kind**：聚合规则使用 `when.kinds: ["task", "issue"]`（或省略 `when`）即可覆盖
+   `dev_standard.child_triggers` 只对使用该定义的父任务生效。`when.kinds` 为空表示统计所有子项 kind。
+2. **混合 kind**：聚合规则使用 `when.kinds: ["task", "issue"]`（或省略 `kinds`）即可覆盖
    需求同时挂 task 和 issue 子项的情况，不需要在每个子项定义里重复声明。
 3. **目标必须唯一可达**：自动流转不会在多条同名目标步骤中挑选。例如 `TO_REVIEW → DONE`
    必须只有一条步骤；如果同时启用 `CODE_REVIEW` 和 `CODE_REVIEW_TASKS`，规则 2 会被跳过。
@@ -971,7 +968,7 @@ owner/manager 的 sprint 规则。
    若想更严格，可显式写 `"self": {"from": ["TO_TEST"], "to": "DONE"}`。
 6. **既有工作项不会自动获得新规则**：每个工作项固定创建时的定义快照（§17.120），
    规则只对**改配置后新建**的工作项生效；在途工作项仍按旧快照运行。
-7. 改完必须递增 `revision`（当前 4）、重启服务，并跑 `rdm workflow validate`。
+7. 改完必须递增 `revision`（当前 9）、重启服务，并跑 `rdm workflow validate`。
 
 可直接运行的契约示例见 `tests/integration/test_parent_triggers.py`（父项侧混合
 task+issue 聚合、kind 过滤、两级级联与“状态不匹配则不动作”）；字段/校验单测见

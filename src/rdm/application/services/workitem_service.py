@@ -55,7 +55,7 @@ from rdm.domain.events import (
 from rdm.domain.workflow.engine import WorkflowEngine
 from rdm.domain.workflow.loader import load_engine
 from rdm.domain.workflow.names import localized_name, step_display_name
-from rdm.domain.workflow.schema import ChildrenCondition, ResolvedKindWorkflow, TriggerTarget
+from rdm.domain.workflow.schema import ResolvedKindWorkflow, TriggerTarget, TriggerWhen
 from rdm.domain.workflow.task_types import item_task_type, normalize_task_type
 from rdm.i18n import current_locale, tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
@@ -1721,9 +1721,7 @@ class WorkItemService:
         child_display_id = self.display_id(project, item)
 
         for child_rule in child_rules:
-            if not child_rule.when.matches(old_status, new_status, child_task_type):
-                continue
-            if not self._children_condition_matches(child_rule.children, siblings, child_terminal):
+            if not self._when_matches(child_rule.when, siblings, child_terminal):
                 continue
             failed = await self._run_trigger_rule(
                 actor,
@@ -1743,9 +1741,7 @@ class WorkItemService:
                 parent = refreshed
 
         for parent_rule in parent_rules:
-            if not parent_rule.when.matches(item.kind, child_task_type, old_status, new_status):
-                continue
-            if not self._children_condition_matches(parent_rule.children, siblings, child_terminal):
+            if not self._when_matches(parent_rule.when, siblings, child_terminal):
                 continue
             failed = await self._run_trigger_rule(
                 actor,
@@ -1818,8 +1814,8 @@ class WorkItemService:
         return False
 
     @staticmethod
-    def _children_condition_matches(
-        condition: ChildrenCondition | None,
+    def _when_matches(
+        when: TriggerWhen,
         siblings: Sequence[WorkItem],
         terminal_map: Mapping[str, bool],
     ) -> bool:
@@ -1828,24 +1824,20 @@ class WorkItemService:
         ``any`` = at least one selected child matches; ``all`` = every selected
         child matches. An empty selected set never satisfies a quantifier.
         """
-        if condition is None:
-            return True
-        selected = [
-            child for child in siblings if condition.selects(child.kind, item_task_type(child))
-        ]
+        selected = [child for child in siblings if when.selects(child.kind, item_task_type(child))]
         if not selected:
             return False
-        if condition.any is not None and not any(
-            condition.any.matches(child.status, terminal_map[child.id]) for child in selected
+        if when.any is not None and not any(
+            when.any.matches(child.status, terminal_map[child.id]) for child in selected
         ):
             return False
-        if condition.all is not None and not all(
-            condition.all.matches(child.status, terminal_map[child.id]) for child in selected
+        if when.all is not None and not all(
+            when.all.matches(child.status, terminal_map[child.id]) for child in selected
         ):
             return False
-        if condition.min_terminal is not None:
+        if when.min_terminal is not None:
             terminal_count = sum(1 for child in selected if terminal_map[child.id])
-            if terminal_count < condition.min_terminal:
+            if terminal_count < when.min_terminal:
                 return False
         return True
 
