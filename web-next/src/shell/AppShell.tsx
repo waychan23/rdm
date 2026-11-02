@@ -25,6 +25,7 @@ import LogOutIcon from "@atlaskit/icon/core/log-out";
 import BranchIcon from "@atlaskit/icon/core/branch";
 import { token } from "@atlaskit/tokens";
 
+import ItemOverlayHost from "../components/ItemOverlayHost";
 import LocaleSwitcher from "../components/LocaleSwitcher";
 import { logout, refreshSession, useCurrentUser } from "../lib/auth";
 import { safePostLoginPath } from "../lib/oauth";
@@ -311,6 +312,7 @@ export default function AppShell() {
         </nav>
         <Box as="main" xcss={styles.content} testId="app-content">
           <Outlet />
+          <ItemOverlayHost />
         </Box>
       </Box>
     </Box>

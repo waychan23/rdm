@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 
 import Button from "@atlaskit/button/default/button";
 import Drawer from "@atlaskit/drawer";
@@ -22,15 +22,15 @@ import TypeKindIcon from "../components/TypeKindIcon";
 import WorkItemPickerDialog from "../components/WorkItemPickerDialog";
 import { useAsync } from "../hooks/useAsync";
 import { api, errorCause } from "../lib/api";
+import { recallDetail, rememberDetail } from "../lib/detailCache";
 import { useNotify } from "../lib/flags";
 import { formatDate } from "../lib/format";
 import { allowDrawerEnter, suppressDrawerEnter } from "../lib/drawerMotion";
-import { itemPath } from "../lib/navigation";
+import { useOpenWorkItem } from "../lib/itemOverlay";
 import {
   useListOrigin,
   useListProjectKey,
   useListSearchParams,
-  useOpenOrigin,
 } from "../lib/originSearch";
 import type { Release, ReleaseDetail, ReleaseStats, WorkItem } from "../types";
 import StatusLozenge from "../workitems/status";
@@ -90,8 +90,7 @@ export default function ReleasesPage() {
   const { key: routeKey = "" } = useParams();
   // The origin URL owns the project while this page is a drawer backdrop.
   const projectKey = useListProjectKey(routeKey);
-  const navigate = useNavigate();
-  const openOrigin = useOpenOrigin();
+  const openWorkItem = useOpenWorkItem();
   // As a drawer backdrop, the work item drawer owns focus and Escape; the
   // release drawer only needs to stay visible underneath it.
   const isBackdrop = useListOrigin() !== null;
@@ -109,7 +108,9 @@ export default function ReleasesPage() {
     else next.delete("release");
     setSearchParams(next, { replace: true });
   };
-  const [detail, setDetail] = useState<ReleaseDetail | null>(null);
+  const [detail, setDetail] = useState<ReleaseDetail | null>(() =>
+    detailId ? recallDetail<ReleaseDetail>(`release:${detailId}`) : null,
+  );
   const [pickerOpen, setPickerOpen] = useState(false);
   const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
   const [confirmPublish, setConfirmPublish] = useState(false);
@@ -131,11 +132,17 @@ export default function ReleasesPage() {
       setDetail(null);
       return;
     }
+    // Re-mounts start from the cached payload so the drawer never renders
+    // empty for a frame before the fetch resolves.
+    setDetail(recallDetail<ReleaseDetail>(`release:${detailId}`));
     let alive = true;
     api
       .get<ReleaseDetail>(`/releases/${detailId}`)
       .then((res) => {
-        if (alive) setDetail(res.data);
+        if (alive) {
+          rememberDetail(`release:${detailId}`, res.data);
+          setDetail(res.data);
+        }
       })
       .catch((e) => {
         if (alive) notify.error(t("loadFailed"), errorCause(e)?.message);
@@ -148,6 +155,7 @@ export default function ReleasesPage() {
   const refreshDetail = useCallback(async () => {
     if (detailId) {
       const res = await api.get<ReleaseDetail>(`/releases/${detailId}`);
+      rememberDetail(`release:${detailId}`, res.data);
       setDetail(res.data);
     }
   }, [detailId]);
@@ -451,13 +459,10 @@ export default function ReleasesPage() {
                             <TextButton
                               data-testid={`release-item-open-${row.display_id}`}
                               onClick={() => {
-                                // Keep the release drawer open and skip its
-                                // enter animation when this page re-mounts as
-                                // the item drawer's backdrop.
+                                // The release drawer stays mounted behind the
+                                // item drawer.
                                 suppressDrawerEnter("release");
-                                navigate(itemPath(projectKey, row.display_id), {
-                                  state: { from: openOrigin },
-                                });
+                                openWorkItem(projectKey, row.display_id);
                               }}
                             >
                               {row.display_id}

@@ -56,6 +56,7 @@ test.describe("work item type icons", () => {
 
     await page.goto(`${app.baseURL}/projects/${projectKey}/sprints`);
     await page.getByTestId(`sprint-row-${sprint.id}`).click();
+    await watchLoading(page, "sprints-loading");
     const row = page.getByTestId(`sprint-item-row-${story.display_id}`);
     await expect(row).toBeVisible();
     await expect(row.getByTestId("type-icon-story")).toBeVisible();
@@ -79,6 +80,12 @@ test.describe("work item type icons", () => {
     await expect(page.getByTestId("item-panel")).toHaveCount(0);
     await expect(page.getByTestId("sprint-detail")).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`sprint=${sprint.id}`));
+    // The live page/detail drawer stays mounted: no list loading flash.
+    expect(
+      await page.evaluate(
+        () => (window as typeof window & { __loadingSeen?: boolean }).__loadingSeen ?? false,
+      ),
+    ).toBe(false);
     // Re-mounting the real page must not animate the already-open drawer.
     expect(await drawerMotion(page, "sprint")).toEqual({
       attr: "sprint",
@@ -228,3 +235,20 @@ test.describe("work item type icons", () => {
     ).toBeVisible();
   });
 });
+
+/** Record whether a loading node is ever mounted from now on. */
+async function watchLoading(page: Page, testId: string) {
+  await page.evaluate((id) => {
+    const w = window as typeof window & {
+      __loadingSeen?: boolean;
+      __loadingObserver?: MutationObserver;
+    };
+    w.__loadingSeen = false;
+    const check = () => {
+      if (document.querySelector(`[data-testid="${id}"]`)) w.__loadingSeen = true;
+    };
+    check();
+    w.__loadingObserver = new MutationObserver(check);
+    w.__loadingObserver.observe(document.body, { childList: true, subtree: true });
+  }, testId);
+}

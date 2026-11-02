@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useSearchParams, useLocation, type SetURLSearchParams } from "react-router-dom";
+import { useSearchParams, type SetURLSearchParams } from "react-router-dom";
 
 // The item drawer is a route, so opening it replaces the list URL. The list
 // keeps rendering behind the drawer, but its route params would read from
@@ -102,18 +102,6 @@ export function useListOrigin(): string | null {
   const origin = useContext(OriginSearchContext);
   if (!origin) return null;
   return origin.search ? `${origin.path}?${origin.search}` : origin.path;
-}
-
-/**
- * The URL to record as `from` when opening a work item from this page: the
- * origin URL while this page renders as a drawer backdrop, otherwise its own
- * address. Pages can therefore open the drawer from anywhere without knowing
- * whether they are the backdrop.
- */
-export function useOpenOrigin(): string {
-  const location = useLocation();
-  const listOrigin = useListOrigin();
-  return listOrigin ?? `${location.pathname}${location.search}`;
 }
 
 /**

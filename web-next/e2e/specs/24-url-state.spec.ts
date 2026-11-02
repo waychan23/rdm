@@ -89,7 +89,7 @@ test.describe("URL-backed filter state", () => {
     await expect(page.getByTestId("work-item-filter-kind")).not.toContainText("缺陷");
     await expect(row).toBeVisible();
 
-    await page.getByTestId("item-backdrop").click({ position: { x: 12, y: 12 } });
+    await page.mouse.click(700, 20);
     await expect(page.getByTestId("item-panel")).toHaveCount(0);
     await expect(page).toHaveURL(/kind=story/);
     await expect(page.getByTestId("work-item-search")).toHaveValue(story.title);

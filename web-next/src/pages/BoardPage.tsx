@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { cssMap } from "@atlaskit/css";
@@ -15,6 +15,7 @@ import { statusLabel } from "../lib/labels";
 import { useNotify } from "../lib/flags";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";
 import { useRememberViewScroll } from "../hooks/useRememberViewScroll";
+import { useOpenWorkItem } from "../lib/itemOverlay";
 import {
   useListOrigin,
   useListProjectKey,
@@ -97,7 +98,6 @@ export default function BoardPage() {
   const { key: routeKey = "" } = useParams();
   // The origin URL owns the project while this page is a drawer backdrop.
   const projectKey = useListProjectKey(routeKey);
-  const navigate = useNavigate();
   const location = useLocation();
   const notify = useNotify();
   useRestoreScroll();
@@ -407,11 +407,11 @@ export default function BoardPage() {
       return column?.error && column.items.length === 0;
     });
 
+  const openWorkItem = useOpenWorkItem();
   const openItem = (item: WorkItem) => {
-    // From the drawer backdrop the board URL (not the item route) is the origin.
-    const from = listOrigin ?? location.pathname + location.search;
-    if (!from.includes("/items/")) rememberScroll(from, appContentScrollTop());
-    navigate(`/projects/${projectKey}/items/${item.id}`, { state: { from } });
+    // Only the legacy route-backed backdrop replaces the board.
+    if (listOrigin) rememberScroll(listOrigin, appContentScrollTop());
+    openWorkItem(projectKey, item.id);
   };
 
   return (

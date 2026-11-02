@@ -21,7 +21,8 @@ import { useAsync } from "../hooks/useAsync";
 import { formatDate } from "../lib/format";
 import { useNotify } from "../lib/flags";
 import { notificationTypeLabel } from "../lib/labels";
-import { useListSearchParams, useOpenOrigin } from "../lib/originSearch";
+import { useOpenWorkItem } from "../lib/itemOverlay";
+import { useListSearchParams } from "../lib/originSearch";
 import { userLabel } from "../lib/users";
 import type { Notification, OrgUser, TodoBundle, TodoStepEntry, WorkItem } from "../types";
 import StatusLozenge from "../workitems/status";
@@ -65,8 +66,7 @@ export default function InboxPage() {
   const navigate = useNavigate();
   const notify = useNotify();
   const [searchParams, setSearchParams] = useListSearchParams();
-  // The page itself, or the origin it owns while rendered as a drawer backdrop.
-  const openOrigin = useOpenOrigin();
+  const openWorkItem = useOpenWorkItem();
   const tab: Tab = searchParams.get("tab") === "todo" ? "todo" : "notifications";
   const unreadOnly = searchParams.get("unread") !== "false";
   const order: Order = searchParams.get("order") === "asc" ? "asc" : "desc";
@@ -158,11 +158,10 @@ export default function InboxPage() {
       }
     }
     if (n.url) {
-      // Work item notifications open the drawer; keep the inbox behind it.
-      navigate(
-        n.url,
-        n.url.includes("/items/") ? { state: { from: openOrigin } } : undefined,
-      );
+      // Work item notifications open the in-page drawer; the inbox stays as is.
+      const match = /\/projects\/([^/]+)\/items\/([^/?#]+)/.exec(n.url);
+      if (match) openWorkItem(decodeURIComponent(match[1]), decodeURIComponent(match[2]));
+      else navigate(n.url);
     }
   };
 
@@ -184,9 +183,7 @@ export default function InboxPage() {
       notify.error(t("notify.openItemFailed"), t("notify.openItemMissingProject"));
       return;
     }
-    navigate(`/projects/${item.project_key}/items/${item.display_id}`, {
-      state: { from: openOrigin },
-    });
+    openWorkItem(item.project_key, item.display_id);
   };
 
   const openStep = (entry: TodoStepEntry) => openItem(entry.item);

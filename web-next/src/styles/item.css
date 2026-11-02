@@ -14,6 +14,17 @@
   inset: 0;
 }
 
+/* In-page overlay: the page underneath stays interactive (rows, filters), so
+   only the panel itself receives pointer events. Blank-page clicks close the
+   drawer through ItemOverlayHost's document listener. */
+.rdm-item-overlay--floating {
+  pointer-events: none;
+}
+
+.rdm-item-overlay--floating .rdm-item-panel {
+  pointer-events: auto;
+}
+
 .rdm-item-backdrop {
   position: absolute;
   inset: 0;

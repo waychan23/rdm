@@ -36,7 +36,7 @@ test.describe("work item drawer dismissal", () => {
     expect(await listingLoading(page)).toBe(false);
 
     // Closing returns to the same rows without a loading flash.
-    await page.getByTestId("item-backdrop").click({ position: { x: 12, y: 12 } });
+    await dismissByBlankClick(page);
     await expect(page.getByTestId("item-panel")).toHaveCount(0);
     await expect(page.getByTestId("page-backlog")).toBeVisible();
     await expect(firstRow).toBeVisible();
@@ -73,7 +73,7 @@ test.describe("work item drawer dismissal", () => {
     await expect(page.getByTestId("item-panel")).toBeVisible();
     expect(await listingLoading(page)).toBe(false);
 
-    await page.getByTestId("item-backdrop").click({ position: { x: 12, y: 12 } });
+    await dismissByBlankClick(page);
     await expect(page.getByTestId("item-panel")).toHaveCount(0);
     await expect(page.getByTestId("page-board")).toBeVisible();
     await expect(card).toBeVisible();
@@ -112,13 +112,22 @@ test.describe("scroll restoration", () => {
 
     await target.click();
     await expect(page.getByTestId("item-panel")).toBeVisible();
-    await page.getByTestId("item-backdrop").click({ position: { x: 12, y: 12 } });
+    await dismissByBlankClick(page);
     await expect(page.getByTestId("item-panel")).toHaveCount(0);
 
     await expect(rows.last()).toBeVisible();
     await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBe(before);
   });
 });
+
+/**
+ * The in-page drawer overlays the live page (no separate backdrop element);
+ * a click on blank chrome (topbar centre) dismisses it.
+ */
+async function dismissByBlankClick(page: Page) {
+  await page.mouse.click(700, 20);
+  await expect(page.getByTestId("item-panel")).toHaveCount(0);
+}
 
 /** Record whether the list/board loading node is ever mounted from now on. */
 async function watchLoading(page: Page, loadingTestId: string) {

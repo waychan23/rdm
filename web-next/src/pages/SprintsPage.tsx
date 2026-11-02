@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import Button from "@atlaskit/button/default/button";
@@ -13,12 +13,8 @@ import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
 import { allowDrawerEnter, suppressDrawerEnter } from "../lib/drawerMotion";
-import { itemPath } from "../lib/navigation";
-import {
-  useListProjectKey,
-  useListSearchParams,
-  useOpenOrigin,
-} from "../lib/originSearch";
+import { useOpenWorkItem } from "../lib/itemOverlay";
+import { useListProjectKey, useListSearchParams } from "../lib/originSearch";
 import type { Sprint } from "../types";
 import SprintDetailDrawer from "./sprints/SprintDetailDrawer";
 import SprintFormDialog, { type SprintFormValues } from "./sprints/SprintFormDialog";
@@ -32,8 +28,7 @@ export default function SprintsPage() {
   const { key: routeKey = "" } = useParams();
   // The origin URL owns the project while this page is a drawer backdrop.
   const projectKey = useListProjectKey(routeKey);
-  const navigate = useNavigate();
-  const openOrigin = useOpenOrigin();
+  const openWorkItem = useOpenWorkItem();
   const notify = useNotify();
   const [searchParams, setSearchParams] = useListSearchParams();
   const [showCreate, setShowCreate] = useState(false);
@@ -152,10 +147,9 @@ export default function SprintsPage() {
         sprintId={detailId}
         onClose={() => setDetailId(null)}
         onOpenItem={(item) => {
-          // The detail drawer stays open behind the item drawer; it must not
-          // animate in again when the backdrop is re-mounted.
+          // The detail drawer stays mounted behind the item drawer.
           suppressDrawerEnter("sprint");
-          navigate(itemPath(projectKey, item.display_id), { state: { from: openOrigin } });
+          openWorkItem(projectKey, item.display_id);
         }}
         onChanged={() => void reload()}
       />

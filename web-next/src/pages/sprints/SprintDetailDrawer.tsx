@@ -14,6 +14,7 @@ import TruncatedText from "../../components/TruncatedText";
 import TypeKindIcon from "../../components/TypeKindIcon";
 import WorkItemPickerDialog from "../../components/WorkItemPickerDialog";
 import { api, errorCause } from "../../lib/api";
+import { recallDetail, rememberDetail } from "../../lib/detailCache";
 import { useNotify } from "../../lib/flags";
 import { useListOrigin } from "../../lib/originSearch";
 import type { SprintDetail, WorkItem } from "../../types";
@@ -45,7 +46,9 @@ export default function SprintDetailDrawer({
   // As a drawer backdrop, the work item drawer owns focus and Escape; the
   // sprint drawer only needs to stay visible underneath it.
   const isBackdrop = useListOrigin() !== null;
-  const [detail, setDetail] = useState<SprintDetail | null>(null);
+  const [detail, setDetail] = useState<SprintDetail | null>(() =>
+    sprintId ? recallDetail<SprintDetail>(`sprint:${sprintId}`) : null,
+  );
   const [showEdit, setShowEdit] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
@@ -56,6 +59,7 @@ export default function SprintDetailDrawer({
     if (!sprintId) return;
     try {
       const res = await api.get<SprintDetail>(`/sprints/${sprintId}`);
+      rememberDetail(`sprint:${sprintId}`, res.data);
       setDetail(res.data);
     } catch (e) {
       notify.error(t("loadFailed"), errorCause(e)?.message);
@@ -63,7 +67,9 @@ export default function SprintDetailDrawer({
   }, [sprintId, notify, t]);
 
   useEffect(() => {
-    setDetail(null);
+    // Re-mounts (item drawer backdrop / return to the page) start from the
+    // cached payload so the drawer never renders empty for a frame.
+    setDetail(sprintId ? recallDetail<SprintDetail>(`sprint:${sprintId}`) : null);
     setShowEdit(false);
     setPickerOpen(false);
     setConfirmClose(false);

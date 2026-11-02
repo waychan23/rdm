@@ -23,7 +23,7 @@ test.describe("drawer backdrop follows the opening page", () => {
     await expect(page.getByTestId("page-inbox")).toBeVisible();
     await expect(page.getByTestId("page-backlog")).toHaveCount(0);
 
-    await page.getByTestId("item-backdrop").click({ position: { x: 12, y: 12 } });
+    await page.getByTestId("item-panel-close").click();
     await expect(page.getByTestId("item-panel")).toHaveCount(0);
     await expect(page).toHaveURL(`${app.baseURL}/inbox`);
   });
@@ -54,7 +54,7 @@ test.describe("drawer backdrop follows the opening page", () => {
     await expect(page.getByTestId("page-mailbox")).toBeVisible();
     await expect(page.getByTestId("page-backlog")).toHaveCount(0);
 
-    await page.getByTestId("item-backdrop").click({ position: { x: 12, y: 12 } });
+    await page.getByTestId("item-panel-close").click();
     await expect(page.getByTestId("item-panel")).toHaveCount(0);
     await expect(page).toHaveURL(
       `${app.baseURL}/projects/${app.projectKey}/mailbox`,

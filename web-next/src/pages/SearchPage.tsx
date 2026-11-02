@@ -15,7 +15,8 @@ import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
 import { api } from "../lib/api";
 import { searchTypeLabel } from "../lib/labels";
-import { useListSearchParams, useOpenOrigin } from "../lib/originSearch";
+import { useOpenWorkItem } from "../lib/itemOverlay";
+import { useListSearchParams } from "../lib/originSearch";
 import { useAsync } from "../hooks/useAsync";
 import type { SearchHit } from "../types";
 
@@ -39,8 +40,7 @@ export default function SearchPage() {
   const { t } = useTranslation("projects");
   const navigate = useNavigate();
   const [params, setParams] = useListSearchParams();
-  // The page itself, or the origin it owns while rendered as a drawer backdrop.
-  const openOrigin = useOpenOrigin();
+  const openWorkItem = useOpenWorkItem();
   const q = params.get("q") ?? "";
   const [draft, setDraft] = useState(q);
 
@@ -58,7 +58,9 @@ export default function SearchPage() {
 
   // Work item hits open the drawer; record the search page as its backdrop.
   const openHit = (url: string) => {
-    navigate(url, url.includes("/items/") ? { state: { from: openOrigin } } : undefined);
+    const match = /\/projects\/([^/]+)\/items\/([^/?#]+)/.exec(url);
+    if (match) openWorkItem(decodeURIComponent(match[1]), decodeURIComponent(match[2]));
+    else navigate(url);
   };
 
   return (

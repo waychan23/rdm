@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -35,10 +35,10 @@ import { useNotify } from "../lib/flags";
 import { useCurrentUser } from "../lib/auth";
 import type { MailGroup, MailMessage, Mailbox, OrgUser, ProjectMemberRow } from "../types";
 import { flattenMembers } from "../lib/members";
+import { useOpenWorkItem } from "../lib/itemOverlay";
 import {
   useListProjectKey,
   useListSearchParams,
-  useOpenOrigin,
 } from "../lib/originSearch";
 import { userLabel } from "../lib/users";
 
@@ -68,8 +68,7 @@ export default function MailboxPage() {
   const notify = useNotify();
   const me = useCurrentUser();
   const projectKey = routeProjectKey ?? "";
-  // The page itself, or the origin it owns while rendered as a drawer backdrop.
-  const openOrigin = useOpenOrigin();
+  const openWorkItem = useOpenWorkItem();
   const [searchParams, setSearchParams] = useListSearchParams();
   const projectFilter = searchParams.get("project") ?? projectKey;
   const folder: "inbox" | "archived" | "sent" =
@@ -470,15 +469,13 @@ export default function MailboxPage() {
                 {t("message.refs")}
               </Text>
               {m.refs.map((r) => (
-                <Link
+                <TextButton
                   key={r}
-                  className="rdm-link"
-                  to={`/projects/${refProject}/items/${r}`}
-                  state={{ from: openOrigin }}
                   data-testid={`mailbox-item-ref-${r}`}
+                  onClick={() => openWorkItem(refProject, r)}
                 >
                   {r}
-                </Link>
+                </TextButton>
               ))}
             </Inline>
           )}

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -13,8 +12,8 @@ import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { statusLabel } from "../lib/labels";
 import { allowDrawerEnter, suppressDrawerEnter } from "../lib/drawerMotion";
-import { itemPath } from "../lib/navigation";
-import { useListSearchParams, useOpenOrigin } from "../lib/originSearch";
+import { useOpenWorkItem } from "../lib/itemOverlay";
+import { useListSearchParams } from "../lib/originSearch";
 import { userLabel } from "../lib/users";
 import type { Assignee, Sprint, WorkflowDto } from "../types";
 import { kindOptions } from "./constants";
@@ -113,8 +112,7 @@ export default function WorkItemToolbar({
   showRefresh = true,
 }: Props) {
   const { t } = useTranslation("projects");
-  const navigate = useNavigate();
-  const openOrigin = useOpenOrigin();
+  const openWorkItem = useOpenWorkItem();
   const [searchParams, setSearchParams] = useListSearchParams();
   const [qInput, setQInput] = useState(filters.q);
   const [sprints, setSprints] = useState<Sprint[]>([]);
@@ -510,10 +508,9 @@ export default function WorkItemToolbar({
         sprintId={sprintDrawerOpen ? filters.sprint || null : null}
         onClose={() => setSprintDrawerOpen(false)}
         onOpenItem={(item) => {
-          // The sprint drawer remains open behind the item drawer; suppress
-          // its enter animation when the board re-mounts as the backdrop.
+          // The sprint drawer remains mounted behind the item drawer.
           suppressDrawerEnter("sprint");
-          navigate(itemPath(projectKey, item.display_id), { state: { from: openOrigin } });
+          openWorkItem(projectKey, item.display_id);
         }}
         onChanged={() => {
           setSprintsNonce((nonce) => nonce + 1);
