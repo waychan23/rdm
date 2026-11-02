@@ -14,6 +14,7 @@
 2. [顶层结构](#2-顶层结构)
    - [2.1 命名工作流定义（workflow_defs + use）](#21-命名工作流定义workflow_defs--use)
 3. [kind 字段](#3-kind-字段)
+   - [3.1 状态触发器：parent_triggers / child_triggers](#31-状态触发器parent_triggers-与-child_triggersschema-v4)
 4. [step 字段](#4-step-字段)
 5. [gate 字段](#5-gate-字段)
 6. [fields：reviewer / review_content / 自定义字段](#6-fieldsreviewer--review_content--自定义字段)
@@ -155,9 +156,11 @@
 
 规则：
 
-- 定义体与 kind 的图定义同构：`states/initial/terminal/steps` 必填，`gates/fields` 可选。
-- `use` 只能与 `label`、`label_en`、`gates`、`fields`（kind 还可加 `subtypes`）同时出现；
-  `gates`/`fields` 写了就**整体覆盖**定义里的同名键，不按字段合并。
+- 定义体与 kind 的图定义同构：`states/initial/terminal/steps` 必填，`gates/fields` 可选；
+  还可以声明 `parent_triggers` / `child_triggers`（见 §3.1）。
+- `use` 只能与 `label`、`label_en`、`gates`、`fields`、`parent_triggers`、`child_triggers`
+  （kind 还可加 `subtypes`）同时出现；`gates`/`fields`/触发器写了就**整体覆盖**定义里的同名键，
+  不按字段合并。
 - 用 `use` 时不能再写 `states/initial/terminal/steps`——要改流程请改定义本身，
   或改用内联配置。错误信息会指明冲突键与引用的定义名。
 - 定义内**不允许**再写 `use`（不做链式引用），避免解析顺序与循环引用问题。
@@ -234,7 +237,8 @@
 | `gates` | 否 | `{"目标状态": GateSpec}`，作为所有进入该状态步骤的默认 gate |
 | `fields` | 否 | 开启 reviewer/review_content 与自定义字段 |
 | `subtypes` | 否 | 子类型覆盖；目前用于 `task` |
-| `parent_triggers` | 否 | 子项状态变更触发父项状态变更；见 3.1（v4 新增） |
+| `parent_triggers` | 否 | 子项侧触发器：我变了 → 父项变；任意 kind/subtype 可用，见 3.1（v4 新增） |
+| `child_triggers` | 否 | 父项侧触发器：直接子项变了 → 我变；可匹配不同 kind/subtype，见 3.1（v4 新增） |
 | `use` | 否 | 引用 `workflow_defs` 中的命名定义；见 2.1 |
 
 兼容输入：也可以用旧式 `"transitions": {"TODO": ["IN_PROGRESS"]}` 代替 `steps`。

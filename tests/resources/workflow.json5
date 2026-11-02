@@ -6,6 +6,11 @@
 // tests/cli/test_doctor.py、tests/contract/）仍读生产文件。
 // 新增工作流能力时：先改生产定义与代码，再按需升级本契约并补测试。
 //
+// 触发器（parent_triggers / child_triggers、when.any/all、子项聚合）的
+// 完整字段与配方见 docs/workflow-config.md §3.1 / §10.7。本契约故意不声明
+// 任何触发器，避免影响其他行为测试；触发用例在
+// tests/integration/test_parent_triggers.py 里按需叠加 v4 规则。
+//
 // 完整字段/defaults/配方/排错见 docs/workflow-config.md
 // JSON5: 支持 // 与 /* */ 注释；结构与 JSON 相同。
 {
