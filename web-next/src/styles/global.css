@@ -79,3 +79,13 @@
   height: 100%;
   overflow-y: auto;
 }
+
+/* A sprint/release detail drawer that stays open behind the work item drawer
+   must not replay its enter animation when re-mounted. The item drawer sets
+   the token list on <html> before navigating (RDM-102). */
+html[data-rdm-restored-drawer~="sprint"] [data-testid="sprint-detail-drawer"],
+html[data-rdm-restored-drawer~="sprint"] [data-testid="sprint-detail-drawer--blanket"],
+html[data-rdm-restored-drawer~="release"] [data-testid="release-detail-drawer"],
+html[data-rdm-restored-drawer~="release"] [data-testid="release-detail-drawer--blanket"] {
+  animation: none !important;
+}

@@ -12,6 +12,7 @@ import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
+import { allowDrawerEnter, suppressDrawerEnter } from "../lib/drawerMotion";
 import { itemPath } from "../lib/navigation";
 import {
   useListProjectKey,
@@ -40,6 +41,7 @@ export default function SprintsPage() {
   // backdrop (opening a work item must not close the sprint drawer).
   const detailId = searchParams.get("sprint");
   const setDetailId = (id: string | null) => {
+    allowDrawerEnter("sprint");
     const next = new URLSearchParams(searchParams);
     if (id) next.set("sprint", id);
     else next.delete("sprint");
@@ -149,9 +151,12 @@ export default function SprintsPage() {
         projectKey={projectKey}
         sprintId={detailId}
         onClose={() => setDetailId(null)}
-        onOpenItem={(item) =>
-          navigate(itemPath(projectKey, item.display_id), { state: { from: openOrigin } })
-        }
+        onOpenItem={(item) => {
+          // The detail drawer stays open behind the item drawer; it must not
+          // animate in again when the backdrop is re-mounted.
+          suppressDrawerEnter("sprint");
+          navigate(itemPath(projectKey, item.display_id), { state: { from: openOrigin } });
+        }}
         onChanged={() => void reload()}
       />
     </Page>

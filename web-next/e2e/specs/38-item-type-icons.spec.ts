@@ -1,4 +1,21 @@
+import type { Page } from "@playwright/test";
+
 import { expect, test } from "../support/fixtures";
+
+/** Drawer enter-animation state plus the restored-drawer suppression token. */
+async function drawerMotion(page: Page, family: "sprint" | "release") {
+  return page.evaluate((key) => {
+    const panel = document.querySelector(`[data-testid="${key}-detail-drawer"]`);
+    const blanket = document.querySelector(
+      `[data-testid="${key}-detail-drawer--blanket"]`,
+    );
+    return {
+      attr: document.documentElement.getAttribute("data-rdm-restored-drawer"),
+      panel: panel ? getComputedStyle(panel).animationName : "missing",
+      blanket: blanket ? getComputedStyle(blanket).animationName : "missing",
+    };
+  }, family);
+}
 
 // RDM-104/RDM-106: item lists outside the backlog show the work item type and
 // their display ids open the work item drawer.
@@ -49,12 +66,36 @@ test.describe("work item type icons", () => {
     await expect(page.getByTestId("page-sprints")).toBeVisible();
     await expect(page.getByTestId("sprint-detail")).toBeVisible();
     await expect(page.getByTestId("page-backlog")).toHaveCount(0);
+    // The detail drawer keeps its position (above the backdrop page) and does
+    // not replay its enter animation while the item drawer is open.
+    expect(await drawerMotion(page, "sprint")).toEqual({
+      attr: "sprint",
+      panel: "none",
+      blanket: "none",
+    });
 
     // Closing the item drawer returns to the still-open sprint detail.
     await page.getByTestId("item-panel-close").click();
     await expect(page.getByTestId("item-panel")).toHaveCount(0);
     await expect(page.getByTestId("sprint-detail")).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`sprint=${sprint.id}`));
+    // Re-mounting the real page must not animate the already-open drawer.
+    expect(await drawerMotion(page, "sprint")).toEqual({
+      attr: "sprint",
+      panel: "none",
+      blanket: "none",
+    });
+
+    // A manual close ends suppression; opening it again is a fresh interaction.
+    await page
+      .getByTestId("sprint-detail-drawer--blanket")
+      .click({ position: { x: 1500, y: 400 } });
+    await expect(page.getByTestId("sprint-detail")).toHaveCount(0);
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.getAttribute("data-rdm-restored-drawer"),
+      ),
+    ).toBeNull();
   });
 
   test("release item rows show the type and open the drawer", async ({ api, app, page }) => {
@@ -82,11 +123,21 @@ test.describe("work item type icons", () => {
     await expect(page.getByTestId("page-releases")).toBeVisible();
     await expect(page.getByTestId("release-detail")).toBeVisible();
     await expect(page.getByTestId("page-backlog")).toHaveCount(0);
+    expect(await drawerMotion(page, "release")).toEqual({
+      attr: "release",
+      panel: "none",
+      blanket: "none",
+    });
 
     await page.getByTestId("item-panel-close").click();
     await expect(page.getByTestId("item-panel")).toHaveCount(0);
     await expect(page.getByTestId("release-detail")).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`release=${release.id}`));
+    expect(await drawerMotion(page, "release")).toEqual({
+      attr: "release",
+      panel: "none",
+      blanket: "none",
+    });
   });
 
   test("board sprint drawer stays open behind the item drawer", async ({
@@ -117,6 +168,11 @@ test.describe("work item type icons", () => {
     await expect(page.getByTestId("item-panel-display-id")).toHaveText(story.display_id);
     await expect(page.getByTestId("sprint-detail")).toBeVisible();
     await expect(page.getByTestId("page-board")).toBeVisible();
+    expect(await drawerMotion(page, "sprint")).toEqual({
+      attr: "sprint",
+      panel: "none",
+      blanket: "none",
+    });
 
     await page.getByTestId("item-panel-close").click();
     await expect(page.getByTestId("item-panel")).toHaveCount(0);

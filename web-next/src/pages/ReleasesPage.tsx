@@ -24,6 +24,7 @@ import { useAsync } from "../hooks/useAsync";
 import { api, errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 import { formatDate } from "../lib/format";
+import { allowDrawerEnter, suppressDrawerEnter } from "../lib/drawerMotion";
 import { itemPath } from "../lib/navigation";
 import {
   useListOrigin,
@@ -102,6 +103,7 @@ export default function ReleasesPage() {
   // backdrop (opening a work item must not close the release drawer).
   const detailId = searchParams.get("release");
   const setDetailId = (id: string | null) => {
+    allowDrawerEnter("release");
     const next = new URLSearchParams(searchParams);
     if (id) next.set("release", id);
     else next.delete("release");
@@ -448,11 +450,15 @@ export default function ReleasesPage() {
                             <TypeKindIcon kind={row.kind} />
                             <TextButton
                               data-testid={`release-item-open-${row.display_id}`}
-                              onClick={() =>
+                              onClick={() => {
+                                // Keep the release drawer open and skip its
+                                // enter animation when this page re-mounts as
+                                // the item drawer's backdrop.
+                                suppressDrawerEnter("release");
                                 navigate(itemPath(projectKey, row.display_id), {
                                   state: { from: openOrigin },
-                                })
-                              }
+                                });
+                              }}
                             >
                               {row.display_id}
                             </TextButton>

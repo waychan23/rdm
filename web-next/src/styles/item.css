@@ -7,12 +7,11 @@
  * the backdrop's copy of the list aligned with the rail/topbar instead of
  * covering them.
  */
+/* No z-index here: the backdrop page must stay below an already-open detail
+   drawer, while the panel itself sits above it (see .rdm-item-panel). */
 .rdm-item-overlay {
   position: absolute;
   inset: 0;
-  /* Above an Atlaskit Drawer panel (500) that stays open behind the item
-     drawer, but below ModalDialog positioners (510) opened from the panel. */
-  z-index: 505;
 }
 
 .rdm-item-backdrop {
@@ -32,6 +31,9 @@
   flex-direction: column;
   background: var(--ds-surface, #fff);
   box-shadow: var(--ds-shadow-overlay, 0 0 12px rgba(9, 30, 66, 0.15));
+  /* Above an Atlaskit Drawer panel (500) that stays open behind the item
+     drawer, but below ModalDialog positioners (510) opened from the panel. */
+  z-index: 505;
 }
 
 .rdm-item-head {

@@ -39,20 +39,30 @@ function splitOrigin(origin: string): { path: string; search: string } {
 export function OriginSearchProvider({
   origin,
   projectKey = null,
+  onOriginChange,
   children,
 }: {
   /** Full list URL (`path?query`) the drawer was opened from. */
   origin: string;
   /** Project named by the origin route; "" for a global page. */
   projectKey?: string | null;
+  /** Reports the live origin URL so the drawer closes to the current state. */
+  onOriginChange?: (origin: string) => void;
   children: ReactNode;
 }) {
   const [initial] = useState(() => splitOrigin(origin));
   const [path] = useState(initial.path);
-  const [search, setSearch] = useState(initial.search);
+  const [search, setSearchState] = useState(initial.search);
+  const setSearch = useCallback(
+    (next: string) => {
+      setSearchState(next);
+      onOriginChange?.(next ? `${path}?${next}` : path);
+    },
+    [path, onOriginChange],
+  );
   const state = useMemo<OriginState>(
     () => ({ path, search, projectKey, setSearch }),
-    [path, search, projectKey],
+    [path, search, projectKey, setSearch],
   );
   return (
     <OriginSearchContext.Provider value={state}>

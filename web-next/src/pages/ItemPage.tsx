@@ -1,4 +1,11 @@
-import { lazy, Suspense, type MouseEvent, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { itemPath, originFor } from "../lib/navigation";
@@ -102,7 +109,11 @@ export default function ItemPage() {
   const { key: projectKey = "", id = "" } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const origin = originFor(location.state, `/projects/${projectKey}/backlog`);
+  const initialOrigin = originFor(location.state, `/projects/${projectKey}/backlog`);
+  // Backdrop pages may change filters or close their detail drawer while the
+  // item is open; remember the live origin so closing returns to that state.
+  const [origin, setOrigin] = useState(initialOrigin);
+  useEffect(() => setOrigin(initialOrigin), [initialOrigin]);
   const background = originRoute(origin.split("?")[0]);
 
   const dismissFromBackdrop = (event: MouseEvent<HTMLDivElement>) => {
@@ -123,7 +134,12 @@ export default function ItemPage() {
       >
         {/* The drawer route owns the address bar; the backdrop keeps the page
             URL (filters included) it was opened from. */}
-        <OriginSearchProvider origin={origin} projectKey={background.projectKey}>
+        <OriginSearchProvider
+          key={initialOrigin}
+          origin={initialOrigin}
+          projectKey={background.projectKey}
+          onOriginChange={setOrigin}
+        >
           <Suspense fallback={null}>{background.page}</Suspense>
         </OriginSearchProvider>
       </div>

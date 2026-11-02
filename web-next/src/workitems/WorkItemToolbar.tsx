@@ -12,6 +12,7 @@ import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { statusLabel } from "../lib/labels";
+import { allowDrawerEnter, suppressDrawerEnter } from "../lib/drawerMotion";
 import { itemPath } from "../lib/navigation";
 import { useListSearchParams, useOpenOrigin } from "../lib/originSearch";
 import { userLabel } from "../lib/users";
@@ -120,6 +121,7 @@ export default function WorkItemToolbar({
   // URL-backed so the sprint drawer stays open behind a work item drawer.
   const sprintDrawerOpen = searchParams.get("sprintOpen") === "1";
   const setSprintDrawerOpen = (open: boolean) => {
+    allowDrawerEnter("sprint");
     const next = new URLSearchParams(searchParams);
     if (open) next.set("sprintOpen", "1");
     else next.delete("sprintOpen");
@@ -507,9 +509,12 @@ export default function WorkItemToolbar({
         projectKey={projectKey}
         sprintId={sprintDrawerOpen ? filters.sprint || null : null}
         onClose={() => setSprintDrawerOpen(false)}
-        onOpenItem={(item) =>
-          navigate(itemPath(projectKey, item.display_id), { state: { from: openOrigin } })
-        }
+        onOpenItem={(item) => {
+          // The sprint drawer remains open behind the item drawer; suppress
+          // its enter animation when the board re-mounts as the backdrop.
+          suppressDrawerEnter("sprint");
+          navigate(itemPath(projectKey, item.display_id), { state: { from: openOrigin } });
+        }}
         onChanged={() => {
           setSprintsNonce((nonce) => nonce + 1);
           onRefresh?.();
