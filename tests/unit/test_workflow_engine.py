@@ -62,13 +62,14 @@ def test_terminal_states_have_no_or_only_named_exits(engine: WorkflowEngine) -> 
 
 
 def test_issue_first_fix_can_close_v2(engine: WorkflowEngine) -> None:
-    # workflow v2 (architecture §16.35): FIXING may enter CLOSED_DONE
-    # directly, but the min_children gate still applies.
+    # Current issue flow: FIXING -> TO_TEST -> CLOSED_DONE (CLOSE). The
+    # CLOSED_DONE gate (children_all_terminal + min_children: 1) still applies.
+    engine.check("issue", "FIXING", "TO_TEST", item="RDM-9")
     with pytest.raises(WorkflowGateBlocked) as exc:
-        engine.check("issue", "FIXING", "CLOSED_DONE", item="RDM-9", context=GateContext())
+        engine.check("issue", "TO_TEST", "CLOSED_DONE", item="RDM-9", context=GateContext())
     assert exc.value.details["min_children"] == 1
     ctx = GateContext(children=[GateChild("task", "DONE", "RDM-10")])
-    engine.check("issue", "FIXING", "CLOSED_DONE", item="RDM-9", context=ctx)
+    engine.check("issue", "TO_TEST", "CLOSED_DONE", item="RDM-9", context=ctx)
 
 
 def test_issue_reopen_flow(engine: WorkflowEngine) -> None:
