@@ -338,6 +338,33 @@ class WorkflowConfigService:
             return None
         return await self._repo.get_version(project.workflow_config_version_id)
 
+    async def project_selection(self, project: Project) -> dict[str, object] | None:
+        """Echo the project's pinned version, even if it is old or disabled.
+
+        The settings page cannot derive this from ``/workflow-configs``: that
+        endpoint lists only each key's *active* version and hides disabled
+        configs. A project may legitimately stay pinned to a version that is
+        neither (RDM-86).
+        """
+        version = await self.selected_version(project)
+        if version is None:
+            return None
+        config = await self._repo.get_config(version.config_id)
+        if config is None:
+            return None
+        return {
+            "config_id": config.id,
+            "key": config.key,
+            "name": config.name,
+            "is_builtin": config.is_builtin,
+            "enabled": config.enabled,
+            "version_id": version.id,
+            "version": version.version,
+            "schema_version": version.schema_version,
+            "revision": version.revision,
+            "is_active": version.is_active,
+        }
+
     async def engine_for_version_ids(self, version_ids: Sequence[str]) -> dict[str, WorkflowEngine]:
         """Batch variant for callers holding many projects (unused for now)."""
         engines: dict[str, WorkflowEngine] = {}
@@ -351,10 +378,9 @@ class WorkflowConfigService:
         try:
             return parse_config_document(text)
         except WorkflowConfigDocumentError as exc:
-            raise ValidationError(
-                tr("workflow_config.invalid", default="工作流配置校验失败"),
-                details={"reason": str(exc)},
-            ) from exc
+            # Surface the concrete reason: "missing base kind" is actionable,
+            # a generic "validation failed" is not.
+            raise ValidationError(str(exc), details={"reason": str(exc)}) from exc
 
 
 __all__ = ["WorkflowConfigService", "WorkflowConfigView"]

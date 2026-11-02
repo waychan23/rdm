@@ -115,6 +115,10 @@ const org = {
       label: "Project workflow",
       hint: "Only enabled configs with an active version are listed. Changes affect newly created items; existing items keep their pinned workflow.",
       current: " (current)",
+      default: "System default (not selected)",
+      unknown: "Unknown version",
+      currentDisabledHint:
+        "The current version is disabled or no longer active. It is shown for reference; pick another version to save a change.",
     },
     owner: {
       heading: "Project owner",

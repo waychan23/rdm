@@ -115,6 +115,9 @@ const org = {
       label: "项目工作流",
       hint: "只列出启用且当前活跃的版本；修改后只影响之后新建的工作项，已有工作项保持原流程。",
       current: "（当前）",
+      default: "系统默认（未显式选择）",
+      unknown: "未知版本",
+      currentDisabledHint: "当前版本已停用或不是活跃版本；仅用于回显，改选后才能保存。",
     },
     owner: {
       heading: "项目经理（Project Owner）",

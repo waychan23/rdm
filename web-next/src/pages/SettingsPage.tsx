@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
@@ -87,15 +87,60 @@ export default function SettingsPage() {
 
   const reload = () => setNonce((n) => n + 1);
 
+  // Echo the pinned version from the project itself. `/workflow-configs` only
+  // exposes each key's active version and hides disabled configs, so a project
+  // pinned to an older/disabled version would otherwise show an empty select
+  // (RDM-86). Selectable options still come from enabled + active versions.
+  const currentWorkflow = data?.project.workflow_config ?? null;
+  const workflowOptions = useMemo(() => {
+    const options: Array<{ label: string; value: string; isDisabled?: boolean }> = [];
+    for (const config of workflowConfigs ?? []) {
+      if (!config.enabled || !config.active_version) continue;
+      options.push({
+        label: `${config.name} (${config.key} · v${config.active_version.version})`,
+        value: config.active_version.id,
+      });
+    }
+    if (
+      currentWorkflow &&
+      !options.some((option) => option.value === currentWorkflow.version_id)
+    ) {
+      options.unshift({
+        label: `${currentWorkflow.name} (${currentWorkflow.key} · v${currentWorkflow.version})${t(
+          "projectSettings.workflow.current",
+        )}`,
+        value: currentWorkflow.version_id,
+        isDisabled: !currentWorkflow.enabled || !currentWorkflow.is_active,
+      });
+    }
+    return options;
+  }, [workflowConfigs, currentWorkflow, t]);
+
+  const workflowValue = workflowVersionId
+    ? (workflowOptions.find((option) => option.value === workflowVersionId) ??
+      (currentWorkflow
+        ? {
+            label: `${currentWorkflow.name} (${currentWorkflow.key} · v${currentWorkflow.version})`,
+            value: currentWorkflow.version_id,
+          }
+        : {
+            label: t("projectSettings.workflow.unknown"),
+            value: workflowVersionId,
+          }))
+    : null;
+
   const saveProject = async (e: FormEvent) => {
      e.preventDefault();
      if (saving) return;
      setSaving(true);
      try {
+       const currentVersionId = data?.project.workflow_config_version_id ?? "";
        await api.patch(`/projects/${projectKey}`, {
          name,
          description_md: description,
-         ...(workflowVersionId
+         // Only send a changed selection: an unchanged disabled/old pinned
+         // version is not selectable by the backend and must not block saving.
+         ...(workflowVersionId && workflowVersionId !== currentVersionId
            ? { workflow_config_version_id: workflowVersionId }
            : {}),
        });
@@ -219,44 +264,9 @@ export default function SettingsPage() {
            >
              <Select
                inputId="project-workflow"
-               options={(() => {
-                 const options = (workflowConfigs ?? [])
-                   .filter((config) => config.enabled && config.active_version)
-                   .map((config) => ({
-                     label: `${config.name} (${config.key} · v${config.active_version?.version})`,
-                     value: config.active_version?.id ?? "",
-                   }));
-                 if (
-                   workflowVersionId &&
-                   !options.some((option) => option.value === workflowVersionId)
-                 ) {
-                   options.unshift({
-                     label: `${t("projectSettings.workflow.label")} ${t(
-                       "projectSettings.workflow.current",
-                     )}`,
-                     value: workflowVersionId,
-                   });
-                 }
-                 return options;
-               })()}
-               value={
-                 workflowVersionId
-                   ? {
-                       label:
-                         (() => {
-                           const config = (workflowConfigs ?? []).find(
-                             (c) => c.active_version?.id === workflowVersionId,
-                           );
-                           return config
-                             ? `${config.name} (${config.key} · v${config.active_version?.version})`
-                             : `${t("projectSettings.workflow.label")} ${t(
-                                 "projectSettings.workflow.current",
-                               )}`;
-                         })(),
-                       value: workflowVersionId,
-                     }
-                   : null
-               }
+               placeholder={t("projectSettings.workflow.default")}
+               options={workflowOptions}
+               value={workflowValue}
                onChange={(option) =>
                  setWorkflowVersionId((option as { value: string } | null)?.value ?? "")
                }

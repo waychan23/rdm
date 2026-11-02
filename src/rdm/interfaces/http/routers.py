@@ -9,6 +9,7 @@ from rdm import __version__
 from rdm.application.services.membership_service import MembershipService
 from rdm.application.services.notification_service import NotificationService
 from rdm.application.services.project_service import ProjectService
+from rdm.application.services.workflow_config_service import WorkflowConfigService
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.actor import Actor
 from rdm.interfaces.http.container import Container, get_actor, get_container
@@ -128,11 +129,13 @@ async def get_project(
 ) -> dict:
     async with container.uow() as uow:
         project = await ProjectService(uow).get_by_key(actor, key)
+        workflow_config = await WorkflowConfigService(uow).project_selection(project)
     return {
         "data": {
             **project_out(project),
             "roles": actor.project_roles(project.id),
             "implicit": actor.is_org_owner,
+            "workflow_config": workflow_config,
         }
     }
 

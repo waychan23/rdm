@@ -104,6 +104,12 @@ export default function CreateWorkItemDialog({
     () => resolveFields(workflow, kind, task.task_type),
     [workflow, kind, task.task_type],
   );
+  // The config's task_types are authoritative: the web UI must not offer a
+  // type the selected workflow does not define (RDM-85).
+  const taskTypeChoices = useMemo(
+    () => (workflow?.task_types?.length ? workflow.task_types : taskTypeOptions()),
+    [workflow],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -263,8 +269,8 @@ export default function CreateWorkItemDialog({
                   <Select
                     {...portalMenuProps}
                     inputId="wi-create-task-type"
-                    options={taskTypeOptions()}
-                    value={taskTypeOptions().find((option) => option.value === task.task_type)}
+                    options={taskTypeChoices}
+                    value={taskTypeChoices.find((option) => option.value === task.task_type)}
                     testId="work-item-create-task-type"
                     onChange={(option) =>
                       option &&

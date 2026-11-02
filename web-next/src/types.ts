@@ -1,3 +1,17 @@
+/** Selected workflow config echoed by GET /projects/{key} (RDM-86). */
+export interface ProjectWorkflowConfig {
+  config_id: string;
+  key: string;
+  name: string;
+  is_builtin: boolean;
+  enabled: boolean;
+  version_id: string;
+  version: number;
+  schema_version: number;
+  revision: number;
+  is_active: boolean;
+}
+
 export interface Project {
   id: string;
   key: string;
@@ -12,6 +26,8 @@ export interface Project {
   unread_count?: number;
   /** Selected workflow config version (RDM-84); null = packaged default. */
   workflow_config_version_id?: string | null;
+  /** Present on GET /projects/{key} (RDM-86). */
+  workflow_config?: ProjectWorkflowConfig | null;
 }
 
 /** One immutable workflow config version (RDM-84). */

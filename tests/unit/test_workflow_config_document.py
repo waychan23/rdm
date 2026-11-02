@@ -51,3 +51,18 @@ def test_stale_schema_version_is_rejected() -> None:
 def test_malformed_json5_is_wrapped() -> None:
     with pytest.raises(WorkflowConfigDocumentError):
         parse_config_document("{ this is not json5")
+
+
+@pytest.mark.parametrize("kind", ["epic", "story", "issue", "task", "sprint"])
+def test_base_kinds_are_required(kind: str) -> None:
+    raw = _raw(key="partial", name="Partial")
+    raw["kinds"].pop(kind)
+    with pytest.raises(WorkflowConfigDocumentError, match="基础 kind"):
+        parse_config_document(json.dumps(raw))
+
+
+def test_task_types_must_include_other() -> None:
+    raw = _raw(key="partial", name="Partial")
+    raw["task_types"].pop("other")
+    with pytest.raises(WorkflowConfigDocumentError, match="'other'"):
+        parse_config_document(json.dumps(raw))

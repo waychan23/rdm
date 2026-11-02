@@ -332,3 +332,94 @@ async def test_new_json5_file_is_imported_and_stale_revisions_are_refused(
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     with pytest.raises(ValueError, match="最新版本"):
         sync_workflow_configs(settings)
+
+
+async def test_config_edit_rejects_missing_base_kinds(server, owner_token: str) -> None:
+    client, _settings, _app = server
+    custom = await _fork(client, owner_token, "default", "partial", "Partial")
+
+    raw = pyjson5.loads(load_spec_text())
+    raw["key"] = "partial"
+    raw["name"] = "Partial"
+
+    for kind in ("epic", "story", "issue", "task", "sprint"):
+        broken = {**raw, "kinds": {k: v for k, v in raw["kinds"].items() if k != kind}}
+        r = await _save(
+            client,
+            owner_token,
+            "partial",
+            content_text=json.dumps(broken, ensure_ascii=False),
+            base_version_id=custom["version"]["id"],
+        )
+        assert r.status_code == 422, (kind, r.text)
+        assert "基础 kind" in r.json()["error"]["message"]
+
+    broken = {**raw, "task_types": {k: v for k, v in raw["task_types"].items() if k != "other"}}
+    r = await _save(
+        client,
+        owner_token,
+        "partial",
+        content_text=json.dumps(broken, ensure_ascii=False),
+        base_version_id=custom["version"]["id"],
+    )
+    assert r.status_code == 422, r.text
+    assert "other" in r.json()["error"]["message"]
+
+
+async def test_project_detail_echoes_old_disabled_config(server, owner_token: str) -> None:
+    client, _settings, _app = server
+    custom = await _fork(client, owner_token, "default", "echo_flow", "Echo Flow")
+    v1 = custom["version"]["id"]
+
+    r = await client.post(
+        f"{API}/projects",
+        json={"key": "ECHO", "name": "Echo", "workflow_config_version_id": v1},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 201, r.text
+
+    # v2 becomes active; v1 is no longer in any list endpoint.
+    r = await _save(
+        client,
+        owner_token,
+        "echo_flow",
+        content_text=_custom_config_text(key="echo_flow", name="Echo Flow", label="Echo 2"),
+        base_version_id=v1,
+    )
+    assert r.status_code == 201, r.text
+    v2 = r.json()["data"]["version"]["id"]
+    assert v2 != v1
+
+    r = await client.patch(
+        f"{API}/workflow-configs/echo_flow",
+        json={"enabled": False},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+
+    config_detail = await _detail(client, owner_token, "echo_flow")
+    r = await client.get(f"{API}/projects/ECHO", headers=auth(owner_token))
+    assert r.status_code == 200, r.text
+    echoed = r.json()["data"]["workflow_config"]
+    assert echoed == {
+        "config_id": config_detail["id"],
+        "key": "echo_flow",
+        "name": "Echo Flow",
+        "is_builtin": False,
+        "enabled": False,
+        "version_id": v1,
+        "version": 1,
+        "schema_version": 4,
+        "revision": pyjson5.loads(load_spec_text())["revision"],
+        "is_active": False,
+    }
+
+    # Renaming the project must not try to re-select the disabled pinned
+    # version; the frontend omits it, and a name-only PATCH succeeds.
+    r = await client.patch(
+        f"{API}/projects/ECHO",
+        json={"name": "Echo renamed"},
+        headers=auth(owner_token),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["workflow_config_version_id"] == v1

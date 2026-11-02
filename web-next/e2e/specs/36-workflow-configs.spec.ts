@@ -81,5 +81,11 @@ test.describe("workflow configs", () => {
 
     await expect(page.getByTestId("project-create-dialog")).toBeHidden();
     await expect(page.getByTestId(`project-card-${key}`)).toBeVisible();
+
+    // RDM-86: project settings must echo the selected config, not fall back to
+    // an empty select because the lookup only lists active/enabled versions.
+    await page.goto(`${app.baseURL}/projects/${key}/settings`);
+    await expect(page.getByTestId("project-settings-form")).toContainText("E2E Workflow");
+    await expect(page.locator("#project-workflow")).toBeVisible();
   });
 });
