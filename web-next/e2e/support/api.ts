@@ -200,7 +200,13 @@ export class Api {
   }
 
   async createProject(key: string, name = key): Promise<void> {
-    await this.post("/projects", { key, name });
+    await this.post("/projects", {
+      key,
+      name,
+      ...(this.ctx.workflowConfigVersionId
+        ? { workflow_config_version_id: this.ctx.workflowConfigVersionId }
+        : {}),
+    });
   }
 
   async addMember(projectKey: string, user: UserName, roles = ["worker"]): Promise<void> {

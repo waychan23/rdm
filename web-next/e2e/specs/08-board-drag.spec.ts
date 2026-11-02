@@ -23,7 +23,9 @@ test.describe("workflow: board drag obeys step rules", () => {
 
     // Drag executes the named step as the actor, so it must be the assignee.
     const page = await asUser("alice");
-    await page.goto(`${app.baseURL}${boardPath(app)}`);
+    // Narrow the board to task columns so source and target both fit on screen
+    // (the multi-kind board puts TO_REVIEW beyond a horizontal scroll).
+    await page.goto(`${app.baseURL}${boardPath(app)}?kind=task`);
     await expect(page.getByTestId("page-board")).toBeVisible();
     await expect(page.getByTestId("board-column-TODO")).toBeVisible();
     const card = page.getByTestId(`board-card-${item.display_id}`);

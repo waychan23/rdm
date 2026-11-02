@@ -145,6 +145,130 @@ function stopServer(child: ChildProcess): Promise<void> {
   });
 }
 
+interface WorkflowConfigSummary {
+  key: string;
+  active_version: { id: string; content_text: string } | null;
+}
+
+interface WorkflowConfigVersion {
+  id: string;
+  version: number;
+  content_text: string;
+}
+
+/**
+ * E2E workflow contract (RDM-84).
+ *
+ * The shipped default config is a product decision (minimal review flow), while
+ * these specs exercise the engine's richer approval/task-mode/custom-field
+ * features. Fork the builtin into an e2e-only config and pin every e2e project
+ * to its active version, exactly as a real project would.
+ */
+async function createE2EWorkflowConfig(api: Api): Promise<string> {
+  const configs = (await api.get<WorkflowConfigSummary[]>("/workflow-configs")).data;
+  const builtin = configs.find((config) => config.key === "default");
+  if (!builtin?.active_version) {
+    throw new Error("builtin workflow config 'default' is missing");
+  }
+
+  const forked = (
+    await api.post<{ config: { key: string }; version: WorkflowConfigVersion }>(
+      "/workflow-configs/default/fork",
+      { key: "e2e", name: "E2E Workflow" },
+    )
+  ).data;
+
+  const raw = JSON.parse(forked.version.content_text) as Record<string, any>;
+  // Task base flow: full dev flow with TO_REVIEW + CODE_REVIEW.
+  raw.kinds.task.use = "dev_standard";
+  const dev = raw.workflow_defs.dev_standard;
+  dev.fields = { ...(dev.fields ?? {}), reviewer: true, review_content: true };
+
+  const reviewSteps = dev.steps.TO_REVIEW as Array<Record<string, any>>;
+  const codeReview = reviewSteps.find((step) => step.key === "CODE_REVIEW");
+  if (!codeReview) throw new Error("dev_standard CODE_REVIEW step is missing");
+  // Assignee + explicit reviewers only: project members must not become
+  // candidates implicitly (spec 03 checks an unassigned reviewer cannot execute).
+  codeReview.actors = ["assignee", "reviewers"];
+  codeReview.gates = { ...(codeReview.gates ?? {}), required_fields: ["review_content"] };
+
+  // Task-mode variant used by spec 05: one subtask per executor.
+  reviewSteps.splice(reviewSteps.indexOf(codeReview) + 1, 0, {
+    key: "CODE_REVIEW_TASKS",
+    name: "Code Review Task",
+    name_en: "Code Review Task",
+    to: "DONE",
+    mode: "task",
+    actors: ["assignee"],
+    executors: { min: 1, max: 1 },
+    note: "optional",
+    tasks: {
+      type: "code_review",
+      title: "Code Review: {display_id} {title}",
+      complete_on: "DONE",
+    },
+  });
+
+  // code_review subtype: IN_REVIEW graph + custom fields used by specs 05/07.
+  const subtype = raw.kinds.task.subtypes.code_review;
+  subtype.states = ["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE", "CANCELLED"];
+  subtype.initial = "TODO";
+  subtype.terminal = ["DONE", "CANCELLED"];
+  subtype.main_terminal = ["DONE"];
+  subtype.side_terminal = ["CANCELLED"];
+  subtype.fields = {
+    reviewer: true,
+    review_content: true,
+    custom: [
+      { key: "review_scope", label: "评审范围", label_en: "Review scope", type: "text" },
+      { key: "risk_score", label: "风险分", label_en: "Risk score", type: "number" },
+      {
+        key: "observers",
+        label: "旁听人",
+        label_en: "Observers",
+        type: "user",
+        multiple: true,
+      },
+    ],
+  };
+  subtype.steps = {
+    TODO: [
+      { key: "START", name: "开始评审", name_en: "Start review", to: "IN_PROGRESS" },
+      { key: "CANCEL", name: "取消", name_en: "Cancel", to: "CANCELLED" },
+    ],
+    IN_PROGRESS: [
+      { key: "SUBMIT", name: "提交评审", name_en: "Submit review", to: "IN_REVIEW" },
+      { key: "CANCEL", name: "取消", name_en: "Cancel", to: "CANCELLED" },
+    ],
+    IN_REVIEW: [
+      {
+        key: "APPROVE",
+        name: "通过",
+        name_en: "Approve",
+        to: "DONE",
+        mode: "direct",
+        actors: ["assignee"],
+        executors: { min: 1, max: 1 },
+        note: "required",
+      },
+      { key: "CANCEL", name: "取消", name_en: "Cancel", to: "CANCELLED" },
+    ],
+    DONE: [],
+    CANCELLED: [],
+  };
+
+  const saved = (
+    await api.post<{ version: WorkflowConfigVersion }>(
+      "/workflow-configs/e2e/versions",
+      {
+        content_text: `${JSON.stringify(raw, null, 2)}\n`,
+        base_version_id: forked.version.id,
+      },
+    )
+  ).data;
+  return saved.version.id;
+}
+
 export default async function globalSetup(): Promise<() => Promise<void>> {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
   const distIndex = path.join(repoRoot, "src/rdm/resources/web-next-dist/index.html");
@@ -204,7 +328,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     const whoami = await api.get<{ user: { id: string } }>("/whoami");
     owner.id = whoami.data.user.id;
 
-    await api.post("/projects", { key: PROJECT_KEY, name: "Workflow E2E" });
+    ctx.workflowConfigVersionId = await createE2EWorkflowConfig(api);
+    await api.createProject(PROJECT_KEY, "Workflow E2E");
 
     for (const name of MEMBER_NAMES) {
       const created = await createUser(api, name);

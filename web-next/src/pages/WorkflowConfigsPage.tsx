@@ -197,7 +197,7 @@ export default function WorkflowConfigsPage() {
                     </Lozenge>
                   </Inline>
                   <Text size="small" color="color.text.subtlest">
-                    {config.key} · {config.version_count === 1 ? "1 version" : t("versionCount", { count: config.version_count })}
+                    {config.key} · {t("versionCount", { count: config.version_count })}
                     {config.active_version
                       ? ` · ${t("activeVersion", {
                           version: config.active_version.version,
@@ -208,11 +208,19 @@ export default function WorkflowConfigsPage() {
                   </Text>
                 </Stack>
                 <Inline space="space.100">
-                  <Button appearance="subtle" onClick={() => void open(config.key)}>
+                  <Button
+                    appearance="subtle"
+                    testId={`workflow-config-open-${config.key}`}
+                    onClick={() => void open(config.key)}
+                  >
                     {t("actions.open")}
                   </Button>
                   {canEdit ? (
-                    <Button appearance="subtle" onClick={() => void toggle(config)}>
+                    <Button
+                      appearance="subtle"
+                      testId={`workflow-config-toggle-${config.key}`}
+                      onClick={() => void toggle(config)}
+                    >
                       {t(config.enabled ? "actions.disable" : "actions.enable")}
                     </Button>
                   ) : null}
@@ -304,7 +312,11 @@ export default function WorkflowConfigsPage() {
               </Button>
               {selected.is_builtin || !canEdit ? (
                 canEdit ? (
-                  <Button appearance="primary" onClick={() => setForkOpen(true)}>
+                  <Button
+                    appearance="primary"
+                    testId="workflow-config-fork"
+                    onClick={() => setForkOpen(true)}
+                  >
                     {t("actions.fork")}
                   </Button>
                 ) : null

@@ -29,6 +29,10 @@ pnpm -C web-next exec playwright test --repeat-each=2 # 稳定性回归
 - 串行执行（`workers: 1`）。大多数 spec 共用临时项目 `WFE2E`，每个 spec 用唯一标题创建
   自己的工作项、互不清理；涉及分页/滚动/列表快照的 spec（如 10）会自建隔离项目，
   避免其他用例积累的行影响断言。
+- **工作流契约（RDM-84）**：global setup 会把内置 `default` 配置 fork 成 e2e 专用配置
+  （`key=e2e`），补齐 spec 需要的 `TO_REVIEW`/`CODE_REVIEW`/task-mode/自定义字段，
+  再把 `WFE2E` 与所有 sandbox 项目固定到该配置的活跃版本。产品默认配置后续再精简
+  也不会连带改坏 e2e；spec 始终按真实项目「选择工作流配置」的方式运行。
 - 失败时 `e2e/.results/` 保留 trace / screenshot / video；
   `pnpm -C web-next exec playwright show-trace <trace.zip>` 可回放。
 - 服务日志：`e2e/.auth/server.log`。`e2e/.auth/` 同时存放本次运行的
@@ -88,6 +92,7 @@ e2e/
 | 11-reparent | 在需求详情抽屉内把 story 从一个 epic 移到另一个 epic；子树跟随、两侧 epic 子项列表与历史记录正确 |
 | 12-drawer-layout | 左右栏主题 divider；父项置顶（不支持时整段隐藏）；优先级在状态前+等高色块（1 紧急红/2 高黄/3 中蓝/4 低灰，无未设置）；任务类型只显值并与标题居中；子项状态/负责人且无解除；附件/产出物在左栏；评论编辑器默认隐藏、添加/取消（有内容需确认）/提交后收起；label 蓝色竖线 + gate 必填红星；metadata 在历史之上；图片高度 ≤ 面板 1/3 且保持比例 |
 | 27-releases | 版本列表/新建/详情抽屉/加入 story；未完成 story 时发布按钮禁用；发布后 story 变为 PUBLISHED |
+| 36-workflow-configs | 内置配置只读、fork 后可编辑并生成新版本、启用/停用；项目创建必须选择启用的工作流配置 |
 
 ## 新增 spec
 

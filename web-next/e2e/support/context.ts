@@ -24,6 +24,8 @@ export interface E2EContext {
   baseURL: string;
   projectKey: string;
   dataDir: string;
+  /** Active version of the e2e-specific workflow config (RDM-84). */
+  workflowConfigVersionId?: string;
   owner: Session;
   users: Record<Exclude<UserName, "owner">, Session>;
 }

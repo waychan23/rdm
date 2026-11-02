@@ -50,8 +50,11 @@ test.describe("backlog filters and board terminal columns", () => {
   }) => {
     const projectKey = await api.createSandboxProject();
     const stamp = Date.now();
+    // qa_standard keeps IN_PROGRESS -> DONE as a direct step; the dev task
+    // flow (used by the e2e workflow config) goes through TO_REVIEW first.
     const done = await api.createItemIn(projectKey, {
       kind: "task",
+      task_type: "testing",
       title: `completed-${stamp}`,
       assignee: "alice",
     });
