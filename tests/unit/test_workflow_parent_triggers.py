@@ -106,7 +106,9 @@ def test_v4_roundtrip_keeps_parent_triggers() -> None:
     assert rule["trigger"]["from"] == ["TODO"]
     assert rule["trigger"]["to"] == "IN_PROGRESS"
     assert rule["when"]["any"]["statuses"] == ["IN_PROGRESS"]
-    assert rule["parent"] == {"from": ["TODO"], "to": "IN_PROGRESS"}
+    assert rule["parent"]["from"] == ["TODO"]
+    assert rule["parent"]["to"] == "IN_PROGRESS"
+    assert rule["parent"]["step"] is None
 
     restored = deserialize_definition("task", "fullstack", payload)
     assert restored.parent_triggers == resolved.parent_triggers
@@ -190,7 +192,9 @@ def test_v4_roundtrip_keeps_child_triggers() -> None:
     first = payload["child_triggers"][0]
     assert first["trigger"]["tasktypes"] == ["frontend", "fullstack"]
     assert first["when"]["any"]["statuses"] == ["IN_PROGRESS"]
-    assert payload["child_triggers"][1]["self"] == {"from": ["TO_TEST"], "to": "DONE"}
+    child_target = payload["child_triggers"][1]["self"]
+    assert child_target["from"] == ["TO_TEST"]
+    assert child_target["to"] == "DONE"
     assert payload["child_triggers"][1]["when"]["all"]["terminal"] is True
 
     restored = deserialize_definition("story", None, payload)
@@ -308,3 +312,43 @@ def test_on_error_rejects_unknown_policy() -> None:
     ]
     with pytest.raises(PydanticValidationError):
         WorkflowSpec.model_validate(raw)
+
+
+def _target_spec(self_body: dict) -> WorkflowSpec:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [
+        {
+            "when": {"any": {"terminal": True}},
+            "self": self_body,
+        }
+    ]
+    return WorkflowSpec.model_validate(raw)
+
+
+def test_trigger_target_accepts_step_instead_of_to() -> None:
+    resolved = _target_spec({"from": ["TO_TEST"], "step": "PASS"}).resolve("story")
+    target = resolved.child_triggers[0].self_
+    assert target.to is None
+    assert target.step == "PASS"
+
+    payload = serialize_definition(resolved, schema_version=4)
+    stored = payload["child_triggers"][0]["self"]
+    assert stored["step"] == "PASS"
+    assert stored["to"] is None
+    assert deserialize_definition("story", None, payload).child_triggers == resolved.child_triggers
+
+
+def test_trigger_target_accepts_to_and_step_together() -> None:
+    target = _target_spec({"to": "DONE", "step": "PASS"}).resolve("story").child_triggers[0].self_
+    assert target.to == "DONE"
+    assert target.step == "PASS"
+
+
+def test_trigger_target_requires_to_or_step() -> None:
+    with pytest.raises(PydanticValidationError, match="requires to or step"):
+        _target_spec({"from": ["TO_TEST"]})
+
+
+def test_trigger_target_step_must_be_a_key() -> None:
+    with pytest.raises(PydanticValidationError, match="valid step key"):
+        _target_spec({"step": "not a key"})

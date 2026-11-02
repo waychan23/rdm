@@ -92,18 +92,29 @@ class GateSpec(BaseModel):
 
 
 class TriggerTarget(BaseModel):
-    """Guard and target for the item whose status the rule changes."""
+    """Guard and action for the item whose status the rule changes (§17.146).
+
+    Exactly one action selects the transition: ``to`` (target state; must be
+    reachable by a unique direct step) or ``step`` (step key; only direct steps
+    execute automatically). ``to`` and ``step`` may be combined as a sanity
+    check; a mismatch skips the rule.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
     # Absent means "any non-terminal state other than the target".
     from_: tuple[str, ...] = Field(default=(), alias="from")
-    to: str = Field(min_length=1)
+    to: str | None = Field(default=None, min_length=1)
+    step: str | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def _validate(self) -> TriggerTarget:
         if len(set(self.from_)) != len(self.from_):
             raise ValueError("trigger target from must be unique")
+        if self.to is None and self.step is None:
+            raise ValueError("trigger target requires to or step")
+        if self.step is not None and not STEP_KEY_RE.fullmatch(self.step):
+            raise ValueError(f"trigger target step {self.step!r} must be a valid step key")
         return self
 
 
@@ -979,9 +990,8 @@ class WorkflowSpec(BaseModel):
                 self._validate_trigger_event(child_trigger.trigger, f"{where}.trigger")
             if child_trigger.when is not None:
                 self._validate_when(child_trigger.when, f"{where}.when")
-            unknown_self = sorted(
-                (set(child_trigger.self_.from_) | {child_trigger.self_.to}) - state_set
-            )
+            self_to = {child_trigger.self_.to} if child_trigger.self_.to is not None else set()
+            unknown_self = sorted((set(child_trigger.self_.from_) | self_to) - state_set)
             if unknown_self:
                 raise ValueError(f"{where}: self states {unknown_self} not in states")
 

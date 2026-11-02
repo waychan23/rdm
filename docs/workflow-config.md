@@ -372,6 +372,38 @@ kind/subtype**（不只 task）：
 规则列表之间是 OR；每条规则内部 `trigger`、`when`、目标项守卫之间是 AND。子句的
 `kinds` 为空表示统计该层级所有直接子项。
 
+#### 动作：self / parent
+
+动作除了按目标状态 `to` 流转，也可以直接指定 **step key**：
+
+```json5
+{
+  "trigger": {"kinds": ["task"], "to": "CANCELLED"},
+  "self": {
+    "from": ["TO_TEST"],
+    "step": "PASS"        // 直接执行名为 PASS 的步骤
+  }
+}
+```
+
+```json5
+{
+  "self": {
+    "from": ["TO_TEST"],
+    "to": "DONE",
+    "step": "PASS"        // 可选：同时指定，用于校验步骤目标确实是 DONE
+  }
+}
+```
+
+- `to` / `step` 至少写一个。
+- `step` 使用 step **key**（`^[A-Z][A-Z0-9_]{1,49}$`），不是展示名。
+- **只有 `mode=direct` 的步骤会自动执行**；approval/task 步骤会被跳过并记录 WARNING，
+  避免绕过人工审批/子任务执行。
+- 同时写 `to` 和 `step` 时，步骤的 `to` 必须与 `to` 一致，否则跳过并记录 WARNING。
+- 未写 `step` 时，仍按当前状态到 `to` 的**唯一**步骤执行；同名目标有多个步骤时跳过。
+- 动作仍受 `from` 守卫、gate、目标项活动步骤检查约束。
+
 #### 错误处理：on_error
 
 每条规则可选 `on_error`，默认 `"fail"`：
@@ -430,7 +462,10 @@ kind/subtype**（不只 task）：
    至少一个满足，`all` = 所有选中项都满足。`statuses`/`start`/`terminal` 之间 AND；
    选中集合为空时该子句不满足。`trigger` 与 `when` 之间也是 AND。
 4. 目标项（`parent` 或 `self`）当前状态必须满足 `from`；省略 `from` 时只允许非终态，且不会重复进入目标状态。
-5. 目标项必须能从当前状态经**唯一**一步到达 `to`；同名目标有多个步骤时不自动选择，规则跳过。
+5. 动作按 `step` 或 `to` 解析：
+   - `step`：必须是当前状态可达的 step key，且 `mode=direct`；approval/task 步骤跳过并记 WARNING；
+   - `to`：必须能从当前状态经**唯一**一步到达；同名目标有多个步骤时不自动选择，规则跳过。
+   - 同时写 `to` + `step` 时二者目标必须一致，否则跳过并记 WARNING。
 6. 自动流转仍走目标项自己的 gate（`required_fields`、`children_all_terminal` 等）；
    gate 不满足时跳过，不报错。目标项存在进行中的步骤时也跳过，避免与人工步骤冲突。
 7. 自动流转写正常的 `work_item.status_changed` 事件（`payload.auto=true`），
@@ -443,7 +478,7 @@ kind/subtype**（不只 task）：
      向上抛出并回滚整个事务；`ignore` 只回滚该规则并记录 ERROR 日志，主操作继续；
    - 级联深度上限 10，超过后静默停止。
 
-注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 11`，**没有声明任何规则**；
+注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 12`，**没有声明任何规则**；
 按实际场景配置后需递增 `revision`，并在合并前跑 `rdm workflow validate`。
 
 ---
@@ -1006,7 +1041,7 @@ owner/manager 的 sprint 规则。
    只能从 `TO_TEST` 到达。省略 `from` 时由父项自己的步骤决定可达性，不可达则跳过。
 6. **既有工作项不会自动获得新规则**：每个工作项固定创建时的定义快照（§17.120），
    规则只对**改配置后新建**的工作项生效；在途工作项仍按旧快照运行。
-7. 改完必须递增 `revision`（当前 11）、重启服务，并跑 `rdm workflow validate`。
+7. 改完必须递增 `revision`（当前 12）、重启服务，并跑 `rdm workflow validate`。
 
 可直接运行的契约示例见 `tests/integration/test_parent_triggers.py`（父项侧混合
 task+issue 聚合、kind 过滤、两级级联与“状态不匹配则不动作”）；字段/校验单测见

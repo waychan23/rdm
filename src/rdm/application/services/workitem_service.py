@@ -1583,6 +1583,7 @@ class WorkItemService:
         to: str,
         *,
         step: WorkItemStep | None = None,
+        step_key: str | None = None,
         reason: str | None = None,
         trigger_depth: int = 0,
     ) -> dict[str, Any]:
@@ -1622,7 +1623,7 @@ class WorkItemService:
             to,
             item=display_id,
             context=gate_ctx,
-            step_key=step.step_key if step is not None else None,
+            step_key=step.step_key if step is not None else step_key,
             task_type=task_type,
         )
 
@@ -1652,6 +1653,19 @@ class WorkItemService:
                 "name": step.step_name,
                 "name_en": (step.config or {}).get("name_en") or step.step_name,
             }
+        elif step_key is not None:
+            step_spec = next(
+                (s for s in workflow.steps_from(old_status) if s.key == step_key),
+                None,
+            )
+            payload["step"] = {
+                "id": None,
+                "key": step_key,
+                "name": step_spec.name if step_spec is not None else step_key,
+                "name_en": (
+                    step_spec.name_en or step_spec.name if step_spec is not None else step_key
+                ),
+            }
         if reason:
             payload["reason"] = reason
         event_id = await self._append_event(
@@ -1669,7 +1683,7 @@ class WorkItemService:
             actor,
             assignee,
             extra={"reason": reason, "step": payload.get("step")}
-            if reason or step is not None
+            if reason or step is not None or step_key is not None
             else None,
         )
         # RDM-79: a child status change may cascade to its parent (and onward).
@@ -1868,21 +1882,63 @@ class WorkItemService:
         new_status: str,
         depth: int,
     ) -> None:
-        """Move the parent to one trigger target, or skip when not applicable."""
-        target = target_spec.to
+        """Move the parent to one trigger target, or skip when not applicable.
+
+        ``to`` requires exactly one reachable step. ``step`` selects a named
+        step directly; only ``direct`` steps execute automatically — approval
+        and task steps are skipped with a warning so human execution is not
+        bypassed.
+        """
+        steps_from_current = parent_workflow.steps_from(parent.status)
+        configured_step = target_spec.step
+        target: str
+        if configured_step is not None:
+            step_spec = next(
+                (step for step in steps_from_current if step.key == configured_step),
+                None,
+            )
+            if step_spec is None:
+                logger.warning(
+                    "trigger step %s not reachable from %s on %s",
+                    configured_step,
+                    parent.status,
+                    parent.id,
+                )
+                return
+            if step_spec.mode != "direct":
+                logger.warning(
+                    "trigger step %s on %s is %s; only direct steps auto-execute",
+                    configured_step,
+                    parent.id,
+                    step_spec.mode,
+                )
+                return
+            target = step_spec.to
+            if target_spec.to is not None and target_spec.to != target:
+                logger.warning(
+                    "trigger step %s on %s targets %s, not configured %s",
+                    configured_step,
+                    parent.id,
+                    target,
+                    target_spec.to,
+                )
+                return
+        else:
+            to_target = target_spec.to
+            assert to_target is not None  # validated by TriggerTarget
+            target = to_target
+            # Automatic transitions cannot disambiguate multiple named steps to
+            # the same target; only apply when exactly one step matches.
+            matching_steps = [step for step in steps_from_current if step.to == target]
+            if len(matching_steps) != 1:
+                return
+
         if parent.status == target or target not in parent_workflow.states:
             return
         if target_spec.from_:
             if parent.status not in target_spec.from_:
                 return
         elif parent.status in parent_workflow.terminal:
-            return
-        # Automatic transitions cannot disambiguate multiple named steps to the
-        # same target; only apply when exactly one step matches.
-        matching_steps = [
-            step for step in parent_workflow.steps_from(parent.status) if step.to == target
-        ]
-        if len(matching_steps) != 1:
             return
         reason = tr(
             "work_item.parent_trigger_reason",
@@ -1896,6 +1952,7 @@ class WorkItemService:
                 actor,
                 parent,
                 target,
+                step_key=configured_step,
                 reason=reason,
                 trigger_depth=depth + 1,
             )

@@ -456,3 +456,54 @@ async def test_when_start_predicate_uses_the_child_initial_state(
     # a re-evaluation of the quantifier.
     await _move(client, owner_token, issue["display_id"], "CANCELLED")
     assert await _status(client, owner_token, story["display_id"]) == "TO_TEST"
+
+
+async def test_trigger_action_can_select_a_direct_step(server, owner_token: str, monkeypatch):
+    client, _settings, _app = server
+    engine = WorkflowEngine(
+        _child_rule_spec(
+            {
+                "trigger": {"kinds": ["task"], "to": "CANCELLED"},
+                "self": {"from": ["TO_TEST"], "step": "PASS"},
+            }
+        )
+    )
+    _install_engine(monkeypatch, engine)
+    await _project(client, owner_token)
+
+    story, child = await _story_with_child(client, owner_token, "STEP", "task")
+    await _move(client, owner_token, child["display_id"], "CANCELLED")
+    assert await _status(client, owner_token, story["display_id"]) == "DONE"
+
+
+async def test_trigger_action_skips_non_direct_steps(server, owner_token: str, monkeypatch, caplog):
+    client, _settings, _app = server
+    raw = pyjson5.loads(load_test_spec_text())
+    raw["version"] = 4
+    raw["workflow_defs"]["task_standard"]["parent_triggers"] = [
+        {
+            "trigger": {"kinds": ["task"], "tasktypes": ["code_review"], "to": "DONE"},
+            "parent": {"from": ["TO_REVIEW"], "step": "CODE_REVIEW"},
+        }
+    ]
+    _install_engine(monkeypatch, WorkflowEngine(WorkflowSpec.model_validate(raw)))
+    caplog.set_level(logging.WARNING, logger="rdm.application.services.workitem_service")
+
+    await _project(client, owner_token)
+    story = await _create(client, owner_token, kind="story", title="APPROVAL")
+    dev = await _create(
+        client, owner_token, kind="task", title="APPROVAL-DEV", parent=story, task_type="fullstack"
+    )
+    review = await _create(
+        client, owner_token, kind="task", title="APPROVAL-REV", parent=dev, task_type="code_review"
+    )
+    await _move(client, owner_token, dev["display_id"], "IN_PROGRESS")
+    await _move(client, owner_token, dev["display_id"], "TO_REVIEW")
+
+    await _move(client, owner_token, review["display_id"], "IN_PROGRESS")
+    await _move(client, owner_token, review["display_id"], "IN_REVIEW")
+    await _move(client, owner_token, review["display_id"], "DONE", reason="approved")
+
+    # CODE_REVIEW is an approval step; automatic triggers must not bypass it.
+    assert await _status(client, owner_token, dev["display_id"]) == "TO_REVIEW"
+    assert any("only direct steps auto-execute" in record.message for record in caplog.records)
