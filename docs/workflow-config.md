@@ -276,7 +276,7 @@ kind/subtype**（不只 task）：
             "kinds": ["task", "issue"],       // 直接子项的 kind，可混用
             "task_types": ["frontend"],        // 可选，仅当子项是 task 时生效
             "from": ["TODO"],                  // 子项变更前状态
-            "to": ["IN_PROGRESS"]              // 子项变更后状态
+            "to": "IN_PROGRESS"              // 子项变更后状态
           },
           // 本项（父项）的条件与目标。
           "self": {
@@ -299,6 +299,9 @@ kind/subtype**（不只 task）：
 `task`。这样一条聚合规则就能覆盖“需求包含 task 和 issue 子项”的场景，无需在每个
 子项定义里重复声明。
 
+`when.from` 可以写多个前置状态（任一命中）；`when.to` 是**单值**——一次状态变更只有
+一个目标状态。需要匹配多个目标时用 `when.any` 分支（见下）。
+
 #### 条件组：when.any / when.all
 
 `when` 的扁平字段之间是 **AND**；需要 OR 或嵌套组合时，加 `any` / `all` 子句组。
@@ -312,14 +315,14 @@ kind/subtype**（不只 task）：
 
     // 任一子句命中即可
     "any": [
-      {"kinds": ["task"], "task_types": ["frontend"], "to": ["DONE"]},
-      {"kinds": ["issue"], "to": ["CLOSED_DONE"]}
+      {"kinds": ["task"], "task_types": ["frontend"], "to": "DONE"},
+      {"kinds": ["issue"], "to": "CLOSED_DONE"}
     ],
 
     // 所有子句都必须命中
     "all": [
       {"from": ["IN_PROGRESS", "FIXING"]},
-      {"to": ["DONE", "CLOSED_DONE"]}
+      {"kinds": ["task", "issue"]}
     ]
   },
   "self": {"to": "DONE"}
@@ -356,7 +359,7 @@ kind/subtype**（不只 task）：
         {
           "when": {
             "from": ["TO_FIX"],
-            "to": ["FIXING"],
+            "to": "FIXING",
             "task_types": ["frontend", "backend"]  // 仅 task 定义可用
           },
           "parent": { "from": ["IN_PROGRESS"], "to": "IN_PROGRESS" }
@@ -369,8 +372,9 @@ kind/subtype**（不只 task）：
 
 执行规则（`WorkItemService._apply_parent_triggers`）：
 
-1. `parent_triggers` 的 `when.from/to`（含嵌套 `any`/`all` 子句）必须是该子项定义里存在的状态；
-   `when.task_types` 只能用于 task 定义，值必须在 `task_types` 目录中。
+1. `parent_triggers` 的 `when.from`（可多值）与 `when.to`（单值，含嵌套 `any`/`all` 子句）
+   必须是该子项定义里存在的状态；`when.task_types` 只能用于 task 定义，值必须在
+   `task_types` 目录中。
 2. `child_triggers` 的 `when.kinds` / `task_types`（含嵌套子句）必须是已知值；
    `when.from/to` 是**子项**状态，不在加载期跨 kind 校验（不匹配时自然不命中）。
 3. 子项聚合条件：`all_children_terminal=true` 要求全部直接子项终态（无子项时为 false）；
@@ -381,8 +385,15 @@ kind/subtype**（不只 task）：
    gate 不满足时跳过，不报错。目标项存在进行中的步骤时也跳过，避免与人工步骤冲突。
 7. 自动流转写正常的 `work_item.status_changed` 事件（`payload.auto=true`），
    `reason` 记录触发的子项与前后状态。
+8. **同步执行、同一事务**：触发器在子项状态变更的同一个 UoW 事务内执行，成功后才一起
+   commit；不会异步延后，也不会出现“子项成功、父项稍后变”的中间态。
+   - 预期内的不触发（条件不匹配、目标不可达/多个步骤、gate 不满足、目标项有活动步骤）
+     静默跳过，子项操作照常成功；
+   - 预期外的异常（数据库冲突、校验/写库错误等）向上抛出并回滚整个事务：子项流转、
+     父级流转、事件、站内通知、webhook outbox 都不生效；SSE 在 commit 后发送，也不会发出；
+   - 级联深度上限 10，超过后静默停止。
 
-注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 5`，**没有声明任何规则**；
+注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 6`，**没有声明任何规则**；
 按实际场景配置后需递增 `revision`，并在合并前跑 `rdm workflow validate`。
 
 ---
@@ -857,7 +868,7 @@ owner/manager 的 sprint 规则。
           "when": {
             "kinds": ["task"],
             "task_types": ["code_review"],
-            "to": ["DONE"]
+            "to": "DONE"
           },
           "self": {"from": ["TO_REVIEW"], "to": "DONE"}
         }
@@ -876,7 +887,7 @@ owner/manager 的 sprint 规则。
             "kinds": ["task"],
             "task_types": ["frontend", "backend", "fullstack"],
             "from": ["TODO"],
-            "to": ["IN_PROGRESS"]
+            "to": "IN_PROGRESS"
           },
           "self": {"from": ["TODO"], "to": "IN_PROGRESS"}
         },
@@ -911,7 +922,7 @@ owner/manager 的 sprint 规则。
     "issue": {
       "parent_triggers": [
         {
-          "when": {"from": ["TO_FIX"], "to": ["FIXING"]},
+          "when": {"from": ["TO_FIX"], "to": "FIXING"},
           "parent": {"from": ["IN_PROGRESS"], "to": "IN_PROGRESS"}
         }
       ]

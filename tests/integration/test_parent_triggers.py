@@ -35,17 +35,17 @@ def _trigger_spec() -> WorkflowSpec:
         {
             "when": {
                 "from": ["TODO"],
-                "to": ["IN_PROGRESS"],
+                "to": "IN_PROGRESS",
                 "task_types": ["frontend", "backend", "fullstack"],
             },
             "parent": {"from": ["TODO"], "to": "IN_PROGRESS"},
         },
         {
-            "when": {"to": ["DONE"]},
+            "when": {"to": "DONE"},
             "parent": {"from": ["TO_REVIEW"], "to": "DONE"},
         },
         {
-            "when": {"to": ["DONE"]},
+            "when": {"to": "DONE"},
             "all_children_terminal": True,
             "parent": {"from": ["TO_TEST"], "to": "DONE"},
         },
@@ -269,8 +269,8 @@ async def test_when_any_matches_either_child_kind(server, owner_token: str, monk
             {
                 "when": {
                     "any": [
-                        {"kinds": ["task"], "to": ["CANCELLED"]},
-                        {"kinds": ["issue"], "to": ["CANCELLED"]},
+                        {"kinds": ["task"], "to": "CANCELLED"},
+                        {"kinds": ["issue"], "to": "CANCELLED"},
                     ]
                 },
                 "self": {"from": ["TO_TEST"], "to": "DONE"},

@@ -16,6 +16,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    field_validator,
     model_validator,
 )
 from pydantic import (
@@ -88,29 +89,43 @@ class GateSpec(BaseModel):
         return not basic and not self.required_fields
 
 
+def _single_state(value: Any, field: str) -> Any:
+    """Accept a historical one-element list, otherwise require a single state."""
+    if isinstance(value, (list, tuple)):
+        if len(value) == 1:
+            return value[0]
+        raise ValueError(f"{field} must be a single state; use when.any for multiple targets")
+    return value
+
+
 class ParentTriggerWhen(BaseModel):
     """Matcher for the child status change that fires a parent trigger (§17.137).
 
-    Flat fields are AND-ed. ``any`` / ``all`` are nested condition groups and
-    are AND-ed with the flat fields (and with each other); an empty group is
-    treated as absent. ``task_types`` only applies to task children (the
-    definition that declares the trigger belongs to the child).
+    Flat fields are AND-ed. ``from`` accepts several states (any of them);
+    ``to`` is the single destination of this change. ``any`` / ``all`` are
+    nested condition groups and are AND-ed with the flat fields (and with each
+    other); an empty group is treated as absent. ``task_types`` only applies to
+    task children (the definition that declares the trigger belongs to the
+    child).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
     from_: tuple[str, ...] = Field(default=(), alias="from")
-    to: tuple[str, ...] = ()
+    to: str | None = Field(default=None, min_length=1)
     task_types: tuple[str, ...] = ()
     any: tuple[ParentTriggerWhen, ...] = ()
     all: tuple[ParentTriggerWhen, ...] = ()
+
+    @field_validator("to", mode="before")
+    @classmethod
+    def _normalize_to(cls, value: Any) -> Any:
+        return _single_state(value, "when.to")
 
     @model_validator(mode="after")
     def _validate(self) -> ParentTriggerWhen:
         if len(set(self.from_)) != len(self.from_):
             raise ValueError("parent trigger when.from must be unique")
-        if len(set(self.to)) != len(self.to):
-            raise ValueError("parent trigger when.to must be unique")
         if len(set(self.task_types)) != len(self.task_types):
             raise ValueError("parent trigger when.task_types must be unique")
         return self
@@ -118,7 +133,7 @@ class ParentTriggerWhen(BaseModel):
     def matches(self, from_state: str, to_state: str, task_type: str | None) -> bool:
         if self.from_ and from_state not in self.from_:
             return False
-        if self.to and to_state not in self.to:
+        if self.to is not None and to_state != self.to:
             return False
         if self.task_types and (task_type is None or task_type not in self.task_types):
             return False
@@ -175,27 +190,31 @@ class ParentTriggerSpec(BaseModel):
 class ChildTriggerWhen(BaseModel):
     """Matcher for a direct child's status change, declared on the parent.
 
-    Flat fields are AND-ed. ``any`` / ``all`` are nested condition groups and
-    are AND-ed with the flat fields (and with each other); an empty group is
-    treated as absent.
+    Flat fields are AND-ed. ``from`` accepts several states (any of them);
+    ``to`` is the single destination of this change. ``any`` / ``all`` are
+    nested condition groups and are AND-ed with the flat fields (and with each
+    other); an empty group is treated as absent.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
     from_: tuple[str, ...] = Field(default=(), alias="from")
-    to: tuple[str, ...] = ()
+    to: str | None = Field(default=None, min_length=1)
     # Child kinds; empty means any kind. Different kinds/subtypes can be mixed.
     kinds: tuple[str, ...] = ()
     task_types: tuple[str, ...] = ()
     any: tuple[ChildTriggerWhen, ...] = ()
     all: tuple[ChildTriggerWhen, ...] = ()
 
+    @field_validator("to", mode="before")
+    @classmethod
+    def _normalize_to(cls, value: Any) -> Any:
+        return _single_state(value, "when.to")
+
     @model_validator(mode="after")
     def _validate(self) -> ChildTriggerWhen:
         if len(set(self.from_)) != len(self.from_):
             raise ValueError("child trigger when.from must be unique")
-        if len(set(self.to)) != len(self.to):
-            raise ValueError("child trigger when.to must be unique")
         if len(set(self.kinds)) != len(self.kinds):
             raise ValueError("child trigger when.kinds must be unique")
         if len(set(self.task_types)) != len(self.task_types):
@@ -215,7 +234,7 @@ class ChildTriggerWhen(BaseModel):
             return False
         if self.from_ and from_state not in self.from_:
             return False
-        if self.to and to_state not in self.to:
+        if self.to is not None and to_state != self.to:
             return False
         if self.any and not any(
             clause.matches(child_kind, child_task_type, from_state, to_state) for clause in self.any
@@ -886,7 +905,8 @@ class WorkflowSpec(BaseModel):
         kind: str,
         where: str,
     ) -> None:
-        unknown_states = sorted((set(when.from_) | set(when.to)) - state_set)
+        to_states = {when.to} if when.to is not None else set()
+        unknown_states = sorted((set(when.from_) | to_states) - state_set)
         if unknown_states:
             raise ValueError(f"{where}: unknown child states {unknown_states}")
         unknown_types = sorted(set(when.task_types) - set(self.task_types))

@@ -17,13 +17,13 @@ TRIGGERS = [
     {
         "when": {
             "from": ["TODO"],
-            "to": ["IN_PROGRESS"],
+            "to": "IN_PROGRESS",
             "task_types": ["frontend", "backend", "fullstack"],
         },
         "parent": {"from": ["TODO"], "to": "IN_PROGRESS"},
     },
     {
-        "when": {"to": ["DONE"]},
+        "when": {"to": "DONE"},
         "parent": {"from": ["TO_REVIEW"], "to": "DONE"},
     },
 ]
@@ -93,7 +93,7 @@ def test_v3_payload_stays_historical_without_triggers() -> None:
 def test_unknown_child_state_is_rejected() -> None:
     raw = _raw()
     raw["workflow_defs"]["task_standard"]["parent_triggers"] = [
-        {"when": {"to": ["NOPE"]}, "parent": {"to": "DONE"}}
+        {"when": {"to": "NOPE"}, "parent": {"to": "DONE"}}
     ]
     with pytest.raises(PydanticValidationError, match="unknown child states"):
         WorkflowSpec.model_validate(raw)
@@ -102,7 +102,7 @@ def test_unknown_child_state_is_rejected() -> None:
 def test_task_types_only_valid_for_task_definitions() -> None:
     raw = _raw()
     raw["kinds"]["story"]["parent_triggers"] = [
-        {"when": {"to": ["IN_PROGRESS"], "task_types": ["frontend"]}, "parent": {"to": "DONE"}}
+        {"when": {"to": "IN_PROGRESS", "task_types": ["frontend"]}, "parent": {"to": "DONE"}}
     ]
     with pytest.raises(
         PydanticValidationError, match="task_types is only valid for task definitions"
@@ -211,12 +211,12 @@ def test_when_any_all_groups_are_and_ed_with_flat_fields() -> None:
             "when": {
                 "kinds": ["task", "issue"],
                 "any": [
-                    {"kinds": ["task"], "task_types": ["frontend"], "to": ["DONE"]},
-                    {"kinds": ["issue"], "to": ["CLOSED_DONE"]},
+                    {"kinds": ["task"], "task_types": ["frontend"], "to": "DONE"},
+                    {"kinds": ["issue"], "to": "CLOSED_DONE"},
                 ],
                 "all": [
                     {"from": ["IN_PROGRESS", "FIXING"]},
-                    {"to": ["DONE", "CLOSED_DONE"]},
+                    {"kinds": ["task", "issue"]},
                 ],
             },
             "self": {"to": "DONE"},
@@ -286,4 +286,20 @@ def test_nested_when_groups_are_validated_recursively() -> None:
         {"when": {"any": [{"kinds": ["mystery"]}]}, "self": {"to": "DONE"}}
     ]
     with pytest.raises(PydanticValidationError, match=r"any\[0\]: unknown child kinds"):
+        WorkflowSpec.model_validate(raw)
+
+
+def test_when_to_accepts_a_legacy_single_item_list() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [{"when": {"to": ["DONE"]}, "self": {"to": "DONE"}}]
+    when = WorkflowSpec.model_validate(raw).resolve("story").child_triggers[0].when
+    assert when.to == "DONE"
+
+
+def test_when_to_rejects_multiple_states() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [
+        {"when": {"to": ["DONE", "CANCELLED"]}, "self": {"to": "DONE"}}
+    ]
+    with pytest.raises(PydanticValidationError, match="single state"):
         WorkflowSpec.model_validate(raw)
