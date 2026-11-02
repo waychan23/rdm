@@ -1717,11 +1717,17 @@ class WorkItemService:
         if await self._active_step(parent.id) is not None:
             return
         siblings: list[WorkItem] = await self.uow.work_items.list_children(parent.id) or []
-        child_terminal = await self._versions().terminal_map(siblings)
+        child_flags = await self._versions().status_flags_map(siblings)
         child_display_id = self.display_id(project, item)
 
         for child_rule in child_rules:
-            if not self._when_matches(child_rule.when, siblings, child_terminal):
+            if child_rule.trigger is not None and not child_rule.trigger.matches(
+                item.kind, child_task_type, old_status, new_status
+            ):
+                continue
+            if child_rule.when is not None and not self._when_matches(
+                child_rule.when, siblings, child_flags
+            ):
                 continue
             failed = await self._run_trigger_rule(
                 actor,
@@ -1741,7 +1747,13 @@ class WorkItemService:
                 parent = refreshed
 
         for parent_rule in parent_rules:
-            if not self._when_matches(parent_rule.when, siblings, child_terminal):
+            if parent_rule.trigger is not None and not parent_rule.trigger.matches(
+                item.kind, child_task_type, old_status, new_status
+            ):
+                continue
+            if parent_rule.when is not None and not self._when_matches(
+                parent_rule.when, siblings, child_flags
+            ):
                 continue
             failed = await self._run_trigger_rule(
                 actor,
@@ -1817,20 +1829,21 @@ class WorkItemService:
     def _when_matches(
         when: TriggerWhen,
         siblings: Sequence[WorkItem],
-        terminal_map: Mapping[str, bool],
+        flags: Mapping[str, tuple[bool, bool]],
     ) -> bool:
         """Evaluate the any/all clauses over their selected direct children.
 
-        ``any`` = at least one child selected by that clause matches;
-        ``all`` = every child selected by that clause matches. An empty selected
-        set never satisfies a clause.
+        ``flags`` maps each child id to ``(is_initial, is_terminal)`` under its
+        pinned definition. ``any`` = at least one child selected by that clause
+        matches; ``all`` = every child selected by that clause matches. An empty
+        selected set never satisfies a clause.
         """
         if when.any is not None:
             selected = [
                 child for child in siblings if when.any.selects(child.kind, item_task_type(child))
             ]
             if not selected or not any(
-                when.any.matches(child.status, terminal_map[child.id]) for child in selected
+                when.any.matches(child.status, *flags[child.id]) for child in selected
             ):
                 return False
         if when.all is not None:
@@ -1838,7 +1851,7 @@ class WorkItemService:
                 child for child in siblings if when.all.selects(child.kind, item_task_type(child))
             ]
             if not selected or not all(
-                when.all.matches(child.status, terminal_map[child.id]) for child in selected
+                when.all.matches(child.status, *flags[child.id]) for child in selected
             ):
                 return False
         return True

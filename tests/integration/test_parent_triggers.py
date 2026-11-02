@@ -36,21 +36,26 @@ def _trigger_spec() -> WorkflowSpec:
     ]
     raw["workflow_defs"]["task_standard"]["parent_triggers"] = [
         {
+            "trigger": {
+                "kinds": ["task"],
+                "tasktypes": ["frontend", "backend", "fullstack"],
+                "from": ["TODO"],
+                "to": "IN_PROGRESS",
+            },
             "when": {
                 "any": {
-                    "task_types": ["frontend", "backend", "fullstack"],
+                    "kinds": ["task"],
+                    "tasktypes": ["frontend", "backend", "fullstack"],
                     "statuses": ["IN_PROGRESS"],
                 }
             },
             "parent": {"from": ["TODO"], "to": "IN_PROGRESS"},
         },
         {
-            "when": {
-                "any": {
-                    "kinds": ["task"],
-                    "task_types": ["code_review"],
-                    "statuses": ["DONE"],
-                }
+            "trigger": {
+                "kinds": ["task"],
+                "tasktypes": ["code_review"],
+                "to": "DONE",
             },
             "parent": {"from": ["TO_REVIEW"], "to": "DONE"},
         },
@@ -425,3 +430,29 @@ async def test_any_status_predicate_respects_the_kind_selector(
 
     await _move(client, owner_token, task["display_id"], "CANCELLED")
     assert await _status(client, owner_token, story["display_id"]) == "IN_PROGRESS"
+
+
+async def test_when_start_predicate_uses_the_child_initial_state(
+    server, owner_token: str, monkeypatch
+):
+    client, _settings, _app = server
+    engine = WorkflowEngine(
+        _child_rule_spec(
+            {
+                "when": {"any": {"kinds": ["task"], "start": True}},
+                "self": {"from": ["IN_PROGRESS"], "to": "TO_TEST"},
+            }
+        )
+    )
+    _install_engine(monkeypatch, engine)
+    await _project(client, owner_token)
+
+    story = await _create(client, owner_token, kind="story", title="START")
+    _task = await _create(client, owner_token, kind="task", title="START-T", parent=story)
+    issue = await _create(client, owner_token, kind="issue", title="START-I", parent=story)
+    await _move(client, owner_token, story["display_id"], "IN_PROGRESS")
+
+    # The task is still in its initial state (TODO); the issue change triggers
+    # a re-evaluation of the quantifier.
+    await _move(client, owner_token, issue["display_id"], "CANCELLED")
+    assert await _status(client, owner_token, story["display_id"]) == "TO_TEST"

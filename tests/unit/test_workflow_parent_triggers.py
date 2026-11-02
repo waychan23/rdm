@@ -1,4 +1,4 @@
-"""Unit: child-set triggers, inheritance and v4 persistence (§17.137–143)."""
+"""Unit: trigger rules (trigger + when + action) and v4 persistence (§17.137–145)."""
 
 from __future__ import annotations
 
@@ -15,16 +15,23 @@ from tests.workflow_support import load_test_spec_text
 
 TRIGGERS = [
     {
+        "trigger": {
+            "kinds": ["task"],
+            "tasktypes": ["frontend", "backend", "fullstack"],
+            "from": ["TODO"],
+            "to": "IN_PROGRESS",
+        },
         "when": {
             "any": {
-                "task_types": ["frontend", "backend", "fullstack"],
+                "kinds": ["task"],
+                "tasktypes": ["frontend", "backend", "fullstack"],
                 "statuses": ["IN_PROGRESS"],
             }
         },
         "parent": {"from": ["TODO"], "to": "IN_PROGRESS"},
     },
     {
-        "when": {"any": {"statuses": ["DONE"]}},
+        "trigger": {"to": "DONE"},
         "parent": {"from": ["TO_REVIEW"], "to": "DONE"},
     },
 ]
@@ -54,14 +61,37 @@ def test_triggers_inherit_from_kind_and_can_be_cleared_by_subtype() -> None:
     assert spec.resolve("task", "code_review").parent_triggers == ()
 
 
-def test_when_any_quantifies_the_parents_children() -> None:
-    trigger = _spec().resolve("task").parent_triggers[0]
-    assert trigger.when.any is not None
-    assert trigger.when.any.matches("IN_PROGRESS", False)
-    assert not trigger.when.any.matches("DONE", True)
-    assert trigger.when.any.selects("task", "fullstack")
-    assert not trigger.when.any.selects("task", "testing")
-    assert not trigger.when.any.selects("issue", None)
+def test_trigger_matches_the_changed_child_event() -> None:
+    trigger = _spec().resolve("task").parent_triggers[0].trigger
+    assert trigger is not None
+    assert trigger.matches("task", "fullstack", "TODO", "IN_PROGRESS")
+    assert not trigger.matches("task", "testing", "TODO", "IN_PROGRESS")
+    assert not trigger.matches("issue", None, "TODO", "IN_PROGRESS")
+    assert not trigger.matches("task", "fullstack", "IN_PROGRESS", "DONE")
+
+
+def test_when_quantifies_current_child_state() -> None:
+    when = _spec().resolve("task").parent_triggers[0].when
+    assert when is not None and when.any is not None
+    assert when.any.matches("IN_PROGRESS", False, False)
+    assert not when.any.matches("DONE", False, True)
+    assert when.any.selects("task", "fullstack")
+    assert not when.any.selects("task", "testing")
+
+
+def test_start_and_terminal_predicates() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [
+        {
+            "when": {"any": {"kinds": ["task"], "start": False, "terminal": False}},
+            "self": {"to": "DONE"},
+        }
+    ]
+    clause = WorkflowSpec.model_validate(raw).resolve("story").child_triggers[0].when
+    assert clause is not None and clause.any is not None
+    assert clause.any.matches("IN_PROGRESS", False, False)
+    assert not clause.any.matches("TODO", True, False)
+    assert not clause.any.matches("DONE", False, True)
 
 
 def test_v4_roundtrip_keeps_parent_triggers() -> None:
@@ -70,13 +100,13 @@ def test_v4_roundtrip_keeps_parent_triggers() -> None:
     payload = serialize_definition(resolved, schema_version=4)
 
     assert payload["format"] == 4
-    clause = payload["parent_triggers"][0]["when"]["any"]
-    assert clause["task_types"] == ["frontend", "backend", "fullstack"]
-    assert clause["statuses"] == ["IN_PROGRESS"]
-    assert payload["parent_triggers"][0]["parent"] == {
-        "from": ["TODO"],
-        "to": "IN_PROGRESS",
-    }
+    rule = payload["parent_triggers"][0]
+    assert rule["trigger"]["kinds"] == ["task"]
+    assert rule["trigger"]["tasktypes"] == ["frontend", "backend", "fullstack"]
+    assert rule["trigger"]["from"] == ["TODO"]
+    assert rule["trigger"]["to"] == "IN_PROGRESS"
+    assert rule["when"]["any"]["statuses"] == ["IN_PROGRESS"]
+    assert rule["parent"] == {"from": ["TODO"], "to": "IN_PROGRESS"}
 
     restored = deserialize_definition("task", "fullstack", payload)
     assert restored.parent_triggers == resolved.parent_triggers
@@ -92,10 +122,7 @@ def test_v3_payload_stays_historical_without_triggers() -> None:
 def test_unknown_task_type_is_rejected() -> None:
     raw = _raw()
     raw["workflow_defs"]["task_standard"]["parent_triggers"] = [
-        {
-            "when": {"any": {"task_types": ["mystery"]}},
-            "parent": {"to": "DONE"},
-        }
+        {"trigger": {"tasktypes": ["mystery"]}, "parent": {"to": "DONE"}}
     ]
     with pytest.raises(PydanticValidationError, match="unknown task types"):
         WorkflowSpec.model_validate(raw)
@@ -103,10 +130,16 @@ def test_unknown_task_type_is_rejected() -> None:
 
 CHILD_TRIGGERS = [
     {
+        "trigger": {
+            "kinds": ["task"],
+            "tasktypes": ["frontend", "fullstack"],
+            "from": ["TODO"],
+            "to": "IN_PROGRESS",
+        },
         "when": {
             "any": {
                 "kinds": ["task"],
-                "task_types": ["frontend", "fullstack"],
+                "tasktypes": ["frontend", "fullstack"],
                 "statuses": ["IN_PROGRESS"],
             }
         },
@@ -125,16 +158,16 @@ def _spec_with_child_triggers() -> WorkflowSpec:
     return WorkflowSpec.model_validate(raw)
 
 
-def test_child_triggers_select_different_child_kinds_and_subtypes() -> None:
+def test_child_triggers_support_trigger_when_and_self() -> None:
     story = _spec_with_child_triggers().resolve("story")
     first, aggregate = story.child_triggers
 
-    assert first.when.any is not None
+    assert first.trigger is not None
+    assert first.trigger.matches("task", "frontend", "TODO", "IN_PROGRESS")
+    assert first.when is not None and first.when.any is not None
     assert first.when.any.selects("task", "frontend")
-    assert not first.when.any.selects("task", "testing")
-    assert not first.when.any.selects("issue", None)
-    assert first.when.any.matches("IN_PROGRESS", False)
-    assert aggregate.when.all is not None and aggregate.when.all.terminal is True
+    assert aggregate.when is not None and aggregate.when.all is not None
+    assert aggregate.when.all.terminal is True
     assert aggregate.self_.to == "DONE"
 
 
@@ -154,12 +187,11 @@ def test_v4_roundtrip_keeps_child_triggers() -> None:
     resolved = _spec_with_child_triggers().resolve("story")
     payload = serialize_definition(resolved, schema_version=4)
 
-    first = payload["child_triggers"][0]["when"]["any"]
-    assert first["kinds"] == ["task"]
-    assert first["task_types"] == ["frontend", "fullstack"]
+    first = payload["child_triggers"][0]
+    assert first["trigger"]["tasktypes"] == ["frontend", "fullstack"]
+    assert first["when"]["any"]["statuses"] == ["IN_PROGRESS"]
     assert payload["child_triggers"][1]["self"] == {"from": ["TO_TEST"], "to": "DONE"}
-    aggregate = payload["child_triggers"][1]["when"]["all"]
-    assert aggregate["terminal"] is True
+    assert payload["child_triggers"][1]["when"]["all"]["terminal"] is True
 
     restored = deserialize_definition("story", None, payload)
     assert restored.child_triggers == resolved.child_triggers
@@ -167,16 +199,36 @@ def test_v4_roundtrip_keeps_child_triggers() -> None:
     assert "child_triggers" not in serialize_definition(resolved, schema_version=3)
 
 
-def test_child_trigger_self_state_must_exist() -> None:
+def test_rule_accepts_trigger_only_or_when_only() -> None:
     raw = _raw()
     raw["kinds"]["story"]["child_triggers"] = [
-        {"when": {"all": {"terminal": True}}, "self": {"to": "NOPE"}}
+        {"trigger": {"to": "DONE"}, "self": {"to": "DONE"}},
+        {"when": {"any": {"terminal": True}}, "self": {"to": "DONE"}},
     ]
-    with pytest.raises(PydanticValidationError, match="self states"):
+    rules = WorkflowSpec.model_validate(raw).resolve("story").child_triggers
+    assert rules[0].trigger is not None and rules[0].when is None
+    assert rules[1].trigger is None and rules[1].when is not None
+
+
+def test_rule_requires_trigger_or_when() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [{"self": {"to": "DONE"}}]
+    with pytest.raises(PydanticValidationError, match="requires trigger or when"):
         WorkflowSpec.model_validate(raw)
 
 
-def test_child_trigger_unknown_kind_is_rejected() -> None:
+def test_trigger_tasktypes_require_task_kind() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [
+        {"trigger": {"kinds": ["issue"], "tasktypes": ["frontend"]}, "self": {"to": "DONE"}}
+    ]
+    with pytest.raises(
+        PydanticValidationError, match="requires kinds to be empty or include 'task'"
+    ):
+        WorkflowSpec.model_validate(raw)
+
+
+def test_unknown_kind_in_when_is_rejected() -> None:
     raw = _raw()
     raw["kinds"]["story"]["child_triggers"] = [
         {"when": {"any": {"kinds": ["mystery"]}}, "self": {"to": "DONE"}}
@@ -185,58 +237,21 @@ def test_child_trigger_unknown_kind_is_rejected() -> None:
         WorkflowSpec.model_validate(raw)
 
 
-def test_child_trigger_task_types_require_task_kind() -> None:
+def test_legacy_event_when_and_children_migrate() -> None:
     raw = _raw()
     raw["kinds"]["story"]["child_triggers"] = [
         {
-            "when": {"any": {"kinds": ["issue"], "task_types": ["frontend"]}},
-            "self": {"to": "DONE"},
-        }
-    ]
-    with pytest.raises(
-        PydanticValidationError, match="requires kinds to be empty or include 'task'"
-    ):
-        WorkflowSpec.model_validate(raw)
-
-
-def test_any_and_all_clauses_have_independent_selectors() -> None:
-    raw = _raw()
-    raw["kinds"]["story"]["child_triggers"] = [
-        {
-            "when": {
-                "any": {"kinds": ["task"], "statuses": ["DONE"]},
-                "all": {"kinds": ["issue"], "terminal": True},
-            },
-            "self": {"to": "DONE"},
-        }
-    ]
-    when = WorkflowSpec.model_validate(raw).resolve("story").child_triggers[0].when
-    assert when.any is not None and when.all is not None
-    assert when.any.selects("task", "frontend")
-    assert not when.any.selects("issue", None)
-    assert when.all.selects("issue", None)
-    assert not when.all.selects("task", "frontend")
-
-
-def test_when_requires_any_or_all() -> None:
-    raw = _raw()
-    raw["kinds"]["story"]["child_triggers"] = [{"when": {}, "self": {"to": "DONE"}}]
-    with pytest.raises(PydanticValidationError, match="when requires any or all"):
-        WorkflowSpec.model_validate(raw)
-
-
-def test_legacy_children_block_migrates_to_when() -> None:
-    raw = _raw()
-    raw["kinds"]["story"]["child_triggers"] = [
-        {
+            "when": {"kinds": ["task"], "from": ["TODO"], "to": "DONE"},
             "children": {"kinds": ["task"], "any": {"terminal": True}},
             "self": {"to": "DONE"},
         }
     ]
-    when = WorkflowSpec.model_validate(raw).resolve("story").child_triggers[0].when
-    assert when.any is not None
-    assert when.any.kinds == ("task",)
-    assert when.any.terminal is True
+    rule = WorkflowSpec.model_validate(raw).resolve("story").child_triggers[0]
+    assert rule.trigger is not None
+    assert rule.trigger.matches("task", None, "TODO", "DONE")
+    assert rule.when is not None and rule.when.any is not None
+    assert rule.when.any.kinds == ("task",)
+    assert rule.when.any.terminal is True
 
 
 def test_legacy_flat_flags_migrate_to_when() -> None:
@@ -249,6 +264,7 @@ def test_legacy_flat_flags_migrate_to_when() -> None:
         }
     ]
     when = WorkflowSpec.model_validate(raw).resolve("story").child_triggers[0].when
+    assert when is not None
     assert when.all is not None and when.all.terminal is True
     assert when.any is not None and when.any.terminal is True
 
@@ -257,15 +273,6 @@ def test_legacy_min_terminal_is_rejected() -> None:
     raw = _raw()
     raw["kinds"]["story"]["child_triggers"] = [{"min_children_terminal": 2, "self": {"to": "DONE"}}]
     with pytest.raises(PydanticValidationError, match="removed"):
-        WorkflowSpec.model_validate(raw)
-
-
-def test_legacy_event_when_is_rejected() -> None:
-    raw = _raw()
-    raw["kinds"]["story"]["child_triggers"] = [
-        {"when": {"kinds": ["task"], "to": "DONE"}, "self": {"to": "DONE"}}
-    ]
-    with pytest.raises(PydanticValidationError, match="child quantifiers"):
         WorkflowSpec.model_validate(raw)
 
 
@@ -281,15 +288,8 @@ def test_legacy_when_any_all_lists_are_rejected() -> None:
 def test_on_error_defaults_to_fail_and_accepts_ignore() -> None:
     raw = _raw()
     raw["workflow_defs"]["task_standard"]["parent_triggers"] = [
-        {
-            "when": {"any": {"statuses": ["IN_PROGRESS"]}},
-            "parent": {"to": "IN_PROGRESS"},
-        },
-        {
-            "when": {"any": {"statuses": ["DONE"]}},
-            "parent": {"to": "DONE"},
-            "on_error": "ignore",
-        },
+        {"trigger": {"to": "IN_PROGRESS"}, "parent": {"to": "IN_PROGRESS"}},
+        {"trigger": {"to": "DONE"}, "parent": {"to": "DONE"}, "on_error": "ignore"},
     ]
     resolved = WorkflowSpec.model_validate(raw).resolve("task")
     assert resolved.parent_triggers[0].on_error == "fail"
@@ -304,11 +304,7 @@ def test_on_error_defaults_to_fail_and_accepts_ignore() -> None:
 def test_on_error_rejects_unknown_policy() -> None:
     raw = _raw()
     raw["workflow_defs"]["task_standard"]["parent_triggers"] = [
-        {
-            "when": {"any": {"statuses": ["DONE"]}},
-            "parent": {"to": "DONE"},
-            "on_error": "warn",
-        }
+        {"trigger": {"to": "DONE"}, "parent": {"to": "DONE"}, "on_error": "warn"}
     ]
     with pytest.raises(PydanticValidationError):
         WorkflowSpec.model_validate(raw)

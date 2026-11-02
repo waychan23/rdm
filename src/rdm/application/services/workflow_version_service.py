@@ -153,6 +153,18 @@ class WorkflowVersionService:
             for item in items
         }
 
+    async def status_flags_map(self, items: Sequence[WorkItem]) -> dict[str, tuple[bool, bool]]:
+        """Map each item to ``(is_initial, is_terminal)`` under its pinned flow."""
+        engines = await self.engines_for(items)
+        flags: dict[str, tuple[bool, bool]] = {}
+        for item in items:
+            resolved = engines[item.id].resolve(item.kind, item_task_type(item))
+            flags[item.id] = (
+                item.status == resolved.initial,
+                item.status in resolved.terminal,
+            )
+        return flags
+
 
 def _deserialize_pinned(row: WorkflowVersion) -> ResolvedKindWorkflow:
     return _deserialize_cached(
