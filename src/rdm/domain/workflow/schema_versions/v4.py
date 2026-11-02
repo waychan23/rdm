@@ -1,8 +1,9 @@
-"""workflow.json5 schema version 4 (parent triggers, §17.137).
+"""workflow.json5 schema version 4 (parent/child triggers, §17.137–138).
 
-Version 4 is version 3 plus the optional ``parent_triggers`` list. The list is
-always serialized (possibly empty) so the canonical definition tells apart "no
-rules" from historical schema-3 records, which never had the field.
+Version 4 is version 3 plus the optional ``parent_triggers`` (declared on the
+child) and ``child_triggers`` (declared on the parent) lists. Both are always
+serialized (possibly empty) so the canonical definition tells apart "no rules"
+from historical schema-3 records, which never had these fields.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from rdm.domain.workflow.schema import (
+    ChildTriggerSpec,
     FieldsSpec,
     GateSpec,
     ParentTriggerSpec,
@@ -46,6 +48,10 @@ class SchemaV4(DefinitionSchema):
                 trigger.model_dump(mode="json", by_alias=True)
                 for trigger in resolved.parent_triggers
             ],
+            "child_triggers": [
+                trigger.model_dump(mode="json", by_alias=True)
+                for trigger in resolved.child_triggers
+            ],
         }
 
     def _deserialize(
@@ -74,5 +80,9 @@ class SchemaV4(DefinitionSchema):
             parent_triggers=tuple(
                 ParentTriggerSpec.model_validate(trigger)
                 for trigger in payload.get("parent_triggers", [])
+            ),
+            child_triggers=tuple(
+                ChildTriggerSpec.model_validate(trigger)
+                for trigger in payload.get("child_triggers", [])
             ),
         )

@@ -121,19 +121,19 @@ class ParentTriggerWhen(BaseModel):
         return True
 
 
-class ParentTriggerParent(BaseModel):
-    """Guard and target for the parent side of a trigger."""
+class TriggerTarget(BaseModel):
+    """Guard and target for the item whose status the rule changes."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
-    # Absent means "any non-terminal parent state other than the target".
+    # Absent means "any non-terminal state other than the target".
     from_: tuple[str, ...] = Field(default=(), alias="from")
     to: str = Field(min_length=1)
 
     @model_validator(mode="after")
-    def _validate(self) -> ParentTriggerParent:
+    def _validate(self) -> TriggerTarget:
         if len(set(self.from_)) != len(self.from_):
-            raise ValueError("parent trigger parent.from must be unique")
+            raise ValueError("trigger target from must be unique")
         return self
 
 
@@ -148,9 +148,66 @@ class ParentTriggerSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     when: ParentTriggerWhen = Field(default_factory=ParentTriggerWhen)
-    parent: ParentTriggerParent
+    parent: TriggerTarget
     # When true the rule only fires if every direct sibling is terminal *after*
     # this change (i.e. the last non-terminal child just became terminal).
+    all_children_terminal: bool = False
+
+
+class ChildTriggerWhen(BaseModel):
+    """Matcher for a direct child's status change, declared on the parent."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
+    from_: tuple[str, ...] = Field(default=(), alias="from")
+    to: tuple[str, ...] = ()
+    # Child kinds; empty means any kind. Different kinds/subtypes can be mixed.
+    kinds: tuple[str, ...] = ()
+    task_types: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def _validate(self) -> ChildTriggerWhen:
+        if len(set(self.from_)) != len(self.from_):
+            raise ValueError("child trigger when.from must be unique")
+        if len(set(self.to)) != len(self.to):
+            raise ValueError("child trigger when.to must be unique")
+        if len(set(self.kinds)) != len(self.kinds):
+            raise ValueError("child trigger when.kinds must be unique")
+        if len(set(self.task_types)) != len(self.task_types):
+            raise ValueError("child trigger when.task_types must be unique")
+        return self
+
+    def matches(
+        self,
+        child_kind: str,
+        child_task_type: str | None,
+        from_state: str,
+        to_state: str,
+    ) -> bool:
+        if self.kinds and child_kind not in self.kinds:
+            return False
+        if self.task_types and (child_task_type is None or child_task_type not in self.task_types):
+            return False
+        if self.from_ and from_state not in self.from_:
+            return False
+        if self.to and to_state not in self.to:
+            return False
+        return True
+
+
+class ChildTriggerSpec(BaseModel):
+    """A direct child's status change that changes the declaring item (§17.138).
+
+    Declared on the **parent** definition, so one rule can aggregate children
+    of different kinds (e.g. a story with task and issue children). The
+    declaring item is addressed as ``self``; ``parent_triggers`` remains the
+    child-side counterpart for narrow, child-specific rules.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
+    when: ChildTriggerWhen = Field(default_factory=ChildTriggerWhen)
+    self_: TriggerTarget = Field(alias="self")
     all_children_terminal: bool = False
 
 
@@ -329,6 +386,7 @@ class SubtypeWorkflow(BaseModel):
     fields: FieldsSpec | None = None
     # Declaring the key replaces the kind-level rules; absent inherits them.
     parent_triggers: tuple[ParentTriggerSpec, ...] | None = None
+    child_triggers: tuple[ChildTriggerSpec, ...] | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -370,6 +428,7 @@ class KindWorkflow(BaseModel):
     gates: dict[str, GateSpec] = {}
     fields: FieldsSpec = Field(default_factory=FieldsSpec)
     parent_triggers: tuple[ParentTriggerSpec, ...] = ()
+    child_triggers: tuple[ChildTriggerSpec, ...] = ()
     subtypes: dict[str, SubtypeWorkflow] = {}
 
     @model_validator(mode="before")
@@ -406,6 +465,7 @@ class NamedWorkflow(BaseModel):
     gates: dict[str, GateSpec] = {}
     fields: FieldsSpec = Field(default_factory=FieldsSpec)
     parent_triggers: tuple[ParentTriggerSpec, ...] = ()
+    child_triggers: tuple[ChildTriggerSpec, ...] = ()
 
     @model_validator(mode="before")
     @classmethod
@@ -503,6 +563,7 @@ class ResolvedKindWorkflow:
     fields: FieldsSpec
     label_en: str | None = None
     parent_triggers: tuple[ParentTriggerSpec, ...] = ()
+    child_triggers: tuple[ChildTriggerSpec, ...] = ()
 
     def steps_from(self, state: str) -> tuple[StepSpec, ...]:
         return tuple(self.steps[state])
@@ -658,6 +719,7 @@ class WorkflowSpec(BaseModel):
                 gates=dict(base.gates),
                 fields=base.fields,
                 parent_triggers=base.parent_triggers,
+                child_triggers=base.child_triggers,
             )
             self._validate_resolved(resolved, _seen | {key})
             return resolved
@@ -676,6 +738,9 @@ class WorkflowSpec(BaseModel):
         triggers = (
             subtype.parent_triggers if subtype.parent_triggers is not None else base.parent_triggers
         )
+        child_triggers = (
+            subtype.child_triggers if subtype.child_triggers is not None else base.child_triggers
+        )
         resolved = ResolvedKindWorkflow(
             kind=kind,
             task_type=key[1],
@@ -688,6 +753,7 @@ class WorkflowSpec(BaseModel):
             gates=gates,
             fields=fields,
             parent_triggers=triggers,
+            child_triggers=child_triggers,
         )
         self._validate_resolved(resolved, _seen | {key})
         return resolved
@@ -757,13 +823,34 @@ class WorkflowSpec(BaseModel):
                     f"{resolved.kind}: custom field {custom_field.key!r} collides with a "
                     "master field"
                 )
-        for index, trigger in enumerate(resolved.parent_triggers):
+        for index, parent_trigger in enumerate(resolved.parent_triggers):
             where = f"{resolved.kind}: parent_triggers[{index}]"
-            unknown_states = sorted((set(trigger.when.from_) | set(trigger.when.to)) - state_set)
+            unknown_states = sorted(
+                (set(parent_trigger.when.from_) | set(parent_trigger.when.to)) - state_set
+            )
             if unknown_states:
                 raise ValueError(f"{where}: unknown child states {unknown_states}")
-            unknown_types = sorted(set(trigger.when.task_types) - set(self.task_types))
+            unknown_types = sorted(set(parent_trigger.when.task_types) - set(self.task_types))
             if unknown_types:
                 raise ValueError(f"{where}: unknown task types {unknown_types}")
-            if trigger.when.task_types and resolved.kind != "task":
+            if parent_trigger.when.task_types and resolved.kind != "task":
                 raise ValueError(f"{where}: when.task_types is only valid for task definitions")
+        for index, child_trigger in enumerate(resolved.child_triggers):
+            where = f"{resolved.kind}: child_triggers[{index}]"
+            unknown_kinds = sorted(set(child_trigger.when.kinds) - set(self.kinds))
+            if unknown_kinds:
+                raise ValueError(f"{where}: unknown child kinds {unknown_kinds}")
+            unknown_types = sorted(set(child_trigger.when.task_types) - set(self.task_types))
+            if unknown_types:
+                raise ValueError(f"{where}: unknown task types {unknown_types}")
+            if (
+                child_trigger.when.task_types
+                and child_trigger.when.kinds
+                and "task" not in child_trigger.when.kinds
+            ):
+                raise ValueError(f"{where}: when.task_types requires when.kinds to include 'task'")
+            unknown_self = sorted(
+                (set(child_trigger.self_.from_) | {child_trigger.self_.to}) - state_set
+            )
+            if unknown_self:
+                raise ValueError(f"{where}: self states {unknown_self} not in states")

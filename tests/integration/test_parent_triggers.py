@@ -181,3 +181,65 @@ async def test_trigger_is_skipped_when_parent_state_does_not_match(
     # Rule 2 requires the parent to be in TO_REVIEW; it is not, so nothing runs.
     await _move(client, owner_token, child["display_id"], "TO_REVIEW")
     assert await _status(client, owner_token, story["display_id"]) == "IN_PROGRESS"
+
+
+def _child_trigger_spec(kinds: list[str]) -> WorkflowSpec:
+    raw = pyjson5.loads(load_test_spec_text())
+    raw["version"] = 4
+    raw["kinds"]["story"]["child_triggers"] = [
+        {
+            "when": {"kinds": kinds},
+            "all_children_terminal": True,
+            "self": {"from": ["TO_TEST"], "to": "DONE"},
+        }
+    ]
+    return WorkflowSpec.model_validate(raw)
+
+
+def _install_engine(monkeypatch, engine: WorkflowEngine) -> None:
+    for module in (
+        step_service_module,
+        workitem_service_module,
+        workflow_version_module,
+        http_workitem_module,
+    ):
+        monkeypatch.setattr(module, "load_engine", lambda: engine)
+
+
+async def _story_with_task_and_issue(client, token: str, title: str) -> tuple[dict, dict, dict]:
+    story = await _create(client, token, kind="story", title=title)
+    task = await _create(client, token, kind="task", title=f"{title}-task", parent=story)
+    issue = await _create(client, token, kind="issue", title=f"{title}-issue", parent=story)
+    await _move(client, token, story["display_id"], "IN_PROGRESS")
+    await _move(client, token, story["display_id"], "TO_TEST")
+    return story, task, issue
+
+
+async def test_all_children_terminal_accepts_mixed_kinds(server, owner_token: str, monkeypatch):
+    """A parent-side rule matches task and issue children without duplication."""
+    client, _settings, _app = server
+    _install_engine(monkeypatch, WorkflowEngine(_child_trigger_spec(["task", "issue"])))
+
+    await _project(client, owner_token)
+    story, task, issue = await _story_with_task_and_issue(client, owner_token, "MIX")
+
+    await _move(client, owner_token, task["display_id"], "CANCELLED")
+    # The issue child is still open, so the aggregate condition is false.
+    assert await _status(client, owner_token, story["display_id"]) == "TO_TEST"
+
+    await _move(client, owner_token, issue["display_id"], "CANCELLED")
+    assert await _status(client, owner_token, story["display_id"]) == "DONE"
+
+
+async def test_child_trigger_kind_filter_skips_other_kinds(server, owner_token: str, monkeypatch):
+    client, _settings, _app = server
+    _install_engine(monkeypatch, WorkflowEngine(_child_trigger_spec(["task"])))
+
+    await _project(client, owner_token)
+    story, task, issue = await _story_with_task_and_issue(client, owner_token, "KIND")
+
+    # The last child to become terminal is an issue, which this rule ignores.
+    await _move(client, owner_token, task["display_id"], "CANCELLED")
+    await _move(client, owner_token, issue["display_id"], "CANCELLED")
+
+    assert await _status(client, owner_token, story["display_id"]) == "TO_TEST"

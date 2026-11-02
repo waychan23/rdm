@@ -54,7 +54,7 @@ from rdm.domain.events import (
 from rdm.domain.workflow.engine import WorkflowEngine
 from rdm.domain.workflow.loader import load_engine
 from rdm.domain.workflow.names import localized_name, step_display_name
-from rdm.domain.workflow.schema import ResolvedKindWorkflow
+from rdm.domain.workflow.schema import ResolvedKindWorkflow, TriggerTarget
 from rdm.domain.workflow.task_types import item_task_type, normalize_task_type
 from rdm.i18n import current_locale, tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
@@ -1682,75 +1682,122 @@ class WorkItemService:
         *,
         depth: int,
     ) -> None:
-        """Apply configured parent triggers after ``item`` changed status.
+        """Apply configured triggers after ``item`` changed status.
 
-        Rules live on the child's pinned definition; the parent transition still
-        goes through its own definition (target reachability + gates). A rule
-        whose target is unreachable, whose gate is blocked, or whose parent has
-        an active step is skipped instead of failing the child transition.
+        Two directions are supported and both use the pinned definitions:
+        - ``parent_triggers`` on the child: "when I change, my parent changes";
+        - ``child_triggers`` on the parent: "when a direct child changes, I
+          change". The latter can match children of different kinds/subtypes,
+          which is what aggregate rules (all children terminal) need.
+
+        Child-side rules run first. A target that is unreachable, whose gate is
+        blocked, or whose parent has an active step is skipped instead of
+        failing the child transition.
         """
         if depth >= MAX_PARENT_TRIGGER_DEPTH or item.parent_id is None:
             return
         assert self.uow.work_items is not None and self.uow.projects is not None
-        engine = await self._engine_for_item(item)
-        rules = engine.resolve(item.kind, item_task_type(item)).parent_triggers
-        if not rules:
-            return
+        child_engine = await self._engine_for_item(item)
+        child_task_type = item_task_type(item)
+        child_rules = child_engine.resolve(item.kind, child_task_type).parent_triggers
         project = await self.uow.projects.get(item.project_id)
         if project is None:
             return
         parent = await self.uow.work_items.get(item.parent_id, include_deleted=True)
         if parent is None or parent.deleted_at is not None:
             return
+        parent_engine = await self._engine_for_item(parent)
+        parent_workflow = parent_engine.resolve(parent.kind, item_task_type(parent))
+        parent_rules = parent_workflow.child_triggers
+        if not child_rules and not parent_rules:
+            return
         if await self._active_step(parent.id) is not None:
             return
-        parent_engine = await self._engine_for_item(parent)
-        parent_task_type = item_task_type(parent)
-        parent_workflow = parent_engine.resolve(parent.kind, parent_task_type)
         siblings: list[WorkItem] = await self.uow.work_items.list_children(parent.id) or []
         child_terminal = await self._versions().terminal_map(siblings)
         all_children_terminal = bool(siblings) and all(
             child_terminal[child.id] for child in siblings
         )
         child_display_id = self.display_id(project, item)
-        for rule in rules:
-            if not rule.when.matches(old_status, new_status, item_task_type(item)):
+
+        for child_rule in child_rules:
+            if not child_rule.when.matches(old_status, new_status, child_task_type):
                 continue
-            if rule.all_children_terminal and not all_children_terminal:
+            if child_rule.all_children_terminal and not all_children_terminal:
                 continue
-            target = rule.parent.to
-            if parent.status == target or target not in parent_workflow.states:
-                continue
-            if rule.parent.from_:
-                if parent.status not in rule.parent.from_:
-                    continue
-            elif parent.status in parent_workflow.terminal:
-                continue
-            # Automatic transitions cannot disambiguate multiple named steps to
-            # the same target; only apply when exactly one step matches.
-            matching_steps = [
-                step for step in parent_workflow.steps_from(parent.status) if step.to == target
-            ]
-            if len(matching_steps) != 1:
-                continue
-            reason = tr(
-                "work_item.parent_trigger_reason",
-                default=("由子项 {child} 的状态变更自动触发（{old_status} → {new_status}）"),
-                child=child_display_id,
+            await self._apply_trigger_target(
+                actor,
+                parent,
+                parent_workflow,
+                child_rule.parent,
+                child_display_id=child_display_id,
                 old_status=old_status,
                 new_status=new_status,
+                depth=depth,
             )
-            try:
-                await self.apply_system_transition(
-                    actor,
-                    parent,
-                    target,
-                    reason=reason,
-                    trigger_depth=depth + 1,
-                )
-            except WorkflowGateBlocked:
-                # Automatic transitions never force a gate; skip and continue.
+
+        for parent_rule in parent_rules:
+            if not parent_rule.when.matches(item.kind, child_task_type, old_status, new_status):
                 continue
+            if parent_rule.all_children_terminal and not all_children_terminal:
+                continue
+            await self._apply_trigger_target(
+                actor,
+                parent,
+                parent_workflow,
+                parent_rule.self_,
+                child_display_id=child_display_id,
+                old_status=old_status,
+                new_status=new_status,
+                depth=depth,
+            )
+
+    async def _apply_trigger_target(
+        self,
+        actor: Actor,
+        parent: WorkItem,
+        parent_workflow: ResolvedKindWorkflow,
+        target_spec: TriggerTarget,
+        *,
+        child_display_id: str,
+        old_status: str,
+        new_status: str,
+        depth: int,
+    ) -> None:
+        """Move the parent to one trigger target, or skip when not applicable."""
+        target = target_spec.to
+        if parent.status == target or target not in parent_workflow.states:
+            return
+        if target_spec.from_:
+            if parent.status not in target_spec.from_:
+                return
+        elif parent.status in parent_workflow.terminal:
+            return
+        # Automatic transitions cannot disambiguate multiple named steps to the
+        # same target; only apply when exactly one step matches.
+        matching_steps = [
+            step for step in parent_workflow.steps_from(parent.status) if step.to == target
+        ]
+        if len(matching_steps) != 1:
+            return
+        reason = tr(
+            "work_item.parent_trigger_reason",
+            default=("由子项 {child} 的状态变更自动触发（{old_status} → {new_status}）"),
+            child=child_display_id,
+            old_status=old_status,
+            new_status=new_status,
+        )
+        try:
+            await self.apply_system_transition(
+                actor,
+                parent,
+                target,
+                reason=reason,
+                trigger_depth=depth + 1,
+            )
+        except WorkflowGateBlocked:
+            # Automatic transitions never force a gate; skip and continue.
+            return
 
     async def delete_item(self, actor: Actor, ref: str) -> tuple[Project, list[str]]:
         project, item = await self.get_item(actor, ref)
