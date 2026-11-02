@@ -118,38 +118,65 @@ class TriggerTarget(BaseModel):
         return self
 
 
-def _single_state(value: Any, field: str) -> Any:
-    """Accept a historical one-element list, otherwise require a single state."""
-    if isinstance(value, (list, tuple)):
-        if len(value) == 1:
-            return value[0]
-        raise ValueError(f"{field} must be a single state")
-    return value
+class StatusPredicate(BaseModel):
+    """Current-status predicate for trigger.from / trigger.to (§17.147)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    # Empty means any status.
+    statuses: tuple[str, ...] = ()
+    # None means any; true/false pins the workflow initial state.
+    start: bool | None = None
+    # None means any terminality; true/false pins it.
+    terminal: bool | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> StatusPredicate:
+        if len(set(self.statuses)) != len(self.statuses):
+            raise ValueError("status predicate statuses must be unique")
+        return self
+
+    def matches(self, status: str, is_start: bool, is_terminal: bool) -> bool:
+        if self.statuses and status not in self.statuses:
+            return False
+        if self.start is not None and is_start != self.start:
+            return False
+        if self.terminal is not None and is_terminal != self.terminal:
+            return False
+        return True
 
 
 class TriggerEvent(BaseModel):
-    """The direct-child status change that fires a rule (§17.145).
+    """The direct-child status change that fires a rule (§17.145/§17.147).
 
-    ``kinds`` / ``task_types`` filter the changed child; ``from`` accepts
-    several previous states (any of them) and ``to`` is the single new state.
+    ``kinds`` / ``tasktypes`` filter the changed child; ``from`` / ``to`` are
+    status predicates (same shape as when clauses) so rules can span kinds with
+    different concrete state names. Bare strings/lists are accepted as
+    ``statuses`` shorthand.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
     kinds: tuple[str, ...] = ()
-    # Accept both spellings; serialize the §17.145 canonical "tasktypes".
+    # Accept both spellings; serialize the canonical "tasktypes".
     task_types: tuple[str, ...] = Field(
         default=(),
         validation_alias=AliasChoices("tasktypes", "task_types"),
         serialization_alias="tasktypes",
     )
-    from_: tuple[str, ...] = Field(default=(), alias="from")
-    to: str | None = Field(default=None, min_length=1)
+    from_: StatusPredicate = Field(default_factory=StatusPredicate, alias="from")
+    to: StatusPredicate = Field(default_factory=StatusPredicate)
 
-    @field_validator("to", mode="before")
+    @field_validator("from_", "to", mode="before")
     @classmethod
-    def _normalize_to(cls, value: Any) -> Any:
-        return _single_state(value, "trigger.to")
+    def _normalize_predicate(cls, value: Any) -> Any:
+        if value is None:
+            return {}
+        if isinstance(value, str):
+            return {"statuses": [value]}
+        if isinstance(value, (list, tuple)):
+            return {"statuses": list(value)}
+        return value
 
     @model_validator(mode="after")
     def _validate(self) -> TriggerEvent:
@@ -157,8 +184,6 @@ class TriggerEvent(BaseModel):
             raise ValueError("trigger.kinds must be unique")
         if len(set(self.task_types)) != len(self.task_types):
             raise ValueError("trigger.tasktypes must be unique")
-        if len(set(self.from_)) != len(self.from_):
-            raise ValueError("trigger.from must be unique")
         return self
 
     def matches(
@@ -167,14 +192,19 @@ class TriggerEvent(BaseModel):
         child_task_type: str | None,
         from_state: str,
         to_state: str,
+        *,
+        from_is_start: bool,
+        from_is_terminal: bool,
+        to_is_start: bool,
+        to_is_terminal: bool,
     ) -> bool:
         if self.kinds and child_kind not in self.kinds:
             return False
         if self.task_types and (child_task_type is None or child_task_type not in self.task_types):
             return False
-        if self.from_ and from_state not in self.from_:
+        if not self.from_.matches(from_state, from_is_start, from_is_terminal):
             return False
-        if self.to is not None and to_state != self.to:
+        if not self.to.matches(to_state, to_is_start, to_is_terminal):
             return False
         return True
 

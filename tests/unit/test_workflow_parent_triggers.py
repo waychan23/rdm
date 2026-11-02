@@ -64,10 +64,23 @@ def test_triggers_inherit_from_kind_and_can_be_cleared_by_subtype() -> None:
 def test_trigger_matches_the_changed_child_event() -> None:
     trigger = _spec().resolve("task").parent_triggers[0].trigger
     assert trigger is not None
-    assert trigger.matches("task", "fullstack", "TODO", "IN_PROGRESS")
-    assert not trigger.matches("task", "testing", "TODO", "IN_PROGRESS")
-    assert not trigger.matches("issue", None, "TODO", "IN_PROGRESS")
-    assert not trigger.matches("task", "fullstack", "IN_PROGRESS", "DONE")
+
+    def matches(kind: str, task_type: str | None, old: str, new: str) -> bool:
+        return trigger.matches(
+            kind,
+            task_type,
+            old,
+            new,
+            from_is_start=old == "TODO",
+            from_is_terminal=False,
+            to_is_start=new == "TODO",
+            to_is_terminal=new == "DONE",
+        )
+
+    assert matches("task", "fullstack", "TODO", "IN_PROGRESS")
+    assert not matches("task", "testing", "TODO", "IN_PROGRESS")
+    assert not matches("issue", None, "TODO", "IN_PROGRESS")
+    assert not matches("task", "fullstack", "IN_PROGRESS", "DONE")
 
 
 def test_when_quantifies_current_child_state() -> None:
@@ -103,8 +116,8 @@ def test_v4_roundtrip_keeps_parent_triggers() -> None:
     rule = payload["parent_triggers"][0]
     assert rule["trigger"]["kinds"] == ["task"]
     assert rule["trigger"]["tasktypes"] == ["frontend", "backend", "fullstack"]
-    assert rule["trigger"]["from"] == ["TODO"]
-    assert rule["trigger"]["to"] == "IN_PROGRESS"
+    assert rule["trigger"]["from"]["statuses"] == ["TODO"]
+    assert rule["trigger"]["to"]["statuses"] == ["IN_PROGRESS"]
     assert rule["when"]["any"]["statuses"] == ["IN_PROGRESS"]
     assert rule["parent"]["from"] == ["TODO"]
     assert rule["parent"]["to"] == "IN_PROGRESS"
@@ -165,7 +178,16 @@ def test_child_triggers_support_trigger_when_and_self() -> None:
     first, aggregate = story.child_triggers
 
     assert first.trigger is not None
-    assert first.trigger.matches("task", "frontend", "TODO", "IN_PROGRESS")
+    assert first.trigger.matches(
+        "task",
+        "frontend",
+        "TODO",
+        "IN_PROGRESS",
+        from_is_start=True,
+        from_is_terminal=False,
+        to_is_start=False,
+        to_is_terminal=False,
+    )
     assert first.when is not None and first.when.any is not None
     assert first.when.any.selects("task", "frontend")
     assert aggregate.when is not None and aggregate.when.all is not None
@@ -252,7 +274,16 @@ def test_legacy_event_when_and_children_migrate() -> None:
     ]
     rule = WorkflowSpec.model_validate(raw).resolve("story").child_triggers[0]
     assert rule.trigger is not None
-    assert rule.trigger.matches("task", None, "TODO", "DONE")
+    assert rule.trigger.matches(
+        "task",
+        None,
+        "TODO",
+        "DONE",
+        from_is_start=True,
+        from_is_terminal=False,
+        to_is_start=False,
+        to_is_terminal=True,
+    )
     assert rule.when is not None and rule.when.any is not None
     assert rule.when.any.kinds == ("task",)
     assert rule.when.any.terminal is True
@@ -352,3 +383,46 @@ def test_trigger_target_requires_to_or_step() -> None:
 def test_trigger_target_step_must_be_a_key() -> None:
     with pytest.raises(PydanticValidationError, match="valid step key"):
         _target_spec({"step": "not a key"})
+
+
+def test_trigger_from_to_support_start_and_terminal_predicates() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [
+        {
+            "trigger": {
+                "kinds": ["task", "issue"],
+                "from": {"terminal": False},
+                "to": {"terminal": True},
+            },
+            "self": {"to": "DONE"},
+        }
+    ]
+    trigger = WorkflowSpec.model_validate(raw).resolve("story").child_triggers[0].trigger
+    assert trigger is not None
+    assert trigger.matches(
+        "issue",
+        None,
+        "FIXING",
+        "CLOSED_DONE",
+        from_is_start=False,
+        from_is_terminal=False,
+        to_is_start=False,
+        to_is_terminal=True,
+    )
+    assert not trigger.matches(
+        "task",
+        "frontend",
+        "DONE",
+        "CANCELLED",
+        from_is_start=False,
+        from_is_terminal=True,
+        to_is_start=False,
+        to_is_terminal=True,
+    )
+
+
+def test_trigger_shorthand_string_and_list_normalize_to_statuses() -> None:
+    trigger = _spec().resolve("task").parent_triggers[0].trigger
+    assert trigger is not None
+    assert trigger.from_.statuses == ("TODO",)
+    assert trigger.to.statuses == ("IN_PROGRESS",)

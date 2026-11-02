@@ -277,17 +277,37 @@ kind/subtype**（不只 task）：
 
 #### trigger：触发事件
 
+`from` / `to` 是**变化子项**的状态谓词，与 `when` 子句同形：
+
 ```json5
 "trigger": {
-  "kinds": ["task"],                       // 变化子项的 kind
+  "kinds": ["task", "issue"],              // 变化子项的 kind
   "tasktypes": ["frontend", "backend"],    // 变化子项的 task 子类型；也接受 task_types
-  "from": ["TODO"],                        // 变化前状态（任一）
-  "to": "IN_PROGRESS"                      // 变化后状态（单值）
+  "from": {
+    "statuses": ["TODO"],                  // 变化前状态集合（任一）
+    "start": true,                         // 变化前是否处于初始状态
+    "terminal": false                      // 变化前是否终态
+  },
+  "to": {
+    "statuses": ["DONE", "CLOSED_DONE"],   // 变化后状态集合（任一）
+    "terminal": true                       // 变化后是否终态
+  }
 }
 ```
 
-`from` / `to` 是**变化子项**的状态；`to` 单值。`tasktypes` 要求 `kinds` 为空或包含
-`task`。
+- `statuses` / `start` / `terminal` 之间是 AND；省略表示不限制。
+- `start` / `terminal` 按**变化子项自己的固定定义**判断（§17.120），因此一条规则可以
+  同时覆盖不同 kind/tasktypes 的不同状态名。
+- 兼容简写：`from: ["TODO"]`、`to: "DONE"` 会自动归一化为 `statuses`。
+- 跨 kind 只关心“进入终态”时可以写：
+  ```json5
+  "trigger": {
+    "kinds": ["task", "issue"],
+    "from": {"terminal": false},
+    "to": {"terminal": true}
+  }
+  ```
+- `tasktypes` 要求 `kinds` 为空或包含 `task`。
 
 #### when：触发时的历史/当前状态
 
@@ -457,7 +477,7 @@ kind/subtype**（不只 task）：
    变化都会触发评估。
 2. `trigger` 与每个 `any`/`all` 子句的 `kinds` / `tasktypes` 必须是已知值；
    `tasktypes` 要求 `kinds` 为空或包含 `task`。`from`/`to`/`statuses` 是子项状态，
-   不在加载期跨 kind 校验。
+   不在加载期跨 kind 校验；`start`/`terminal` 按子项 pinned 定义在运行时判断。
 3. `when` 存在时，每个子句先按自己的 `kinds`/`tasktypes` 选出直接子项；`any` =
    至少一个满足，`all` = 所有选中项都满足。`statuses`/`start`/`terminal` 之间 AND；
    选中集合为空时该子句不满足。`trigger` 与 `when` 之间也是 AND。
@@ -478,7 +498,7 @@ kind/subtype**（不只 task）：
      向上抛出并回滚整个事务；`ignore` 只回滚该规则并记录 ERROR 日志，主操作继续；
    - 级联深度上限 10，超过后静默停止。
 
-注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 12`，**没有声明任何规则**；
+注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 13`，**没有声明任何规则**；
 按实际场景配置后需递增 `revision`，并在合并前跑 `rdm workflow validate`。
 
 ---
@@ -1041,7 +1061,7 @@ owner/manager 的 sprint 规则。
    只能从 `TO_TEST` 到达。省略 `from` 时由父项自己的步骤决定可达性，不可达则跳过。
 6. **既有工作项不会自动获得新规则**：每个工作项固定创建时的定义快照（§17.120），
    规则只对**改配置后新建**的工作项生效；在途工作项仍按旧快照运行。
-7. 改完必须递增 `revision`（当前 12）、重启服务，并跑 `rdm workflow validate`。
+7. 改完必须递增 `revision`（当前 13）、重启服务，并跑 `rdm workflow validate`。
 
 可直接运行的契约示例见 `tests/integration/test_parent_triggers.py`（父项侧混合
 task+issue 聚合、kind 过滤、两级级联与“状态不匹配则不动作”）；字段/校验单测见

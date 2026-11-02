@@ -507,3 +507,27 @@ async def test_trigger_action_skips_non_direct_steps(server, owner_token: str, m
     # CODE_REVIEW is an approval step; automatic triggers must not bypass it.
     assert await _status(client, owner_token, dev["display_id"]) == "TO_REVIEW"
     assert any("only direct steps auto-execute" in record.message for record in caplog.records)
+
+
+async def test_trigger_terminal_predicate_spans_different_kinds(
+    server, owner_token: str, monkeypatch
+):
+    client, _settings, _app = server
+    engine = WorkflowEngine(
+        _child_rule_spec(
+            {
+                "trigger": {
+                    "kinds": ["task", "issue"],
+                    "from": {"terminal": False},
+                    "to": {"terminal": True},
+                },
+                "self": {"from": ["TO_TEST"], "to": "DONE"},
+            }
+        )
+    )
+    _install_engine(monkeypatch, engine)
+    await _project(client, owner_token)
+
+    story, issue = await _story_with_child(client, owner_token, "TERMINAL", "issue")
+    await _move(client, owner_token, issue["display_id"], "CANCELLED")
+    assert await _status(client, owner_token, story["display_id"]) == "DONE"

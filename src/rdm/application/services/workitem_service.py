@@ -1716,7 +1716,12 @@ class WorkItemService:
         assert self.uow.work_items is not None and self.uow.projects is not None
         child_engine = await self._engine_for_item(item)
         child_task_type = item_task_type(item)
-        child_rules = child_engine.resolve(item.kind, child_task_type).parent_triggers
+        child_workflow = child_engine.resolve(item.kind, child_task_type)
+        child_rules = child_workflow.parent_triggers
+        from_is_start = old_status == child_workflow.initial
+        from_is_terminal = old_status in child_workflow.terminal
+        to_is_start = new_status == child_workflow.initial
+        to_is_terminal = new_status in child_workflow.terminal
         project = await self.uow.projects.get(item.project_id)
         if project is None:
             return
@@ -1736,7 +1741,14 @@ class WorkItemService:
 
         for child_rule in child_rules:
             if child_rule.trigger is not None and not child_rule.trigger.matches(
-                item.kind, child_task_type, old_status, new_status
+                item.kind,
+                child_task_type,
+                old_status,
+                new_status,
+                from_is_start=from_is_start,
+                from_is_terminal=from_is_terminal,
+                to_is_start=to_is_start,
+                to_is_terminal=to_is_terminal,
             ):
                 continue
             if child_rule.when is not None and not self._when_matches(
@@ -1762,7 +1774,14 @@ class WorkItemService:
 
         for parent_rule in parent_rules:
             if parent_rule.trigger is not None and not parent_rule.trigger.matches(
-                item.kind, child_task_type, old_status, new_status
+                item.kind,
+                child_task_type,
+                old_status,
+                new_status,
+                from_is_start=from_is_start,
+                from_is_terminal=from_is_terminal,
+                to_is_start=to_is_start,
+                to_is_terminal=to_is_terminal,
             ):
                 continue
             if parent_rule.when is not None and not self._when_matches(
