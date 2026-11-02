@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useSearchParams, type SetURLSearchParams } from "react-router-dom";
+import { useSearchParams, useLocation, type SetURLSearchParams } from "react-router-dom";
 
 // The item drawer is a route, so opening it replaces the list URL. The list
 // keeps rendering behind the drawer, but its route params would read from
@@ -19,6 +19,11 @@ interface OriginState {
   path: string;
   /** Current list query string, without the leading `?`. */
   search: string;
+  /**
+   * Project named by the origin route (`:key`), or "" for a global page such
+   * as `/inbox` or `/mailbox`. `null` means the origin has no project notion.
+   */
+  projectKey: string | null;
   setSearch: (next: string) => void;
 }
 
@@ -33,18 +38,21 @@ function splitOrigin(origin: string): { path: string; search: string } {
 
 export function OriginSearchProvider({
   origin,
+  projectKey = null,
   children,
 }: {
   /** Full list URL (`path?query`) the drawer was opened from. */
   origin: string;
+  /** Project named by the origin route; "" for a global page. */
+  projectKey?: string | null;
   children: ReactNode;
 }) {
   const [initial] = useState(() => splitOrigin(origin));
   const [path] = useState(initial.path);
   const [search, setSearch] = useState(initial.search);
   const state = useMemo<OriginState>(
-    () => ({ path, search, setSearch }),
-    [path, search],
+    () => ({ path, search, projectKey, setSearch }),
+    [path, search, projectKey],
   );
   return (
     <OriginSearchContext.Provider value={state}>
@@ -84,4 +92,27 @@ export function useListOrigin(): string | null {
   const origin = useContext(OriginSearchContext);
   if (!origin) return null;
   return origin.search ? `${origin.path}?${origin.search}` : origin.path;
+}
+
+/**
+ * The URL to record as `from` when opening a work item from this page: the
+ * origin URL while this page renders as a drawer backdrop, otherwise its own
+ * address. Pages can therefore open the drawer from anywhere without knowing
+ * whether they are the backdrop.
+ */
+export function useOpenOrigin(): string {
+  const location = useLocation();
+  const listOrigin = useListOrigin();
+  return listOrigin ?? `${location.pathname}${location.search}`;
+}
+
+/**
+ * Project key for a page rendered as a drawer backdrop: the origin route's
+ * `:key` (or "" for a global page). Falls back to the page's own route param
+ * when it is the real page. Backdrop pages are not mounted under their own
+ * route, so `useParams()` cannot be trusted there.
+ */
+export function useListProjectKey(fallback: string): string {
+  const origin = useContext(OriginSearchContext);
+  return origin?.projectKey ?? fallback;
 }

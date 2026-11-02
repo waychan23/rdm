@@ -58,7 +58,7 @@ async def test_todo_assigned_and_overdue(server, owner_token: str) -> None:
 async def test_todo_pending_step_and_approval(server, owner_token: str) -> None:
     client, _settings, _app = server
     await _project(client, owner_token)
-    _alice_id, alice_token = await make_member(client, owner_token, "DEMO", "alice", ["worker"])
+    alice_id, alice_token = await make_member(client, owner_token, "DEMO", "alice", ["worker"])
     _bob_id, bob_token = await make_member(client, owner_token, "DEMO", "bob", ["worker"])
 
     item = await _item(
@@ -107,3 +107,36 @@ async def test_todo_pending_step_and_approval(server, owner_token: str) -> None:
     data = r.json()["data"]
     assert data["pending_steps"] == []
     assert [row["display_id"] for row in data["assigned"]] == [item["display_id"]]
+
+
+async def test_todo_identity_filter_allows_managed_agent(server, owner_token: str) -> None:
+    client, _settings, _app = server
+    await _project(client, owner_token)
+    alice_id, alice_token = await make_member(client, owner_token, "DEMO", "alice", ["worker"])
+    r = await client.post(
+        f"{API}/me/agents",
+        json={"name": "todo-agent"},
+        headers=auth(alice_token),
+    )
+    assert r.status_code == 201, r.text
+    agent_id = r.json()["data"]["id"]
+
+    item = await _item(
+        client, owner_token, {"kind": "task", "title": "agent 待办", "assignee": agent_id}
+    )
+
+    # RDM-96: the managing human can scope the todo bundle to their agent.
+    r = await client.get(f"{API}/todos?identity={agent_id}", headers=auth(alice_token))
+    assert r.status_code == 200, r.text
+    assert [row["display_id"] for row in r.json()["data"]["assigned"]] == [item["display_id"]]
+    # Without identity the bundle still aggregates the human and their agents
+    # (pre-RDM-96 behavior); identity narrows it to one person.
+    r = await client.get(f"{API}/todos", headers=auth(alice_token))
+    assert [row["display_id"] for row in r.json()["data"]["assigned"]] == [item["display_id"]]
+    r = await client.get(f"{API}/todos?identity={alice_id}", headers=auth(alice_token))
+    assert r.json()["data"]["assigned"] == []
+
+    # A different human cannot inspect the agent's to-dos.
+    _bob_id, bob_token = await make_member(client, owner_token, "DEMO", "bob", ["worker"])
+    r = await client.get(f"{API}/todos?identity={agent_id}", headers=auth(bob_token))
+    assert r.status_code == 404

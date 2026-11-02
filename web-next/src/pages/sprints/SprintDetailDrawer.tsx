@@ -11,6 +11,7 @@ import ImagePreviewDialog from "../../components/ImagePreviewDialog";
 import MarkdownText from "../../components/MarkdownText";
 import TextButton from "../../components/TextButton";
 import TruncatedText from "../../components/TruncatedText";
+import TypeKindIcon from "../../components/TypeKindIcon";
 import WorkItemPickerDialog from "../../components/WorkItemPickerDialog";
 import { api, errorCause } from "../../lib/api";
 import { useNotify } from "../../lib/flags";
@@ -24,6 +25,8 @@ interface Props {
   /** Null keeps the drawer closed; changing it loads that sprint. */
   sprintId: string | null;
   onClose: () => void;
+  /** Open the work item drawer for a row in the sprint scope (RDM-102). */
+  onOpenItem: (item: WorkItem) => void;
   /** Host pages refresh their sprint list / board after a mutation. */
   onChanged?: () => void;
 }
@@ -33,6 +36,7 @@ export default function SprintDetailDrawer({
   projectKey,
   sprintId,
   onClose,
+  onOpenItem,
   onChanged,
 }: Props) {
   const { t } = useTranslation("sprints");
@@ -192,7 +196,15 @@ export default function SprintDetailDrawer({
                     {detail.items.map((row) => (
                       <tr key={row.id} data-testid={`sprint-item-row-${row.display_id}`}>
                         <td>
-                          <Text color="color.link">{row.display_id}</Text>
+                          <Inline space="space.075" alignBlock="center">
+                            <TypeKindIcon kind={row.kind} />
+                            <TextButton
+                              data-testid={`sprint-item-open-${row.display_id}`}
+                              onClick={() => onOpenItem(row)}
+                            >
+                              {row.display_id}
+                            </TextButton>
+                          </Inline>
                         </td>
                         <td>
                           <TruncatedText className="title-text" text={row.title} />

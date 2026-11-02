@@ -29,7 +29,12 @@ from rdm.interfaces.http.serializers import (
     work_item_out,
     work_item_summary_out,
 )
-from rdm.interfaces.mcp.tools._base import ok, run_tool
+from rdm.interfaces.mcp.tools._base import (
+    attach_work_item_web_url,
+    attach_work_item_web_urls,
+    ok,
+    run_tool,
+)
 
 
 def _without_none(**values: Any) -> dict[str, Any]:
@@ -56,7 +61,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         """按条件列工作项（默认 20 条摘要）。
 
         assignee 传 "me" 表示自己；sprint 传 Sprint 的 ULID（先用 sprint_list 查）。
-        不要用它读详情/评论，详情用 work_item_get。
+        不要用它读详情/评论，详情用 work_item_get；每条结果带 web_url，汇报时附上。
         """
 
         async def run(uow, actor):
@@ -78,9 +83,10 @@ def register(mcp: FastMCP, container: Container) -> None:
             sprints = await SprintService(uow).sprint_map_for_items(
                 proj.id, [item.id for item in items]
             )
-            return ok(
-                [work_item_summary_out(i, proj, members, sprint=sprints.get(i.id)) for i in items]
-            )
+            rows = [
+                work_item_summary_out(i, proj, members, sprint=sprints.get(i.id)) for i in items
+            ]
+            return ok(attach_work_item_web_urls(container, proj.key, rows))
 
         return await run_tool(container, run)
 
@@ -96,6 +102,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         不要遍历其他项目。开工三步之一；认领任务用它找未负责人的任务时
         改用 backlog_list。include_steps=true 时在 meta.pending_steps 返回
         待我执行/审批的命名步骤（含 step 与 item 摘要），默认关闭以保持旧返回。
+        每条结果带 web_url，向用户汇报时附上。
         """
 
         async def run(uow, actor):
@@ -115,11 +122,15 @@ def register(mcp: FastMCP, container: Container) -> None:
                         uow
                     ).sprint_map_for_items(item.project_id, item_ids)
                 out.append(
-                    work_item_summary_out(
-                        item,
-                        item_project,
-                        users_by_project[item.project_id],
-                        sprint=sprints_by_project[item.project_id].get(item.id),
+                    attach_work_item_web_url(
+                        container,
+                        item_project.key,
+                        work_item_summary_out(
+                            item,
+                            item_project,
+                            users_by_project[item.project_id],
+                            sprint=sprints_by_project[item.project_id].get(item.id),
+                        ),
                     )
                 )
             if not include_steps:
@@ -152,8 +163,12 @@ def register(mcp: FastMCP, container: Container) -> None:
                         },
                         "executor_user_id": executor.user_id,
                         "project_key": item_project.key,
-                        "item": work_item_summary_out(
-                            item, item_project, users_by_project[item_project.id]
+                        "item": attach_work_item_web_url(
+                            container,
+                            item_project.key,
+                            work_item_summary_out(
+                                item, item_project, users_by_project[item_project.id]
+                            ),
                         ),
                     }
                 )
@@ -167,13 +182,15 @@ def register(mcp: FastMCP, container: Container) -> None:
 
         按 priority 升序（1=紧急 最前，4=低 最后），同优先级按 display_no。
         查 Sprint 内的工作项用 sprint_get；已终态或已入 Sprint 的项不会出现。
+        每条结果带 web_url，向用户汇报时附上。
         """
 
         async def run(uow, actor):
             service = WorkItemService(uow)
             proj, items = await service.backlog_items(actor, project_key=project, kind=kind)
             members = await _users(uow, proj.id)
-            return ok([work_item_summary_out(i, proj, members) for i in items])
+            rows = [work_item_summary_out(i, proj, members) for i in items]
+            return ok(attach_work_item_web_urls(container, proj.key, rows))
 
         return await run_tool(container, run)
 
@@ -186,6 +203,7 @@ def register(mcp: FastMCP, container: Container) -> None:
         id 接受 KEY-42 显示 ID 或 ULID。
         meta.comment_count / meta.latest_comment_at 是评论数量与最近评论时间；
         处理工作项前先看这两个值，非 0 或时间较新时用 comment_list 读评论。
+        data.web_url 是可直接在浏览器打开的工作项链接；向用户汇报时附上它。
         """
 
         async def run(uow, actor):
@@ -223,15 +241,22 @@ def register(mcp: FastMCP, container: Container) -> None:
                     continue
                 seen.add(attachment.id)
                 attachments.append(attachment_mcp_out(container, attachment, members))
-            data = work_item_out(item, proj, members)
+            data = attach_work_item_web_url(container, proj.key, work_item_out(item, proj, members))
             step_meta = await StepService(uow, container.file_store).describe(item, actor)
             assert uow.comments is not None
             comment_count, latest_comment_at = await uow.comments.stats_for_item(item.id)
             return ok(
                 data,
                 allowed_transitions=list(allowed),
-                children=[work_item_summary_out(c, proj, members) for c in children],
-                parent=work_item_summary_out(parent_item, proj, members)
+                children=[
+                    attach_work_item_web_url(
+                        container, proj.key, work_item_summary_out(c, proj, members)
+                    )
+                    for c in children
+                ],
+                parent=attach_work_item_web_url(
+                    container, proj.key, work_item_summary_out(parent_item, proj, members)
+                )
                 if parent_item is not None
                 else None,
                 allowed_parent_kinds=allowed_parent_kinds(item.kind),
@@ -313,7 +338,9 @@ def register(mcp: FastMCP, container: Container) -> None:
                 actor, project_key, payload.model_dump(exclude_unset=True)
             )
             members = await _users(uow, proj.id)
-            return ok(work_item_out(item, proj, members))
+            return ok(
+                attach_work_item_web_url(container, proj.key, work_item_out(item, proj, members))
+            )
 
         return await run_tool(container, run)
 
@@ -378,7 +405,9 @@ def register(mcp: FastMCP, container: Container) -> None:
                 actor, id, payload.model_dump(exclude_unset=True)
             )
             members = await _users(uow, proj.id)
-            return ok(work_item_out(item, proj, members))
+            return ok(
+                attach_work_item_web_url(container, proj.key, work_item_out(item, proj, members))
+            )
 
         return await run_tool(container, run)
 
@@ -394,7 +423,9 @@ def register(mcp: FastMCP, container: Container) -> None:
             payload = WorkItemAssignIn.model_validate({"member": member})
             proj, item = await WorkItemService(uow).assign_item(actor, id, payload.member)
             members = await _users(uow, proj.id)
-            return ok(work_item_out(item, proj, members))
+            return ok(
+                attach_work_item_web_url(container, proj.key, work_item_out(item, proj, members))
+            )
 
         return await run_tool(container, run)
 
@@ -422,7 +453,10 @@ def register(mcp: FastMCP, container: Container) -> None:
                 reason=payload.reason,
             )
             members = await _users(uow, proj.id)
-            return ok(work_item_out(item, proj, members), **meta)
+            return ok(
+                attach_work_item_web_url(container, proj.key, work_item_out(item, proj, members)),
+                **meta,
+            )
 
         return await run_tool(container, run)
 
@@ -451,7 +485,7 @@ def register(mcp: FastMCP, container: Container) -> None:
             proj, item, restored = await service.restore_item(actor, id)
             members = await _users(uow, proj.id)
             return ok(
-                work_item_out(item, proj, members),
+                attach_work_item_web_url(container, proj.key, work_item_out(item, proj, members)),
                 restored=restored,
             )
 
@@ -547,7 +581,10 @@ def register(mcp: FastMCP, container: Container) -> None:
                     },
                 )
             members = await _users(uow, proj.id)
-            return ok(work_item_out(item, proj, members), **meta)
+            return ok(
+                attach_work_item_web_url(container, proj.key, work_item_out(item, proj, members)),
+                **meta,
+            )
 
         return await run_tool(container, run)
 

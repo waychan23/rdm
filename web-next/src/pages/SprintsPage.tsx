@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import Button from "@atlaskit/button/default/button";
@@ -12,6 +12,8 @@ import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
+import { itemPath } from "../lib/navigation";
+import { useListProjectKey, useOpenOrigin } from "../lib/originSearch";
 import type { Sprint } from "../types";
 import SprintDetailDrawer from "./sprints/SprintDetailDrawer";
 import SprintFormDialog, { type SprintFormValues } from "./sprints/SprintFormDialog";
@@ -22,7 +24,11 @@ const centeredRow = { display: "flex", justifyContent: "center" } as const;
 
 export default function SprintsPage() {
   const { t } = useTranslation("sprints");
-  const { key: projectKey = "" } = useParams();
+  const { key: routeKey = "" } = useParams();
+  // The origin URL owns the project while this page is a drawer backdrop.
+  const projectKey = useListProjectKey(routeKey);
+  const navigate = useNavigate();
+  const openOrigin = useOpenOrigin();
   const notify = useNotify();
   const [showCreate, setShowCreate] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -130,6 +136,9 @@ export default function SprintsPage() {
         projectKey={projectKey}
         sprintId={detailId}
         onClose={() => setDetailId(null)}
+        onOpenItem={(item) =>
+          navigate(itemPath(projectKey, item.display_id), { state: { from: openOrigin } })
+        }
         onChanged={() => void reload()}
       />
     </Page>

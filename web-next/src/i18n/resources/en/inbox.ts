@@ -11,6 +11,10 @@ const inbox = {
   filters: {
     unreadOnly: "Unread only",
   },
+  identity: {
+    me: "Me ({{name}})",
+    agent: "{{name}} (agent)",
+  },
   actions: {
     markAllRead: "Mark all read",
     refresh: "Refresh",

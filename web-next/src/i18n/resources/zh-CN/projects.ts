@@ -50,7 +50,7 @@ const projects = {
   },
   workItemFilters: {
     sprint: "迭代",
-    sprintPlaceholder: "未选择",
+    sprintPlaceholder: "选择迭代",
     kindPlaceholder: "全部类型",
     subtypePlaceholder: "全部子类型",
     rootOnly: "仅一级工作项",

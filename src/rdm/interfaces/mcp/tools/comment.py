@@ -71,6 +71,8 @@ def register(mcp: FastMCP, container: Container) -> None:
     ) -> Any:
         """在工作项下发评论；@成员名 会给对方发站内信，可挂已有附件。
 
+        单个工作项的进展、反馈、验收或阻塞优先用它（而不是只发信箱）：
+        信息会留在工作项里，对方也会收到站内信。
         附件请先通过 REST multipart 上传到该工作项
         （POST /projects/<key>/attachments, owner_type=work_item），再把
         返回的附件 id 以 attachment_ids 传入；只能挂同一工作项上未绑定其他

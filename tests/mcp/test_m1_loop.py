@@ -37,6 +37,8 @@ async def test_m1_single_agent_loop(server, mcp_clients) -> None:
             {"kind": "story", "title": "登录", "project": "DEMO"},
         )
         story_ref = story["data"]["display_id"]
+        # RDM-36: every work item carries a browser link for skill reports.
+        assert story["data"]["web_url"] == f"{settings.base_url}/projects/DEMO/items/{story_ref}"
         task = await call(
             owner_client,
             "work_item_create",
@@ -55,6 +57,7 @@ async def test_m1_single_agent_loop(server, mcp_clients) -> None:
         # S4: frontend lists own work and drives it to TO_REVIEW
         mine = await call(frontend, "work_item_list", {"assignee": "me", "project": "DEMO"})
         assert [i["display_id"] for i in mine["data"]] == [task_ref]
+        assert mine["data"][0]["web_url"] == f"{settings.base_url}/projects/DEMO/items/{task_ref}"
 
         res = await call(
             frontend,

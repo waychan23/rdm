@@ -13,7 +13,9 @@ from rdm.application.services.workflow_version_service import WorkflowVersionSer
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Notification, Project, WorkItem, WorkItemStep, WorkItemStepExecutor
+from rdm.domain.errors import NotFound
 from rdm.domain.workflow.loader import load_engine
+from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 
 
@@ -43,9 +45,23 @@ class TodoService:
             return [actor.id]
         return [actor.id, *sorted(actor.managed_agent_ids)]
 
-    async def bundle(self, actor: Actor, *, project_key: str | None = None) -> TodoBundle:
+    async def bundle(
+        self,
+        actor: Actor,
+        *,
+        project_key: str | None = None,
+        identity: str | None = None,
+    ) -> TodoBundle:
         assert self.uow.projects is not None and self.uow.work_items is not None
         identities = self._identity_ids(actor)
+        if identity is not None:
+            # Same rule as the inbox/mailbox identity filter: only yourself or
+            # an agent you manage (RDM-96).
+            if identity not in identities:
+                raise NotFound(
+                    tr("notification.identity_not_found"), details={"identity": identity}
+                )
+            identities = [identity]
         if project_key is not None:
             bound = await WorkItemService(self.uow).resolve_project(actor, project_key)
             project_ids = [bound.id]

@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import FormField from "../../components/FormField";
 import PersonCell from "../../components/PersonCell";
 import TruncatedText from "../../components/TruncatedText";
+import TypeKindIcon from "../../components/TypeKindIcon";
 import WorkItemPicker, {
   toWorkItemOption,
   type WorkItemOption,
@@ -197,6 +198,7 @@ export default function ChildrenSection({
                 }
               }}
             >
+              <TypeKindIcon kind={child.kind} />
               <span className="rdm-item-child-id">{child.display_id}</span>
               <TruncatedText className="rdm-item-child-title" text={child.title} />
               <span className="rdm-item-child-status">

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
+import { useListProjectKey } from "../lib/originSearch";
 import { useTranslation } from "react-i18next";
 
 import { cssMap } from "@atlaskit/css";
@@ -52,7 +53,9 @@ const isHttpLocation = (value: string) => /^https?:\/\//i.test(value);
 
 export default function WorkspacesPage() {
   const { t } = useTranslation("projects");
-  const { key: projectKey = "" } = useParams();
+  const { key: routeKey = "" } = useParams();
+  // The origin URL owns the project while this page is a drawer backdrop.
+  const projectKey = useListProjectKey(routeKey);
   const notify = useNotify();
 
   const [nonce, setNonce] = useState(0);

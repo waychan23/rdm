@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import Button from "@atlaskit/button/default/button";
 import Drawer from "@atlaskit/drawer";
@@ -18,11 +18,14 @@ import MarkdownText from "../components/MarkdownText";
 import { Page, PageHeader } from "../components/Page";
 import TextButton from "../components/TextButton";
 import TruncatedText from "../components/TruncatedText";
+import TypeKindIcon from "../components/TypeKindIcon";
 import WorkItemPickerDialog from "../components/WorkItemPickerDialog";
 import { useAsync } from "../hooks/useAsync";
 import { api, errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 import { formatDate } from "../lib/format";
+import { itemPath } from "../lib/navigation";
+import { useListProjectKey, useOpenOrigin } from "../lib/originSearch";
 import type { Release, ReleaseDetail, ReleaseStats, WorkItem } from "../types";
 import StatusLozenge from "../workitems/status";
 import ReleaseFormDialog, { type ReleaseFormValues } from "./releases/ReleaseFormDialog";
@@ -78,7 +81,11 @@ function ReleaseProgress({ stats, label }: { stats: ReleaseStats; label: string 
 
 export default function ReleasesPage() {
   const { t } = useTranslation("releases");
-  const { key: projectKey = "" } = useParams();
+  const { key: routeKey = "" } = useParams();
+  // The origin URL owns the project while this page is a drawer backdrop.
+  const projectKey = useListProjectKey(routeKey);
+  const navigate = useNavigate();
+  const openOrigin = useOpenOrigin();
   const notify = useNotify();
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
@@ -408,7 +415,19 @@ export default function ReleasesPage() {
                     {detail.items.map((row) => (
                       <tr key={row.id} data-testid={`release-item-row-${row.display_id}`}>
                         <td>
-                          <Text color="color.link">{row.display_id}</Text>
+                          <Inline space="space.075" alignBlock="center">
+                            <TypeKindIcon kind={row.kind} />
+                            <TextButton
+                              data-testid={`release-item-open-${row.display_id}`}
+                              onClick={() =>
+                                navigate(itemPath(projectKey, row.display_id), {
+                                  state: { from: openOrigin },
+                                })
+                              }
+                            >
+                              {row.display_id}
+                            </TextButton>
+                          </Inline>
                         </td>
                         <td>
                           <TruncatedText className="title-text" text={row.title} />

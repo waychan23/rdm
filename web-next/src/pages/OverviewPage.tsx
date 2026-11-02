@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
+import { useListProjectKey } from "../lib/originSearch";
 import { useTranslation } from "react-i18next";
 
 import { cssMap } from "@atlaskit/css";
@@ -58,7 +59,9 @@ const styles = cssMap({
 
 export default function OverviewPage() {
   const { t } = useTranslation("projects");
-  const { key: projectKey = "" } = useParams();
+  const { key: routeKey = "" } = useParams();
+  // The origin URL owns the project while this page is a drawer backdrop.
+  const projectKey = useListProjectKey(routeKey);
   const navigate = useNavigate();
   const { data, loading, error, reload } = useAsync<Overview>(
     async () => (await api.get<Overview>(`/projects/${projectKey}/overview`)).data,

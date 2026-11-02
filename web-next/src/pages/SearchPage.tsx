@@ -1,5 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { cssMap } from "@atlaskit/css";
@@ -15,6 +15,7 @@ import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
 import { api } from "../lib/api";
 import { searchTypeLabel } from "../lib/labels";
+import { useListSearchParams, useOpenOrigin } from "../lib/originSearch";
 import { useAsync } from "../hooks/useAsync";
 import type { SearchHit } from "../types";
 
@@ -37,7 +38,9 @@ const styles = cssMap({
 export default function SearchPage() {
   const { t } = useTranslation("projects");
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useListSearchParams();
+  // The page itself, or the origin it owns while rendered as a drawer backdrop.
+  const openOrigin = useOpenOrigin();
   const q = params.get("q") ?? "";
   const [draft, setDraft] = useState(q);
 
@@ -51,6 +54,11 @@ export default function SearchPage() {
   const submit = () => {
     const next = draft.trim();
     if (next) setParams({ q: next });
+  };
+
+  // Work item hits open the drawer; record the search page as its backdrop.
+  const openHit = (url: string) => {
+    navigate(url, url.includes("/items/") ? { state: { from: openOrigin } } : undefined);
   };
 
   return (
@@ -104,12 +112,12 @@ export default function SearchPage() {
               testId={`search-hit-${hit.entity_type}-${hit.entity_id}`}
               role="button"
               tabIndex={0}
-              onClick={() => navigate(hit.url)}
+              onClick={() => openHit(hit.url)}
               onKeyDown={(e: KeyboardEvent<HTMLElement>) => {
                 if (e.target !== e.currentTarget) return;
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  navigate(hit.url);
+                  openHit(hit.url);
                 }
               }}
             >

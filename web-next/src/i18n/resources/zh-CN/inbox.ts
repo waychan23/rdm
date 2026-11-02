@@ -11,6 +11,10 @@ const inbox = {
   filters: {
     unreadOnly: "只看未读",
   },
+  identity: {
+    me: "我（{{name}}）",
+    agent: "{{name}}（agent）",
+  },
   actions: {
     markAllRead: "全部已读",
     refresh: "刷新",

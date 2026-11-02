@@ -50,8 +50,11 @@ def register(mcp: FastMCP, container: Container) -> None:
         reply_to: str | None = None,
         project: str | None = None,
     ) -> Any:
-        """给成员或 group 信箱发信；跨 human/agent 协作的唯一通道。
+        """给成员或 group 信箱发信；用于跨工作项/项目级的异步协作。
 
+        单个工作项的反馈、进展、验收或阻塞优先用 comment_add 在该工作项下
+        评论并 @ 成员（会同时发站内信，且信息留在工作项里）；只有跨工作项、
+        项目级或没有对应工作项的事项才用本工具。
         project 传当前绑定项目的 KEY，只向当前绑定项目发信；不要向其他项目
         发信，除非用户明确要求切换项目。
         to/cc 传成员 name/id 或 group 名；refs 附工作项 id（KEY-42/ULID）。

@@ -17,11 +17,12 @@ router = APIRouter(prefix="/api/v1", tags=["todos"])
 @router.get("/todos")
 async def list_todos(
     project: str | None = None,
+    identity: str | None = None,
     container: Container = Depends(get_container),
     actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
-        bundle = await TodoService(uow).bundle(actor, project_key=project)
+        bundle = await TodoService(uow).bundle(actor, project_key=project, identity=identity)
         users: dict[str, dict] = {}
 
         async def summary(pair) -> dict:

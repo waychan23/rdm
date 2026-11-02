@@ -13,7 +13,11 @@ import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";
 import { useRememberViewScroll } from "../hooks/useRememberViewScroll";
-import { useListOrigin, useListSearchParams } from "../lib/originSearch";
+import {
+  useListOrigin,
+  useListProjectKey,
+  useListSearchParams,
+} from "../lib/originSearch";
 import { recall, remember } from "../lib/pageCache";
 import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
 import type { WorkItem, WorkflowDto } from "../types";
@@ -103,7 +107,9 @@ async function loadTreeItems(projectKey: string, filterParams: string): Promise<
 }
 
 export default function BacklogPage() {
-  const { key: projectKey = "RDM" } = useParams();
+  const { key: routeKey = "RDM" } = useParams();
+  // The origin URL owns the project while this page is a drawer backdrop.
+  const projectKey = useListProjectKey(routeKey);
   // Remount per project so the stored view/collapse preferences are re-read
   // when switching projects without a full remount of the route.
   return <BacklogView key={projectKey} projectKey={projectKey} />;

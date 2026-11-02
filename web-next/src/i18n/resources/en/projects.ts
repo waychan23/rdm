@@ -52,7 +52,7 @@ const projects = {
   },
   workItemFilters: {
     sprint: "Sprint",
-    sprintPlaceholder: "Not selected",
+    sprintPlaceholder: "Select sprint",
     kindPlaceholder: "All types",
     subtypePlaceholder: "All subtypes",
     rootOnly: "Top-level items only",

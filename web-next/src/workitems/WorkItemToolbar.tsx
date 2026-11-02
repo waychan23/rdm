@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -11,6 +12,8 @@ import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { statusLabel } from "../lib/labels";
+import { itemPath } from "../lib/navigation";
+import { useOpenOrigin } from "../lib/originSearch";
 import { userLabel } from "../lib/users";
 import type { Assignee, Sprint, WorkflowDto } from "../types";
 import { kindOptions } from "./constants";
@@ -109,6 +112,8 @@ export default function WorkItemToolbar({
   showRefresh = true,
 }: Props) {
   const { t } = useTranslation("projects");
+  const navigate = useNavigate();
+  const openOrigin = useOpenOrigin();
   const [qInput, setQInput] = useState(filters.q);
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [sprintDrawerOpen, setSprintDrawerOpen] = useState(false);
@@ -219,110 +224,153 @@ export default function WorkItemToolbar({
 
   return (
     <Stack space="space.100">
-      <Inline space="space.100" alignBlock="center" shouldWrap testId="work-item-filters">
-        {view && onViewChange && (
-          <Box xcss={styles.view} testId="work-item-filter-view">
-            <Select<Option>
-              options={viewOptions}
-              value={viewOptions.find((option) => option.value === view) ?? null}
+      {/* Row 1: search, high-frequency locators and page actions (RDM-108). */}
+      <Inline
+        space="space.100"
+        alignBlock="center"
+        spread="space-between"
+        shouldWrap
+        testId="work-item-filters"
+      >
+        <Inline space="space.100" alignBlock="center" shouldWrap>
+          <Box xcss={styles.search}>
+            <Textfield
+              placeholder={t("workItemFilters.search")}
+              value={qInput}
+              testId="work-item-search"
+              onChange={(event) => setQInput(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") onFilterChange({ q: qInput.trim() });
+              }}
+              onBlur={() => {
+                if (filters.q !== qInput.trim()) onFilterChange({ q: qInput.trim() });
+              }}
+            />
+          </Box>
+
+          <Box xcss={styles.sprint} testId="work-item-filter-sprint">
+            <Select<SprintOption>
+              options={sprintOptions}
+              value={sprintOptions.find((option) => option.value === filters.sprint) ?? null}
               onChange={(option) =>
-                onViewChange(((option as Option | null)?.value as WorkItemView) ?? "tree")
+                onFilterChange({ sprint: (option as SprintOption | null)?.value ?? "" })
+              }
+              isClearable
+              spacing="compact"
+              placeholder={t("workItemFilters.sprintPlaceholder")}
+              formatOptionLabel={(option, meta) =>
+                meta.context === "menu" ? (
+                  <Inline space="space.100" alignBlock="center">
+                    <Text size="small">{option.sprint.name}</Text>
+                    {sprintLozenge(option.sprint.status)}
+                    <Text size="small" color="color.text.subtle">
+                      {sprintDates(option.sprint)}
+                    </Text>
+                  </Inline>
+                ) : (
+                  <Text size="small">{option.sprint.name}</Text>
+                )
+              }
+              testId="work-item-sprint-select"
+            />
+          </Box>
+
+          {!kindFixed && (
+            <Box xcss={styles.kind} testId="work-item-filter-kind">
+              <Select<Option, true>
+                isMulti
+                hideSelectedOptions={false}
+                options={kindSelectOptions}
+                value={kindSelectOptions.filter((option) =>
+                  filters.kinds.includes(option.value),
+                )}
+                onChange={(options) =>
+                  onFilterChange({ kinds: options.map((option) => option.value) })
+                }
+                spacing="compact"
+                placeholder={t("workItemFilters.kindPlaceholder")}
+                testId="work-item-kind-select"
+              />
+            </Box>
+          )}
+
+          {view && onViewChange && (
+            <Box xcss={styles.view} testId="work-item-filter-view">
+              <Select<Option>
+                options={viewOptions}
+                value={viewOptions.find((option) => option.value === view) ?? null}
+                onChange={(option) =>
+                  onViewChange(((option as Option | null)?.value as WorkItemView) ?? "tree")
+                }
+                spacing="compact"
+                isClearable={false}
+                testId="work-item-view-select"
+              />
+            </Box>
+          )}
+
+          <Box xcss={styles.order} testId="work-item-filter-order">
+            <Select<Option>
+              options={orderOptions}
+              value={orderOptions.find((option) => option.value === filters.order) ?? null}
+              onChange={(option) =>
+                onFilterChange({
+                  order: ((option as Option | null)?.value ??
+                    "composite") as WorkItemOrder,
+                })
               }
               spacing="compact"
               isClearable={false}
-              testId="work-item-view-select"
+              testId="work-item-order-select"
             />
           </Box>
-        )}
+        </Inline>
 
-        <Box xcss={styles.sprint} testId="work-item-filter-sprint">
-          <Select<SprintOption>
-            options={sprintOptions}
-            value={sprintOptions.find((option) => option.value === filters.sprint) ?? null}
-            onChange={(option) => onFilterChange({ sprint: (option as SprintOption | null)?.value ?? "" })}
-            isClearable
-            spacing="compact"
-            placeholder={t("workItemFilters.sprintPlaceholder")}
-            formatOptionLabel={(option, meta) =>
-              meta.context === "menu" ? (
-                <Inline space="space.100" alignBlock="center">
-                  <Text size="small">{option.sprint.name}</Text>
-                  {sprintLozenge(option.sprint.status)}
-                  <Text size="small" color="color.text.subtle">
-                    {sprintDates(option.sprint)}
-                  </Text>
-                </Inline>
-              ) : (
-                <Text size="small">{option.sprint.name}</Text>
-              )
-            }
-            testId="work-item-sprint-select"
-          />
-        </Box>
-
-        {!kindFixed && (
-          <Box xcss={styles.kind} testId="work-item-filter-kind">
-            <Select<Option, true>
-              isMulti
-              hideSelectedOptions={false}
-              options={kindSelectOptions}
-              value={kindSelectOptions.filter((option) =>
-                filters.kinds.includes(option.value),
-              )}
-              onChange={(options) =>
-                onFilterChange({ kinds: options.map((option) => option.value) })
-              }
+        <Inline space="space.100" alignBlock="center" testId="work-item-toolbar-actions">
+          {showRefresh && onRefresh && (
+            <Button
+              appearance="subtle"
               spacing="compact"
-              placeholder={t("workItemFilters.kindPlaceholder")}
-              testId="work-item-kind-select"
-            />
-          </Box>
-        )}
+              testId="work-item-refresh"
+              onClick={onRefresh}
+            >
+              {t("workItemFilters.refresh")}
+            </Button>
+          )}
 
-        {showSubtype && (
-          <Box xcss={styles.subtype} testId="work-item-filter-subtype">
-            <Select<Option, true>
-              isMulti
-              hideSelectedOptions={false}
-              options={subtypeOptions}
-              value={subtypeOptions.filter((option) =>
-                filters.subtypes.includes(option.value),
-              )}
-              onChange={(options) =>
-                onFilterChange({ subtypes: options.map((option) => option.value) })
-              }
-              spacing="compact"
-              placeholder={t("workItemFilters.subtypePlaceholder")}
-              testId="work-item-subtype-select"
-            />
-          </Box>
-        )}
+          {showCreate && onCreate && (
+            <Button
+              appearance="primary"
+              testId="work-item-create-button"
+              onClick={onCreate}
+            >
+              {t("workItemFilters.create")}
+            </Button>
+          )}
+        </Inline>
+      </Inline>
 
-        <Checkbox
-          label={t("workItemFilters.rootOnly")}
-          isChecked={filters.rootOnly}
-          testId="work-item-filter-root-only"
-          onChange={(event) => onFilterChange({ rootOnly: event.currentTarget.checked })}
-        />
-
-        <Box xcss={styles.hasChildren} testId="work-item-filter-has-children">
-          <Select<Option>
-            options={hasChildrenOptions}
-            value={
-              hasChildrenOptions.find(
-                (option) => option.value === filters.hasChildren,
-              ) ?? null
+      {/* Row 2: deep filters, people and child-item rules (RDM-108). */}
+      <Inline
+        space="space.100"
+        alignBlock="center"
+        shouldWrap
+        testId="work-item-filters-secondary"
+      >
+        <Box xcss={styles.status} testId="work-item-filter-status">
+          <Select<Option, true>
+            isMulti
+            hideSelectedOptions={false}
+            options={statusOptions}
+            value={statusOptions.filter((option) =>
+              filters.statuses.includes(option.value),
+            )}
+            onChange={(options) =>
+              onFilterChange({ statuses: options.map((option) => option.value) })
             }
-            onChange={(option) =>
-              onFilterChange({
-                hasChildren: ((option as Option | null)?.value ??
-                  "") as HasChildrenFilter,
-              })
-            }
-            isClearable
             spacing="compact"
-            placeholder={t("workItemFilters.hasChildrenPlaceholder")}
-            testId="work-item-has-children-select"
+            placeholder={t("workItemFilters.statusPlaceholder")}
+            testId="work-item-status-select"
           />
         </Box>
 
@@ -345,22 +393,24 @@ export default function WorkItemToolbar({
           />
         </Box>
 
-        <Box xcss={styles.status} testId="work-item-filter-status">
-          <Select<Option, true>
-            isMulti
-            hideSelectedOptions={false}
-            options={statusOptions}
-            value={statusOptions.filter((option) =>
-              filters.statuses.includes(option.value),
-            )}
-            onChange={(options) =>
-              onFilterChange({ statuses: options.map((option) => option.value) })
-            }
-            spacing="compact"
-            placeholder={t("workItemFilters.statusPlaceholder")}
-            testId="work-item-status-select"
-          />
-        </Box>
+        {showSubtype && (
+          <Box xcss={styles.subtype} testId="work-item-filter-subtype">
+            <Select<Option, true>
+              isMulti
+              hideSelectedOptions={false}
+              options={subtypeOptions}
+              value={subtypeOptions.filter((option) =>
+                filters.subtypes.includes(option.value),
+              )}
+              onChange={(options) =>
+                onFilterChange({ subtypes: options.map((option) => option.value) })
+              }
+              spacing="compact"
+              placeholder={t("workItemFilters.subtypePlaceholder")}
+              testId="work-item-subtype-select"
+            />
+          </Box>
+        )}
 
         <Box xcss={styles.person} testId="work-item-filter-assignee">
           <Select<Option, true>
@@ -398,66 +448,33 @@ export default function WorkItemToolbar({
           />
         </Box>
 
-        <Box xcss={styles.search}>
-          <Textfield
-            placeholder={t("workItemFilters.search")}
-            value={qInput}
-            testId="work-item-search"
-            onChange={(event) => setQInput(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") onFilterChange({ q: qInput.trim() });
-            }}
-            onBlur={() => {
-              if (filters.q !== qInput.trim()) onFilterChange({ q: qInput.trim() });
-            }}
-          />
-        </Box>
-      </Inline>
-
-      {/* Sort sits with the filters; create/refresh are the page actions. */}
-      <Inline
-        space="space.100"
-        alignBlock="center"
-        spread="space-between"
-        testId="work-item-toolbar-actions"
-      >
-        <Box xcss={styles.order} testId="work-item-filter-order">
+        <Box xcss={styles.hasChildren} testId="work-item-filter-has-children">
           <Select<Option>
-            options={orderOptions}
-            value={orderOptions.find((option) => option.value === filters.order) ?? null}
+            options={hasChildrenOptions}
+            value={
+              hasChildrenOptions.find(
+                (option) => option.value === filters.hasChildren,
+              ) ?? null
+            }
             onChange={(option) =>
               onFilterChange({
-                order: ((option as Option | null)?.value ?? "composite") as WorkItemOrder,
+                hasChildren: ((option as Option | null)?.value ??
+                  "") as HasChildrenFilter,
               })
             }
+            isClearable
             spacing="compact"
-            isClearable={false}
-            testId="work-item-order-select"
+            placeholder={t("workItemFilters.hasChildrenPlaceholder")}
+            testId="work-item-has-children-select"
           />
         </Box>
 
-        <Inline space="space.100" alignBlock="center">
-          {showRefresh && onRefresh && (
-            <Button
-              appearance="subtle"
-              spacing="compact"
-              testId="work-item-refresh"
-              onClick={onRefresh}
-            >
-              {t("workItemFilters.refresh")}
-            </Button>
-          )}
-
-          {showCreate && onCreate && (
-            <Button
-              appearance="primary"
-              testId="work-item-create-button"
-              onClick={onCreate}
-            >
-              {t("workItemFilters.create")}
-            </Button>
-          )}
-        </Inline>
+        <Checkbox
+          label={t("workItemFilters.rootOnly")}
+          isChecked={filters.rootOnly}
+          testId="work-item-filter-root-only"
+          onChange={(event) => onFilterChange({ rootOnly: event.currentTarget.checked })}
+        />
       </Inline>
 
       {activeSprint && (
@@ -482,6 +499,9 @@ export default function WorkItemToolbar({
         projectKey={projectKey}
         sprintId={sprintDrawerOpen ? filters.sprint || null : null}
         onClose={() => setSprintDrawerOpen(false)}
+        onOpenItem={(item) =>
+          navigate(itemPath(projectKey, item.display_id), { state: { from: openOrigin } })
+        }
         onChanged={() => {
           setSprintsNonce((nonce) => nonce + 1);
           onRefresh?.();

@@ -1,6 +1,6 @@
-import { useEffect, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -16,12 +16,14 @@ import { cardBorder } from "../components/cardBorder";
 import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
-import { reloadSession } from "../lib/auth";
+import { reloadSession, useCurrentUser } from "../lib/auth";
 import { useAsync } from "../hooks/useAsync";
 import { formatDate } from "../lib/format";
 import { useNotify } from "../lib/flags";
 import { notificationTypeLabel } from "../lib/labels";
-import type { Notification, TodoBundle, TodoStepEntry, WorkItem } from "../types";
+import { useListSearchParams, useOpenOrigin } from "../lib/originSearch";
+import { userLabel } from "../lib/users";
+import type { Notification, OrgUser, TodoBundle, TodoStepEntry, WorkItem } from "../types";
 import StatusLozenge from "../workitems/status";
 
 interface NotificationResult {
@@ -62,10 +64,32 @@ export default function InboxPage() {
   const { t } = useTranslation("inbox");
   const navigate = useNavigate();
   const notify = useNotify();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useListSearchParams();
+  // The page itself, or the origin it owns while rendered as a drawer backdrop.
+  const openOrigin = useOpenOrigin();
   const tab: Tab = searchParams.get("tab") === "todo" ? "todo" : "notifications";
   const unreadOnly = searchParams.get("unread") !== "false";
   const order: Order = searchParams.get("order") === "asc" ? "asc" : "desc";
+  // RDM-96: view a managed agent's notifications / to-dos (null = yourself).
+  const identity = searchParams.get("identity");
+  const setIdentity = (value: string | null) => patchParams({ identity: value });
+  const me = useCurrentUser();
+  const [agents, setAgents] = useState<OrgUser[]>([]);
+  useEffect(() => {
+    api
+      .get<OrgUser[]>("/me/agents")
+      .then((res) => setAgents(res.data))
+      .catch(() => {
+        // Keep only the "me" option when the agent list cannot be loaded.
+      });
+  }, []);
+  const identityOptions = [
+    { label: t("identity.me", { name: userLabel(me?.user) }), value: me?.user.id ?? "" },
+    ...agents.map((agent) => ({
+      label: t("identity.agent", { name: userLabel(agent) }),
+      value: agent.id,
+    })),
+  ];
   const patchParams = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(searchParams);
     for (const [key, value] of Object.entries(patch)) {
@@ -85,22 +109,27 @@ export default function InboxPage() {
   ];
 
   const notifications = useAsync<NotificationResult>(async () => {
-    const res = await api.get<Notification[]>(
-      `/notifications?unread_only=${unreadOnly}&order=${order}&limit=100`,
-    );
+    const params = new URLSearchParams({
+      unread_only: String(unreadOnly),
+      order,
+      limit: "100",
+    });
+    if (identity) params.set("identity", identity);
+    const res = await api.get<Notification[]>(`/notifications?${params}`);
     return {
       items: res.data,
       unread: Number(res.meta?.unread ?? 0),
       total: Number(res.meta?.total ?? res.data.length),
     };
-  }, [unreadOnly, order]);
+  }, [unreadOnly, order, identity]);
 
   const todos = useAsync<TodoBundle>(async () => {
     if (tab !== "todo") {
       return { assigned: [], pending_steps: [], approvals: [], overdue: [], mentions: [] };
     }
-    return (await api.get<TodoBundle>("/todos")).data;
-  }, [tab]);
+    const suffix = identity ? `?identity=${encodeURIComponent(identity)}` : "";
+    return (await api.get<TodoBundle>(`/todos${suffix}`)).data;
+  }, [tab, identity]);
 
   useEffect(() => {
     const onChange = () => {
@@ -118,19 +147,30 @@ export default function InboxPage() {
   const openNotification = async (n: Notification) => {
     if (!n.read_at) {
       try {
-        await api.post("/notifications/read", { ids: [n.id] });
+        await api.post("/notifications/read", {
+          ids: [n.id],
+          ...(identity ? { identity } : {}),
+        });
         await reloadSession();
         notifications.reload();
       } catch (e) {
         notify.error(t("notify.markReadFailed"), errorCause(e)?.message);
       }
     }
-    if (n.url) navigate(n.url);
+    if (n.url) {
+      // Work item notifications open the drawer; keep the inbox behind it.
+      navigate(
+        n.url,
+        n.url.includes("/items/") ? { state: { from: openOrigin } } : undefined,
+      );
+    }
   };
 
   const markAll = async () => {
     try {
-      const res = await api.post<{ updated: number }>("/notifications/read-all", {});
+      const res = await api.post<{ updated: number }>("/notifications/read-all", {
+        ...(identity ? { identity } : {}),
+      });
       notify.success(t("notify.markAllSuccess", { count: res.data.updated }));
       await reloadSession();
       notifications.reload();
@@ -144,7 +184,9 @@ export default function InboxPage() {
       notify.error(t("notify.openItemFailed"), t("notify.openItemMissingProject"));
       return;
     }
-    navigate(`/projects/${item.project_key}/items/${item.display_id}`);
+    navigate(`/projects/${item.project_key}/items/${item.display_id}`, {
+      state: { from: openOrigin },
+    });
   };
 
   const openStep = (entry: TodoStepEntry) => openItem(entry.item);
@@ -172,6 +214,22 @@ export default function InboxPage() {
                 {t("tabs.todo")}
               </Button>
             </Inline>
+            {agents.length > 0 && (
+              <Box style={{ width: 200 }} testId="inbox-identity">
+                <Select
+                  spacing="compact"
+                  options={identityOptions}
+                  value={
+                    identityOptions.find((o) => o.value === (identity ?? me?.user.id)) ??
+                    null
+                  }
+                  onChange={(opt) => {
+                    const value = (opt as { value?: string } | null)?.value ?? null;
+                    setIdentity(value === me?.user.id ? null : value);
+                  }}
+                />
+              </Box>
+            )}
             {tab === "notifications" ? (
               <>
                 <Box style={{ width: 130 }}>

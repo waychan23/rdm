@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -35,6 +35,11 @@ import { useNotify } from "../lib/flags";
 import { useCurrentUser } from "../lib/auth";
 import type { MailGroup, MailMessage, Mailbox, OrgUser, ProjectMemberRow } from "../types";
 import { flattenMembers } from "../lib/members";
+import {
+  useListProjectKey,
+  useListSearchParams,
+  useOpenOrigin,
+} from "../lib/originSearch";
 import { userLabel } from "../lib/users";
 
 const styles = cssMap({
@@ -57,12 +62,15 @@ interface Option {
 
 export default function MailboxPage() {
   const { t } = useTranslation("mailbox");
-  const { key: routeProjectKey } = useParams<{ key?: string }>();
-  const location = useLocation();
+  const { key: routeKey } = useParams<{ key?: string }>();
+  // The origin URL owns the project while this page is a drawer backdrop.
+  const routeProjectKey = useListProjectKey(routeKey ?? "");
   const notify = useNotify();
   const me = useCurrentUser();
   const projectKey = routeProjectKey ?? "";
-  const [searchParams, setSearchParams] = useSearchParams();
+  // The page itself, or the origin it owns while rendered as a drawer backdrop.
+  const openOrigin = useOpenOrigin();
+  const [searchParams, setSearchParams] = useListSearchParams();
   const projectFilter = searchParams.get("project") ?? projectKey;
   const folder: "inbox" | "archived" | "sent" =
     searchParams.get("folder") === "archived"
@@ -466,7 +474,7 @@ export default function MailboxPage() {
                   key={r}
                   className="rdm-link"
                   to={`/projects/${refProject}/items/${r}`}
-                  state={{ from: location.pathname + location.search }}
+                  state={{ from: openOrigin }}
                   data-testid={`mailbox-item-ref-${r}`}
                 >
                   {r}

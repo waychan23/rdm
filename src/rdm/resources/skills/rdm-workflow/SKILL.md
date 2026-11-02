@@ -27,13 +27,15 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 
 **绑定后只处理该项目**：不要遍历 `whoami.projects`，不要查询、处理或建议处理其他项目的信件/工作项，除非用户明确要求。不要在没有上下文时直接改状态或发信。信箱（查信/回信/@mention/已读）的详细规范见 rdm-mailbox skill。
 
+**汇报时带链接**：向用户提到某个工作项时，附上可直接在浏览器打开的链接。`work_item_get` 的 `data.web_url`，以及 `work_item_list` / `my_work_list` / `backlog_list` 每条结果的 `web_url` 都是完整 URL；写成 Markdown 链接，例如 `[RDM-42 修复抽屉背景](http://127.0.0.1:8765/projects/RDM/items/RDM-42)`。不要只给编号，也不要自己猜主机名或拼接 URL。
+
 ## 2. 认领工作项
 
 1. 先 `work_item_get`（id 接受 `KEY-42` 显示 ID 或 ULID）确认 `assignee`、`status`、`meta.available_steps` 与 `meta.active_step`。
 2. 同一响应的 `meta.comment_count` / `meta.latest_comment_at` 是评论数量与最近评论时间：有评论时先 `comment_list` 读完再动手——评论里常有复现步骤、验收补充和他人结论。
 3. 未指派且该由你做：`work_item_assign` 把负责人设为自己（`member="me"`）。已有负责人时，只有负责人/参与人/manager/project_owner 能改派；不要争抢。
 4. 认领后按当前状态的 direct 步骤推进（通常是 `TODO -> IN_PROGRESS`）。direct 步骤必须由该步骤的指定执行人执行；Owner/Manager 不能越权，需先变更负责人再操作。
-5. 若认领时返回 `ALREADY_ASSIGNED`，说明被别人抢走/指派了——不要争，用 `mailbox_send` 联系其 accountable_human。
+5. 若认领时返回 `ALREADY_ASSIGNED`，说明被别人抢走/指派了——不要争，在该工作项下 `comment_add` 并 `@` 对方的 accountable_human 说明情况。
 6. 需要评审/多人步骤时，负责人先维护 `reviewer`/参与人，再 `work_item_step(action="start", step_key=..., executors=[...])`。
 ## 3. 推进状态：direct 用 work_item_transition，命名步骤用 work_item_step
 
@@ -47,20 +49,21 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 - 每次操作带最新 `row_version`/步骤 `row_version`；`CONFLICT_VERSION` 时重新 get。
 - 活动步骤存在时普通 `work_item_transition` 返回 `WORKFLOW_STEP_IN_PROGRESS`；不要另起步骤。
 - **gate 被拒**：读 `details.blocking_children` 与 `details.missing_fields`；先完成/取消子项、补齐字段，再重试同一操作。
-## 4. 协作：一切走信箱
+## 4. 协作：单个工作项用评论 @，跨工作项才走访信箱
 
-- 跨 human/agent 传递任何需要对方知道的信息，一律 `mailbox_send`，并用 `refs` 附上相关工作项 id。**不要靠 commit message、代码注释或口头约定传递工作信息。**
+- **单个工作项的反馈、进展、验收或阻塞**：直接在该工作项下 `comment_add`，用 `@成员名` 提醒相关人员。评论会自动给对方发一封站内信，同时把信息留在工作项里（详情抽屉可见）；不要只用 `mailbox_send` 汇报单个工作项。
+- **跨工作项、项目级或没有对应工作项的事项**：用 `mailbox_send`，并用 `refs` 附上相关工作项 id。**不要靠 commit message、代码注释或口头约定传递工作信息。**
 - 收件人 `to/cc` 可传成员 name/id 或 group 信箱名；发信前如不确定名字，先在项目上下文中确认，不要猜。
-- 在工作项下发用 `comment_add`；评论里 `@成员名` 会自动给对方发一封站内信（找不到名字或重名时静默忽略）。
+- 评论里的 `@成员名` 需精确匹配项目内唯一名（找不到或重名时静默忽略）；评论只用于沟通，不要用评论推动状态。
 - 评论也是上下文：每次 `work_item_get` 后看 `meta.comment_count` / `meta.latest_comment_at`，有评论（或时间比上次处理更新）就用 `comment_list` 读取，不要只看描述和状态。
-- 回复信件使用 `reply_to`，保持线程。
+- 回复信件使用 `reply_to`，保持线程。同一事项不要既发信又在评论里重复轰炸：工作项内沟通用评论，跨工作项汇总用信件。
 
 ## 5. 完成工作
 
 1. task 完成后先回填实际工时（`work_item_update` 改 `actual_work_hours` 等特型字段）。
 2. 按工作流推进：以 `work_item_get.meta.available_steps` 为准。开发类 task（frontend/backend/fullstack）先 `SUBMIT_REVIEW` 到 `TO_REVIEW`；其他 task 直接 `COMPLETE` 到 `DONE`。
 3. **agent 可以作为 DONE 步骤的执行人**（§17.102）：DONE 目标不再按身份类型过滤候选人。只要 `actors`（assignee/participants/managers/reviewers/project_members）解析到你，就可以发起并执行 `CODE_REVIEW`/任务式步骤收口到 `DONE`；需要人类验收时，由负责人把 reviewer/执行人配置为 human，或由该 agent 的 human manager 代操作（操作历史仍记实际操作身份）。
-4. story 在 TO_TEST、开发类 task 在 TO_REVIEW 后用 `mailbox_send` 通知 accountable_human 验收。issue 的 CLOSED_DONE 是 QA 关单语义。
+4. story 在 TO_TEST、开发类 task 在 TO_REVIEW 后，在该工作项下用 `comment_add` `@accountable_human` 请求验收（会同时发站内信并保留在工作项里），并附上 `web_url`。只有跨工作项汇总才用 `mailbox_send`。issue 的 CLOSED_DONE 是 QA 关单语义。
 5. Story/Issue/Epic 进入终态有 gate：所有直接子项必须先终态；issue 关闭还要求至少 1 个子任务。
 ## 6. 版本发布（Release）
 
@@ -72,12 +75,12 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 ## 7. 异常处理
 
 - 一切错误都是结构化信封 `{"error": {"code", "message", "details"}}`：按 `message` 的中文指引行动，`details`（如 allowed_transitions、available_steps、blocking_children、missing_fields、current_version）给具体数据。
-- `FORBIDDEN` / `WORKFLOW_STEP_FORBIDDEN`：你的身份无权做此事（步骤只能由负责人发起/改派，只能由被指派执行人执行；sprint 创建/启动/关闭仅 owner/manager）——用 mailbox_send 请求有权限的人协助，不要重试。
+- `FORBIDDEN` / `WORKFLOW_STEP_FORBIDDEN`：你的身份无权做此事（步骤只能由负责人发起/改派，只能由被指派执行人执行；sprint 创建/启动/关闭仅 owner/manager）——在该工作项下 `comment_add` 并 `@` 有权限的人请求协助；只有跨工作项事项才用 mailbox_send。不要重试。
 - `WORKFLOW_STEP_REQUIRED`：目标不是唯一 direct 步骤；按 `details.available_steps` 的 `key` 调用 `work_item_step`，不要硬转。
 - `WORKFLOW_STEP_IN_PROGRESS`：已有活动步骤；继续 `execute`/`retry`，或由负责人 `cancel`/`reassign`，不要另起步骤。
 - `WORKFLOW_STEP_NO_CANDIDATES` / `WORKFLOW_STEP_NOTE_REQUIRED`：先补齐 reviewer/参与人/执行人，或填写必填备注。
 - `NOT_FOUND`：id 错或不属于当前项目；重新 `work_item_get` / 查列表确认，**不要猜 id**。
-- **同一个错误连续出现两次**：停止重试，`mailbox_send` 给 accountable_human，附上错误原文与你尝试的操作。
+- **同一个错误连续出现两次**：停止重试。问题属于某个具体工作项时，在该工作项下 `comment_add` 并 `@accountable_human`，附上错误原文与你尝试的操作；跨工作项问题才用 `mailbox_send`。
 ## 8. 图片与附件
 
 - 工作项描述、评论、Sprint 目标里的图片是 **project 级附件**，正文写成

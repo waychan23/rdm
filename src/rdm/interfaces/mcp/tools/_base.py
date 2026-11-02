@@ -56,6 +56,26 @@ def ok(data: Any, **meta: Any) -> dict[str, Any]:
     return {"data": data, "meta": meta}
 
 
+def work_item_web_url(container: Container, project_key: str, display_id: str) -> str:
+    """Browser URL for a work item, so skills can link the user to the Web UI."""
+    return f"{container.settings.base_url}/projects/{project_key}/items/{display_id}"
+
+
+def attach_work_item_web_url(
+    container: Container, project_key: str, row: dict[str, Any]
+) -> dict[str, Any]:
+    row["web_url"] = work_item_web_url(container, project_key, str(row["display_id"]))
+    return row
+
+
+def attach_work_item_web_urls(
+    container: Container, project_key: str, rows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    for row in rows:
+        attach_work_item_web_url(container, project_key, row)
+    return rows
+
+
 _PROJECT_RECOVERY = {
     "steps": [
         "读取当前工作区根目录的 .rdm/project.json。",

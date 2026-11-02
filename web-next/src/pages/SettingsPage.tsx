@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
+import { useListProjectKey } from "../lib/originSearch";
 
 import { cssMap } from "@atlaskit/css";
 import Button from "@atlaskit/button/default/button";
@@ -47,7 +48,9 @@ const styles = cssMap({
 
 export default function SettingsPage() {
   const { t } = useTranslation("org");
-  const { key: projectKey = "" } = useParams();
+  const { key: routeKey = "" } = useParams();
+  // The origin URL owns the project while this page is a drawer backdrop.
+  const projectKey = useListProjectKey(routeKey);
   const notify = useNotify();
 
   const [nonce, setNonce] = useState(0);

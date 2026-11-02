@@ -15,7 +15,11 @@ import { statusLabel } from "../lib/labels";
 import { useNotify } from "../lib/flags";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";
 import { useRememberViewScroll } from "../hooks/useRememberViewScroll";
-import { useListOrigin, useListSearchParams } from "../lib/originSearch";
+import {
+  useListOrigin,
+  useListProjectKey,
+  useListSearchParams,
+} from "../lib/originSearch";
 import { recall, remember } from "../lib/pageCache";
 import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
 import type { WorkItem, WorkflowDto } from "../types";
@@ -90,7 +94,9 @@ const styles = cssMap({
 
 export default function BoardPage() {
   const { t } = useTranslation("projects");
-  const { key: projectKey = "" } = useParams();
+  const { key: routeKey = "" } = useParams();
+  // The origin URL owns the project while this page is a drawer backdrop.
+  const projectKey = useListProjectKey(routeKey);
   const navigate = useNavigate();
   const location = useLocation();
   const notify = useNotify();
