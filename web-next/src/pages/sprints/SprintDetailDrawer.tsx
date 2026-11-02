@@ -15,6 +15,7 @@ import TypeKindIcon from "../../components/TypeKindIcon";
 import WorkItemPickerDialog from "../../components/WorkItemPickerDialog";
 import { api, errorCause } from "../../lib/api";
 import { useNotify } from "../../lib/flags";
+import { useListOrigin } from "../../lib/originSearch";
 import type { SprintDetail, WorkItem } from "../../types";
 import StatusLozenge from "../../workitems/status";
 import SprintFormDialog, { type SprintFormValues } from "./SprintFormDialog";
@@ -41,6 +42,9 @@ export default function SprintDetailDrawer({
 }: Props) {
   const { t } = useTranslation("sprints");
   const notify = useNotify();
+  // As a drawer backdrop, the work item drawer owns focus and Escape; the
+  // sprint drawer only needs to stay visible underneath it.
+  const isBackdrop = useListOrigin() !== null;
   const [detail, setDetail] = useState<SprintDetail | null>(null);
   const [showEdit, setShowEdit] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -137,6 +141,8 @@ export default function SprintDetailDrawer({
         onClose={onClose}
         width="wide"
         label={t("drawerLabel")}
+        isFocusLockEnabled={!isBackdrop}
+        autoFocusFirstElem={!isBackdrop}
         testId="sprint-detail-drawer"
       >
         {detail && (

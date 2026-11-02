@@ -10,7 +10,9 @@
 .rdm-item-overlay {
   position: absolute;
   inset: 0;
-  z-index: 100;
+  /* Above an Atlaskit Drawer panel (500) that stays open behind the item
+     drawer, but below ModalDialog positioners (510) opened from the panel. */
+  z-index: 505;
 }
 
 .rdm-item-backdrop {

@@ -45,9 +45,16 @@ test.describe("work item type icons", () => {
 
     await page.getByTestId(`sprint-item-open-${story.display_id}`).click();
     await expect(page.getByTestId("item-panel-display-id")).toHaveText(story.display_id);
-    // The sprint page stays behind the drawer (RDM-99 regression guard).
+    // The sprint page and the sprint detail drawer stay behind the item drawer.
     await expect(page.getByTestId("page-sprints")).toBeVisible();
+    await expect(page.getByTestId("sprint-detail")).toBeVisible();
     await expect(page.getByTestId("page-backlog")).toHaveCount(0);
+
+    // Closing the item drawer returns to the still-open sprint detail.
+    await page.getByTestId("item-panel-close").click();
+    await expect(page.getByTestId("item-panel")).toHaveCount(0);
+    await expect(page.getByTestId("sprint-detail")).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`sprint=${sprint.id}`));
   });
 
   test("release item rows show the type and open the drawer", async ({ api, app, page }) => {
@@ -73,7 +80,47 @@ test.describe("work item type icons", () => {
     await page.getByTestId(`release-item-open-${story.display_id}`).click();
     await expect(page.getByTestId("item-panel-display-id")).toHaveText(story.display_id);
     await expect(page.getByTestId("page-releases")).toBeVisible();
+    await expect(page.getByTestId("release-detail")).toBeVisible();
     await expect(page.getByTestId("page-backlog")).toHaveCount(0);
+
+    await page.getByTestId("item-panel-close").click();
+    await expect(page.getByTestId("item-panel")).toHaveCount(0);
+    await expect(page.getByTestId("release-detail")).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`release=${release.id}`));
+  });
+
+  test("board sprint drawer stays open behind the item drawer", async ({
+    api,
+    app,
+    page,
+  }) => {
+    const projectKey = await api.createSandboxProject();
+    const stamp = Date.now();
+    const story = await api.createItemIn(projectKey, {
+      kind: "story",
+      title: `board-drawer-story-${stamp}`,
+    });
+    const sprint = (
+      await api.post<{ id: string }>(`/projects/${projectKey}/sprints`, {
+        name: `board-drawer-sprint-${stamp}`,
+      })
+    ).data;
+    await api.post(`/sprints/${sprint.id}/items`, { items: [story.display_id] });
+
+    await page.goto(
+      `${app.baseURL}/projects/${projectKey}/board?sprint=${sprint.id}`,
+    );
+    await page.getByTestId("work-item-sprint-open").click();
+    await expect(page.getByTestId("sprint-detail")).toBeVisible();
+
+    await page.getByTestId(`sprint-item-open-${story.display_id}`).click();
+    await expect(page.getByTestId("item-panel-display-id")).toHaveText(story.display_id);
+    await expect(page.getByTestId("sprint-detail")).toBeVisible();
+    await expect(page.getByTestId("page-board")).toBeVisible();
+
+    await page.getByTestId("item-panel-close").click();
+    await expect(page.getByTestId("item-panel")).toHaveCount(0);
+    await expect(page.getByTestId("sprint-detail")).toBeVisible();
   });
 
   test("work item filters use two rows with a clear sprint placeholder", async ({

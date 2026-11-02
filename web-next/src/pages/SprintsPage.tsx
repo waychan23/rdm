@@ -13,7 +13,11 @@ import { api, errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
 import { itemPath } from "../lib/navigation";
-import { useListProjectKey, useOpenOrigin } from "../lib/originSearch";
+import {
+  useListProjectKey,
+  useListSearchParams,
+  useOpenOrigin,
+} from "../lib/originSearch";
 import type { Sprint } from "../types";
 import SprintDetailDrawer from "./sprints/SprintDetailDrawer";
 import SprintFormDialog, { type SprintFormValues } from "./sprints/SprintFormDialog";
@@ -30,8 +34,17 @@ export default function SprintsPage() {
   const navigate = useNavigate();
   const openOrigin = useOpenOrigin();
   const notify = useNotify();
+  const [searchParams, setSearchParams] = useListSearchParams();
   const [showCreate, setShowCreate] = useState(false);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  // URL-backed so the open detail drawer survives becoming the item drawer's
+  // backdrop (opening a work item must not close the sprint drawer).
+  const detailId = searchParams.get("sprint");
+  const setDetailId = (id: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (id) next.set("sprint", id);
+    else next.delete("sprint");
+    setSearchParams(next, { replace: true });
+  };
 
   const loadSprints = useCallback(
     async () => (await api.get<Sprint[]>(`/projects/${projectKey}/sprints`)).data,

@@ -13,7 +13,7 @@ import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { statusLabel } from "../lib/labels";
 import { itemPath } from "../lib/navigation";
-import { useOpenOrigin } from "../lib/originSearch";
+import { useListSearchParams, useOpenOrigin } from "../lib/originSearch";
 import { userLabel } from "../lib/users";
 import type { Assignee, Sprint, WorkflowDto } from "../types";
 import { kindOptions } from "./constants";
@@ -114,9 +114,17 @@ export default function WorkItemToolbar({
   const { t } = useTranslation("projects");
   const navigate = useNavigate();
   const openOrigin = useOpenOrigin();
+  const [searchParams, setSearchParams] = useListSearchParams();
   const [qInput, setQInput] = useState(filters.q);
   const [sprints, setSprints] = useState<Sprint[]>([]);
-  const [sprintDrawerOpen, setSprintDrawerOpen] = useState(false);
+  // URL-backed so the sprint drawer stays open behind a work item drawer.
+  const sprintDrawerOpen = searchParams.get("sprintOpen") === "1";
+  const setSprintDrawerOpen = (open: boolean) => {
+    const next = new URLSearchParams(searchParams);
+    if (open) next.set("sprintOpen", "1");
+    else next.delete("sprintOpen");
+    setSearchParams(next, { replace: true });
+  };
   const [sprintsNonce, setSprintsNonce] = useState(0);
 
   useEffect(() => setQInput(filters.q), [filters.q]);

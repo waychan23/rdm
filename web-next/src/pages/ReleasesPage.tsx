@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -25,7 +25,12 @@ import { api, errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 import { formatDate } from "../lib/format";
 import { itemPath } from "../lib/navigation";
-import { useListProjectKey, useOpenOrigin } from "../lib/originSearch";
+import {
+  useListOrigin,
+  useListProjectKey,
+  useListSearchParams,
+  useOpenOrigin,
+} from "../lib/originSearch";
 import type { Release, ReleaseDetail, ReleaseStats, WorkItem } from "../types";
 import StatusLozenge from "../workitems/status";
 import ReleaseFormDialog, { type ReleaseFormValues } from "./releases/ReleaseFormDialog";
@@ -86,10 +91,22 @@ export default function ReleasesPage() {
   const projectKey = useListProjectKey(routeKey);
   const navigate = useNavigate();
   const openOrigin = useOpenOrigin();
+  // As a drawer backdrop, the work item drawer owns focus and Escape; the
+  // release drawer only needs to stay visible underneath it.
+  const isBackdrop = useListOrigin() !== null;
   const notify = useNotify();
+  const [searchParams, setSearchParams] = useListSearchParams();
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  // URL-backed so the open detail drawer survives becoming the item drawer's
+  // backdrop (opening a work item must not close the release drawer).
+  const detailId = searchParams.get("release");
+  const setDetailId = (id: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (id) next.set("release", id);
+    else next.delete("release");
+    setSearchParams(next, { replace: true });
+  };
   const [detail, setDetail] = useState<ReleaseDetail | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
@@ -103,18 +120,28 @@ export default function ReleasesPage() {
   );
   const { data: releases, loading, error, reload } = useAsync(loadReleases, [projectKey]);
 
-  const openDetail = useCallback(
-    async (id: string) => {
-      setDetailId(id);
-      try {
-        const res = await api.get<ReleaseDetail>(`/releases/${id}`);
-        setDetail(res.data);
-      } catch (e) {
-        notify.error(t("loadFailed"), errorCause(e)?.message);
-      }
-    },
-    [notify, t],
-  );
+  const openDetail = (id: string) => setDetailId(id);
+
+  // Load (or clear) the drawer body whenever the URL-backed selection changes,
+  // including when this page is re-created as another item's backdrop.
+  useEffect(() => {
+    if (!detailId) {
+      setDetail(null);
+      return;
+    }
+    let alive = true;
+    api
+      .get<ReleaseDetail>(`/releases/${detailId}`)
+      .then((res) => {
+        if (alive) setDetail(res.data);
+      })
+      .catch((e) => {
+        if (alive) notify.error(t("loadFailed"), errorCause(e)?.message);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [detailId, notify, t]);
 
   const refreshDetail = useCallback(async () => {
     if (detailId) {
@@ -320,6 +347,8 @@ export default function ReleasesPage() {
         }}
         width="wide"
         label={t("drawerLabel")}
+        isFocusLockEnabled={!isBackdrop}
+        autoFocusFirstElem={!isBackdrop}
         testId="release-detail-drawer"
       >
         {detail && (
