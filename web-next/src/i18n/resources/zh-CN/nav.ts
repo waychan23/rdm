@@ -15,6 +15,7 @@ const nav = {
     projects: "项目",
     inbox: "通知/待办",
     orgUsers: "用户",
+    workflows: "工作流",
     settings: "我的",
   },
   topbar: {

@@ -23,9 +23,20 @@ class ProjectModel(AuditMixin, SoftDeleteMixin, Base):
     owner_user_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     description_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    # Selected workflow config version (RDM-84); NULL = packaged default.
+    workflow_config_version_id: Mapped[str | None] = mapped_column(
+        String(32),
+        ForeignKey(
+            "workflow_config_version.id",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        nullable=True,
+    )
     item_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     __table_args__ = (
+        Index("ix_project_workflow_config_version", "workflow_config_version_id"),
         Index(
             "ux_project_org_key_lower",
             "org_id",

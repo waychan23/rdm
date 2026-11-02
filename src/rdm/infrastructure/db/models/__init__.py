@@ -35,6 +35,10 @@ from rdm.infrastructure.db.models.release import (
     ProductReleaseModel,
 )
 from rdm.infrastructure.db.models.sprint import SprintItemModel, SprintModel
+from rdm.infrastructure.db.models.workflow_config import (
+    WorkflowConfigModel,
+    WorkflowConfigVersionModel,
+)
 from rdm.infrastructure.db.models.workitem import (
     WorkItemIssueModel,
     WorkItemModel,
@@ -55,6 +59,8 @@ __all__ = [
     "PasswordTicketModel",
     "ProjectModel",
     "ProjectMemberModel",
+    "WorkflowConfigModel",
+    "WorkflowConfigVersionModel",
     "NotificationModel",
     "WorkItemModel",
     "WorkItemStoryModel",

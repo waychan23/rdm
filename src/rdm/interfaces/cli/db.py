@@ -80,8 +80,10 @@ def run_upgrade(data_dir: Path, revision: str = "head", *, database_url: str | N
     initialize_data_dir(data_dir)
     command.upgrade(_alembic_config(settings), revision)
     if revision == "head":
+        from rdm.infrastructure.db.workflow_config_sync import sync_workflow_configs
         from rdm.infrastructure.db.workflow_version_sync import sync_workflow_versions
 
+        sync_workflow_configs(settings)
         sync_workflow_versions(settings)
 
 

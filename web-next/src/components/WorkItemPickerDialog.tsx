@@ -153,7 +153,7 @@ export default function WorkItemPickerDialog({
   const workflowState = useAsync<WorkflowDto | null>(
     async () => {
       if (!open) return null;
-      return (await api.get<WorkflowDto>("/workflow")).data;
+      return (await api.get<WorkflowDto>(`/workflow?project=${encodeURIComponent(projectKey)}`)).data;
     },
     [open, projectKey],
   );

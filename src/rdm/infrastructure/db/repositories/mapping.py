@@ -34,6 +34,8 @@ from rdm.domain.entities import (
     TaskFields,
     User,
     UserToken,
+    WorkflowConfig,
+    WorkflowConfigVersion,
     WorkflowVersion,
     WorkItem,
     WorkItemStep,
@@ -64,6 +66,8 @@ from rdm.infrastructure.db.models import (
     SprintModel,
     UserModel,
     UserTokenModel,
+    WorkflowConfigModel,
+    WorkflowConfigVersionModel,
     WorkItemIssueModel,
     WorkItemModel,
     WorkItemStepExecutorModel,
@@ -94,6 +98,7 @@ def project_to_domain(row: ProjectModel) -> Project:
         description_md=row.description_md,
         owner_user_id=row.owner_user_id,
         status=ProjectStatus(row.status),
+        workflow_config_version_id=row.workflow_config_version_id,
         item_seq=row.item_seq,
         created_at=row.created_at,
         created_by=row.created_by,
@@ -562,6 +567,40 @@ def workflow_version_to_domain(row: WorkItemWorkflowVersionModel) -> WorkflowVer
         created_at=row.created_at,
         created_by=row.created_by,
         updated_at=row.updated_at,
+    )
+
+
+def workflow_config_to_domain(row: WorkflowConfigModel) -> WorkflowConfig:
+    return WorkflowConfig(
+        id=row.id,
+        key=row.key,
+        name=row.name,
+        is_builtin=bool(row.is_builtin),
+        enabled=bool(row.enabled),
+        current_version_id=row.current_version_id,
+        created_at=row.created_at,
+        created_by=row.created_by,
+        updated_at=row.updated_at,
+        updated_by=row.updated_by,
+    )
+
+
+def workflow_config_version_to_domain(
+    row: WorkflowConfigVersionModel,
+) -> WorkflowConfigVersion:
+    return WorkflowConfigVersion(
+        id=row.id,
+        config_id=row.config_id,
+        version=row.version,
+        schema_version=row.schema_version,
+        revision=row.revision,
+        content_text=row.content_text,
+        content=dict(row.content or {}),
+        content_hash=row.content_hash,
+        source_version_id=row.source_version_id,
+        is_active=bool(row.is_active),
+        created_at=row.created_at,
+        created_by=row.created_by,
     )
 
 

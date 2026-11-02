@@ -194,7 +194,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
         api.get<Artifact[]>(
           `/projects/${projectKey}/artifacts?owner_type=work_item&owner_ref=${encodeURIComponent(itemId)}`,
         ),
-        api.get<WorkflowDto>("/workflow"),
+        api.get<WorkflowDto>(`/workflow?project=${encodeURIComponent(projectKey)}`),
         api.get<{ sprint: Sprint | null }>(`/work-items/${itemId}/sprint`),
         api.get<Sprint[]>(`/projects/${projectKey}/sprints`),
       ]);

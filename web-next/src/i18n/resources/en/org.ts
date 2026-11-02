@@ -110,6 +110,12 @@ const org = {
       save: "Save",
       archive: "Archive project",
     },
+    workflow: {
+      heading: "Workflow config",
+      label: "Project workflow",
+      hint: "Only enabled configs with an active version are listed. Changes affect newly created items; existing items keep their pinned workflow.",
+      current: " (current)",
+    },
     owner: {
       heading: "Project owner",
       hint: "A project-director / Org Owner or the current project owner can reassign it; the target must be an enabled human in the project.",

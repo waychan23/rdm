@@ -36,6 +36,7 @@ from rdm.interfaces.http.stream import router as stream_router
 from rdm.interfaces.http.todos import router as todos_router
 from rdm.interfaces.http.users import router as users_router
 from rdm.interfaces.http.workflow import router as workflow_router
+from rdm.interfaces.http.workflow_config import router as workflow_config_router
 from rdm.interfaces.http.workitem import router as work_items_router
 from rdm.interfaces.http.workspaces import router as workspaces_router
 from rdm.interfaces.mcp.oauth_provider import RdmOAuthProvider
@@ -111,6 +112,7 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     app.include_router(artifacts_router)
     app.include_router(workspaces_router)
     app.include_router(workflow_router)
+    app.include_router(workflow_config_router)
     app.include_router(overview_router)
     app.include_router(notifications_router)
     app.include_router(todos_router)

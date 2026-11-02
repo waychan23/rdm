@@ -26,6 +26,7 @@ const WorkspacesPage = lazy(() => import("./pages/WorkspacesPage"));
 const MembersPage = lazy(() => import("./pages/MembersPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const OrgUsersPage = lazy(() => import("./pages/OrgUsersPage"));
+const WorkflowConfigsPage = lazy(() => import("./pages/WorkflowConfigsPage"));
 const PersonalSettingsPage = lazy(() => import("./pages/PersonalSettingsPage"));
 const ItemPage = lazy(() => import("./pages/ItemPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
@@ -92,6 +93,10 @@ export const router = createBrowserRouter([
       { path: "projects/:key/settings", Component: () => withSuspense(<SettingsPage />) },
       { path: "projects/:key/items/:id", Component: () => withSuspense(<ItemPage />) },
       { path: "org/users", loader: requireOrgAdmin, Component: () => withSuspense(<OrgUsersPage />) },
+      {
+        path: "workflow-configs",
+        Component: () => withSuspense(<WorkflowConfigsPage />),
+      },
       { path: "settings", Component: () => withSuspense(<PersonalSettingsPage />) },
       { path: "*", Component: () => withSuspense(<NotFoundPage />) },
     ],

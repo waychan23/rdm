@@ -57,6 +57,7 @@ from rdm.infrastructure.db.repositories.user import (
 from rdm.infrastructure.db.repositories.work_item import WorkItemRepository
 from rdm.infrastructure.db.repositories.work_item_people import WorkItemPeopleRepository
 from rdm.infrastructure.db.repositories.work_item_step import WorkItemStepRepository
+from rdm.infrastructure.db.repositories.workflow_config import WorkflowConfigRepository
 from rdm.infrastructure.db.repositories.workflow_version import WorkflowVersionRepository
 
 logger = logging.getLogger("rdm.uow")
@@ -98,6 +99,7 @@ class SqlAlchemyUnitOfWork:
         self.work_item_people: WorkItemPeopleRepository | None = None
         self.work_item_steps: WorkItemStepRepository | None = None
         self.workflow_versions: WorkflowVersionRepository | None = None
+        self.workflow_configs: WorkflowConfigRepository | None = None
         self.sprints: SprintRepository | None = None
         self.sprint_items: SprintItemRepository | None = None
         self.releases: ProductReleaseRepository | None = None
@@ -136,6 +138,7 @@ class SqlAlchemyUnitOfWork:
             self.work_item_people = WorkItemPeopleRepository(self.session)
             self.work_item_steps = WorkItemStepRepository(self.session)
             self.workflow_versions = WorkflowVersionRepository(self.session)
+            self.workflow_configs = WorkflowConfigRepository(self.session)
             self.sprints = SprintRepository(self.session)
             self.sprint_items = SprintItemRepository(self.session)
             self.releases = ProductReleaseRepository(self.session)

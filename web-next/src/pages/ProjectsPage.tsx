@@ -14,6 +14,7 @@ import ModalDialog, {
   ModalTransition,
 } from "@atlaskit/modal-dialog";
 import SectionMessage from "@atlaskit/section-message";
+import Select from "@atlaskit/select";
 import Spinner from "@atlaskit/spinner";
 import TextArea from "@atlaskit/textarea";
 import Textfield from "@atlaskit/textfield";
@@ -26,7 +27,7 @@ import { api, errorCause } from "../lib/api";
 import { useCurrentUser } from "../lib/auth";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
-import type { Project } from "../types";
+import type { Project, WorkflowConfig } from "../types";
 
 const styles = cssMap({
   card: {
@@ -59,7 +60,7 @@ const styles = cssMap({
   },
 });
 
-const FORM_INITIAL = { key: "", name: "", description_md: "" };
+const FORM_INITIAL = { key: "", name: "", description_md: "", workflow_config_version_id: "" };
 
 export default function ProjectsPage() {
   const { t } = useTranslation("projects");
@@ -76,10 +77,18 @@ export default function ProjectsPage() {
     async () => (await api.get<Project[]>("/projects")).data,
     [],
   );
+  const { data: workflowConfigs } = useAsync(
+    async () => (await api.get<WorkflowConfig[]>("/workflow-configs?enabled=true")).data,
+    [],
+  );
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
     if (saving) return;
+    if (!form.workflow_config_version_id) {
+      notify.error(t("create.workflow"), t("create.workflowPlaceholder"));
+      return;
+    }
     setSaving(true);
     try {
       await api.post("/projects", { ...form });
@@ -191,6 +200,42 @@ export default function ProjectsPage() {
                       value={form.name}
                       testId="project-create-name"
                       onChange={(e) => setForm({ ...form, name: e.currentTarget.value })}
+                    />
+                  </FormField>
+                  <FormField label={t("create.workflow")} htmlFor="project-workflow">
+                    <Select
+                      inputId="project-workflow"
+                      testId="project-create-workflow"
+                      placeholder={t("create.workflowPlaceholder")}
+                      options={(workflowConfigs ?? [])
+                        .filter((c) => c.enabled && c.active_version)
+                        .map((c) => ({
+                          label: `${c.name} (${c.key} · v${c.active_version?.version})`,
+                          value: c.active_version?.id ?? "",
+                        }))}
+                      value={
+                        form.workflow_config_version_id
+                          ? (() => {
+                              const found = (workflowConfigs ?? []).find(
+                                (c) => c.active_version?.id === form.workflow_config_version_id,
+                              );
+                              return found
+                                ? {
+                                    label: `${found.name} (${found.key} · v${found.active_version?.version})`,
+                                    value: form.workflow_config_version_id,
+                                  }
+                                : null;
+                            })()
+                          : null
+                      }
+                      onChange={(option) =>
+                        setForm({
+                          ...form,
+                          workflow_config_version_id:
+                            (option as { value: string } | null)?.value ?? "",
+                        })
+                      }
+                      isClearable={false}
                     />
                   </FormField>
                   <FormField label={t("create.description")} htmlFor="project-desc">

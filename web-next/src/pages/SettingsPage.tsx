@@ -22,7 +22,7 @@ import { statusLabel } from "../lib/labels";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
 import { userLabel } from "../lib/users";
-import type { OrgUser, Project, ProjectMemberRow } from "../types";
+import type { OrgUser, Project, ProjectMemberRow, WorkflowConfig } from "../types";
 
 const styles = cssMap({
   infoBlock: {
@@ -53,6 +53,7 @@ export default function SettingsPage() {
   const [nonce, setNonce] = useState(0);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [workflowVersionId, setWorkflowVersionId] = useState<string>("");
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -70,10 +71,16 @@ export default function SettingsPage() {
      [projectKey, nonce],
   );
 
+  const { data: workflowConfigs } = useAsync(
+    async () => (await api.get<WorkflowConfig[]>("/workflow-configs?enabled=true")).data,
+    [],
+  );
+
   useEffect(() => {
      if (data) {
        setName(data.project.name);
        setDescription(data.project.description_md ?? "");
+       setWorkflowVersionId(data.project.workflow_config_version_id ?? "");
        setOwnerId(data.project.owner_user_id ?? null);
      }
   }, [data]);
@@ -88,6 +95,9 @@ export default function SettingsPage() {
        await api.patch(`/projects/${projectKey}`, {
          name,
          description_md: description,
+         ...(workflowVersionId
+           ? { workflow_config_version_id: workflowVersionId }
+           : {}),
        });
        reload();
        notify.success(t("projectSettings.notices.saved"));
@@ -200,6 +210,57 @@ export default function SettingsPage() {
                projectKey={projectKey}
                minimumRows={3}
                testId="project-settings-description"
+             />
+           </FormField>
+           <FormField
+             label={t("projectSettings.workflow.label")}
+             hint={t("projectSettings.workflow.hint")}
+             htmlFor="project-workflow"
+           >
+             <Select
+               inputId="project-workflow"
+               options={(() => {
+                 const options = (workflowConfigs ?? [])
+                   .filter((config) => config.enabled && config.active_version)
+                   .map((config) => ({
+                     label: `${config.name} (${config.key} · v${config.active_version?.version})`,
+                     value: config.active_version?.id ?? "",
+                   }));
+                 if (
+                   workflowVersionId &&
+                   !options.some((option) => option.value === workflowVersionId)
+                 ) {
+                   options.unshift({
+                     label: `${t("projectSettings.workflow.label")} ${t(
+                       "projectSettings.workflow.current",
+                     )}`,
+                     value: workflowVersionId,
+                   });
+                 }
+                 return options;
+               })()}
+               value={
+                 workflowVersionId
+                   ? {
+                       label:
+                         (() => {
+                           const config = (workflowConfigs ?? []).find(
+                             (c) => c.active_version?.id === workflowVersionId,
+                           );
+                           return config
+                             ? `${config.name} (${config.key} · v${config.active_version?.version})`
+                             : `${t("projectSettings.workflow.label")} ${t(
+                                 "projectSettings.workflow.current",
+                               )}`;
+                         })(),
+                       value: workflowVersionId,
+                     }
+                   : null
+               }
+               onChange={(option) =>
+                 setWorkflowVersionId((option as { value: string } | null)?.value ?? "")
+               }
+               isClearable={false}
              />
            </FormField>
            <Inline space="space.100">

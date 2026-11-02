@@ -189,8 +189,10 @@ export class Api {
     return this.request<T>("POST", path, body, actor);
   }
 
-  workflow(): Promise<WorkflowDto> {
-    return this.get<WorkflowDto>("/workflow").then((res) => res.data);
+  workflow(projectKey = this.ctx.projectKey): Promise<WorkflowDto> {
+    return this.get<WorkflowDto>(
+      `/workflow?project=${encodeURIComponent(projectKey)}`,
+    ).then((res) => res.data);
   }
 
   getItem(ref: string, actor: UserName = "owner"): Promise<ItemDetail> {

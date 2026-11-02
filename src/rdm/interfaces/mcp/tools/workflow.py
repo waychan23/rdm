@@ -7,6 +7,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from rdm.application.services.project_service import ProjectService
+from rdm.application.services.workflow_config_service import WorkflowConfigService
 from rdm.application.services.workflow_service import build_workflow_dto
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.interfaces.http.container import Container
@@ -104,15 +105,24 @@ def register(mcp: FastMCP, container: Container) -> None:
         return await run_tool(container, run)
 
     @mcp.tool
-    async def workflow_get(kind: str | None = None, task_type: str | None = None) -> Any:
+    async def workflow_get(
+        kind: str | None = None,
+        task_type: str | None = None,
+        project: str | None = None,
+    ) -> Any:
         """拉取流程定义（命名步骤、合法目标、终态、fields、gate）。
 
         任何状态流转前先看它；kind 可选（epic/story/issue/task/sprint），
-        task_type 可选（task 子类型），缺省返回全部。只转 allowed 中的状态，
+        task_type 可选（task 子类型），缺省返回全部。传 project 时返回该项目
+        所选工作流配置的定义（未选配置时返回系统默认）。只转 allowed 中的状态，
         不要凭记忆猜状态名。
         """
 
         async def run(uow, actor):
-            return ok(build_workflow_dto(kind=kind, task_type=task_type))
+            spec = None
+            if project:
+                proj = await ProjectService(uow).get_by_key(actor, project)
+                spec = (await WorkflowConfigService(uow).engine_for_project(proj)).spec
+            return ok(build_workflow_dto(spec=spec, kind=kind, task_type=task_type))
 
         return await run_tool(container, run)

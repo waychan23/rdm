@@ -45,6 +45,7 @@ void i18n.use(initReactI18next).init({
     "labels",
     "auth",
     "workitems",
+    "workflows",
     "collab",
     "admin",
     "components",

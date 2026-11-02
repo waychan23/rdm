@@ -45,6 +45,7 @@ def project_out(p: Project) -> dict:
         "description_md": p.description_md,
         "owner_user_id": p.owner_user_id,
         "status": str(p.status),
+        "workflow_config_version_id": p.workflow_config_version_id,
         "created_at": _iso(p.created_at),
     }
 

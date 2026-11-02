@@ -47,6 +47,9 @@ class Project:
     # only changed by transfer_project_owner.
     owner_user_id: str | None = None
     status: ProjectStatus = ProjectStatus.active
+    # Selected workflow config version (RDM-84). NULL means "follow the
+    # process-wide packaged default" for legacy rows and non-UI clients.
+    workflow_config_version_id: str | None = None
     item_seq: int = 0
     created_at: dt.datetime = field(default_factory=_utcnow)
     created_by: str | None = None
@@ -295,6 +298,52 @@ class WorkflowVersion:
     created_at: dt.datetime = field(default_factory=_utcnow)
     created_by: str | None = None
     updated_at: dt.datetime | None = None
+
+
+@dataclass(kw_only=True)
+class WorkflowConfig:
+    """A selectable workflow config (RDM-84).
+
+    ``is_builtin`` configs are imported from ``workflow-configs/*.json5`` at
+    startup and cannot be edited in the web UI; they can only be forked into a
+    new non-builtin key. Disabling a config blocks new project selection but
+    never changes projects already pinned to one of its versions.
+    """
+
+    id: str
+    key: str
+    name: str
+    is_builtin: bool = False
+    enabled: bool = True
+    current_version_id: str | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    updated_by: str | None = None
+
+
+@dataclass(kw_only=True)
+class WorkflowConfigVersion:
+    """One immutable version of a :class:`WorkflowConfig`.
+
+    ``content_text`` is the exact JSON5 source so the web editor round-trips
+    comments; ``content`` is the parsed document used to build engines.
+    ``source_version_id`` records lineage: for an edit it points at the
+    previous active version, for a fork at the source config's version.
+    """
+
+    id: str
+    config_id: str
+    version: int
+    schema_version: int
+    revision: int
+    content_text: str
+    content: dict[str, Any]
+    content_hash: str
+    source_version_id: str | None = None
+    is_active: bool = True
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
 
 
 @dataclass(kw_only=True)

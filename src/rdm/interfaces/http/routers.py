@@ -83,6 +83,9 @@ class ProjectCreateIn(BaseModel):
     key: str = Field(min_length=2, max_length=12)
     name: str = Field(min_length=1, max_length=200)
     description_md: str | None = None
+    # Required by the web UI (RDM-84). Optional on the wire for compatibility
+    # with older clients/tests: omitted means "packaged default workflow".
+    workflow_config_version_id: str | None = None
 
 
 @projects_router.get("/projects")
@@ -112,6 +115,7 @@ async def create_project(
             name=body.name,
             description_md=body.description_md,
             actor=actor,
+            workflow_config_version_id=body.workflow_config_version_id,
         )
     return {"data": project_out(project)}
 
@@ -138,6 +142,7 @@ class ProjectUpdateIn(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description_md: str | None = None
+    workflow_config_version_id: str | None = None
 
 
 @projects_router.patch("/projects/{key}")
@@ -153,6 +158,7 @@ async def update_project(
             actor=actor,
             name=body.name,
             description_md=body.description_md,
+            workflow_config_version_id=body.workflow_config_version_id,
         )
     return {"data": project_out(project)}
 

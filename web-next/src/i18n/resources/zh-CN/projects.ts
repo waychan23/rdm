@@ -21,6 +21,8 @@ const projects = {
     key: "Key",
     name: "名称",
     description: "描述",
+    workflow: "工作流配置",
+    workflowPlaceholder: "必选一个启用的工作流配置",
     cancel: "取消",
     submit: "创建",
   },

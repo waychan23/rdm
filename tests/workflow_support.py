@@ -1,6 +1,6 @@
 """Dedicated workflow definition for behavior tests.
 
-Behavior tests must not depend on the packaged ``src/rdm/resources/workflow.json5``:
+Behavior tests must not depend on the packaged ``src/rdm/resources/workflow-configs/default.json5``:
 product edits to the shipped state machine should not cause a wave of unrelated
 test failures. ``tests/resources/workflow.json5`` is the stable test contract
 (see its header comment).

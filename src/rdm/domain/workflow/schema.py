@@ -1,4 +1,4 @@
-"""Pydantic schema for resources/workflow.json5 — validated and frozen at load.
+"""Pydantic schema for workflow-configs/*.json5 — validated and frozen at load.
 
 v3 introduces named transition edges ("steps") with executor types, counted
 executor ranges, note requirements, field gates and optional task execution.
@@ -931,6 +931,10 @@ class WorkflowSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     version: int
+    # Optional selection metadata (RDM-84). Config files must set both; the
+    # behavior-test fixture and in-memory specs may omit them.
+    key: str | None = None
+    name: str | None = None
     # Definition revision; bumped whenever states/steps/gates change in a way
     # that matters for in-flight items (§17 M7). Distinct from schema version.
     revision: int = 1

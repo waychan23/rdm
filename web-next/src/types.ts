@@ -10,6 +10,38 @@ export interface Project {
   implicit?: boolean;
   membership_id?: string | null;
   unread_count?: number;
+  /** Selected workflow config version (RDM-84); null = packaged default. */
+  workflow_config_version_id?: string | null;
+}
+
+/** One immutable workflow config version (RDM-84). */
+export interface WorkflowConfigVersion {
+  id: string;
+  config_id: string;
+  version: number;
+  schema_version: number;
+  revision: number;
+  content_hash: string;
+  source_version_id?: string | null;
+  is_active: boolean;
+  created_at: string;
+  created_by?: string | null;
+  content_text?: string;
+}
+
+/** A selectable workflow config with its active version (RDM-84). */
+export interface WorkflowConfig {
+  id: string;
+  key: string;
+  name: string;
+  is_builtin: boolean;
+  enabled: boolean;
+  current_version_id?: string | null;
+  active_version?: WorkflowConfigVersion | null;
+  version_count: number;
+  created_at: string;
+  updated_at?: string | null;
+  versions?: WorkflowConfigVersion[];
 }
 
 /** Organization-level identity (human or agent), §17. */

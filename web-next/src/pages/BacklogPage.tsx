@@ -161,7 +161,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
   };
 
   const workflowState = useAsync<WorkflowDto>(
-    async () => (await api.get<WorkflowDto>("/workflow")).data,
+    async () => (await api.get<WorkflowDto>(`/workflow?project=${encodeURIComponent(projectKey)}`)).data,
     [projectKey],
   );
 

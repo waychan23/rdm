@@ -1,10 +1,13 @@
-# workflow.json5 配置手册（v4）
+# 工作流配置手册（v4）
 
-> 适用：`src/rdm/resources/workflow.json5`（随包发布的唯一工作流定义）。
-> 相关实现：`src/rdm/domain/workflow/schema.py`、`engine.py`；运行时行为见
-> `docs/architecture.md §5.3` 与 §17.88–96。
+> 适用：`workflow-configs/*.json5`（可多份；包内默认
+> `src/rdm/resources/workflow-configs/default.json5`，运行时目录
+> `<data-dir>/workflow-configs/`）。
+> 相关实现：`src/rdm/domain/workflow/schema.py`、`config.py`、`engine.py`；
+> 启动导入见 `src/rdm/infrastructure/db/workflow_config_sync.py`；运行时行为见
+> `docs/architecture.md §5.3`、§17.88–96 与 §17.150。
 
-> 实际文件是 **JSON5**（`src/rdm/resources/workflow.json5`）。JSON5 支持 `//`、`/* */`
+> 实际文件是 **JSON5**。JSON5 支持 `//`、`/* */`
 > 注释与尾逗号；字符串建议使用双引号。本文示例均为 JSON5；标注「节选」的片段只展示
 > 相关层级，插入到对应位置即可。
 
@@ -29,23 +32,58 @@
 
 ## 1. 文件位置与加载方式
 
-- 文件：`src/rdm/resources/workflow.json5`，随 Python 包发布。
-- 启动时由 `rdm.domain.workflow.loader.load_spec()` 用 `pyjson5` 解析、Pydantic 校验并冻结；
-  任何非法配置会让服务启动失败，而不是运行时才报错。
+- 目录：`workflow-configs/`，可放任意多个 `*.json5` 文件，文件名不限。
+  - 打包默认文件：`src/rdm/resources/workflow-configs/default.json5`；
+  - 运行时目录：`<data-dir>/workflow-configs/`（默认 `~/rdm-data/workflow-configs/`）。
+    `rdm init/serve/db upgrade` 会把包内缺失的文件复制进去；之后以数据目录中的文件为准。
+- 每个文件必须包含：
+  - `key`：配置标识（`^[a-z][a-z0-9_-]{1,49}$`），同一 key 的多个文件版本在库中归为一个配置；
+  - `name`：项目选择工作流时展示的名称；
+  - `version`：schema 结构版本，必须等于当前代码支持的最新版本（`latest_schema_version()`），
+    旧版本文件会被拒绝入库；
+  - `revision`：配置修订号；内容变化时必须 +1。
+- 启动时 `sync_workflow_configs()` 用 `pyjson5` 解析、Pydantic 校验并导入：
+  - 文件导入的配置标记为**内置**（`is_builtin=true`），Web 端只读；修改只能编辑文件并重启。
+  - `(version, revision)` 未入库则新增版本并成为唯一活跃版本；已入库且内容相同则幂等跳过；
+    同 `(version, revision)` 但内容不同会启动失败，提示提升 `revision`。
+  - 内置配置可在 Web 上 **fork** 成新的非内置 key 后编辑；非内置配置保存时生成新版本，
+    并记录来源版本（`source_version_id`）。
 - 单例缓存：修改 JSON5 后必须重启 `rdm serve` 才生效，没有热重载。
-- **没有项目级覆盖**：所有项目共用这一份定义。需要项目差异时，用子类型或不同 kind 表达。
+- **项目级选择**：创建项目时必选一个启用且活跃的工作流配置版本（Web 端强制；API 省略时
+  沿用系统默认，兼容旧客户端）。项目设置里可改选更新版本；改选只影响之后新建的工作项，
+  已创建工作项继续按创建时固定的定义运行（§17.120）。停用配置不影响已选它的项目。
 - JSON5 语法要点：
   - 支持 `//` 行注释、`/* */` 块注释、尾逗号；
   - 字符串建议双引号（也接受单引号）；键建议加双引号；
   - 中英文标签直接写 UTF-8；
   - 语法检查：
     ```bash
-    uv run python -c "import pyjson5,pathlib; pyjson5.loads(pathlib.Path('src/rdm/resources/workflow.json5').read_text())"
+    uv run python -c "import pyjson5,pathlib; pyjson5.loads(pathlib.Path('src/rdm/resources/workflow-configs/default.json5').read_text())"
     ```
 - 查看当前生效配置：
-  - REST：`GET /api/v1/workflow?kind=task&task_type=code_review`
-  - MCP：`workflow_get(kind="task", task_type="code_review")`
+  - REST：`GET /api/v1/workflow?kind=task&task_type=code_review`；
+    项目视角：`GET /api/v1/workflow?project=DEMO&kind=task&task_type=code_review`
+  - 配置管理：`GET /api/v1/workflow-configs`、`GET /api/v1/workflow-configs/{key}`
+  - MCP：`workflow_get(kind="task", task_type="code_review", project="DEMO")`
   - 详情：`work_item_get` 返回的 `meta.available_steps` / `meta.active_step`
+
+---
+
+## 1.1 顶层信封字段（RDM-84）
+
+```json5
+{
+  // 配置标识：同一 key 的多个版本共享；项目按版本固定工作流。
+  key: "default",
+  // 展示名称（Web 端项目创建/设置里显示）。
+  name: "默认工作流",
+  // schema 结构版本，必须是当前代码支持的最新版本。
+  version: 4,
+  // 配置修订号：语义内容变化时 +1；用于启动导入去重。
+  revision: 17,
+  // ...其余见第 2 节
+}
+```
 
 ---
 
@@ -55,7 +93,10 @@
 
 ```json5
 {
-  "version": 3,
+  key: "default",
+  name: "默认工作流",
+  "version": 4,
+  "revision": 17,
 
   // 任务类型目录：code -> 中文标签；子类型 key 必须出现在这里。
   "task_types": {
@@ -184,7 +225,7 @@
 
 ### 2.2 新增配置结构版本
 
-1. 改配置结构时递增 `workflow.json5` 的 `version`（同时递增 `revision`）。
+1. 改配置结构时递增 `workflow-configs/*.json5` 的 `version`（同时递增 `revision`）。
 2. 在 `src/rdm/domain/workflow/schema_versions/` 新增 `vN.py`，实现 `SchemaVn(DefinitionSchema)` 的 `_serialize` / `_deserialize`，并在包的 `__init__.py` 导入该模块。子类通过 `__init_subclass__` 自动注册；注册表与调用方不需要改。
 3. **保留旧的 `SchemaVn` 实现**：已固定旧 schema 的工作项仍按自己的 `config_schema_version` 读取，不能为了“只支持最新版”而删除历史策略。
 4. 如确需废弃某历史版本，必须先提供数据迁移（把工作项重新固定到新版本）并显式移除策略；未知版本会抛出 `UnsupportedWorkflowSchema`，doctor 报 FAIL。
@@ -566,7 +607,7 @@ kind/subtype**（不只 task）：
      向上抛出并回滚整个事务；`ignore` 只回滚该规则并记录 ERROR 日志，主操作继续；
    - 级联深度上限 10，超过后静默停止。
 
-注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 16`，已配置 story / issue 的 `child_triggers` 与各 kind 的终态分类；
+注意：生产 `workflow-configs/default.json5` 目前是 `version: 4`、`revision: 17`，已配置 story / issue 的 `child_triggers` 与各 kind 的终态分类；
 按实际场景配置后需递增 `revision`，并在合并前跑 `rdm workflow validate`。
 
 ---
@@ -1196,11 +1237,12 @@ uv run python -c "import json,pyjson5; from rdm.domain.workflow.loader import lo
 
 ## 12. 已知限制
 
-- 单一内置 `workflow.json5`，无项目级覆盖；改动需重启服务。
+- 内置配置来自 `workflow-configs/*.json5`，改动需重启服务；Web 上只能 fork 后编辑副本。
+- 项目只能选择启用且活跃的配置版本；已固定旧版本的工作项不会自动升级。
 - 自定义字段定义只在 JSON5，不提供 Web 字段设计器。
 - 自定义字段不参与列表检索；reviewer/review_content 可检索。
 - `mode="task"` 不能要求步骤备注；备注由子任务承担。
 - 不做步骤级“拒绝/退回”审批语义；取消 + 重新发起即可。
 - 步骤事件暂不进入 webhook 白名单；通知能力后续实现。
 - 运行中的步骤会快照 edge 配置（mode/note/tasks/gates 等）；gate 最终校验仍以当前加载的
-  engine 为准，因此跨版本修改 `workflow.json5` 时建议先取消在途步骤再发布。
+  engine 为准，因此跨版本修改 `workflow-configs/*.json5` 时建议先取消在途步骤再发布。

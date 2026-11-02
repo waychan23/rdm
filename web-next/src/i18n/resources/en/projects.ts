@@ -23,6 +23,8 @@ const projects = {
     key: "Key",
     name: "Name",
     description: "Description",
+    workflow: "Workflow config",
+    workflowPlaceholder: "Select an enabled workflow config",
     cancel: "Cancel",
     submit: "Create",
   },

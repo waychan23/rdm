@@ -1,7 +1,7 @@
 // rdm 工作流定义（v3）—— **测试专用契约**，不是随产品发布的定义。
 //
 // 行为测试（integration/mcp/…）统一加载本文件，避免产品调整
-// src/rdm/resources/workflow.json5 时大面积误报。断言"打包定义本身"的测试
+// src/rdm/resources/workflow-configs/default.json5 时大面积误报。断言"打包定义本身"的测试
 // （tests/unit/test_workflow_supply.py、tests/unit/test_workflow_refs.py、
 // tests/cli/test_doctor.py、tests/contract/）仍读生产文件。
 // 新增工作流能力时：先改生产定义与代码，再按需升级本契约并补测试。

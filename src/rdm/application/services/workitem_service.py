@@ -24,6 +24,7 @@ from rdm.application.dto import user_brief
 from rdm.application.services.attachment_commit import commit_inline_images
 from rdm.application.services.membership_service import MembershipService
 from rdm.application.services.notification_service import NotificationService
+from rdm.application.services.workflow_config_service import WorkflowConfigService
 from rdm.application.services.workflow_version_service import WorkflowVersionService
 from rdm.domain.actor import Actor
 from rdm.domain.constants import DEFAULT_PRIORITY, PRIORITY_MAX, PRIORITY_MIN
@@ -61,6 +62,7 @@ from rdm.domain.workflow.schema import (
     StatusFlags,
     TriggerTarget,
     TriggerWhen,
+    WorkflowSpec,
 )
 from rdm.domain.workflow.task_types import item_task_type, normalize_task_type
 from rdm.i18n import current_locale, tr
@@ -383,7 +385,7 @@ class WorkItemService:
         # states), so it is resolved to the union of terminal states here
         # instead of being a single status value on the wire.
         if completed is not None or backlog:
-            terminal = sorted(load_engine().all_terminal_states())
+            terminal = sorted((await self._engine_for_project(project)).all_terminal_states())
             if completed:
                 include_statuses = terminal
             else:
@@ -652,7 +654,7 @@ class WorkItemService:
         include_statuses: list[str] | None = None
         exclude_statuses: list[str] | None = None
         if completed is not None:
-            terminal = sorted(load_engine().all_terminal_states())
+            terminal = sorted((await self._engine_for_project(project)).all_terminal_states())
             if completed:
                 include_statuses = terminal
             else:
@@ -834,9 +836,9 @@ class WorkItemService:
 
     # --- M6 workflow/field helpers ---------------------------------------
 
-    def _validate_task_type(self, value: str | None) -> str:
+    def _validate_task_type(self, value: str | None, spec: WorkflowSpec | None = None) -> str:
         task_type = normalize_task_type(value)
-        spec = load_engine().spec
+        spec = spec or load_engine().spec
         if task_type not in spec.task_types:
             raise ValidationError(
                 tr(
@@ -852,8 +854,12 @@ class WorkItemService:
             )
         return task_type
 
-    def _workflow(self, kind: str, task_type: str | None) -> ResolvedKindWorkflow:
-        return load_engine().resolve(kind, task_type)
+    async def _engine_for_project(self, project: Project) -> WorkflowEngine:
+        # NULL means the packaged default; read it through this module's
+        # binding so behavior tests can keep patching load_engine.
+        if not project.workflow_config_version_id:
+            return load_engine()
+        return await WorkflowConfigService(self.uow).engine_for_project(project)
 
     def _versions(self) -> WorkflowVersionService:
         return WorkflowVersionService(self.uow, load_engine())
@@ -1042,9 +1048,10 @@ class WorkItemService:
                 )
 
         task_type = None
+        engine = await self._engine_for_project(project)
         if kind == "task":
-            task_type = self._validate_task_type(data.get("task_type"))
-        workflow = self._workflow(kind, task_type)
+            task_type = self._validate_task_type(data.get("task_type"), engine.spec)
+        workflow = engine.resolve(kind, task_type)
         self._check_optional_fields(workflow, data)
 
         assignee = None
@@ -1074,7 +1081,7 @@ class WorkItemService:
             participant_ids.append(actor.id)
 
         assert self.uow.work_items is not None
-        workflow_version = await WorkflowVersionService(self.uow, load_engine()).ensure(
+        workflow_version = await WorkflowVersionService(self.uow, engine).ensure(
             kind, task_type, resolved=workflow, created_by=actor.id
         )
         display_no = await self.uow.allocate_display_no(project.id)
@@ -1171,7 +1178,8 @@ class WorkItemService:
         workflow = await self._resolved_for_item(item)
         self._check_optional_fields(workflow, payload)
         if "task_type" in keys:
-            normalized = self._validate_task_type(payload["task_type"])
+            task_engine = await self._engine_for_item(item)
+            normalized = self._validate_task_type(payload["task_type"], task_engine.spec)
             if normalized != task_type:
                 raise ValidationError(
                     tr(

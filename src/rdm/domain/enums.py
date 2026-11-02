@@ -68,7 +68,7 @@ class ProjectStatus(StrEnum):
     archived = "archived"
 
 
-# Sprint workflow states are stored verbatim from resources/workflow.json5
+# Sprint workflow states are stored verbatim from workflow-configs/*.json5
 # (uppercase); see docs/architecture.md §16.2.
 class SprintStatus(StrEnum):
     PLANNED = "PLANNED"

@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 
 from rdm.application import security
 from rdm.application.services.attachment_commit import commit_inline_images
+from rdm.application.services.workflow_config_service import WorkflowConfigService
 from rdm.application.services.workflow_version_service import WorkflowVersionService
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.actor import Actor
@@ -22,7 +23,7 @@ from rdm.domain.entities import Project, Sprint, SprintItem, WorkItem
 from rdm.domain.enums import SprintStatus
 from rdm.domain.errors import NotFound, SprintActiveExists, ValidationError
 from rdm.domain.events import EventType
-from rdm.domain.workflow.engine import GateContext, GateSprintItem
+from rdm.domain.workflow.engine import GateContext, GateSprintItem, WorkflowEngine
 from rdm.domain.workflow.loader import load_engine
 from rdm.i18n import tr
 from rdm.infrastructure.db.errors import translate_integrity
@@ -69,6 +70,11 @@ class SprintService:
         sprints = await self.uow.sprints.list(project.id, status=status)
         return project, sprints
 
+    async def _engine_for_project(self, project: Project) -> WorkflowEngine:
+        if not project.workflow_config_version_id:
+            return load_engine()
+        return await WorkflowConfigService(self.uow).engine_for_project(project)
+
     async def create(
         self, actor: Actor, project_key: str | None, data: dict[str, Any]
     ) -> tuple[Project, Sprint]:
@@ -88,7 +94,7 @@ class SprintService:
             project_id=project.id,
             name=name,
             goal_md=data.get("goal_md"),
-            status=SprintStatus(load_engine().initial_status("sprint")),  # PLANNED
+            status=SprintStatus((await self._engine_for_project(project)).initial_status("sprint")),
             start_date=_as_date(data.get("start_date")),
             end_date=_as_date(data.get("end_date")),
             manager_user_id=manager_id,
@@ -325,7 +331,7 @@ class SprintService:
         project, sprint = await self.resolve_sprint(actor, sprint_id)
         security.require_sprint_manager(actor, project.id)
         assert self.uow.sprints is not None
-        engine = load_engine()
+        engine = await self._engine_for_project(project)
         engine.check("sprint", str(sprint.status), "ACTIVE", item=sprint.name)
 
         active = await self.uow.sprints.active_for_project(project.id)
@@ -359,7 +365,7 @@ class SprintService:
             if links
             else []
         )
-        engine = load_engine()
+        engine = await self._engine_for_project(project)
         terminal = await WorkflowVersionService(self.uow, engine).terminal_map(members_items)
         ctx = GateContext(
             sprint_items=[

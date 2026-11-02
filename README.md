@@ -165,7 +165,8 @@ uv build
 ```
 
 前端写码规则见仓库根 `CLAUDE.md`，UI 设计与组件/token 规范见 [docs/web-next-ui.md](docs/web-next-ui.md)；
-工作流 `workflow.json5` 的完整配置手册见 [docs/workflow-config.md](docs/workflow-config.md)；
+工作流配置 `workflow-configs/*.json5` 的完整手册见 [docs/workflow-config.md](docs/workflow-config.md)；
+（首次启动会把包内默认定义复制到 `<data-dir>/workflow-configs/`，修改后重启生效；项目创建时必选一份启用中的配置版本。）
 运维/备份/升级/排障见 [docs/runbook.md](docs/runbook.md)；
 测试与关键裁决见 `docs/`（architecture.md §16/§17）。
 M1 手工验收脚本见 `docs/acceptance/m1-loop.md`。

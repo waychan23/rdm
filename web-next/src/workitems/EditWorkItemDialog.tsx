@@ -102,7 +102,7 @@ export default function EditWorkItemDialog({
     if (!open) return;
     let cancelled = false;
     api
-      .get<WorkflowDto>("/workflow")
+      .get<WorkflowDto>(`/workflow?project=${encodeURIComponent(projectKey)}`)
       .then((res) => {
         if (!cancelled) setWorkflow(res.data);
       })
@@ -112,7 +112,7 @@ export default function EditWorkItemDialog({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, projectKey]);
 
   useEffect(() => {
     if (!open || !item) return;

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from rdm.application import security
+from rdm.application.services.workflow_config_service import WorkflowConfigService
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Project
 from rdm.domain.enums import WorkItemKind
@@ -28,7 +29,11 @@ class OverviewService:
 
         items = self.uow.work_items
         by_status = await items.count_by_status(project.id)
-        engine = load_engine()
+        engine = (
+            await WorkflowConfigService(self.uow).engine_for_project(project)
+            if project.workflow_config_version_id
+            else load_engine()
+        )
         terminal_statuses = {
             terminal for kind in WorkItemKind for terminal in engine.spec.kind(kind.value).terminal
         }

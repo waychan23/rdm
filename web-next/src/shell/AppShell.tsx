@@ -22,6 +22,7 @@ import FolderIcon from "@atlaskit/icon/core/folder-open";
 import PeopleIcon from "@atlaskit/icon/core/people-group";
 import SettingsIcon from "@atlaskit/icon/core/settings";
 import LogOutIcon from "@atlaskit/icon/core/log-out";
+import BranchIcon from "@atlaskit/icon/core/branch";
 import { token } from "@atlaskit/tokens";
 
 import LocaleSwitcher from "../components/LocaleSwitcher";
@@ -279,6 +280,10 @@ export default function AppShell() {
             {(who?.org_roles.includes("org_owner") ||
               who?.org_roles.includes("user_manager")) && (
               <RailItem to="/org/users" label={t("rail.orgUsers")} testId="org-users" icon={PeopleIcon} />
+            )}
+            {(who?.org_roles.includes("org_owner") ||
+              who?.org_roles.includes("user_manager")) && (
+              <RailItem to="/workflow-configs" label={t("rail.workflows")} testId="workflow-configs" icon={BranchIcon} />
             )}
             <RailItem to="/settings" label={t("rail.settings")} testId="settings" icon={SettingsIcon} end />
           </div>

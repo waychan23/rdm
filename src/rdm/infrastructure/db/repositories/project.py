@@ -41,6 +41,7 @@ class ProjectRepository:
                 description_md=project.description_md,
                 owner_user_id=project.owner_user_id,
                 status=str(project.status),
+                workflow_config_version_id=project.workflow_config_version_id,
                 item_seq=project.item_seq,
                 created_at=project.created_at,
                 created_by=project.created_by,
@@ -57,6 +58,7 @@ class ProjectRepository:
                 description_md=project.description_md,
                 status=str(project.status),
                 owner_user_id=project.owner_user_id,
+                workflow_config_version_id=project.workflow_config_version_id,
                 updated_at=dt.datetime.now(dt.UTC),
             )
         )

@@ -13,6 +13,7 @@ import common from "./common";
 import components from "./components";
 import labels from "./labels";
 import nav from "./nav";
+import workflows from "./workflows";
 import workitems from "./workitems";
 
 export const en = {
@@ -21,6 +22,7 @@ export const en = {
   labels,
   auth,
   workitems,
+  workflows,
   collab,
   admin,
   components,

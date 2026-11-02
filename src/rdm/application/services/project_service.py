@@ -6,6 +6,7 @@ from rdm.application import security
 from rdm.application.dto import validate_project_key
 from rdm.application.services.attachment_commit import commit_inline_images
 from rdm.application.services.membership_service import MembershipService
+from rdm.application.services.workflow_config_service import WorkflowConfigService
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Project
 from rdm.domain.enums import ProjectStatus
@@ -45,10 +46,13 @@ class ProjectService:
         name: str,
         description_md: str | None,
         actor: Actor,
+        workflow_config_version_id: str | None = None,
     ) -> Project:
         security.require_can_create_project(actor)
         validate_project_key(key)
         assert self.uow.projects is not None and self.uow.users is not None
+        if workflow_config_version_id is not None:
+            await WorkflowConfigService(self.uow).selectable_version(workflow_config_version_id)
         if await self.uow.projects.get_by_key(key, org_id=actor.org_id) is not None:
             raise ProjectKeyDuplicate(
                 tr(
@@ -69,6 +73,7 @@ class ProjectService:
             name=name,
             description_md=description_md,
             owner_user_id=creator.id,
+            workflow_config_version_id=workflow_config_version_id,
             created_by=actor.human_id,
         )
         await self.uow.projects.add(project)
@@ -101,6 +106,7 @@ class ProjectService:
         actor: Actor,
         name: str | None = None,
         description_md: str | None = None,
+        workflow_config_version_id: str | None = None,
     ) -> Project:
         project = await self.get_by_key(actor, key)
         security.require_project_owner(actor, project.id)
@@ -111,6 +117,16 @@ class ProjectService:
         if description_md is not None and description_md != project.description_md:
             changes["description_md"] = [project.description_md, description_md]
             project.description_md = description_md
+        if (
+            workflow_config_version_id is not None
+            and workflow_config_version_id != project.workflow_config_version_id
+        ):
+            await WorkflowConfigService(self.uow).selectable_version(workflow_config_version_id)
+            changes["workflow_config_version_id"] = [
+                project.workflow_config_version_id,
+                workflow_config_version_id,
+            ]
+            project.workflow_config_version_id = workflow_config_version_id
         if changes:
             assert self.uow.projects is not None
             await self.uow.projects.update(project)

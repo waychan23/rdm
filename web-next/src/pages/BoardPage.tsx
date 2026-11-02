@@ -134,7 +134,7 @@ export default function BoardPage() {
   useEffect(() => {
     let alive = true;
     api
-      .get<WorkflowDto>("/workflow")
+      .get<WorkflowDto>(`/workflow?project=${encodeURIComponent(projectKey)}`)
       .then((res) => {
         if (alive) {
           setWorkflow(res.data);

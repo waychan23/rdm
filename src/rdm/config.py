@@ -84,6 +84,11 @@ class Settings(BaseSettings):
         return self.data_dir / "projects"
 
     @property
+    def workflow_configs_dir(self) -> Path:
+        """Operator-editable workflow config directory (RDM-84)."""
+        return self.data_dir / "workflow-configs"
+
+    @property
     def webhook_secret_path(self) -> Path:
         return self.data_dir / "webhook-secret"
 

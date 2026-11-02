@@ -110,6 +110,12 @@ const org = {
       save: "保存",
       archive: "归档项目",
     },
+    workflow: {
+      heading: "工作流配置",
+      label: "项目工作流",
+      hint: "只列出启用且当前活跃的版本；修改后只影响之后新建的工作项，已有工作项保持原流程。",
+      current: "（当前）",
+    },
     owner: {
       heading: "项目经理（Project Owner）",
       hint: "project-director / Org Owner 或现任项目经理可以改派；目标必须是项目内启用的 human。",

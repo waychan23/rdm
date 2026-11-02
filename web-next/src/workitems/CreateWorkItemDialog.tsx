@@ -109,7 +109,7 @@ export default function CreateWorkItemDialog({
     if (!open) return;
     let cancelled = false;
     api
-      .get<WorkflowDto>("/workflow")
+      .get<WorkflowDto>(`/workflow?project=${encodeURIComponent(projectKey)}`)
       .then((res) => {
         if (!cancelled) setWorkflow(res.data);
       })
@@ -119,7 +119,7 @@ export default function CreateWorkItemDialog({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, projectKey]);
 
   useEffect(() => {
     if (!open) return;
