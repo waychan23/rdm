@@ -243,3 +243,93 @@ async def test_child_trigger_kind_filter_skips_other_kinds(server, owner_token: 
     await _move(client, owner_token, issue["display_id"], "CANCELLED")
 
     assert await _status(client, owner_token, story["display_id"]) == "TO_TEST"
+
+
+def _child_rule_spec(rule: dict) -> WorkflowSpec:
+    raw = pyjson5.loads(load_test_spec_text())
+    raw["version"] = 4
+    raw["kinds"]["story"]["child_triggers"] = [rule]
+    return WorkflowSpec.model_validate(raw)
+
+
+async def _story_with_child(client, token: str, title: str, child_kind: str) -> tuple[dict, dict]:
+    story = await _create(client, token, kind="story", title=title)
+    child = await _create(
+        client, token, kind=child_kind, title=f"{title}-{child_kind}", parent=story
+    )
+    await _move(client, token, story["display_id"], "IN_PROGRESS")
+    await _move(client, token, story["display_id"], "TO_TEST")
+    return story, child
+
+
+async def test_when_any_matches_either_child_kind(server, owner_token: str, monkeypatch):
+    client, _settings, _app = server
+    engine = WorkflowEngine(
+        _child_rule_spec(
+            {
+                "when": {
+                    "any": [
+                        {"kinds": ["task"], "to": ["CANCELLED"]},
+                        {"kinds": ["issue"], "to": ["CANCELLED"]},
+                    ]
+                },
+                "self": {"from": ["TO_TEST"], "to": "DONE"},
+            }
+        )
+    )
+    _install_engine(monkeypatch, engine)
+    await _project(client, owner_token)
+
+    task_story, task = await _story_with_child(client, owner_token, "ANY-TASK", "task")
+    issue_story, issue = await _story_with_child(client, owner_token, "ANY-ISSUE", "issue")
+
+    await _move(client, owner_token, task["display_id"], "CANCELLED")
+    assert await _status(client, owner_token, task_story["display_id"]) == "DONE"
+    # The issue story is untouched until its own child matches a branch.
+    assert await _status(client, owner_token, issue_story["display_id"]) == "TO_TEST"
+
+    await _move(client, owner_token, issue["display_id"], "CANCELLED")
+    assert await _status(client, owner_token, issue_story["display_id"]) == "DONE"
+
+
+async def test_any_children_terminal_fires_on_first_terminal_child(
+    server, owner_token: str, monkeypatch
+):
+    client, _settings, _app = server
+    engine = WorkflowEngine(
+        _child_rule_spec(
+            {
+                "when": {"kinds": ["task", "issue"]},
+                "any_children_terminal": True,
+                "self": {"from": ["TO_TEST"], "to": "IN_PROGRESS"},
+            }
+        )
+    )
+    _install_engine(monkeypatch, engine)
+    await _project(client, owner_token)
+
+    story, task, _issue = await _story_with_task_and_issue(client, owner_token, "ANYCHILD")
+    await _move(client, owner_token, task["display_id"], "CANCELLED")
+    assert await _status(client, owner_token, story["display_id"]) == "IN_PROGRESS"
+
+
+async def test_min_children_terminal_waits_for_the_threshold(server, owner_token: str, monkeypatch):
+    client, _settings, _app = server
+    engine = WorkflowEngine(
+        _child_rule_spec(
+            {
+                "when": {"kinds": ["task", "issue"]},
+                "min_children_terminal": 2,
+                "self": {"from": ["TO_TEST"], "to": "DONE"},
+            }
+        )
+    )
+    _install_engine(monkeypatch, engine)
+    await _project(client, owner_token)
+
+    story, task, issue = await _story_with_task_and_issue(client, owner_token, "MIN")
+    await _move(client, owner_token, task["display_id"], "CANCELLED")
+    assert await _status(client, owner_token, story["display_id"]) == "TO_TEST"
+
+    await _move(client, owner_token, issue["display_id"], "CANCELLED")
+    assert await _status(client, owner_token, story["display_id"]) == "DONE"

@@ -1715,15 +1715,20 @@ class WorkItemService:
             return
         siblings: list[WorkItem] = await self.uow.work_items.list_children(parent.id) or []
         child_terminal = await self._versions().terminal_map(siblings)
-        all_children_terminal = bool(siblings) and all(
-            child_terminal[child.id] for child in siblings
-        )
+        terminal_count = sum(1 for child in siblings if child_terminal[child.id])
+        sibling_count = len(siblings)
         child_display_id = self.display_id(project, item)
 
         for child_rule in child_rules:
             if not child_rule.when.matches(old_status, new_status, child_task_type):
                 continue
-            if child_rule.all_children_terminal and not all_children_terminal:
+            if not self._children_condition_matches(
+                all_terminal=child_rule.all_children_terminal,
+                any_terminal=child_rule.any_children_terminal,
+                min_terminal=child_rule.min_children_terminal,
+                sibling_count=sibling_count,
+                terminal_count=terminal_count,
+            ):
                 continue
             await self._apply_trigger_target(
                 actor,
@@ -1739,7 +1744,13 @@ class WorkItemService:
         for parent_rule in parent_rules:
             if not parent_rule.when.matches(item.kind, child_task_type, old_status, new_status):
                 continue
-            if parent_rule.all_children_terminal and not all_children_terminal:
+            if not self._children_condition_matches(
+                all_terminal=parent_rule.all_children_terminal,
+                any_terminal=parent_rule.any_children_terminal,
+                min_terminal=parent_rule.min_children_terminal,
+                sibling_count=sibling_count,
+                terminal_count=terminal_count,
+            ):
                 continue
             await self._apply_trigger_target(
                 actor,
@@ -1751,6 +1762,28 @@ class WorkItemService:
                 new_status=new_status,
                 depth=depth,
             )
+
+    @staticmethod
+    def _children_condition_matches(
+        *,
+        all_terminal: bool,
+        any_terminal: bool,
+        min_terminal: int | None,
+        sibling_count: int,
+        terminal_count: int,
+    ) -> bool:
+        """Evaluate the children aggregate conditions (AND-ed).
+
+        ``all_terminal`` keeps the legacy semantics: false when there are no
+        children (there is nothing to finish).
+        """
+        if all_terminal and (sibling_count == 0 or terminal_count != sibling_count):
+            return False
+        if any_terminal and terminal_count == 0:
+            return False
+        if min_terminal is not None and terminal_count < min_terminal:
+            return False
+        return True
 
     async def _apply_trigger_target(
         self,

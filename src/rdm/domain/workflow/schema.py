@@ -91,8 +91,10 @@ class GateSpec(BaseModel):
 class ParentTriggerWhen(BaseModel):
     """Matcher for the child status change that fires a parent trigger (§17.137).
 
-    An absent dimension matches anything. ``task_types`` only applies to task
-    children (the definition that declares the trigger belongs to the child).
+    Flat fields are AND-ed. ``any`` / ``all`` are nested condition groups and
+    are AND-ed with the flat fields (and with each other); an empty group is
+    treated as absent. ``task_types`` only applies to task children (the
+    definition that declares the trigger belongs to the child).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
@@ -100,6 +102,8 @@ class ParentTriggerWhen(BaseModel):
     from_: tuple[str, ...] = Field(default=(), alias="from")
     to: tuple[str, ...] = ()
     task_types: tuple[str, ...] = ()
+    any: tuple[ParentTriggerWhen, ...] = ()
+    all: tuple[ParentTriggerWhen, ...] = ()
 
     @model_validator(mode="after")
     def _validate(self) -> ParentTriggerWhen:
@@ -116,8 +120,16 @@ class ParentTriggerWhen(BaseModel):
             return False
         if self.to and to_state not in self.to:
             return False
-        if self.task_types:
-            return task_type is not None and task_type in self.task_types
+        if self.task_types and (task_type is None or task_type not in self.task_types):
+            return False
+        if self.any and not any(
+            clause.matches(from_state, to_state, task_type) for clause in self.any
+        ):
+            return False
+        if self.all and not all(
+            clause.matches(from_state, to_state, task_type) for clause in self.all
+        ):
+            return False
         return True
 
 
@@ -149,13 +161,24 @@ class ParentTriggerSpec(BaseModel):
 
     when: ParentTriggerWhen = Field(default_factory=ParentTriggerWhen)
     parent: TriggerTarget
+    # Children aggregates are AND-ed with ``when``; false/None means "not
+    # constrained".
     # When true the rule only fires if every direct sibling is terminal *after*
     # this change (i.e. the last non-terminal child just became terminal).
     all_children_terminal: bool = False
+    # At least one direct sibling terminal after this change.
+    any_children_terminal: bool = False
+    # At least N direct siblings terminal after this change (N >= 1).
+    min_children_terminal: int | None = Field(default=None, ge=1)
 
 
 class ChildTriggerWhen(BaseModel):
-    """Matcher for a direct child's status change, declared on the parent."""
+    """Matcher for a direct child's status change, declared on the parent.
+
+    Flat fields are AND-ed. ``any`` / ``all`` are nested condition groups and
+    are AND-ed with the flat fields (and with each other); an empty group is
+    treated as absent.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
@@ -164,6 +187,8 @@ class ChildTriggerWhen(BaseModel):
     # Child kinds; empty means any kind. Different kinds/subtypes can be mixed.
     kinds: tuple[str, ...] = ()
     task_types: tuple[str, ...] = ()
+    any: tuple[ChildTriggerWhen, ...] = ()
+    all: tuple[ChildTriggerWhen, ...] = ()
 
     @model_validator(mode="after")
     def _validate(self) -> ChildTriggerWhen:
@@ -192,6 +217,14 @@ class ChildTriggerWhen(BaseModel):
             return False
         if self.to and to_state not in self.to:
             return False
+        if self.any and not any(
+            clause.matches(child_kind, child_task_type, from_state, to_state) for clause in self.any
+        ):
+            return False
+        if self.all and not all(
+            clause.matches(child_kind, child_task_type, from_state, to_state) for clause in self.all
+        ):
+            return False
         return True
 
 
@@ -209,6 +242,8 @@ class ChildTriggerSpec(BaseModel):
     when: ChildTriggerWhen = Field(default_factory=ChildTriggerWhen)
     self_: TriggerTarget = Field(alias="self")
     all_children_terminal: bool = False
+    any_children_terminal: bool = False
+    min_children_terminal: int | None = Field(default=None, ge=1)
 
 
 class ExecutorRange(BaseModel):
@@ -824,33 +859,56 @@ class WorkflowSpec(BaseModel):
                     "master field"
                 )
         for index, parent_trigger in enumerate(resolved.parent_triggers):
-            where = f"{resolved.kind}: parent_triggers[{index}]"
-            unknown_states = sorted(
-                (set(parent_trigger.when.from_) | set(parent_trigger.when.to)) - state_set
+            self._validate_parent_when(
+                parent_trigger.when,
+                state_set,
+                resolved.kind,
+                f"{resolved.kind}: parent_triggers[{index}].when",
             )
-            if unknown_states:
-                raise ValueError(f"{where}: unknown child states {unknown_states}")
-            unknown_types = sorted(set(parent_trigger.when.task_types) - set(self.task_types))
-            if unknown_types:
-                raise ValueError(f"{where}: unknown task types {unknown_types}")
-            if parent_trigger.when.task_types and resolved.kind != "task":
-                raise ValueError(f"{where}: when.task_types is only valid for task definitions")
         for index, child_trigger in enumerate(resolved.child_triggers):
-            where = f"{resolved.kind}: child_triggers[{index}]"
-            unknown_kinds = sorted(set(child_trigger.when.kinds) - set(self.kinds))
-            if unknown_kinds:
-                raise ValueError(f"{where}: unknown child kinds {unknown_kinds}")
-            unknown_types = sorted(set(child_trigger.when.task_types) - set(self.task_types))
-            if unknown_types:
-                raise ValueError(f"{where}: unknown task types {unknown_types}")
-            if (
-                child_trigger.when.task_types
-                and child_trigger.when.kinds
-                and "task" not in child_trigger.when.kinds
-            ):
-                raise ValueError(f"{where}: when.task_types requires when.kinds to include 'task'")
+            self._validate_child_when(
+                child_trigger.when,
+                f"{resolved.kind}: child_triggers[{index}].when",
+            )
             unknown_self = sorted(
                 (set(child_trigger.self_.from_) | {child_trigger.self_.to}) - state_set
             )
             if unknown_self:
-                raise ValueError(f"{where}: self states {unknown_self} not in states")
+                raise ValueError(
+                    f"{resolved.kind}: child_triggers[{index}]: "
+                    f"self states {unknown_self} not in states"
+                )
+
+    def _validate_parent_when(
+        self,
+        when: ParentTriggerWhen,
+        state_set: set[str],
+        kind: str,
+        where: str,
+    ) -> None:
+        unknown_states = sorted((set(when.from_) | set(when.to)) - state_set)
+        if unknown_states:
+            raise ValueError(f"{where}: unknown child states {unknown_states}")
+        unknown_types = sorted(set(when.task_types) - set(self.task_types))
+        if unknown_types:
+            raise ValueError(f"{where}: unknown task types {unknown_types}")
+        if when.task_types and kind != "task":
+            raise ValueError(f"{where}: when.task_types is only valid for task definitions")
+        for index, clause in enumerate(when.any):
+            self._validate_parent_when(clause, state_set, kind, f"{where}.any[{index}]")
+        for index, clause in enumerate(when.all):
+            self._validate_parent_when(clause, state_set, kind, f"{where}.all[{index}]")
+
+    def _validate_child_when(self, when: ChildTriggerWhen, where: str) -> None:
+        unknown_kinds = sorted(set(when.kinds) - set(self.kinds))
+        if unknown_kinds:
+            raise ValueError(f"{where}: unknown child kinds {unknown_kinds}")
+        unknown_types = sorted(set(when.task_types) - set(self.task_types))
+        if unknown_types:
+            raise ValueError(f"{where}: unknown task types {unknown_types}")
+        if when.task_types and when.kinds and "task" not in when.kinds:
+            raise ValueError(f"{where}: when.task_types requires when.kinds to include 'task'")
+        for index, clause in enumerate(when.any):
+            self._validate_child_when(clause, f"{where}.any[{index}]")
+        for index, clause in enumerate(when.all):
+            self._validate_child_when(clause, f"{where}.all[{index}]")

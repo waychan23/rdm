@@ -295,6 +295,52 @@ kind/subtype**（不只 task）：
 `task`。这样一条聚合规则就能覆盖“需求包含 task 和 issue 子项”的场景，无需在每个
 子项定义里重复声明。
 
+#### 条件组：when.any / when.all
+
+`when` 的扁平字段之间是 **AND**；需要 OR 或嵌套组合时，加 `any` / `all` 子句组。
+它们与扁平字段、彼此之间都是 **AND** 关系，组内可继续嵌套 `any` / `all`：
+
+```json5
+{
+  "when": {
+    // 扁平字段仍然参与 AND
+    "kinds": ["task", "issue"],
+
+    // 任一子句命中即可
+    "any": [
+      {"kinds": ["task"], "task_types": ["frontend"], "to": ["DONE"]},
+      {"kinds": ["issue"], "to": ["CLOSED_DONE"]}
+    ],
+
+    // 所有子句都必须命中
+    "all": [
+      {"from": ["IN_PROGRESS", "FIXING"]},
+      {"to": ["DONE", "CLOSED_DONE"]}
+    ]
+  },
+  "self": {"to": "DONE"}
+}
+```
+
+等价于：`(kinds ∈ {task,issue}) AND (子句A OR 子句B) AND (子句C AND 子句D)`。
+空数组视为“未声明”，不施加条件。
+
+#### 子项聚合条件
+
+规则还可按**当前父项的直接子项集合**判断；以下条件与 `when` 之间是 AND：
+
+```json5
+{
+  "all_children_terminal": true,   // 所有直接子项终态（无子项时视为 false）
+  "any_children_terminal": true,   // 至少一个直接子项终态
+  "min_children_terminal": 2,      // 终态子项数 >= 2（必须 >= 1）
+  "self": {"from": ["TO_TEST"], "to": "DONE"}
+}
+```
+
+三个条件可同时使用。`any_children_terminal` / `min_children_terminal` 统计的是
+本次变更**之后**的子项状态，包含刚变化的那个子项。
+
 #### parent_triggers（子项侧，适合专属规则）
 
 ```json5
@@ -319,11 +365,12 @@ kind/subtype**（不只 task）：
 
 执行规则（`WorkItemService._apply_parent_triggers`）：
 
-1. `parent_triggers` 的 `when.from/to` 必须是该子项定义里存在的状态；
+1. `parent_triggers` 的 `when.from/to`（含嵌套 `any`/`all` 子句）必须是该子项定义里存在的状态；
    `when.task_types` 只能用于 task 定义，值必须在 `task_types` 目录中。
-2. `child_triggers` 的 `when.kinds` 必须是已知 kind，`task_types` 必须是已知子类型；
+2. `child_triggers` 的 `when.kinds` / `task_types`（含嵌套子句）必须是已知值；
    `when.from/to` 是**子项**状态，不在加载期跨 kind 校验（不匹配时自然不命中）。
-3. `all_children_terminal=true` 时，只有本次变更后全部直接子项都处于各自固定定义的终态才命中。
+3. 子项聚合条件：`all_children_terminal=true` 要求全部直接子项终态（无子项时为 false）；
+   `any_children_terminal=true` 要求至少一个终态；`min_children_terminal=N` 要求终态子项数 >= N。
 4. 目标项（`parent` 或 `self`）当前状态必须满足 `from`；省略 `from` 时只允许非终态，且不会重复进入目标状态。
 5. 目标项必须能从当前状态经**唯一**一步到达 `to`；同名目标有多个步骤时不自动选择，规则跳过。
 6. 自动流转仍走目标项自己的 gate（`required_fields`、`children_all_terminal` 等）；
@@ -331,7 +378,7 @@ kind/subtype**（不只 task）：
 7. 自动流转写正常的 `work_item.status_changed` 事件（`payload.auto=true`），
    `reason` 记录触发的子项与前后状态。
 
-注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 4`，**没有声明任何规则**；
+注意：生产 `workflow.json5` 目前是 `version: 4`、`revision: 5`，**没有声明任何规则**；
 按实际场景配置后需递增 `revision`，并在合并前跑 `rdm workflow validate`。
 
 ---
