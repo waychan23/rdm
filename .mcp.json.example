@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "ads-mcp": {
+      "url": "https://mcp.atlassian.com/v1/ads/public/mcp"
+    }
+  }
+}

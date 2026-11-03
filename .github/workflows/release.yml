@@ -1,0 +1,95 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)release, e.g. v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - name: Set up Python
+        run: uv python install 3.13
+      - name: Install Python dependencies
+        run: uv sync --frozen
+      - name: Backend checks
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy src/rdm/domain src/rdm/application
+          uv run pytest -q
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-next/pnpm-lock.yaml
+      - name: Frontend checks and build
+        working-directory: web-next
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm lint
+          pnpm build
+
+      - name: Verify version matches tag
+        run: |
+          uv run python - <<'PY'
+          import json, os, pathlib, rdm
+          tag = os.environ["RELEASE_TAG"]
+          expected = tag.removeprefix("v")
+          version = rdm.__version__
+          web = json.loads(pathlib.Path("web-next/package.json").read_text())["version"]
+          assert expected == version == web, f"tag={tag} rdm={version} web-next={web}"
+          print(f"release version {version}")
+          PY
+
+      - name: Build wheel + sdist
+        run: uv build
+
+      - name: Package frontend bundle and deploy samples
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          tar -czf "dist/web-next-dist-${VERSION}.tar.gz" -C web-next/dist .
+          tar -czf "dist/deploy-${VERSION}.tar.gz" -C deploy .
+          cd dist
+          sha256sum *.whl *.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
+            gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" --generate-notes
+          gh release upload "$RELEASE_TAG" \
+            dist/*.whl \
+            dist/rdm-*.tar.gz \
+            dist/web-next-dist-*.tar.gz \
+            dist/deploy-*.tar.gz \
+            dist/SHA256SUMS \
+            --clobber

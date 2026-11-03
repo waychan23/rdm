@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -16,6 +23,8 @@ jobs:
           python-version: "3.13"
       - name: Set up Python
         run: uv python install 3.13
+      - name: Verify lockfile
+        run: uv lock --check
       - name: Install dependencies
         run: uv sync --frozen
       - name: Ruff lint
@@ -46,21 +55,19 @@ jobs:
 
   web:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        dir: [web-next]
     defaults:
       run:
-        working-directory: ${{ matrix.dir }}
+        working-directory: web-next
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: ${{ matrix.dir }}/pnpm-lock.yaml
+          cache-dependency-path: web-next/pnpm-lock.yaml
       # esbuild needs no postinstall (platform binary is an optional dep);
       # --ignore-scripts also keeps the install independent of build approval.
       - name: Install
@@ -96,6 +103,8 @@ jobs:
         working-directory: .
         run: uv sync --frozen
       - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -131,9 +140,39 @@ jobs:
           python-version: "3.13"
       - name: Set up Python
         run: uv python install 3.13
-      # The wheel is API/CLI only; the frontend bundle is built by the web job
-      # and deployed to nginx separately (architecture §17.160).
-      - name: Build wheel and assert the frontend is not shipped
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Check version consistency
         run: |
-          uv build --wheel
-          python3 -c "import zipfile,glob; w=zipfile.ZipFile(glob.glob('dist/*.whl')[0]); names=w.namelist(); assert not any('web-next-dist' in n for n in names); print('wheel is API/CLI only')"
+          uv run python - <<'PY'
+          import json, pathlib, rdm
+          version = rdm.__version__
+          web = json.loads(pathlib.Path("web-next/package.json").read_text())["version"]
+          assert version == web, f"version mismatch: rdm={version} web-next={web}"
+          print(f"version {version}")
+          PY
+          uv run rdm --version
+      # The wheel is API/CLI only; the frontend bundle is built by the web job
+      # and deployed to nginx separately (architecture §17.160). The sdist is a
+      # source distribution of the backend package, not a mirror of the repo.
+      - name: Build and verify wheel + sdist
+        run: |
+          uv build
+          python3 - <<'PY'
+          import glob, tarfile, zipfile
+
+          wheel = glob.glob("dist/*.whl")[0]
+          names = zipfile.ZipFile(wheel).namelist()
+          assert any(n.endswith("rdm/py.typed") for n in names), "py.typed missing"
+          assert not any("web-next" in n or n.startswith("tests/") for n in names), "wheel leaks non-package files"
+          print(f"wheel OK: {wheel}")
+
+          sdist = glob.glob("dist/*.tar.gz")[0]
+          with tarfile.open(sdist) as tar:
+              names = tar.getnames()
+          forbidden = ("/web-next/", "/e2e/", "/.github/", "/CLAUDE.md", "/.mcp.json", "/node_modules/", "/docs/internal/")
+          assert not any(part in n for n in names for part in forbidden), "sdist leaks repository-only files"
+          assert any(n.endswith("/src/rdm/__init__.py") for n in names), "sdist missing backend package"
+          assert any(n.endswith("/LICENSE") for n in names), "sdist missing LICENSE"
+          print(f"sdist OK: {sdist}")
+          PY

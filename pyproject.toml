@@ -1,12 +1,27 @@
 [project]
 name = "rdm"
-version = "0.1.0"
-description = "rd-manager — human/agent collaborative R&D work management (MCP + REST + Web)"
+dynamic = ["version"]
+description = "rd-manager — human/agent collaborative R&D work management (MCP + REST API/CLI)"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [
     { name = "waychan23", email = "waychan23@hotmail.com" },
 ]
 requires-python = ">=3.13"
+keywords = ["mcp", "workflow", "project-management", "fastapi", "ai-agent"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Bug Tracking",
+    "Typing :: Typed",
+]
+
 dependencies = [
     "fastapi",
     "uvicorn[standard]",
@@ -24,6 +39,12 @@ dependencies = [
     "pyjson5>=2.0.1",
 ]
 
+[project.urls]
+Homepage = "https://github.com/waychan23/rdm"
+Repository = "https://github.com/waychan23/rdm"
+Issues = "https://github.com/waychan23/rdm/issues"
+Changelog = "https://github.com/waychan23/rdm/blob/main/CHANGELOG.md"
+
 [project.scripts]
 rdm = "rdm.interfaces.cli.main:app"
 
@@ -36,14 +57,26 @@ postgres = ["psycopg[binary]>=3.2"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.version]
+path = "src/rdm/__init__.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/rdm"]
-# The Web UI is deployed separately (Vite build -> nginx, §17.160); the wheel
-# is API/CLI only. Exclude any stale local bundle from earlier versions.
-exclude = ["src/rdm/resources/web-next-dist"]
+# The Web UI is deployed separately (Vite build -> nginx, architecture §17.160);
+# the wheel is API/CLI only.
 
+# The sdist is an installable source package: backend + tests + legal/README.
+# Frontend sources, agent e2e harness, deploy samples and CI config stay in the
+# repository and are not part of the PyPI source distribution.
 [tool.hatch.build.targets.sdist]
-exclude = ["src/rdm/resources/web-next-dist"]
+only-include = [
+    "src/rdm",
+    "tests",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "pyproject.toml",
+]
 
 [dependency-groups]
 dev = [

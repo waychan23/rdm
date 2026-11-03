@@ -4,8 +4,8 @@
 > `src/rdm/resources/workflow-configs/default.json5`，运行时目录
 > `<data-dir>/workflow-configs/`）。
 > 相关实现：`src/rdm/domain/workflow/schema.py`、`config.py`、`engine.py`；
-> 启动导入见 `src/rdm/infrastructure/db/workflow_config_sync.py`；运行时行为见
-> `docs/architecture.md §5.3`、§17.88–96 与 §17.150。
+> 启动导入见 `src/rdm/infrastructure/db/workflow_config_sync.py`；运行时行为见实现代码与测试
+> （内部设计裁决记录仅本地维护，不随仓库发布）。
 
 > 实际文件是 **JSON5**。JSON5 支持 `//`、`/* */`
 > 注释与尾逗号；字符串建议使用双引号。本文示例均为 JSON5；标注「节选」的片段只展示

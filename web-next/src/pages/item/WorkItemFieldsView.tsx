@@ -40,7 +40,7 @@ interface Props {
 
 /**
  * Kind-specific fields. Each value edits in place and PATCHes only its own
- * top-level key (flat schema, see docs/web-next-ui.md §6.3).
+ * top-level key (flat schema).
  */
 export default function WorkItemFieldsView({
   item,

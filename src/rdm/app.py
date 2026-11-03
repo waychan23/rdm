@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from rdm import __version__
 from rdm.application.services.bootstrap import bootstrap_if_empty
 from rdm.config import Settings
 from rdm.infrastructure.webhook.worker import WebhookWorker
@@ -96,7 +97,7 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     # Docs stay inside the /api namespace so an ingress only needs /api/.
     app = FastAPI(
         title="rd-manager",
-        version="0.1.0",
+        version=__version__,
         lifespan=lifespan,
         docs_url="/api/docs",
         redoc_url="/api/redoc",

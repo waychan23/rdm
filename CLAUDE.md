@@ -18,7 +18,7 @@ human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，两个组
 ## 前端需求归属
 
 - 所有新需求、新页面、交互改动、UI/前端缺陷，只在 `web-next/` 实现。
-- 前后端共享 REST/MCP 契约（MCP 工具新增/签名变更须在 `docs/architecture.md` §17 记裁决，当前 35 个）。
+- 前后端共享 REST/MCP 契约（MCP 工具新增/签名变更须在内部设计裁决记录 §17 登记，当前 35 个；该记录仅本地维护、不随仓库发布）。
 
 ## 常用命令
 
@@ -44,10 +44,10 @@ human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，两个组
 
 ## 写 web-next/ 下的 UI 时
 
-完整规范见 **[docs/web-next-ui.md](docs/web-next-ui.md)**（ADS 工具用法、token 规则与短名坑、
+完整内部规范见本地 `docs/internal/web-next-ui.md`（已 gitignore，不随仓库发布；ADS 工具用法、token 规则与短名坑、
 组件导入路径、状态/类型配色、表格/对话框/覆盖面板模式、新页面 checklist）——动手前先读。
 
-- 动手前先用 ads-mcp（`.mcp.json` 已配，工具名 `mcp__ads-mcp__*`）或
+- 动手前先用 ads-mcp（`.mcp.json`，由 `.mcp.json.example` 复制，工具名 `mcp__ads-mcp__*`）或
   `npx @atlaskit/ads-cli search/docs ... [--json]` 确认组件名、token 名、用法；查不到再用 `atlaskit_*` fallback 工具。
 - 颜色、间距、圆角、阴影、字体、层级一律走 `@atlaskit/tokens`（`token('…')` / CSS 变量 `var(--ds-…)`），
   不写裸 hex/rgb、不手造间距值；无法避免的例外（markdown 排版等）在同行注释说明。
@@ -63,5 +63,5 @@ human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，两个组
 
 ## 后端铁律
 
-业务规则只进 domain/application；MCP 工具变更须在 §17 记裁决（当前 35 个）；UoW 唯一提交点；仅回环绑定；
-PAT 是永久自动化路径。细节与历史裁决见 `docs/architecture.md` §16/§17（冲突以编号靠后的裁决为准）。
+业务规则只进 domain/application；MCP 工具变更须在 §17 记裁决（当前 35 个）；UoW 唯一提交点；默认仅回环绑定（企业部署可显式绑定内网地址，敏感本地端点仍仅限本机）；
+PAT 是永久自动化路径。细节与历史裁决见本地 `docs/internal/architecture.md` §16/§17（不随仓库发布；冲突以编号靠后的裁决为准）。

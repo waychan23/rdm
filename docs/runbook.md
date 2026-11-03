@@ -1,6 +1,7 @@
 # 运维手册（rdm）
 
-> 适用：单进程、单写者、loopback-only 的自托管部署。数据目录默认 `~/rdm-data`，
+> 适用：单进程、单写者、默认回环绑定的自托管部署（企业内网/容器部署可绑定内网地址，
+> 但必须设置 `RDM_PUBLIC_BASE_URL` 并只对反向代理开放端口）。数据目录默认 `~/rdm-data`，
 > 可用 `--data-dir` / `RDM_DATA_DIR` 覆盖。数据库默认 SQLite；设置
 > `RDM_DATABASE_URL` 后改用 PostgreSQL（要求 ParadeDB `pg_search` 扩展，§17.114）。
 > 所有命令在仓库根执行。
@@ -117,7 +118,8 @@ pnpm -C web-next build            # 产物 web-next/dist，交给 nginx
 
 ## 5. 安全边界
 
-- 服务只监听 127.0.0.1；远程访问用 SSH 隧道，不要直接暴露 8765。
+- 默认只监听 127.0.0.1；绑定内网地址时用防火墙限制来源，并用 TLS 反向代理对外。
+  `/api/v1/local/*` 始终只接受本机回环请求，远程不可达。
 - data-dir 内 `webhook-secret`、`attachment-secret` 为 0600；`rdm.db` 与附件依赖部署目录权限，建议 `chmod 700` 数据目录。
 - PAT 由本人创建；管理员只能批量撤销。`/api/docs` 在反代后可公开访问，不需要时应在 nginx 封禁或加鉴权。
 - 备份文件含全部业务数据与密钥，按敏感数据保管。

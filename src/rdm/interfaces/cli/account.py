@@ -2,7 +2,8 @@
 
 Offline password resets and the bootstrap-token file are gone. The deployer
 runs this command on the host that serves the data directory; the server must
-be running because only it can mint a bootstrap ticket.
+be running because only it can mint a bootstrap ticket. The endpoint itself
+stays loopback-only even when the server binds a LAN/container address.
 """
 
 from __future__ import annotations

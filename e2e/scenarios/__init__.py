@@ -1,1 +1,1 @@
-"""S1–S10 acceptance scenarios (docs/plan.md §4)."""
+"""S1–S10 acceptance scenarios."""

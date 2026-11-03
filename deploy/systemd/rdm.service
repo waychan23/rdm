@@ -1,0 +1,23 @@
+[Unit]
+Description=rd-manager (rdm) API/MCP server
+Documentation=https://github.com/waychan23/rdm
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rdm
+Group=rdm
+EnvironmentFile=-/etc/rdm/rdm.env
+# `rdm serve` only binds loopback by design; put nginx in front of it.
+ExecStart=/home/rdm/.local/bin/rdm serve --data-dir /var/lib/rdm
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/rdm
+
+[Install]
+WantedBy=multi-user.target

@@ -15,11 +15,47 @@ from rdm.config import Settings
 logger = logging.getLogger("rdm.serve")
 
 
-def _is_local(host: str) -> bool:
+def is_loopback(host: str) -> bool:
+    """True for 127.0.0.0/8, ::1 and the literal ``localhost``."""
+    if host == "localhost":
+        return True
     try:
-        return ipaddress.ip_address(host).is_loopback or host in ("localhost",)
+        return ipaddress.ip_address(host).is_loopback
     except ValueError:
         return False
+
+
+def build_serve_settings(
+    data_dir: Path,
+    host: str,
+    port: int,
+    database_url: str = "",
+    public_base_url: str = "",
+) -> Settings:
+    """Validate bind options without starting the server.
+
+    rdm defaults to loopback, but enterprise deployments may bind a private or
+    container address. A non-loopback bind requires an explicit public origin:
+    OAuth discovery, ``web_url`` and attachment links all derive from it, and
+    an unset origin would otherwise advertise the internal IP over HTTP.
+    """
+    settings = Settings(
+        data_dir=data_dir,
+        host=host,
+        port=port,
+        **({"database_url": database_url} if database_url else {}),
+        **({"public_base_url": public_base_url} if public_base_url else {}),
+    )
+    if not is_loopback(host) and not settings.public_base_url:
+        typer.secho(
+            "Binding a non-loopback address requires RDM_PUBLIC_BASE_URL "
+            "(the HTTPS origin users and MCP clients use). Example: "
+            "RDM_PUBLIC_BASE_URL=https://rdm.example.com rdm serve --host 0.0.0.0",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    return settings
 
 
 def run_serve(
@@ -29,25 +65,18 @@ def run_serve(
     database_url: str = "",
     public_base_url: str = "",
 ) -> None:
-    # The v1 --owner-token shared secret was a no-op at runtime; M3 refuses
-    # non-loopback binds outright (architecture §16.59). Reach a remote host
-    # via SSH port forwarding or an authenticating reverse proxy.
-    if not _is_local(host):
+    settings = build_serve_settings(data_dir, host, port, database_url, public_base_url)
+    if not is_loopback(host):
+        # /api/v1/local/* (owner recovery) still rejects non-loopback peers, so
+        # this only opens the regular authenticated API. Keep it behind a
+        # firewall and an authenticating reverse proxy.
         typer.secho(
-            "Refusing to bind a non-local address: rdm serves loopback only "
-            "(127.0.0.1/localhost/::1). Use SSH port forwarding for remote access.",
-            fg=typer.colors.RED,
+            f"Serving on non-loopback host {host}: keep port {port} on a private "
+            "network and put TLS/authentication in front of it. "
+            "/api/v1/local/* remains loopback-only.",
+            fg=typer.colors.YELLOW,
             err=True,
         )
-        raise typer.Exit(code=2)
-
-    settings = Settings(
-        data_dir=data_dir,
-        host=host,
-        port=port,
-        **({"database_url": database_url} if database_url else {}),
-        **({"public_base_url": public_base_url} if public_base_url else {}),
-    )
     # Migrate first so a bare `rdm serve` on a fresh data dir works.
     from rdm.interfaces.cli.db import initialize_data_dir, run_upgrade
 

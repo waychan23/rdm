@@ -1,10 +1,29 @@
 # rd-manager（rdm）
 
-human/agent 协作的研发工作管理：受工作流引擎约束的 WorkItem/Sprint/版本发布、站内信箱、
-附件/产出物/工作区、站内通知、Webhook、全局搜索、35 个 MCP 工具与完整 Web。单组织部署（初始化
-创建默认组织，预留多租户隔离），默认 SQLite（可选 PostgreSQL + ParadeDB 搜索），服务只监听 127.0.0.1。
+[![ci](https://github.com/waychan23/rdm/actions/workflows/ci.yml/badge.svg)](https://github.com/waychan23/rdm/actions/workflows/ci.yml)
+[![release](https://github.com/waychan23/rdm/actions/workflows/release.yml/badge.svg)](https://github.com/waychan23/rdm/actions/workflows/release.yml)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-## 5 分钟跑起来
+human/agent 协作的研发工作管理，核心取向是**渐进式协作**：不改变团队熟悉的、以人为主的敏捷流程，
+而是把 AI Agent 作为正式成员引入——有自己的账号、项目角色、待办与信箱，从承担单个任务开始，
+逐步参与需求、开发、评审、测试与发布，自动化程度随流程成熟度逐步提高。
+
+系统用工作流引擎约束协作边界：WorkItem/Sprint/版本发布、状态机与审批 gate、站内信箱与 @ 通知、
+附件/产出物、Webhook、全局搜索，以及 35 个 MCP 工具和完整 Web。单组织自托管，默认 SQLite
+（可选 PostgreSQL + ParadeDB 搜索）。服务默认只监听 127.0.0.1；企业内网/容器部署可绑定内网地址，
+敏感恢复端点仍仅限本机。
+
+## 安装与部署
+
+- **生产部署**（从 Release 下载 wheel + 前端产物，systemd + nginx）：[docs/deployment.md](docs/deployment.md)
+- **Docker 部署**（compose 构建后端 + Web + 可选 ParadeDB）：[docs/docker.md](docs/docker.md)
+- **配置参考**（环境变量、数据目录、迁移）：[docs/configuration.md](docs/configuration.md)
+- **MCP 客户端接入**（OAuth / PAT、目录级绑定、skills）：[docs/mcp-clients.md](docs/mcp-clients.md)
+- **完整文档索引**：[docs/README.md](docs/README.md)
+
+从源码开发请继续往下看。
+
+## 源码开发：5 分钟跑起来
 
 前置：Python 3.13 + [uv](https://docs.astral.sh/uv/)；Web 前端另需 Node 22 + pnpm。
 
@@ -40,7 +59,7 @@ pnpm -C web-next dev          # http://127.0.0.1:5173
 - Org Owner 忘记密码：在部署主机执行 `rdm account recover-owner --public-url http://127.0.0.1:5173`
   （需服务运行；通过仅回环的 HTTP 端点重新生成 bootstrap-url）
 
-> Python 进程只提供 API/CLI，不托管 Web 静态资源（architecture §17.160）。生产部署用
+> Python 进程只提供 API/CLI，不托管 Web 静态资源。生产部署用
 > nginx 托管 `web-next/dist` 并反代 `/api/`、`/mcp`、`/.well-known/`，样例见
 > [deploy/nginx/rdm.conf](deploy/nginx/rdm.conf)。
 
@@ -88,6 +107,10 @@ uv run rdm integrate mcp --method token   # 静态 Bearer PAT（CI/无浏览器�
 uv run rdm skills install --target claude      # 安装 rdm-workflow skill
 uv run rdm skills install --target opencode
 ```
+
+生产环境用 `--url https://<public-origin>/mcp`；通用客户端配置、OAuth 排障与卸载见
+[docs/mcp-clients.md](docs/mcp-clients.md)。仓库根 `.mcp.json.example` 是本地开发用的客户端配置模板
+（真实文件 `.mcp.json` 不入库）。
 
 PAT 只能由本人在 Web「我的设置 → 访问令牌」或 `rdm me token-create` 创建；管理员
 不能代签，只能批量撤销。令牌可指定「使用身份」为本人或自己管理的某个 agent。
@@ -163,7 +186,7 @@ uv run pytest -q                             # 全部测试
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src/rdm/domain src/rdm/application
 
-# 前端：React 18 + Atlaskit/ADS（唯一前端，architecture §17.160）
+# 前端：React 18 + Atlaskit/ADS（唯一前端）
 pnpm -C web-next install --ignore-scripts
 pnpm -C web-next dev        # Vite dev server（代理 /api、/.well-known、/mcp 到 8765，HMR）
 pnpm -C web-next lint       # ESLint（type-aware；@typescript-eslint/no-deprecated 为 error）
@@ -178,9 +201,17 @@ uv build
 
 前端产物单独部署给 nginx/ingress（样例 `deploy/nginx/rdm.conf`）。
 
-前端写码规则见仓库根 `CLAUDE.md`，UI 设计与组件/token 规范见 [docs/web-next-ui.md](docs/web-next-ui.md)；
+前端写码规则见仓库根 `CLAUDE.md`（含 UI 设计与组件/token 规范摘要）；
 工作流配置 `workflow-configs/*.json5` 的完整手册见 [docs/workflow-config.md](docs/workflow-config.md)；
 （首次启动会把包内默认定义复制到 `<data-dir>/workflow-configs/`，修改后重启生效；项目创建时必选一份启用中的配置版本。）
 运维/备份/升级/排障见 [docs/runbook.md](docs/runbook.md)；
-测试与关键裁决见 `docs/`（architecture.md §16/§17）。
-M1 手工验收脚本见 `docs/acceptance/m1-loop.md`。
+测试要求见 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [e2e/README.md](e2e/README.md)。
+
+## 参与贡献
+
+开发环境、测试与提交要求见 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题请按
+[SECURITY.md](SECURITY.md) 私下报告。
+
+## 许可证
+
+[Apache License 2.0](LICENSE)，版权声明见 [NOTICE](NOTICE)。

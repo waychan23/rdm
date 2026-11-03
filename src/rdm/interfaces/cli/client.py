@@ -37,8 +37,8 @@ def _fail(response: httpx.Response) -> None:
     raise typer.Exit(code=1)
 
 
-# The v1 server only binds loopback; never send local admin calls through a
-# system/macOS proxy (httpx would otherwise read it via urllib getproxies()).
+# Admin CLI calls are local by contract; never send them through a system/macOS
+# proxy (httpx would otherwise read it via urllib getproxies()).
 _http = httpx.Client(timeout=10, trust_env=False)
 
 

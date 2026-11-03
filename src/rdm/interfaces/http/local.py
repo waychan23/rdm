@@ -2,8 +2,9 @@
 
 The deployer runs ``rdm account recover-owner`` on the host; the CLI calls
 this endpoint over loopback. Any non-loopback peer gets a 404 so the endpoint
-does not advertise its existence. The server itself already refuses to bind
-non-loopback addresses (§16.59).
+does not advertise its existence. This is independent of the bind address:
+even when ``rdm serve --host 0.0.0.0`` exposes the regular API on a LAN, this
+recovery path remains reachable only from the server host.
 """
 
 from __future__ import annotations

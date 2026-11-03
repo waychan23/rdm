@@ -1,8 +1,9 @@
 """Server configuration (pydantic-settings).
 
 Env overrides use the RDM_ prefix: RDM_DATA_DIR / RDM_HOST / RDM_PORT
-(docs/architecture.md §16.9). The v1 RDM_OWNER_TOKEN option was removed in
-M3: non-loopback binds are refused outright (§16.59).
+(docs/architecture.md §16.9). The server defaults to loopback; enterprise
+deployments may bind a private/container address, but the CLI then requires
+RDM_PUBLIC_BASE_URL so OAuth metadata and generated links stay correct.
 
 RDM_DATABASE_URL selects the optional PostgreSQL backend (§17.114). Empty
 keeps the default SQLite file under the data dir.
@@ -126,7 +127,7 @@ class Settings(BaseSettings):
 
     @property
     def internal_base_url(self) -> str:
-        """Origin the server actually binds (loopback)."""
+        """Origin the server actually binds."""
         host = f"[{self.host}]" if ":" in self.host else self.host
         return f"http://{host}:{self.port}"
 

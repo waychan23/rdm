@@ -94,7 +94,7 @@ def serve(
         str, typer.Option("--public-base-url", envvar="RDM_PUBLIC_BASE_URL")
     ] = "",
 ) -> None:
-    """Start the HTTP + MCP API server (loopback binds only)."""
+    """Start the HTTP + MCP API server (defaults to loopback; --host for LAN/container)."""
     from rdm.interfaces.cli import server as server_commands
 
     server_commands.run_serve(data_dir, host, port, database_url, public_base_url)

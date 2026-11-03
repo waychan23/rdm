@@ -239,4 +239,4 @@ MCP 请求不携带 cwd；绑定事实源是客户端工作区根目录的 `.rdm
 - 命名：`资源_动作`（`work_item_*`、`sprint_*`、`mailbox_*`），全小写蛇形；无前缀 `rdm_`（server 名已隔离）。
 - 注册：`interfaces/mcp/tools/<resource>.py` 每文件一个模块，`register(mcp, container)` 函数（container 用于开 UoW）；工具函数只做 pydantic 入参 → 调 service → 包信封。
 - 测试：每个工具至少一条 happy path + 一条错误码映射测试；`workflow_get` 的工具输出必须与 REST `/api/v1/workflow` 完全一致（同一函数生成）。
-- 工具总数当前 35（见 §3）；新增或签名变更必须在 `docs/architecture.md` §17 记裁决，不做无理由扩张。
+- 工具总数当前 35（见 §3）；新增或签名变更必须在内部设计裁决记录 §17 登记（本地维护，不随仓库发布），不做无理由扩张。

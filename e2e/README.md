@@ -5,7 +5,7 @@
 > 与本目录的 agent CLI 验收互不依赖。
 
 用**真实的 agent CLI**（`claude -p` / `opencode run`，非 MCP 客户端模拟）驱动
-rdm，验收 `docs/plan.md §4` 的十个场景。断言落在临时 sqlite 的投影与事件上。
+rdm，验收 S1–S10 十个场景（场景定义见 `e2e/scenarios/`）。断言落在临时 sqlite 的投影与事件上。
 
 ## 前置
 

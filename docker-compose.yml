@@ -1,0 +1,50 @@
+# Production-ish container deployment for rdm.
+#
+#   RDM_PUBLIC_BASE_URL=https://rdm.example.com docker compose up -d --build
+#
+# Only the Web container publishes a port. Put your TLS terminator (enterprise
+# load balancer, ingress, or host nginx) in front of it. See docs/docker.md.
+
+name: rdm
+
+services:
+  rdm:
+    build:
+      context: .
+      dockerfile: deploy/docker/backend.Dockerfile
+    environment:
+      # Required: the HTTPS origin users and MCP clients use.
+      RDM_PUBLIC_BASE_URL: ${RDM_PUBLIC_BASE_URL:?set RDM_PUBLIC_BASE_URL, e.g. https://rdm.example.com}
+      # Optional PostgreSQL + ParadeDB (start the `postgres` profile first).
+      RDM_DATABASE_URL: ${RDM_DATABASE_URL:-}
+    volumes:
+      - rdm-data:/data
+    # Not published to the host: only the web container can reach it.
+    expose:
+      - "8765"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/docker/web.Dockerfile
+    depends_on:
+      - rdm
+    ports:
+      - "${RDM_HTTP_PORT:-8080}:80"
+    restart: unless-stopped
+
+  db:
+    image: paradedb/paradedb:0.26.4-pg18
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: rdm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: rdm
+    volumes:
+      - rdm-pg:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  rdm-data:
+  rdm-pg:

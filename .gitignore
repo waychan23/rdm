@@ -1,51 +1,70 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+/build/
+/dist/
+/wheels/
+*.egg-info/
+.venv/
 
-# Virtual environments
-.venv
-
-# Tool caches
+# Tool caches and coverage
 .ruff_cache/
 .mypy_cache/
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
 
-# Local data directories / sqlite databases
+# Local data directories and databases
 *.db
 *.db-wal
 *.db-shm
+*.sqlite
+*.sqlite3
 /rdm-data/
-bootstrap-token
+bootstrap-*
+webhook-secret
+attachment-secret
+
+# Secrets and environment overrides (template: .env.example)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+*.log
 
 # Local MCP project binding (per-workspace)
 .rdm/
 
+# Local MCP client config (template: .mcp.json.example)
+.mcp.json
+
 # Node / web build
+node_modules/
 web-next/node_modules/
 web-next/dist/
-src/rdm/resources/web-next-dist/
+*.tsbuildinfo
 
 # Web e2e artifacts
 web-next/e2e/.auth/
 web-next/e2e/.results/
 web-next/playwright-report/
 web-next/test-results/
+e2e/out/
 
 # OS/editor
 .DS_Store
 .idea/
 .vscode/
-e2e/out/
-.opencode/opencode.json
 
-.claude
-docs/ui-design
+# Local agent tooling (skills are installed from the package, not committed)
+.claude/
+.opencode/
 
-.opencode
-
-node_modules/
-**/node_modules/
+# Internal process docs (local reference only; never published)
+docs/internal/
