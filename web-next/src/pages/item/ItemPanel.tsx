@@ -5,6 +5,7 @@ import IconButton from "@atlaskit/button/icon/button";
 import { cssMap } from "@atlaskit/css";
 import { DatePicker } from "@atlaskit/datetime-picker";
 import Heading from "@atlaskit/heading";
+import ArrowLeftIcon from "@atlaskit/icon/core/arrow-left";
 import CrossIcon from "@atlaskit/icon/core/cross";
 import Link from "@atlaskit/link";
 import Lozenge from "@atlaskit/lozenge";
@@ -85,6 +86,10 @@ interface Props {
   itemId: string;
   onClose: () => void;
   onOpenItem: (id: string) => void;
+  /** Pop the top drawer layer; when set the close icon becomes a back arrow. */
+  onBack?: () => void;
+  /** A lower stack layer kept mounted but not visible (RDM-136). */
+  covered?: boolean;
 }
 
 interface DetailBundle {
@@ -141,7 +146,14 @@ function effectiveFields(workflow: WorkflowDto, item: WorkItem): WorkflowFields 
   return effective.fields ?? EMPTY_FIELDS;
 }
 
-export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: Props) {
+export default function ItemPanel({
+  projectKey,
+  itemId,
+  onClose,
+  onOpenItem,
+  onBack,
+  covered = false,
+}: Props) {
   const { t } = useTranslation("item");
   const notify = useNotify();
   const me = useCurrentUser();
@@ -567,6 +579,15 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
     }
   };
 
+  const copyDisplayId = async (displayId: string) => {
+    try {
+      await navigator.clipboard.writeText(displayId);
+      notify.success(t("panel.displayIdCopied", { id: displayId }));
+    } catch {
+      notify.error(t("panel.copyFailed"), t("panel.clipboardDenied"));
+    }
+  };
+
   const loadMoreComments = async () => {    if (!bundle || loadingMoreComments) return;
     setLoadingMoreComments(true);
     try {
@@ -890,15 +911,29 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   );
 
   return (
-    <aside className="rdm-item-panel" aria-label={t("panel.ariaLabel")} data-testid="item-panel">
+    <aside
+      className={`rdm-item-panel${covered ? " rdm-item-panel--covered" : ""}`}
+      aria-label={t("panel.ariaLabel")}
+      data-testid="item-panel"
+    >
       <header className="rdm-item-head" data-testid="item-panel-header">
-        <IconButton
-          icon={(iconProps) => <CrossIcon {...iconProps} />}
-          label={t("panel.close")}
-          appearance="subtle"
-          testId="item-panel-close"
-          onClick={onClose}
-        />
+        {onBack ? (
+          <IconButton
+            icon={(iconProps) => <ArrowLeftIcon {...iconProps} />}
+            label={t("panel.back")}
+            appearance="subtle"
+            testId="item-panel-back"
+            onClick={onBack}
+          />
+        ) : (
+          <IconButton
+            icon={(iconProps) => <CrossIcon {...iconProps} />}
+            label={t("panel.close")}
+            appearance="subtle"
+            testId="item-panel-close"
+            onClick={onClose}
+          />
+        )}
         <nav
           className="rdm-item-breadcrumb"
           aria-label={t("panel.breadcrumbLabel")}
@@ -925,9 +960,16 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                   </span>
                 )}
                 {last ? (
-                  <span className="rdm-item-breadcrumb-current" aria-current="page">
+                  <button
+                    type="button"
+                    className="rdm-item-breadcrumb-current rdm-item-breadcrumb-copy"
+                    aria-current="page"
+                    title={t("panel.copyDisplayId")}
+                    data-testid="item-panel-copy-id"
+                    onClick={() => void copyDisplayId(node.display_id)}
+                  >
                     {label}
-                  </span>
+                  </button>
                 ) : (
                   <button
                     type="button"

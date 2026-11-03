@@ -1,8 +1,13 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 
 import ItemPanel from "../pages/item/ItemPanel";
-import { BACKDROP_INTERACTIVE, itemOverlaySearch } from "../lib/itemOverlay";
+import {
+  BACKDROP_INTERACTIVE,
+  itemOverlayStack,
+  popItemOverlay,
+  pushItemOverlay,
+} from "../lib/itemOverlay";
 import "../styles/item.css";
 
 /**
@@ -22,15 +27,22 @@ function clickPathMatches(event: MouseEvent, selector: string): boolean {
  * In-page work item drawer. It lives beside the current page (AppShell) so
  * opening/closing it never unmounts the page, its filters or an open
  * sprint/release detail drawer.
+ *
+ * Opening an item from inside a panel pushes a new layer (RDM-136); layers
+ * stay mounted so going back restores the previous panel instantly. A repeat
+ * open of an item already in the stack promotes that layer to the top.
  */
 export default function ItemOverlayHost() {
   const [params, setParams] = useSearchParams();
   const location = useLocation();
-  const itemId = params.get("item");
-  const projectKey = params.get("itemProject") ?? "";
   // Direct `/items/:id` links keep using the route-backed overlay.
   const onLegacyRoute = location.pathname.includes("/items/");
-  const open = Boolean(itemId && projectKey) && !onLegacyRoute;
+  const search = params.toString();
+  const stack = useMemo(
+    () => (onLegacyRoute ? [] : itemOverlayStack(search)),
+    [onLegacyRoute, search],
+  );
+  const open = stack.length > 0;
 
   const close = useCallback(() => {
     const next = new URLSearchParams(params);
@@ -39,8 +51,20 @@ export default function ItemOverlayHost() {
     setParams(next, { replace: true });
   }, [params, setParams]);
 
+  const goBack = useCallback(() => {
+    setParams(new URLSearchParams(popItemOverlay(params.toString(), stack)), {
+      replace: true,
+    });
+  }, [params, setParams, stack]);
+
   const openItem = (nextId: string) => {
-    setParams(new URLSearchParams(itemOverlaySearch(params.toString(), projectKey, nextId)));
+    const current = stack[stack.length - 1];
+    if (!current) return;
+    setParams(
+      new URLSearchParams(
+        pushItemOverlay(params.toString(), stack, current.projectKey, nextId),
+      ),
+    );
   };
 
   useEffect(() => {
@@ -56,18 +80,26 @@ export default function ItemOverlayHost() {
     return () => document.removeEventListener("click", onClick);
   }, [open, close]);
 
-  if (!open || !itemId) return null;
+  if (!open) return null;
   return (
     <div
       className="rdm-item-overlay rdm-item-overlay--floating"
       data-testid="item-overlay"
     >
-      <ItemPanel
-        projectKey={projectKey}
-        itemId={itemId}
-        onClose={close}
-        onOpenItem={openItem}
-      />
+      {stack.map((entry, index) => {
+        const isTop = index === stack.length - 1;
+        return (
+          <ItemPanel
+            key={`${entry.projectKey}:${entry.itemId}`}
+            projectKey={entry.projectKey}
+            itemId={entry.itemId}
+            onClose={close}
+            onOpenItem={openItem}
+            onBack={isTop && stack.length > 1 ? goBack : undefined}
+            covered={!isTop}
+          />
+        );
+      })}
     </div>
   );
 }

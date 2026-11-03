@@ -31,6 +31,13 @@
   overflow: hidden;
 }
 
+/* Lower stack layers stay mounted so going back restores them instantly
+   (RDM-136); only the top layer is visible/interactive. */
+.rdm-item-panel--covered {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .rdm-item-panel {
   position: absolute;
   top: 0;
@@ -92,6 +99,17 @@
 .rdm-item-breadcrumb-current {
   color: var(--ds-text-subtle);
   font-weight: var(--ds-font-weight-medium, 500);
+}
+/* The current display id is a copy action (RDM-136). */
+.rdm-item-breadcrumb-copy {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+}
+.rdm-item-breadcrumb-copy:hover .rdm-item-breadcrumb-id {
+  text-decoration: underline;
 }
 .rdm-item-breadcrumb-sep {
   color: var(--ds-text-subtlest);
