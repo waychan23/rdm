@@ -46,7 +46,7 @@ async def _ensure_owner_password(client: httpx.AsyncClient) -> None:
 
 async def _register(client, redirect_uri: str = "http://127.0.0.1:54321/callback"):
     return await client.post(
-        "/register",
+        "/api/oauth/register",
         json={
             "client_name": "session-cache-test",
             "redirect_uris": [redirect_uri],
@@ -67,7 +67,7 @@ async def _oauth_access(client, settings) -> tuple[str, str, str]:
     cid, secret = registered["client_id"], registered.get("client_secret")
     verifier, challenge = _verifier_pair()
     r = await client.get(
-        "/authorize",
+        "/api/oauth/authorize",
         params={
             "response_type": "code",
             "client_id": cid,
@@ -105,7 +105,7 @@ async def _oauth_access(client, settings) -> tuple[str, str, str]:
     ).json()["data"]["redirect_to"]
     code = parse_qs(urlparse(decided).query)["code"][0]
     tok = await client.post(
-        "/token",
+        "/api/oauth/token",
         data={
             "grant_type": "authorization_code",
             "code": code,

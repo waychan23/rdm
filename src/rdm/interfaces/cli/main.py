@@ -90,21 +90,25 @@ def serve(
     host: Annotated[str, typer.Option("--host", envvar="RDM_HOST")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", envvar="RDM_PORT")] = 8765,
     database_url: DatabaseUrlOpt = "",
+    public_base_url: Annotated[
+        str, typer.Option("--public-base-url", envvar="RDM_PUBLIC_BASE_URL")
+    ] = "",
 ) -> None:
-    """Start the HTTP + MCP server (loopback binds only)."""
+    """Start the HTTP + MCP API server (loopback binds only)."""
     from rdm.interfaces.cli import server as server_commands
 
-    server_commands.run_serve(data_dir, host, port, database_url)
+    server_commands.run_serve(data_dir, host, port, database_url, public_base_url)
 
 
 @account_app.command("recover-owner")
 def account_recover_owner(
     url: UrlOpt = DEFAULT_URL,
+    public_url: Annotated[str, typer.Option("--public-url", envvar="RDM_PUBLIC_BASE_URL")] = "",
 ) -> None:
     """重新生成 Org Owner 的一次性设置密码链接（需服务在本机运行）。"""
     from rdm.interfaces.cli import account as account_commands
 
-    link = account_commands.recover_owner(url)
+    link = account_commands.recover_owner(url, public_url)
     typer.secho("把下面的链接交给 Org Owner（7 天内有效）：", fg=typer.colors.GREEN)
     typer.echo(link)
 

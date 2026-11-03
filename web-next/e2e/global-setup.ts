@@ -11,6 +11,7 @@ import { Api, OWNER_PASSWORD, USER_PASSWORD, oauthLogin } from "./support/api";
 import {
   AUTH_DIR,
   SERVER_LOG,
+  WEB_LOG,
   storageStateFor,
   type E2EContext,
   type Session,
@@ -34,21 +35,26 @@ function freePort(): Promise<number> {
   });
 }
 
-async function waitForHealth(baseURL: string, child: ChildProcess): Promise<void> {
+async function waitForHealth(
+  baseURL: string,
+  child: ChildProcess,
+  path: string,
+  label: string,
+): Promise<void> {
   const deadline = Date.now() + 45_000;
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
-      throw new Error(`rdm serve exited early (${child.exitCode}); see ${SERVER_LOG}`);
+      throw new Error(`${label} exited early (${child.exitCode}); see ${AUTH_DIR}`);
     }
     try {
-      const res = await fetch(`${baseURL}/healthz`);
+      const res = await fetch(`${baseURL}${path}`);
       if (res.ok) return;
     } catch {
       // Not listening yet.
     }
     await sleep(200);
   }
-  throw new Error(`rdm serve did not become healthy in 45s; see ${SERVER_LOG}`);
+  throw new Error(`${label} did not become healthy in 45s; see ${AUTH_DIR}`);
 }
 
 async function recoverOwner(baseURL: string): Promise<void> {
@@ -271,7 +277,7 @@ async function createE2EWorkflowConfig(api: Api): Promise<string> {
 
 export default async function globalSetup(): Promise<() => Promise<void>> {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-  const distIndex = path.join(repoRoot, "src/rdm/resources/web-next-dist/index.html");
+  const distIndex = path.join(repoRoot, "web-next/dist/index.html");
   if (!fs.existsSync(distIndex)) {
     throw new Error(
       `SPA bundle missing at ${distIndex}. Run \`pnpm -C web-next build\` first ` +
@@ -283,37 +289,76 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   fs.mkdirSync(AUTH_DIR, { recursive: true });
 
   const dataDir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "rdm-web-e2e-")), "data");
-  const port = await freePort();
-  const baseURL = `http://127.0.0.1:${port}`;
+  const apiPort = await freePort();
+  const webPort = await freePort();
+  const apiURL = `http://127.0.0.1:${apiPort}`;
+  // The browser origin is the Vite preview server, which serves the production
+  // bundle and proxies /api, /mcp and /.well-known to the backend — the same
+  // topology as nginx in production (architecture §17.160).
+  const baseURL = `http://127.0.0.1:${webPort}`;
+  const noProxy = {
+    NO_PROXY: "127.0.0.1,localhost,::1",
+    no_proxy: "127.0.0.1,localhost,::1",
+  };
   const log = fs.createWriteStream(SERVER_LOG, { flags: "w" });
   const child = spawn(
     "uv",
-    ["run", "rdm", "serve", "--data-dir", dataDir, "--host", "127.0.0.1", "--port", String(port)],
+    ["run", "rdm", "serve", "--data-dir", dataDir, "--host", "127.0.0.1", "--port", String(apiPort)],
     {
       cwd: repoRoot,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
-        NO_PROXY: "127.0.0.1,localhost,::1",
-        no_proxy: "127.0.0.1,localhost,::1",
+        ...noProxy,
         RDM_WEBHOOK_POLL_SECONDS: "0.5",
+        RDM_PUBLIC_BASE_URL: baseURL,
       },
     },
   );
   child.stdout?.pipe(log);
   child.stderr?.pipe(log);
 
+  const webLog = fs.createWriteStream(WEB_LOG, { flags: "w" });
+  const web = spawn(
+    "pnpm",
+    [
+      "-C",
+      "web-next",
+      "exec",
+      "vite",
+      "preview",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(webPort),
+      "--strictPort",
+    ],
+    {
+      cwd: repoRoot,
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, ...noProxy, RDM_API_URL: apiURL },
+    },
+  );
+  web.stdout?.pipe(webLog);
+  web.stderr?.pipe(webLog);
+
   const teardown = async () => {
+    await stopServer(web);
     await stopServer(child);
     log.end();
+    webLog.end();
     fs.rmSync(path.dirname(dataDir), { recursive: true, force: true });
   };
 
   try {
-    await waitForHealth(baseURL, child);
-    await recoverOwner(baseURL);
-    const ownerTokens = await oauthLogin(baseURL, "owner", OWNER_PASSWORD);
+    await waitForHealth(apiURL, child, "/api/healthz", "rdm serve");
+    // Hitting the proxied health endpoint proves both the static server and
+    // the API proxy are ready.
+    await waitForHealth(baseURL, web, "/api/healthz", "vite preview");
+    await recoverOwner(apiURL);
+    const ownerTokens = await oauthLogin(apiURL, "owner", OWNER_PASSWORD);
     const owner: Session = {
       id: "",
       name: "owner",
@@ -321,7 +366,14 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       ...ownerTokens,
     };
     const users = {} as E2EContext["users"];
-    const ctx: E2EContext = { baseURL, projectKey: PROJECT_KEY, dataDir, owner, users };
+    const ctx: E2EContext = {
+      baseURL,
+      apiURL,
+      projectKey: PROJECT_KEY,
+      dataDir,
+      owner,
+      users,
+    };
     const api = new Api(ctx);
 
     // Resolve the owner's id from whoami.
@@ -333,8 +385,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 
     for (const name of MEMBER_NAMES) {
       const created = await createUser(api, name);
-      await setPassword(baseURL, created.password_reset_url, USER_PASSWORD);
-      const tokens = await oauthLogin(baseURL, name, USER_PASSWORD);
+      await setPassword(apiURL, created.password_reset_url, USER_PASSWORD);
+      const tokens = await oauthLogin(apiURL, name, USER_PASSWORD);
       users[name as Exclude<UserName, "owner">] = {
         id: created.id,
         name,

@@ -80,6 +80,7 @@ class Web:
 async def web(tmp_path) -> AsyncIterator[Web]:
     settings = Settings(
         data_dir=tmp_path / "data",
+        public_base_url="",
         webhook_backoff="0,0,0",
         webhook_poll_seconds=60,
         extra_redirect_uris="http://test/auth/callback",

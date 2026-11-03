@@ -9,14 +9,14 @@ def auth(token: str) -> dict[str, str]:
 
 async def test_healthz_no_auth(server) -> None:
     client, _settings, _app = server
-    r = await client.get("/healthz")
+    r = await client.get("/api/healthz")
     assert r.status_code == 200
     assert r.json()["version"]
 
 
 async def test_request_id_roundtrip(server) -> None:
     client, _settings, _app = server
-    r = await client.get("/healthz", headers={"X-Request-ID": "req-xyz"})
+    r = await client.get("/api/healthz", headers={"X-Request-ID": "req-xyz"})
     assert r.headers["x-request-id"] == "req-xyz"
 
 

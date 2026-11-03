@@ -11,7 +11,7 @@ test.describe("browser authentication", () => {
     try {
       await page.goto(`${app.baseURL}/projects`);
 
-      // No token: router guard -> /login -> /authorize -> login ticket form.
+      // No token: router guard -> /login -> /api/oauth/authorize -> login ticket form.
       await expect(page.getByTestId("page-login")).toBeVisible({ timeout: 20_000 });
       await page.getByTestId("login-username").fill("owner");
       await page.getByTestId("login-password").fill(OWNER_PASSWORD);

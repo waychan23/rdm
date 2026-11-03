@@ -131,6 +131,7 @@ async def server(
 ) -> AsyncIterator[tuple[httpx.AsyncClient, Settings, object]]:
     settings = Settings(
         data_dir=tmp_path / "data",
+        public_base_url="",
         extra_redirect_uris=WEB_REDIRECT,
         **({"database_url": pg_database_url} if db_backend == "postgres" else {}),
     )
@@ -157,7 +158,7 @@ async def web_login(
     """Full first-party OAuth flow; returns (access_token, refresh_token)."""
     verifier, challenge = await pkce()
     r = await client.get(
-        "/authorize",
+        "/api/oauth/authorize",
         params={
             "response_type": "code",
             "client_id": "rdm-web",
@@ -180,7 +181,7 @@ async def web_login(
     assert data["must_reset"] is False, data
     code = parse_qs(urlparse(data["redirect_to"]).query)["code"][0]
     r = await client.post(
-        "/token",
+        "/api/oauth/token",
         data={
             "grant_type": "authorization_code",
             "code": code,

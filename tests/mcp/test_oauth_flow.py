@@ -56,12 +56,13 @@ async def _ensure_owner_password(client: httpx.AsyncClient) -> None:
 
 
 async def test_metadata_discovery(server) -> None:
-    client, _settings, _app = server
+    client, settings, _app = server
     r = await client.get("/.well-known/oauth-protected-resource/mcp")
     assert r.status_code == 200, r.text
     resource = r.json()
-    assert resource["resource"].rstrip("/").endswith("/mcp")
+    assert resource["resource"].rstrip("/") == f"{settings.base_url}/mcp"
     assert resource["authorization_servers"]
+    assert resource["authorization_servers"][0].rstrip("/") == settings.base_url
 
     r = await client.get("/.well-known/oauth-authorization-server")
     assert r.status_code == 200, r.text
@@ -69,13 +70,16 @@ async def test_metadata_discovery(server) -> None:
     assert "authorization_code" in metadata["grant_types_supported"]
     assert "refresh_token" in metadata["grant_types_supported"]
     assert metadata["code_challenge_methods_supported"] == ["S256"]
-    assert metadata["registration_endpoint"].endswith("/register")
-    assert metadata["revocation_endpoint"].endswith("/revoke")
+    assert metadata["issuer"].rstrip("/") == settings.base_url
+    assert metadata["authorization_endpoint"] == f"{settings.base_url}/api/oauth/authorize"
+    assert metadata["token_endpoint"] == f"{settings.base_url}/api/oauth/token"
+    assert metadata["registration_endpoint"].endswith("/api/oauth/register")
+    assert metadata["revocation_endpoint"].endswith("/api/oauth/revoke")
 
 
 async def _register(client, redirect_uri: str = "http://127.0.0.1:54321/callback"):
     r = await client.post(
-        "/register",
+        "/api/oauth/register",
         json={
             "client_name": "test-mcp-client",
             "redirect_uris": [redirect_uri],
@@ -95,7 +99,7 @@ async def test_dcr_loopback_only(server) -> None:
 
     # External / non-loopback redirect URIs are rejected at registration.
     r = await client.post(
-        "/register",
+        "/api/oauth/register",
         json={"redirect_uris": ["https://example.com/callback"]},
     )
     assert r.status_code == 400
@@ -109,7 +113,7 @@ async def _authorize_to_consent(client, client_id: str) -> tuple[str, str, str, 
     redirect_uri = "http://127.0.0.1:54321/callback"
     verifier, challenge = _verifier_pair()
     r = await client.get(
-        "/authorize",
+        "/api/oauth/authorize",
         params={
             "response_type": "code",
             "client_id": client_id,
@@ -147,9 +151,9 @@ async def test_authorize_requires_login_then_consent_and_token(server) -> None:
     registered = (await _register(client)).json()
     client_id = registered["client_id"]
 
-    # Without a session, /authorize bounces to the login page.
+    # Without a session, /api/oauth/authorize bounces to the login page.
     r = await client.get(
-        "/authorize",
+        "/api/oauth/authorize",
         params={
             "response_type": "code",
             "client_id": client_id,
@@ -194,7 +198,7 @@ async def test_authorize_requires_login_then_consent_and_token(server) -> None:
     }
     if registered.get("client_secret"):
         token_payload["client_secret"] = registered["client_secret"]
-    r = await client.post("/token", data=token_payload)
+    r = await client.post("/api/oauth/token", data=token_payload)
     assert r.status_code == 200, r.text
     tokens = r.json()
     access = tokens["access_token"]
@@ -230,7 +234,7 @@ async def test_refresh_rotation_reuse_and_revocation(server) -> None:
         data = {**data, "client_id": client_id}
         if registered.get("client_secret"):
             data = {**data, "client_secret": registered["client_secret"]}
-        return await client.post("/token", data=data)
+        return await client.post("/api/oauth/token", data=data)
 
     # Rotate: a new pair is issued and the old refresh dies.
     r = await token_request({"grant_type": "refresh_token", "refresh_token": refresh})
@@ -263,7 +267,7 @@ async def test_refresh_rotation_reuse_and_revocation(server) -> None:
     }
     if registered.get("client_secret"):
         revoke_data["client_secret"] = registered["client_secret"]
-    r = await client.post("/revoke", data=revoke_data)
+    r = await client.post("/api/oauth/revoke", data=revoke_data)
     assert r.status_code == 200, r.text
 
 

@@ -303,7 +303,7 @@ def check_workflow_data(settings: Settings) -> CheckResult:
 
 
 def check_endpoint(settings: Settings) -> CheckResult:
-    url = f"http://{settings.host}:{settings.port}/healthz"
+    url = f"http://{settings.host}:{settings.port}/api/healthz"
     try:
         response = httpx.get(url, trust_env=False, timeout=3)
         if response.status_code == 200:

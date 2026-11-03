@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 
@@ -16,6 +15,7 @@ from rdm.interfaces.http.attachments import router as attachments_router
 from rdm.interfaces.http.auth import router as auth_router
 from rdm.interfaces.http.comments import router as comments_router
 from rdm.interfaces.http.container import Container
+from rdm.interfaces.http.dispatch import OAUTH_PREFIX, OAuthRoutesOnly, RootDispatch
 from rdm.interfaces.http.errors import install_exception_handlers
 from rdm.interfaces.http.local import router as local_router
 from rdm.interfaces.http.logging import RequestContextMiddleware, configure_logging
@@ -30,7 +30,6 @@ from rdm.interfaces.http.routers import (
     system_router,
 )
 from rdm.interfaces.http.search import router as search_router
-from rdm.interfaces.http.spa import RootDispatch
 from rdm.interfaces.http.sprint import router as sprints_router
 from rdm.interfaces.http.stream import router as stream_router
 from rdm.interfaces.http.todos import router as todos_router
@@ -45,23 +44,26 @@ from rdm.interfaces.mcp.server import build_mcp
 
 logger = logging.getLogger("rdm.app")
 
-_RESOURCES = Path(__file__).resolve().parent / "resources"
-# Single SPA bundle (§17): the legacy Vue app was removed together with the
-# --web-ui switch when web-next became the only frontend.
-WEB_DIST = _RESOURCES / "web-next-dist"
-
 
 def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     configure_logging()
     container = Container(settings)
-    base_url = f"http://{settings.host}:{settings.port}"
-    oauth_provider = RdmOAuthProvider(base_url=base_url, container=container)
+    # Public origin drives OAuth metadata/issuer, web_url and attachment links;
+    # the internal origin is only used for the loopback bind/redirect aliases.
+    public_base = settings.base_url
+    oauth_base = f"{public_base}{OAUTH_PREFIX}"
+    oauth_provider = RdmOAuthProvider(
+        base_url=oauth_base,
+        issuer_url=public_base,
+        resource_base_url=public_base,
+        container=container,
+    )
     mcp = build_mcp(container, oauth_provider)
     # streamable-http only; no stdio (architecture §1). host_origin_protection
     # is disabled: rdm binds loopback only (§16.59) and serves test hosts too.
     mcp_http = mcp.http_app(transport="streamable-http", host_origin_protection=False)
-    # OAuth endpoints (/authorize, /.well-known/*) need the ASGI scope to
-    # read the session cookie, so wrap the whole FastMCP sub-app.
+    # OAuth endpoints (/authorize, /.well-known/*) read the ASGI scope so the
+    # provider can see the original request; wrap the whole FastMCP sub-app.
     mcp_guarded = RequestScopeMiddleware(mcp_http)
 
     @asynccontextmanager
@@ -73,14 +75,15 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
                 async with container.uow() as uow:
                     ticket = await bootstrap_if_empty(
                         uow,
-                        base_url=base_url,
+                        base_url=public_base,
                         extra_redirect_uris=settings.extra_redirect_uri_list,
+                        internal_base_url=settings.internal_base_url,
                     )
                 if ticket:
                     logger.warning(
                         "首次启动：请在本机打开设置 Org Owner 密码：%s/set-password?ticket=%s "
                         "（7 天内有效；丢失可执行 `rdm account recover-owner` 重新生成）",
-                        base_url,
+                        public_base,
                         ticket,
                     )
             worker.start()
@@ -90,7 +93,16 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
                 await worker.stop()
                 await container.aclose()
 
-    app = FastAPI(title="rd-manager", version="0.1.0", lifespan=lifespan)
+    # Docs stay inside the /api namespace so an ingress only needs /api/.
+    app = FastAPI(
+        title="rd-manager",
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url="/api/docs",
+        redoc_url="/api/redoc",
+        openapi_url="/api/openapi.json",
+        swagger_ui_oauth2_redirect_url="/api/docs/oauth2-redirect",
+    )
     app.state.container = container
 
     app.add_middleware(RequestContextMiddleware)
@@ -119,9 +131,11 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     app.include_router(search_router)
     app.include_router(stream_router)
 
-    # FastMCP's http_app serves /mcp and the OAuth 2.1 endpoints (§16.54);
-    # RootDispatch splits those from the static SPA, while API routers above
-    # win route matching first. Authentication is FastMCP's bearer middleware
-    # (RdmOAuthProvider accepts both PAT and OAuth access tokens).
-    app.mount("/", RootDispatch(mcp_guarded, WEB_DIST))
+    # FastMCP's http_app carries /mcp, the four OAuth routes and the well-known
+    # discovery routes. Mount the OAuth routes under /api/oauth (they stay at
+    # the sub-app root internally), then let RootDispatch own /mcp and
+    # /.well-known; API routers above win route matching first. The Python
+    # process serves no HTML: the Web UI comes from Vite/nginx (§17.160).
+    app.mount(f"{OAUTH_PREFIX}", OAuthRoutesOnly(mcp_guarded))
+    app.mount("/", RootDispatch(mcp_guarded))
     return app

@@ -67,9 +67,18 @@ def _loopback_redirect_only(info: OAuthClientInformationFull) -> None:
 
 
 class RdmOAuthProvider(OAuthProvider):
-    def __init__(self, *, base_url: str, container) -> None:  # type: ignore[no-untyped-def]
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        container,  # type: ignore[no-untyped-def]
+        issuer_url: str | None = None,
+        resource_base_url: str | None = None,
+    ) -> None:
         super().__init__(
             base_url=base_url,
+            issuer_url=issuer_url or base_url,
+            resource_base_url=resource_base_url,
             client_registration_options=ClientRegistrationOptions(
                 enabled=True, valid_scopes=[SCOPE_MCP], default_scopes=[SCOPE_MCP]
             ),

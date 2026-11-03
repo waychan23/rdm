@@ -67,8 +67,13 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Type-check and build
         run: pnpm build
-      - name: Verify SPA bundle landed in package resources
-        run: test -f ../src/rdm/resources/web-next-dist/index.html
+      - name: Verify the frontend bundle
+        run: test -f dist/index.html
+      - name: Upload frontend bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-next-dist
+          path: dist
 
   web-e2e:
     runs-on: ubuntu-latest
@@ -109,6 +114,7 @@ jobs:
             web-next/playwright-report
             web-next/e2e/.results
             web-next/e2e/.auth/server.log
+            web-next/e2e/.auth/web.log
 
   package:
     runs-on: ubuntu-latest
@@ -121,15 +127,9 @@ jobs:
           python-version: "3.13"
       - name: Set up Python
         run: uv python install 3.13
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Build the SPA bundle
-        run: |
-          pnpm -C web-next install --frozen-lockfile --ignore-scripts
-          pnpm -C web-next build
-      - name: Build wheel and assert the bundle ships
+      # The wheel is API/CLI only; the frontend bundle is built by the web job
+      # and deployed to nginx separately (architecture §17.160).
+      - name: Build wheel and assert the frontend is not shipped
         run: |
           uv build --wheel
-          python3 -c "import zipfile,glob; w=zipfile.ZipFile(glob.glob('dist/*.whl')[0]); names=w.namelist(); assert any('resources/web-next-dist/index.html' in n for n in names); print('web-next bundle present in wheel')"
+          python3 -c "import zipfile,glob; w=zipfile.ZipFile(glob.glob('dist/*.whl')[0]); names=w.namelist(); assert not any('web-next-dist' in n for n in names); print('wheel is API/CLI only')"

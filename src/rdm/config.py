@@ -9,6 +9,7 @@ keeps the default SQLite file under the data dir.
 """
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -50,6 +51,10 @@ class Settings(BaseSettings):
     database_url: str = ""
     host: str = "127.0.0.1"
     port: int = 8765
+    # Public origin the browser/MCP clients use (scheme://host[:port], no path).
+    # Empty = same as the bind address. Behind nginx this must be the external
+    # origin so OAuth issuer/metadata, web_url and attachment URLs are correct.
+    public_base_url: str = ""
     # Extra loopback redirect URIs for the first-party browser client (tests).
     # Comma-separated absolute URLs; appended to the built-in /auth/callback.
     extra_redirect_uris: str = ""
@@ -66,6 +71,28 @@ class Settings(BaseSettings):
     @classmethod
     def _normalize_database_url(cls, value: str) -> str:
         return normalize_database_url(value)
+
+    @field_validator("public_base_url")
+    @classmethod
+    def _validate_public_base_url(cls, value: str) -> str:
+        """Accept only an origin; the Web UI and discovery live at the root.
+
+        OAuth issuers must be HTTPS off-loopback (RFC 8414 / FastMCP's
+        validate_issuer_url); rejecting it here gives a clear startup error
+        instead of an SDK stack trace.
+        """
+        clean = (value or "").strip().rstrip("/")
+        if not clean:
+            return ""
+        parsed = urlparse(clean)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("RDM_PUBLIC_BASE_URL must be http(s)://host[:port]")
+        if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+            raise ValueError("RDM_PUBLIC_BASE_URL must be an origin without path/query/fragment")
+        host = (parsed.hostname or "").lower()
+        if parsed.scheme == "http" and host not in {"127.0.0.1", "localhost", "::1"}:
+            raise ValueError("RDM_PUBLIC_BASE_URL must use https for non-loopback hosts")
+        return clean
 
     @property
     def is_postgres(self) -> bool:
@@ -98,9 +125,19 @@ class Settings(BaseSettings):
         return self.data_dir / "attachment-secret"
 
     @property
-    def base_url(self) -> str:
+    def internal_base_url(self) -> str:
+        """Origin the server actually binds (loopback)."""
         host = f"[{self.host}]" if ":" in self.host else self.host
         return f"http://{host}:{self.port}"
+
+    @property
+    def base_url(self) -> str:
+        """Public origin for user-facing URLs (OAuth, web links, attachments).
+
+        Falls back to the bind origin when RDM_PUBLIC_BASE_URL is unset, so
+        direct loopback usage keeps working unchanged.
+        """
+        return self.public_base_url.rstrip("/") or self.internal_base_url
 
     @property
     def db_path(self) -> Path:

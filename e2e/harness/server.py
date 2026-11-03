@@ -72,7 +72,7 @@ def start_server(root: Path, *, log_path: Path | None = None) -> Server:
     deadline = time.time() + 30
     while time.time() < deadline:
         try:
-            r = httpx.get(f"{base_url}/healthz", timeout=1)
+            r = httpx.get(f"{base_url}/api/healthz", timeout=1)
             if r.status_code == 200:
                 break
         except httpx.HTTPError:

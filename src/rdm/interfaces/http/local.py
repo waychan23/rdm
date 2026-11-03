@@ -23,6 +23,12 @@ _LOOPBACK_PEERS = {"127.0.0.1", "::1", "localhost", "testclient"}
 
 
 def _peer_is_loopback(request: Request) -> bool:
+    # A reverse proxy also connects from loopback, so the peer address alone
+    # stopped being a trust boundary once nginx fronts the API (§17.160).
+    # Local `rdm account recover-owner` never sends proxy headers; the nginx
+    # sample additionally blocks /api/v1/local/ outright.
+    if request.headers.get("x-forwarded-for") or request.headers.get("x-real-ip"):
+        return False
     host = request.client.host if request.client else None
     return host in _LOOPBACK_PEERS
 

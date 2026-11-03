@@ -28,12 +28,17 @@ human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，两个组
   （testcontainers 用 `paradedb/paradedb:0.26.4-pg18`，每测试独立库；Docker 不可用时跳过）。
   手工冒烟：`uv sync --extra postgres`，起 ParadeDB 镜像，
   `RDM_DATABASE_URL=postgresql://postgres:pw@127.0.0.1:5432/rdm uv run rdm init|serve|doctor`。
-- 前端：`pnpm -C web-next dev`（5173，代理 API 到 8765）、`pnpm -C web-next build`（产物进 `src/rdm/resources/web-next-dist`）。
-- 前端 e2e（Playwright，重点覆盖工作流引擎）：`pnpm -C web-next e2e`（先 build 再跑浏览器 spec；
-  首次需 `pnpm -C web-next exec playwright install chromium`）。详见 `web-next/e2e/README.md`。
-- 起服务：`uv run rdm serve`；首次启动看日志里的 **bootstrap-url** 设置 Org Owner 密码。
-  Owner 找回：`uv run rdm account recover-owner`（需服务在本机运行）。
-- wheel 打包前 build 前端：`pnpm -C web-next build`。
+- 前端：`pnpm -C web-next dev`（5173，代理 `/api`、`/.well-known`、`/mcp` 到 8765，HMR）、
+  `pnpm -C web-next build`（产物进 `web-next/dist`，独立部署给 nginx，不进 wheel）。
+  开发时后端加 `RDM_PUBLIC_BASE_URL=http://127.0.0.1:5173`，登录/恢复链接才指向 dev server。
+  前端 e2e（Playwright，重点覆盖工作流引擎）：`pnpm -C web-next e2e`（先 build，再以 `vite preview`
+  起生产产物 + 代理；首次需 `pnpm -C web-next exec playwright install chromium`）。详见 `web-next/e2e/README.md`。
+- 起服务：`uv run rdm serve`（纯 API/MCP/OAuth，不托管 Web）；首次启动看日志里的 **bootstrap-url**
+  设置 Org Owner 密码。Owner 找回：`uv run rdm account recover-owner --public-url http://127.0.0.1:5173`
+  （需服务在本机运行）。
+- root 路径只有三类：`/api/*`（REST、`/api/oauth/*`、`/api/healthz`、`/api/docs`）、`/mcp`、
+  `/.well-known/*`。生产用 nginx 托管 `web-next/dist` 并反代这三类路径（样例 `deploy/nginx/rdm.conf`）。
+- wheel 只含 API/CLI，打包前不需要构建前端；前端产物单独部署。
 - npm 下载挂起时走本地代理：`HTTP_PROXY=http://127.0.0.1:7890 HTTPS_PROXY=http://127.0.0.1:7890`。
 
 ## 写 web-next/ 下的 UI 时

@@ -1,6 +1,7 @@
 # web-next e2e（Playwright，重点覆盖工作流引擎）
 
-浏览器端到端测试：启动真实的 `rdm serve`（临时 data dir + 随机端口），
+浏览器端到端测试：启动真实的 `rdm serve`（临时 data dir + 随机端口）与
+`vite preview`（生产构建产物 + 与 nginx 相同的 `/api`、`/.well-known`、`/mcp` 代理），
 用真实 OAuth 登录与真实 REST 写入准备数据，再在 **构建后的 SPA** 上操作
 `/projects/:key/items/:id` 与看板，断言界面与数据库状态。
 
@@ -13,8 +14,9 @@
 - `pnpm -C web-next install`
 - Chromium：`pnpm -C web-next exec playwright install chromium`
   （`@playwright/test` 固定 1.58.0，与本机已缓存的 Chromium 版本一致）
-- 首次或改动前端后无需手工 build：`pnpm e2e` 会先 `pnpm build`，
-  把产物写入 `src/rdm/resources/web-next-dist/` 再启动服务。
+- 首次或改动前端后无需手工 build：`pnpm e2e` 会先 `pnpm build`，产物写入
+  `web-next/dist/`；global setup 再用 `vite preview` 提供静态资源和 API 代理
+  （后端以 `RDM_PUBLIC_BASE_URL=<preview origin>` 启动）。
 
 ## 运行
 
@@ -35,7 +37,7 @@ pnpm -C web-next exec playwright test --repeat-each=2 # 稳定性回归
   也不会连带改坏 e2e；spec 始终按真实项目「选择工作流配置」的方式运行。
 - 失败时 `e2e/.results/` 保留 trace / screenshot / video；
   `pnpm -C web-next exec playwright show-trace <trace.zip>` 可回放。
-- 服务日志：`e2e/.auth/server.log`。`e2e/.auth/` 同时存放本次运行的
+- 服务日志：`e2e/.auth/server.log`（API）与 `e2e/.auth/web.log`（vite preview）。`e2e/.auth/` 同时存放本次运行的
   浏览器 storageState（含临时 token），已 gitignore。
 
 ## 结构
@@ -65,8 +67,8 @@ e2e/
     27-releases.spec.ts
 ```
 
-- **认证**：global setup 走完整 OAuth（`/authorize` → login ticket →
-  `/api/v1/auth/login` → `/token`，PKCE + scope=web），把 access/refresh token
+- **认证**：global setup 走完整 OAuth（`/api/oauth/authorize` → login ticket →
+  `/api/v1/auth/login` → `/api/oauth/token`，PKCE + scope=web），把 access/refresh token
   写进每个身份的 `storageState`。`01-login` 额外用真实浏览器表单走一遍登录，
   其余 spec 直接注入 token 以节省时间。
 - **造数**：`Api` 用各身份 token 调 REST。`createItem({status: ...})` 会沿

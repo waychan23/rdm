@@ -33,26 +33,40 @@ async def is_bootstrapped(uow: SqlAlchemyUnitOfWork) -> bool:
     return (await uow.organizations.get(DEFAULT_ORG_ID)) is not None
 
 
-def web_client_redirect_uris(base_url: str) -> list[str]:
-    """Loopback redirect URIs for the first-party browser client (§17)."""
-    uris = [
-        f"{base_url}/auth/callback",
-    ]
-    # Accept both spellings of loopback for the same bound port.
-    if "://127.0.0.1" in base_url:
-        uris.append(base_url.replace("://127.0.0.1", "://localhost") + "/auth/callback")
-    elif "://localhost" in base_url:
-        uris.append(base_url.replace("://localhost", "://127.0.0.1") + "/auth/callback")
+def _loopback_variants(origin: str) -> list[str]:
+    """Accept both spellings of loopback for the same bound port."""
+    uris = [f"{origin}/auth/callback"]
+    if "://127.0.0.1" in origin:
+        uris.append(origin.replace("://127.0.0.1", "://localhost") + "/auth/callback")
+    elif "://localhost" in origin:
+        uris.append(origin.replace("://localhost", "://127.0.0.1") + "/auth/callback")
+    return uris
+
+
+def web_client_redirect_uris(base_url: str, internal_base_url: str | None = None) -> list[str]:
+    """Redirect URIs for the first-party browser client (§17).
+
+    Always include the internal bind origin as well as the public origin:
+    operators often reach a loopback bind through an SSH tunnel even when the
+    canonical public origin is behind nginx.
+    """
+    uris = _loopback_variants(base_url)
+    if internal_base_url and internal_base_url != base_url:
+        uris += _loopback_variants(internal_base_url)
     # Vite dev server.
     uris += [
         "http://127.0.0.1:5173/auth/callback",
         "http://localhost:5173/auth/callback",
     ]
-    return uris
+    return list(dict.fromkeys(uris))
 
 
-def seed_web_client(base_url: str, extra_redirect_uris: list[str] | None = None) -> OAuthClient:
-    redirect_uris = web_client_redirect_uris(base_url)
+def seed_web_client(
+    base_url: str,
+    extra_redirect_uris: list[str] | None = None,
+    internal_base_url: str | None = None,
+) -> OAuthClient:
+    redirect_uris = web_client_redirect_uris(base_url, internal_base_url)
     for uri in extra_redirect_uris or []:
         if uri not in redirect_uris:
             redirect_uris.append(uri)
@@ -80,12 +94,20 @@ async def bootstrap_if_empty(
     *,
     base_url: str,
     extra_redirect_uris: list[str] | None = None,
+    internal_base_url: str | None = None,
 ) -> str | None:
-    """Create the organization, owner, web client and bootstrap ticket.
+    """Create the organization/owner on first boot; always sync the web client.
 
     Returns the raw bootstrap ticket when bootstrap happened, else None.
     """
+    client = seed_web_client(base_url, extra_redirect_uris, internal_base_url)
     if await is_bootstrapped(uow):
+        # The first-party client's redirect URIs follow RDM_PUBLIC_BASE_URL;
+        # refresh them on every start so moving behind nginx does not strand
+        # existing installs with a loopback-only whitelist.
+        assert uow.oauth_clients is not None
+        await uow.oauth_clients.upsert(client)
+        logger.info("rdm-web redirect URIs: %s", ", ".join(client.redirect_uris))
         return None
 
     now = dt.datetime.now(dt.UTC)
@@ -106,7 +128,8 @@ async def bootstrap_if_empty(
     assert uow.organizations and uow.users and uow.oauth_clients and uow.events
     await uow.organizations.add(org)
     await uow.users.add(owner)
-    await uow.oauth_clients.upsert(seed_web_client(base_url, extra_redirect_uris))
+    await uow.oauth_clients.upsert(client)
+    logger.info("rdm-web redirect URIs: %s", ", ".join(client.redirect_uris))
     await uow.flush()
 
     raw_ticket = await issue_ticket(

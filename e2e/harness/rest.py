@@ -25,7 +25,7 @@ class RestClient:
     def request(self, method: str, path: str, **kwargs) -> httpx.Response:
         headers = kwargs.pop("headers", {})
         headers.update(self.headers(kwargs.pop("token", None)))
-        # /token and /authorize live outside /api/v1.
+        # OAuth protocol endpoints live under /api/oauth (architecture §17.160).
         url = path if path.startswith("/api/") else f"/api/v1{path}"
         return self.http.request(method, url, headers=headers, **kwargs)
 
@@ -79,7 +79,7 @@ class RestClient:
         )
         redirect = f"{self.base_url}/auth/callback"
         r = self.http.get(
-            f"{self.base_url}/authorize",
+            f"{self.base_url}/api/oauth/authorize",
             params={
                 "response_type": "code",
                 "client_id": "rdm-web",
@@ -105,7 +105,7 @@ class RestClient:
         assert r.status_code == 200, r.text
         code = parse_qs(urlparse(r.json()["data"]["redirect_to"]).query)["code"][0]
         r = self.http.post(
-            f"{self.base_url}/token",
+            f"{self.base_url}/api/oauth/token",
             data={
                 "grant_type": "authorization_code",
                 "code": code,

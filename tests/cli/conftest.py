@@ -49,7 +49,7 @@ def _owner_pat(base: str) -> str:
         )
         redirect = f"{base}/auth/callback"
         r = client.get(
-            f"{base}/authorize",
+            f"{base}/api/oauth/authorize",
             params={
                 "response_type": "code",
                 "client_id": "rdm-web",
@@ -75,7 +75,7 @@ def _owner_pat(base: str) -> str:
         assert r.status_code == 200, r.text
         code = parse_qs(urlparse(r.json()["data"]["redirect_to"]).query)["code"][0]
         r = client.post(
-            f"{base}/token",
+            f"{base}/api/oauth/token",
             data={
                 "grant_type": "authorization_code",
                 "code": code,
@@ -104,6 +104,7 @@ def live_server(tmp_path: Path) -> Iterator[tuple[str, str]]:
     settings = Settings(
         data_dir=data_dir,
         port=port,
+        public_base_url="",
         extra_redirect_uris=f"http://127.0.0.1:{port}/auth/callback",
     )
     app = create_app(settings)

@@ -152,7 +152,7 @@ def _login_pat_sync(client: httpx.Client, base: str, name: str) -> str:
     )
     redirect = f"{base}/auth/callback"
     r = client.get(
-        f"{base}/authorize",
+        f"{base}/api/oauth/authorize",
         params={
             "response_type": "code",
             "client_id": "rdm-web",
@@ -172,7 +172,7 @@ def _login_pat_sync(client: httpx.Client, base: str, name: str) -> str:
     assert r.status_code == 200, r.text
     code = parse_qs(urlparse(r.json()["data"]["redirect_to"]).query)["code"][0]
     r = client.post(
-        f"{base}/token",
+        f"{base}/api/oauth/token",
         data={
             "grant_type": "authorization_code",
             "code": code,

@@ -100,7 +100,7 @@ export async function oauthLogin(
 ): Promise<{ accessToken: string; refreshToken: string }> {
   const { verifier, challenge } = pkce();
   const redirectURI = `${baseURL}/auth/callback`;
-  const authorize = new URL("/authorize", baseURL);
+  const authorize = new URL("/api/oauth/authorize", baseURL);
   authorize.search = new URLSearchParams({
     response_type: "code",
     client_id: "rdm-web",
@@ -114,7 +114,7 @@ export async function oauthLogin(
   const authorizeRes = await fetch(authorize, { redirect: "manual" });
   const loginLocation = authorizeRes.headers.get("location");
   if (authorizeRes.status !== 302 || !loginLocation) {
-    throw new Error(`GET /authorize -> ${authorizeRes.status} (${loginLocation})`);
+    throw new Error(`GET /api/oauth/authorize -> ${authorizeRes.status} (${loginLocation})`);
   }
   const authKey = new URL(loginLocation, baseURL).searchParams.get("auth_key");
   if (!authKey) throw new Error(`no auth_key in ${loginLocation}`);
@@ -131,7 +131,7 @@ export async function oauthLogin(
   const code = new URL(redirectTo, baseURL).searchParams.get("code");
   if (!code) throw new Error(`no code in redirect ${redirectTo}`);
 
-  const tokenRes = await fetch(new URL("/token", baseURL), {
+  const tokenRes = await fetch(new URL("/api/oauth/token", baseURL), {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -165,7 +165,7 @@ export class Api {
     body?: unknown,
     actor: UserName = "owner",
   ): Promise<Envelope<T>> {
-    const url = new URL(`/api/v1${path}`, this.ctx.baseURL);
+    const url = new URL(`/api/v1${path}`, this.ctx.apiURL ?? this.ctx.baseURL);
     const res = await fetch(url, {
       method,
       headers: {

@@ -22,7 +22,13 @@ def _is_local(host: str) -> bool:
         return False
 
 
-def run_serve(data_dir: Path, host: str, port: int, database_url: str = "") -> None:
+def run_serve(
+    data_dir: Path,
+    host: str,
+    port: int,
+    database_url: str = "",
+    public_base_url: str = "",
+) -> None:
     # The v1 --owner-token shared secret was a no-op at runtime; M3 refuses
     # non-loopback binds outright (architecture §16.59). Reach a remote host
     # via SSH port forwarding or an authenticating reverse proxy.
@@ -40,6 +46,7 @@ def run_serve(data_dir: Path, host: str, port: int, database_url: str = "") -> N
         host=host,
         port=port,
         **({"database_url": database_url} if database_url else {}),
+        **({"public_base_url": public_base_url} if public_base_url else {}),
     )
     # Migrate first so a bare `rdm serve` on a fresh data dir works.
     from rdm.interfaces.cli.db import initialize_data_dir, run_upgrade
@@ -61,5 +68,13 @@ def run_serve(data_dir: Path, host: str, port: int, database_url: str = "") -> N
         )
 
     app = create_app(settings)
-    typer.secho(f"rdm serving on http://{host}:{port} (data-dir {data_dir})", fg=typer.colors.GREEN)
+    typer.secho(
+        f"rdm API on {settings.internal_base_url} (data-dir {data_dir})",
+        fg=typer.colors.GREEN,
+    )
+    typer.secho(
+        f"public origin: {settings.base_url} | Web UI: Vite dev server or nginx "
+        "(`pnpm -C web-next dev` / deploy/nginx/rdm.conf)",
+        fg=typer.colors.GREEN,
+    )
     uvicorn.run(app, host=host, port=port, log_config=None)

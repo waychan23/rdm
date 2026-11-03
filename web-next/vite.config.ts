@@ -3,8 +3,24 @@ import { defineConfig } from "vite";
 import compiled from "@compiled/vite-plugin";
 import react from "@vitejs/plugin-react";
 
-// Dev server proxies API/MCP/OAuth to rdm serve; the production build lands in
-// the package resource dir and is served by RootDispatch (architecture §16.62).
+// The Web UI is a standalone frontend (architecture §17.160). In dev the Vite
+// server proxies the API namespaces to rdm serve; in production nginx serves
+// `web-next/dist` and proxies the same paths. `RDM_API_URL` lets the Playwright
+// setup point the proxy at its throwaway backend.
+const API_TARGET = process.env.RDM_API_URL ?? "http://127.0.0.1:8765";
+
+// Legacy root OAuth paths are still proxied so Python can 308 them to
+// /api/oauth/*; without this the SPA fallback would swallow them.
+const proxy = {
+  "/api": API_TARGET,
+  "/.well-known": API_TARGET,
+  "/mcp": { target: API_TARGET, ws: true },
+  "/authorize": API_TARGET,
+  "/token": API_TARGET,
+  "/register": API_TARGET,
+  "/revoke": API_TARGET,
+};
+
 export default defineConfig({
   // Compiled must run before the React plugin (pre-ordering is enforced by the
   // plugin). It compiles @atlaskit/css `cssMap` styles at build time; without it
@@ -15,8 +31,8 @@ export default defineConfig({
   // go through the inline `cardBorder` helper (components/cardBorder.ts).
   plugins: [compiled({ importReact: false }), react()],
   build: {
-    outDir: "../src/rdm/resources/web-next-dist",
-    emptyOutDir: true,
+    // Default `dist` under web-next/. The bundle no longer ships inside the
+    // Python wheel; deploy it to nginx.
   },
   resolve: {
     // pnpm + Atlaskit transitive deps must resolve a single React copy. The
@@ -29,17 +45,12 @@ export default defineConfig({
     },
   },
   server: {
-    proxy: {
-      "/api": "http://127.0.0.1:8765",
-      "/authorize": "http://127.0.0.1:8765",
-      "/token": "http://127.0.0.1:8765",
-      "/register": "http://127.0.0.1:8765",
-      "/revoke": "http://127.0.0.1:8765",
-      "/.well-known": "http://127.0.0.1:8765",
-      "/mcp": {
-        target: "http://127.0.0.1:8765",
-        ws: true,
-      },
-    },
+    strictPort: true,
+    proxy,
+  },
+  // `vite preview` exercises the production bundle + the same proxy topology
+  // as nginx; the web e2e suite runs against it.
+  preview: {
+    proxy,
   },
 });

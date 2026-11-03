@@ -326,6 +326,17 @@ async def test_owner_recovery_is_loopback_only(server) -> None:
     assert r.status_code == 404
 
 
+async def test_owner_recovery_rejects_proxied_loopback_requests(server) -> None:
+    """A reverse proxy connects from loopback; proxy headers must disqualify it."""
+    _client, _settings, app = server
+    transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 5000))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as proxied:
+        r = await proxied.post(
+            "/api/v1/local/owner-recovery", headers={"X-Forwarded-For": "203.0.113.9"}
+        )
+    assert r.status_code == 404
+
+
 async def test_org_owner_transfer_is_unique(server, owner_token) -> None:
     client, _settings, _app = server
     owner_id = await _owner_id(client, owner_token)

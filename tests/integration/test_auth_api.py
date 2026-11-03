@@ -25,7 +25,7 @@ async def _login_ticket(client) -> str:
 
     _verifier, challenge = await pkce()
     r = await client.get(
-        "/authorize",
+        "/api/oauth/authorize",
         params={
             "response_type": "code",
             "client_id": "rdm-web",
@@ -67,6 +67,29 @@ async def test_login_wrong_password_uniform_401(server) -> None:
         )
         assert r.status_code == 401
         assert r.json()["error"]["code"] == "AUTH_INVALID_CREDENTIALS"
+
+
+async def test_public_base_url_resyncs_web_client_on_restart(tmp_path) -> None:
+    """RDM_PUBLIC_BASE_URL changes must refresh the first-party redirect whitelist."""
+    from asgi_lifespan import LifespanManager
+
+    from rdm.app import create_app
+    from rdm.config import Settings
+    from rdm.interfaces.cli.db import initialize_data_dir, run_upgrade
+
+    data_dir = tmp_path / "data"
+    initialize_data_dir(data_dir)
+    run_upgrade(data_dir)
+    client_row = None
+    for origin in ("http://127.0.0.1:5173", "https://rdm.example.com"):
+        app = create_app(Settings(data_dir=data_dir, public_base_url=origin))
+        async with LifespanManager(app):
+            async with app.state.container.uow() as uow:
+                client_row = await uow.oauth_clients.get("rdm-web")
+        assert client_row is not None
+        assert f"{origin}/auth/callback" in client_row.redirect_uris
+        # SSH-tunnel access to the loopback bind keeps working.
+        assert "http://127.0.0.1:8765/auth/callback" in client_row.redirect_uris
 
 
 async def test_expired_login_ticket_rejected(server) -> None:
@@ -133,7 +156,7 @@ async def test_change_password_rotates_oauth_but_keeps_pat(server, owner_token) 
     assert (await client.get("/api/v1/auth/me", headers=auth(access))).status_code == 401
     assert (await client.get("/api/v1/auth/me", headers=auth(owner_token))).status_code == 200
     r = await client.post(
-        "/token",
+        "/api/oauth/token",
         data={"grant_type": "refresh_token", "refresh_token": refresh, "client_id": "rdm-web"},
     )
     assert r.status_code in (400, 401)

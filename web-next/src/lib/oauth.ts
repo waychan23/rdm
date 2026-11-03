@@ -10,6 +10,9 @@ const STATE_KEY = "rdm.pkce_state";
 const POST_LOGIN_KEY = "rdm.post_login";
 
 const CLIENT_ID = "rdm-web";
+// OAuth protocol endpoints live under /api/oauth; /api is proxied by Vite in
+// dev and by nginx in production (architecture §17.160).
+const OAUTH_BASE = "/api/oauth";
 // The browser audience is the REST API; MCP clients request `mcp` instead.
 const SCOPE = "web";
 
@@ -77,7 +80,7 @@ export async function beginLogin(postLoginPath?: string): Promise<void> {
     code_challenge: await challengeFor(verifier),
     code_challenge_method: "S256",
   });
-  window.location.assign(`/authorize?${params.toString()}`);
+  window.location.assign(`${OAUTH_BASE}/authorize?${params.toString()}`);
 }
 
 export function takePostLoginPath(): string {
@@ -101,7 +104,7 @@ export async function completeLogin(code: string, state: string): Promise<boolea
     redirect_uri: callbackUrl(),
     code_verifier: verifier,
   });
-  const res = await fetch("/token", {
+  const res = await fetch(`${OAUTH_BASE}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
@@ -149,7 +152,7 @@ export function refreshTokens(): Promise<boolean> {
       refresh_token: refresh,
       client_id: CLIENT_ID,
     });
-    const res = await fetch("/token", {
+    const res = await fetch(`${OAUTH_BASE}/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,

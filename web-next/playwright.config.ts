@@ -1,7 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Web e2e: global setup boots `rdm serve` on a temp data dir and seeds the
-// project/identities; every spec then drives the built SPA in Chromium.
+// Web e2e: global setup boots `rdm serve` plus `vite preview` (the production
+// bundle with the same proxy topology as nginx) and seeds the project/identities;
+// every spec then drives the built SPA in Chromium.
 export default defineConfig({
   testDir: "./e2e/specs",
   globalSetup: "./e2e/global-setup.ts",

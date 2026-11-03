@@ -24,7 +24,7 @@ projects_router = APIRouter(prefix="/api/v1", tags=["projects"])
 members_router = APIRouter(prefix="/api/v1", tags=["members"])
 
 
-@system_router.get("/healthz")
+@system_router.get("/api/healthz")
 async def healthz() -> dict:
     return {"status": "ok", "version": __version__}
 

@@ -144,6 +144,7 @@ async def test_only_uploader_or_privileged_can_delete(server, owner_token) -> No
 async def test_size_limit_enforced(tmp_path) -> None:
     settings = Settings(
         data_dir=tmp_path / "tiny",
+        public_base_url="",
         attachment_max_bytes=10,
         extra_redirect_uris="http://test/auth/callback",
     )

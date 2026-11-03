@@ -11,7 +11,7 @@ def auth(token: str) -> dict[str, str]:
 
 async def test_all_api_paths_have_tags(server, owner_token: str) -> None:
     client, _settings, _app = server
-    schema = (await client.get("/openapi.json")).json()
+    schema = (await client.get("/api/openapi.json")).json()
     paths = schema["paths"]
     missing = [
         path

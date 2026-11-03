@@ -6,31 +6,43 @@ human/agent 协作的研发工作管理：受工作流引擎约束的 WorkItem/S
 
 ## 5 分钟跑起来
 
-前置：Python 3.13 + [uv](https://docs.astral.sh/uv/)。
+前置：Python 3.13 + [uv](https://docs.astral.sh/uv/)；Web 前端另需 Node 22 + pnpm。
 
 ```bash
-uv sync                       # 安装依赖
+uv sync                       # 安装后端依赖
 uv run rdm init               # 初始化 ~/rdm-data 并迁移数据库
-uv run rdm serve              # http://127.0.0.1:8765 （Ctrl-C 停止）
+# 终端 A：API/MCP 服务（dev 时把 public origin 指向前端，便于登录/恢复链接）
+RDM_PUBLIC_BASE_URL=http://127.0.0.1:5173 uv run rdm serve
+
+# 终端 B：Web 前端（Vite dev server，HMR，无需 build）
+pnpm -C web-next install --ignore-scripts
+pnpm -C web-next dev          # http://127.0.0.1:5173
 ```
 
-首次启动会创建默认组织与无密码的 Org Owner，在日志里打印**一次性 bootstrap-url**：
+首次启动会创建默认组织与无密码的 Org Owner，在日志里打印**一次性 bootstrap-url**
+（`RDM_PUBLIC_BASE_URL` 设置后指向 5173）：
 
 ```
-首次启动：请在本机打开设置 Org Owner 密码：http://127.0.0.1:8765/set-password?ticket=...
+首次启动：请在本机打开设置 Org Owner 密码：http://127.0.0.1:5173/set-password?ticket=...
 （7 天内有效；丢失可执行 `rdm account recover-owner` 重新生成）
 ```
 
-- Web：打开该 URL 设置密码，然后用浏览器访问 <http://127.0.0.1:8765/> 登录。
+- Web：打开该 URL 设置密码，然后用浏览器访问 <http://127.0.0.1:5173/> 登录。
   登录是无状态 OAuth（Auth Code + PKCE），不再有会话 cookie；支持「记住我」
   （7 天滑动续期，绝对上限 30 天）。
 - 首次登录没有默认项目；组织 Owner 或 `project-director` 在 Web 里创建项目。
-- API 文档（FastAPI Swagger）：<http://127.0.0.1:8765/docs>（Bearer PAT/OAuth token）
-- MCP endpoint：`http://127.0.0.1:8765/mcp`（原生 OAuth 2.1 或 Bearer PAT，见下）
+- API 文档（FastAPI Swagger）：<http://127.0.0.1:8765/api/docs>（Bearer PAT/OAuth token）
+- MCP endpoint：`http://127.0.0.1:8765/mcp`（原生 OAuth 2.1 或 Bearer PAT，见下）。
+  生产设置 `RDM_PUBLIC_BASE_URL` 后 OAuth discovery 指向公网 origin；本地 agent 应改用
+  `https://<public-origin>/mcp`，或继续用 PAT 直连 loopback。
 - 自检：`uv run rdm doctor`（数据目录/迁移/Org Owner/workflow/端点/OAuth
   metadata/outbox 积压/附件孤儿，`--json`）
-- Org Owner 忘记密码：在部署主机执行 `rdm account recover-owner`（需服务运行；
-  通过仅回环的 HTTP 端点重新生成 bootstrap-url）
+- Org Owner 忘记密码：在部署主机执行 `rdm account recover-owner --public-url http://127.0.0.1:5173`
+  （需服务运行；通过仅回环的 HTTP 端点重新生成 bootstrap-url）
+
+> Python 进程只提供 API/CLI，不托管 Web 静态资源（architecture §17.160）。生产部署用
+> nginx 托管 `web-next/dist` 并反代 `/api/`、`/mcp`、`/.well-known/`，样例见
+> [deploy/nginx/rdm.conf](deploy/nginx/rdm.conf)。
 
 ## 可选：PostgreSQL + ParadeDB 后端
 
@@ -151,18 +163,19 @@ uv run pytest -q                             # 全部测试
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src/rdm/domain src/rdm/application
 
-# 前端：React 18 + Atlaskit/ADS（唯一前端，architecture §17.72）
+# 前端：React 18 + Atlaskit/ADS（唯一前端，architecture §17.160）
 pnpm -C web-next install --ignore-scripts
-pnpm -C web-next dev        # Vite dev server（代理 /api、OAuth、/mcp 到 8765）
-pnpm -C web-next build      # 产物到 src/rdm/resources/web-next-dist
+pnpm -C web-next dev        # Vite dev server（代理 /api、/.well-known、/mcp 到 8765，HMR）
+pnpm -C web-next build      # 产物到 web-next/dist（不随 wheel 发布）
 ```
 
-打 wheel 前先构建前端：
+后端 wheel 只含 API/CLI；打 wheel 前不再需要构建前端：
 
 ```bash
-pnpm -C web-next install --frozen-lockfile --ignore-scripts && pnpm -C web-next build
 uv build
 ```
+
+前端产物单独部署给 nginx/ingress（样例 `deploy/nginx/rdm.conf`）。
 
 前端写码规则见仓库根 `CLAUDE.md`，UI 设计与组件/token 规范见 [docs/web-next-ui.md](docs/web-next-ui.md)；
 工作流配置 `workflow-configs/*.json5` 的完整手册见 [docs/workflow-config.md](docs/workflow-config.md)；

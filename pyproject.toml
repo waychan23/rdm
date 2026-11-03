@@ -38,15 +38,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rdm"]
-# The SPA bundle is gitignored but ships in the wheel so a pip install serves
-# the UI: web-next-dist (React + Atlaskit/ADS), the only frontend (§17).
-# Build it (`pnpm -C web-next build`) before `uv build --wheel`; hatch fails
-# when a force-include source is missing.
-[tool.hatch.build.targets.wheel.force-include]
-"src/rdm/resources/web-next-dist" = "rdm/resources/web-next-dist"
+# The Web UI is deployed separately (Vite build -> nginx, §17.160); the wheel
+# is API/CLI only. Exclude any stale local bundle from earlier versions.
+exclude = ["src/rdm/resources/web-next-dist"]
 
-[tool.hatch.build.targets.sdist.force-include]
-"src/rdm/resources/web-next-dist" = "src/rdm/resources/web-next-dist"
+[tool.hatch.build.targets.sdist]
+exclude = ["src/rdm/resources/web-next-dist"]
 
 [dependency-groups]
 dev = [

@@ -13,7 +13,7 @@ import httpx
 import typer
 
 
-def recover_owner(url: str) -> str:
+def recover_owner(url: str, public_url: str = "") -> str:
     try:
         response = httpx.post(
             f"{url.rstrip('/')}/api/v1/local/owner-recovery",
@@ -42,4 +42,7 @@ def recover_owner(url: str) -> str:
         typer.secho(json.dumps(body, ensure_ascii=False, indent=2), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
     data = response.json()["data"]
-    return f"{url.rstrip('/')}{data['set_password_url']}"
+    # The API returns a path; the printed link must point at the Web origin,
+    # which is no longer the API server once nginx/Vite front it (§17.160).
+    origin = (public_url or url).rstrip("/")
+    return f"{origin}{data['set_password_url']}"
