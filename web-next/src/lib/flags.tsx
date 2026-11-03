@@ -32,8 +32,9 @@ interface Notice {
   description?: string;
 }
 
-// Same dwell time as Atlaskit's AutoDismissFlag.
-const SUCCESS_DISMISS_MS = 8_000;
+// Every notice auto-dismisses after five seconds (RDM-142); errors keep the
+// same dwell time as successes so the stack never grows without bound.
+const DISMISS_MS = 5_000;
 
 const styles = cssMap({
   // Anchored where Atlaskit flags render (bottom start, space.600 inset) and as
@@ -135,10 +136,9 @@ function NoticeCard({
   const { id, appearance, title, description } = notice;
 
   useEffect(() => {
-    if (appearance !== "success") return;
-    const timer = window.setTimeout(() => onDismiss(id), SUCCESS_DISMISS_MS);
+    const timer = window.setTimeout(() => onDismiss(id), DISMISS_MS);
     return () => window.clearTimeout(timer);
-  }, [appearance, id, onDismiss]);
+  }, [id, onDismiss]);
 
   return (
     <Box role={appearance === "error" ? "alert" : "status"} testId={`notice-${appearance}`}>
