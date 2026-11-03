@@ -68,7 +68,7 @@ test("returning from another menu restores the list scroll position", async ({
   await page.goto(`${app.baseURL}/projects/${projectKey}/backlog?view=flat`);
   await expect(page.getByTestId("page-backlog")).toBeVisible();
   await expect(page.locator('[data-testid^="work-item-row-"]').first()).toBeVisible();
-  const content = page.getByTestId("app-content");
+  const content = page.getByTestId("work-item-table-scroll");
   await content.evaluate((el) => {
     el.scrollTop = 200;
   });

@@ -25,6 +25,14 @@ import { sprintLozenge } from "./sprintStatus";
 
 const styles = cssMap({
   detail: { padding: "var(--ds-space-300)" },
+  listHeading: {
+    flexShrink: 0,
+    paddingInline: "var(--ds-space-300)",
+    paddingBlockEnd: "var(--ds-space-100)",
+  },
+  emptyList: {
+    paddingInline: "var(--ds-space-300)",
+  },
 });
 
 interface Props {
@@ -157,96 +165,112 @@ export default function SprintDetailDrawer({
         testId="sprint-detail-drawer"
       >
         {detail && (
-          <div className="rdm-drawer-scroll">
-            <Box xcss={styles.detail} testId="sprint-detail">
-              <Stack space="space.200">
-              <Inline space="space.150" alignBlock="center">
-                {sprintLozenge(detail.status)}
-                <Heading size="medium">{detail.name}</Heading>
-                {detail.status !== "CLOSED" && (
-                  <Button
-                    spacing="compact"
-                    testId="sprint-detail-edit"
-                    onClick={() => setShowEdit(true)}
-                  >
-                    {t("edit")}
-                  </Button>
-                )}
-              </Inline>
-              {detail.goal_md && (
-                <MarkdownText source={detail.goal_md} onImageClick={setPreview} />
-              )}
-              <Inline space="space.075" shouldWrap>
-                {Object.entries(detail.status_counts).map(([s, n]) => (
-                  <StatusLozenge key={s} status={s}>
-                    {`${s}: ${n}`}
-                  </StatusLozenge>
-                ))}
-              </Inline>
-
-              <Heading size="small">{t("itemsHeading")}</Heading>
-              {detail.items.length === 0 ? (
-                <Text size="small" color="color.text.subtlest">
-                  {t("noItems")}
-                </Text>
-              ) : (
-                <table
-                  className="rdm-table rdm-table--contained"
-                  aria-label={t("itemsTableLabel")}
-                  data-testid="sprint-detail-items"
-                >
-                  <thead>
-                    <tr>
-                      <th scope="col" className="col-id">
-                        ID
-                      </th>
-                      <th scope="col">{t("col.title")}</th>
-                      <th scope="col" className="col-status">
-                        {t("col.status")}
-                      </th>
-                      <th scope="col" className="col-count">
-                        {t("col.actions")}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detail.items.map((row) => (
-                      <tr key={row.id} data-testid={`sprint-item-row-${row.display_id}`}>
-                        <td>
-                          <Inline space="space.075" alignBlock="center">
-                            <TypeKindIcon kind={row.kind} />
-                            <TextButton
-                              data-testid={`sprint-item-open-${row.display_id}`}
-                              onClick={() => onOpenItem(row)}
-                            >
-                              {row.display_id}
-                            </TextButton>
-                          </Inline>
-                        </td>
-                        <td>
-                          <TruncatedText className="title-text" text={row.title} />
-                        </td>
-                        <td>
-                          <StatusLozenge status={row.status} />
-                        </td>
-                        <td>
-                          {detail.status !== "CLOSED" && (
-                            <TextButton
-                              danger
-                              data-testid={`sprint-item-remove-${row.display_id}`}
-                              onClick={() => void removeItem(row.display_id)}
-                            >
-                              {t("remove")}
-                            </TextButton>
-                          )}
-                        </td>
-                      </tr>
+          <div className="rdm-drawer-shell">
+            <div className="rdm-drawer-header" data-testid="sprint-detail-header">
+              <Box xcss={styles.detail} testId="sprint-detail">
+                <Stack space="space.200">
+                  <Inline space="space.150" alignBlock="center">
+                    {sprintLozenge(detail.status)}
+                    <Heading size="medium">{detail.name}</Heading>
+                    {detail.status !== "CLOSED" && (
+                      <Button
+                        spacing="compact"
+                        testId="sprint-detail-edit"
+                        onClick={() => setShowEdit(true)}
+                      >
+                        {t("edit")}
+                      </Button>
+                    )}
+                  </Inline>
+                  {detail.goal_md && (
+                    <MarkdownText source={detail.goal_md} onImageClick={setPreview} />
+                  )}
+                  <Inline space="space.075" shouldWrap>
+                    {Object.entries(detail.status_counts).map(([s, n]) => (
+                      <StatusLozenge key={s} status={s}>
+                        {`${s}: ${n}`}
+                      </StatusLozenge>
                     ))}
-                  </tbody>
-                </table>
-              )}
+                  </Inline>
+                </Stack>
+              </Box>
+            </div>
 
-              {detail.status !== "CLOSED" && (
+            <div className="rdm-drawer-list" data-testid="sprint-detail-list">
+              <Box xcss={styles.listHeading}>
+                <Heading size="small">{t("itemsHeading")}</Heading>
+              </Box>
+              {detail.items.length === 0 ? (
+                <Box xcss={styles.emptyList}>
+                  <Text size="small" color="color.text.subtlest">
+                    {t("noItems")}
+                  </Text>
+                </Box>
+              ) : (
+                <div
+                  className="rdm-scroll-area"
+                  data-testid="sprint-detail-items-scroll"
+                >
+                  <table
+                    className="rdm-table rdm-table--contained"
+                    aria-label={t("itemsTableLabel")}
+                    data-testid="sprint-detail-items"
+                  >
+                    <thead>
+                      <tr>
+                        <th scope="col" className="col-id">
+                          ID
+                        </th>
+                        <th scope="col">{t("col.title")}</th>
+                        <th scope="col" className="col-status">
+                          {t("col.status")}
+                        </th>
+                        <th scope="col" className="col-count">
+                          {t("col.actions")}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detail.items.map((row) => (
+                        <tr key={row.id} data-testid={`sprint-item-row-${row.display_id}`}>
+                          <td>
+                            <Inline space="space.075" alignBlock="center">
+                              <TypeKindIcon kind={row.kind} />
+                              <TextButton
+                                data-testid={`sprint-item-open-${row.display_id}`}
+                                onClick={() => onOpenItem(row)}
+                              >
+                                {row.display_id}
+                              </TextButton>
+                            </Inline>
+                          </td>
+                          <td>
+                            <TruncatedText className="title-text" text={row.title} />
+                          </td>
+                          <td>
+                            <StatusLozenge status={row.status} />
+                          </td>
+                          <td>
+                            {detail.status !== "CLOSED" && (
+                              <TextButton
+                                danger
+                                data-testid={`sprint-item-remove-${row.display_id}`}
+                                onClick={() => void removeItem(row.display_id)}
+                              >
+                                {t("remove")}
+                              </TextButton>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {detail.status !== "CLOSED" && (
+              <div className="rdm-drawer-footer" data-testid="sprint-detail-footer">
                 <Stack space="space.150">
                   <Inline space="space.100" alignBlock="center">
                     <Button
@@ -277,9 +301,8 @@ export default function SprintDetailDrawer({
                     )}
                   </Inline>
                 </Stack>
-              )}
-              </Stack>
-            </Box>
+              </div>
+            )}
           </div>
         )}
       </Drawer>

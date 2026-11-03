@@ -20,7 +20,7 @@ import {
   useListSearchParams,
 } from "../lib/originSearch";
 import { recall, remember } from "../lib/pageCache";
-import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
+import { pageScrollTop, rememberScroll } from "../lib/scrollMemory";
 import type { WorkItem, WorkflowDto } from "../types";
 import { PAGE_SIZE } from "../workitems/constants";
 import { buildWorkItemTree } from "../workitems/hierarchy";
@@ -77,15 +77,19 @@ const pageStyles = cssMap({
     flexDirection: "column",
     flex: "1",
     minHeight: "0",
+    overflow: "hidden",
   },
 
   centered: {
     display: "flex",
+    flex: "1",
+    alignItems: "center",
     justifyContent: "center",
     padding: "var(--ds-space-400)",
   },
 
   treeTruncated: {
+    flexShrink: 0,
     paddingBlockEnd: "var(--ds-space-150)",
   },
 });
@@ -232,7 +236,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
   const openWorkItem = useOpenWorkItem();
   const openItem = (item: WorkItem) => {
     // Only the legacy route-backed backdrop replaces the list.
-    if (listOrigin) rememberScroll(listOrigin, appContentScrollTop());
+    if (listOrigin) rememberScroll(listOrigin, pageScrollTop());
     openWorkItem(projectKey, item.id);
   };
 
@@ -249,6 +253,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
       <PageHeader
         title={issuesOnly ? t("issues.title") : t("backlog.title")}
         testId="backlog-header"
+        nowrap
       />
 
       <WorkItemToolbar

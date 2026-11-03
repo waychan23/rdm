@@ -22,7 +22,7 @@ import {
   useListSearchParams,
 } from "../lib/originSearch";
 import { recall, remember } from "../lib/pageCache";
-import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
+import { pageScrollTop, rememberScroll } from "../lib/scrollMemory";
 import type { WorkItem, WorkflowDto } from "../types";
 import { BOARD_COLUMN_PAGE_SIZE, KIND_VALUES } from "../workitems/constants";
 import { useWorkItemViewMemory } from "../workitems/viewMemory";
@@ -410,13 +410,13 @@ export default function BoardPage() {
   const openWorkItem = useOpenWorkItem();
   const openItem = (item: WorkItem) => {
     // Only the legacy route-backed backdrop replaces the board.
-    if (listOrigin) rememberScroll(listOrigin, appContentScrollTop());
+    if (listOrigin) rememberScroll(listOrigin, pageScrollTop());
     openWorkItem(projectKey, item.id);
   };
 
   return (
     <Page fill testId="page-board">
-      <PageHeader title={t("board.title")} testId="board-header" />
+      <PageHeader title={t("board.title")} testId="board-header" nowrap />
 
       <WorkItemToolbar
         projectKey={projectKey}

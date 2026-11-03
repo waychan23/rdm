@@ -73,11 +73,42 @@
   border-radius: var(--ds-radius-small, 4px);
 }
 
-/* Atlaskit Drawer does not scroll its content by default; sprint/release
-   detail drawers wrap their body in this container (RDM-74). */
-.rdm-drawer-scroll {
+/* Sprint/release detail drawers are a fixed-height shell: the header scrolls
+   only when it is too tall, the work item list owns the main scrollbar, and
+   the actions stay pinned to the bottom (RDM-125). The Atlaskit Drawer content
+   already provides the definite height this shell fills. */
+.rdm-drawer-shell {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rdm-drawer-header {
+  flex: 0 0 auto;
+  /* Cap the header so a long goal/description cannot push the item list and
+     actions out of the drawer; the header itself scrolls instead. */
+  max-height: 40%;
   overflow-y: auto;
+}
+
+.rdm-drawer-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.rdm-drawer-list .rdm-scroll-area {
+  padding-inline: var(--ds-space-300, 24px);
+}
+
+.rdm-drawer-footer {
+  flex: 0 0 auto;
+  padding: var(--ds-space-300, 24px);
+  border-top: 1px solid var(--ds-border);
 }
 
 /* A sprint/release detail drawer that stays open behind the work item drawer

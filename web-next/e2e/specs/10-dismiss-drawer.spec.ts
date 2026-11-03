@@ -104,7 +104,8 @@ test.describe("scroll restoration", () => {
     const rows = page.locator('[data-testid^="work-item-row-"]');
     await expect(rows.first()).toBeVisible();
 
-    const scroller = page.getByTestId("app-content");
+    // RDM-125: the list body is the page's scroller, not the shell.
+    const scroller = page.getByTestId("work-item-table-scroll");
     const target = rows.last();
     await target.scrollIntoViewIfNeeded();
     const before = await scroller.evaluate((el) => el.scrollTop);

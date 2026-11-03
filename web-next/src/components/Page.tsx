@@ -15,6 +15,8 @@ const styles = cssMap({
     padding: "var(--ds-space-300)",
     minWidth: "0",
   },
+  // `fill` pages own their whole viewport: the title/filters/pager stay put and
+  // only the list body scrolls, so the page itself must never overflow.
   fillPage: {
     display: "flex",
     flexDirection: "column",
@@ -24,6 +26,14 @@ const styles = cssMap({
     flex: "1",
     minHeight: "0",
     height: "100%",
+    overflow: "hidden",
+  },
+  header: {
+    flexShrink: 0,
+    minWidth: "0",
+  },
+  nowrap: {
+    whiteSpace: "nowrap",
   },
 });
 
@@ -48,21 +58,25 @@ export function PageHeader({
   description,
   actions,
   testId,
+  nowrap = false,
 }: {
   title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
   testId?: string;
+  /** Fixed-height pages keep the title on one line (RDM-125). */
+  nowrap?: boolean;
 }) {
   return (
     <Inline
       spread="space-between"
       alignBlock="center"
       space="space.200"
-      shouldWrap
+      shouldWrap={!nowrap}
+      xcss={styles.header}
       testId={testId}
     >
-      <Stack space="space.050">
+      <Stack space="space.050" xcss={nowrap ? styles.nowrap : undefined}>
         <Heading size="large" as="h1">
           {title}
         </Heading>

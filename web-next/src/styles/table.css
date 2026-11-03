@@ -61,6 +61,21 @@
   text-overflow: ellipsis;
 }
 
+/* Fixed-height lists scroll here instead of growing the page/drawer: the
+   table body owns the scrollbar while the header band stays pinned to the top
+   of the scroll area (RDM-125). */
+.rdm-scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.rdm-scroll-area .rdm-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
 /* Column widths used by the tables (kept here so pages stay layout-free). */
 .rdm-table .col-title {
   min-width: 280px;
@@ -171,10 +186,12 @@
 
 .rdm-pager {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   padding: var(--ds-space-100, 8px) var(--ds-space-200, 16px);
   border-top: 1px solid var(--ds-border);
+  white-space: nowrap;
 }
 
 /* Folded agent rows under their human manager (§17). */

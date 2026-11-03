@@ -43,6 +43,14 @@ const centeredRow = { display: "flex", justifyContent: "center" } as const;
 const styles = cssMap({
   loading: { padding: "var(--ds-space-400)" },
   detail: { padding: "var(--ds-space-300)" },
+  listHeading: {
+    flexShrink: 0,
+    paddingInline: "var(--ds-space-300)",
+    paddingBlockEnd: "var(--ds-space-100)",
+  },
+  emptyList: {
+    paddingInline: "var(--ds-space-300)",
+  },
 });
 
 function ReleaseStatusLozenge({ status }: { status: string }) {
@@ -368,137 +376,153 @@ export default function ReleasesPage() {
         testId="release-detail-drawer"
       >
         {detail && (
-          <div className="rdm-drawer-scroll">
-            <Box xcss={styles.detail} testId="release-detail">
-              <Stack space="space.200">
-              <Inline space="space.150" alignBlock="center" shouldWrap>
-                <ReleaseStatusLozenge status={detail.status} />
-                <Heading size="medium">{detail.name}</Heading>
-                {detail.status === "PLANNED" && (
-                  <Button
-                    spacing="compact"
-                    testId="release-detail-edit"
-                    onClick={() => setShowEdit(true)}
-                  >
-                    {t("edit")}
-                  </Button>
-                )}
-              </Inline>
-              {detail.target_date && (
-                <Text size="small" color="color.text.subtlest">
-                  {t("col.target")}: {detail.target_date}
-                </Text>
-              )}
-              {detail.released_at && (
-                <Text size="small" color="color.text.subtlest">
-                  {t("col.released")}: {formatDate(detail.released_at)}
-                </Text>
-              )}
-              {detail.description_md && (
-                <MarkdownText source={detail.description_md} onImageClick={setPreview} />
-              )}
-              <ReleaseProgress
-                stats={detail.stats}
-                label={`${detail.name} ${t("col.progress")}`}
-              />
-              <Inline space="space.075" shouldWrap>
-                {Object.entries(detail.status_counts).map(([status, count]) => (
-                  <StatusLozenge key={status} status={status}>
-                    {`${status}: ${count}`}
-                  </StatusLozenge>
-                ))}
-              </Inline>
-
-              <Heading size="small">{t("readinessHeading")}</Heading>
-              {detail.stats.total === 0 ? (
-                <Text size="small" color="color.text.subtlest">
-                  {t("emptyScope")}
-                </Text>
-              ) : detail.readiness.blocking.length === 0 ? (
-                <Text size="small" color="color.text.success">
-                  {t("ready")}
-                </Text>
-              ) : (
-                <Stack space="space.050">
-                  <Text size="small" color="color.text.warning">
-                    {t("blockingSummary", { count: detail.readiness.blocking.length })}
-                  </Text>
-                  <Text size="small" color="color.text.subtlest">
-                    {detail.readiness.blocking
-                      .map((item) => `${item.display_id} (${item.status})`)
-                      .join(", ")}
-                  </Text>
-                </Stack>
-              )}
-
-              <Heading size="small">{t("itemsHeading")}</Heading>
-              {detail.items.length === 0 ? (
-                <Text size="small" color="color.text.subtlest">
-                  {t("noItems")}
-                </Text>
-              ) : (
-                <table
-                  className="rdm-table rdm-table--contained"
-                  aria-label={t("itemsTableLabel")}
-                  data-testid="release-detail-items"
-                >
-                  <thead>
-                    <tr>
-                      <th scope="col" className="col-id">
-                        ID
-                      </th>
-                      <th scope="col">{t("col.title")}</th>
-                      <th scope="col" className="col-status">
-                        {t("col.status")}
-                      </th>
-                      <th scope="col" className="col-count">
-                        {t("col.actions")}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detail.items.map((row) => (
-                      <tr key={row.id} data-testid={`release-item-row-${row.display_id}`}>
-                        <td>
-                          <Inline space="space.075" alignBlock="center">
-                            <TypeKindIcon kind={row.kind} />
-                            <TextButton
-                              data-testid={`release-item-open-${row.display_id}`}
-                              onClick={() => {
-                                // The release drawer stays mounted behind the
-                                // item drawer.
-                                suppressDrawerEnter("release");
-                                openWorkItem(projectKey, row.display_id);
-                              }}
-                            >
-                              {row.display_id}
-                            </TextButton>
-                          </Inline>
-                        </td>
-                        <td>
-                          <TruncatedText className="title-text" text={row.title} />
-                        </td>
-                        <td>
-                          <StatusLozenge status={row.status} />
-                        </td>
-                        <td>
-                          {detail.status === "PLANNED" && (
-                            <TextButton
-                              danger
-                              data-testid={`release-item-remove-${row.display_id}`}
-                              onClick={() => void removeItem(row.display_id)}
-                            >
-                              {t("remove")}
-                            </TextButton>
-                          )}
-                        </td>
-                      </tr>
+          <div className="rdm-drawer-shell">
+            <div className="rdm-drawer-header" data-testid="release-detail-header">
+              <Box xcss={styles.detail} testId="release-detail">
+                <Stack space="space.200">
+                  <Inline space="space.150" alignBlock="center" shouldWrap>
+                    <ReleaseStatusLozenge status={detail.status} />
+                    <Heading size="medium">{detail.name}</Heading>
+                    {detail.status === "PLANNED" && (
+                      <Button
+                        spacing="compact"
+                        testId="release-detail-edit"
+                        onClick={() => setShowEdit(true)}
+                      >
+                        {t("edit")}
+                      </Button>
+                    )}
+                  </Inline>
+                  {detail.target_date && (
+                    <Text size="small" color="color.text.subtlest">
+                      {t("col.target")}: {detail.target_date}
+                    </Text>
+                  )}
+                  {detail.released_at && (
+                    <Text size="small" color="color.text.subtlest">
+                      {t("col.released")}: {formatDate(detail.released_at)}
+                    </Text>
+                  )}
+                  {detail.description_md && (
+                    <MarkdownText source={detail.description_md} onImageClick={setPreview} />
+                  )}
+                  <ReleaseProgress
+                    stats={detail.stats}
+                    label={`${detail.name} ${t("col.progress")}`}
+                  />
+                  <Inline space="space.075" shouldWrap>
+                    {Object.entries(detail.status_counts).map(([status, count]) => (
+                      <StatusLozenge key={status} status={status}>
+                        {`${status}: ${count}`}
+                      </StatusLozenge>
                     ))}
-                  </tbody>
-                </table>
-              )}
+                  </Inline>
 
-              {detail.status === "PLANNED" && (
+                  <Heading size="small">{t("readinessHeading")}</Heading>
+                  {detail.stats.total === 0 ? (
+                    <Text size="small" color="color.text.subtlest">
+                      {t("emptyScope")}
+                    </Text>
+                  ) : detail.readiness.blocking.length === 0 ? (
+                    <Text size="small" color="color.text.success">
+                      {t("ready")}
+                    </Text>
+                  ) : (
+                    <Stack space="space.050">
+                      <Text size="small" color="color.text.warning">
+                        {t("blockingSummary", { count: detail.readiness.blocking.length })}
+                      </Text>
+                      <Text size="small" color="color.text.subtlest">
+                        {detail.readiness.blocking
+                          .map((item) => `${item.display_id} (${item.status})`)
+                          .join(", ")}
+                      </Text>
+                    </Stack>
+                  )}
+                </Stack>
+              </Box>
+            </div>
+
+            <div className="rdm-drawer-list" data-testid="release-detail-list">
+              <Box xcss={styles.listHeading}>
+                <Heading size="small">{t("itemsHeading")}</Heading>
+              </Box>
+              {detail.items.length === 0 ? (
+                <Box xcss={styles.emptyList}>
+                  <Text size="small" color="color.text.subtlest">
+                    {t("noItems")}
+                  </Text>
+                </Box>
+              ) : (
+                <div
+                  className="rdm-scroll-area"
+                  data-testid="release-detail-items-scroll"
+                >
+                  <table
+                    className="rdm-table rdm-table--contained"
+                    aria-label={t("itemsTableLabel")}
+                    data-testid="release-detail-items"
+                  >
+                    <thead>
+                      <tr>
+                        <th scope="col" className="col-id">
+                          ID
+                        </th>
+                        <th scope="col">{t("col.title")}</th>
+                        <th scope="col" className="col-status">
+                          {t("col.status")}
+                        </th>
+                        <th scope="col" className="col-count">
+                          {t("col.actions")}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detail.items.map((row) => (
+                        <tr key={row.id} data-testid={`release-item-row-${row.display_id}`}>
+                          <td>
+                            <Inline space="space.075" alignBlock="center">
+                              <TypeKindIcon kind={row.kind} />
+                              <TextButton
+                                data-testid={`release-item-open-${row.display_id}`}
+                                onClick={() => {
+                                  // The release drawer stays mounted behind the
+                                  // item drawer.
+                                  suppressDrawerEnter("release");
+                                  openWorkItem(projectKey, row.display_id);
+                                }}
+                              >
+                                {row.display_id}
+                              </TextButton>
+                            </Inline>
+                          </td>
+                          <td>
+                            <TruncatedText className="title-text" text={row.title} />
+                          </td>
+                          <td>
+                            <StatusLozenge status={row.status} />
+                          </td>
+                          <td>
+                            {detail.status === "PLANNED" && (
+                              <TextButton
+                                danger
+                                data-testid={`release-item-remove-${row.display_id}`}
+                                onClick={() => void removeItem(row.display_id)}
+                              >
+                                {t("remove")}
+                              </TextButton>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {detail.status === "PLANNED" && (
+              <div className="rdm-drawer-footer" data-testid="release-detail-footer">
                 <Stack space="space.150">
                   <Inline space="space.100" alignBlock="center">
                     <Button testId="release-item-add" onClick={() => setPickerOpen(true)}>
@@ -523,9 +547,8 @@ export default function ReleasesPage() {
                     </Button>
                   </Inline>
                 </Stack>
-              )}
-              </Stack>
-            </Box>
+              </div>
+            )}
           </div>
         )}
       </Drawer>

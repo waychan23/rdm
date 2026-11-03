@@ -26,8 +26,20 @@ function rememberIn(
   }
 }
 
-export function appContentScrollTop(): number {
-  return document.querySelector<HTMLElement>('[data-testid="app-content"]')?.scrollTop ?? 0;
+/**
+ * The element that scrolls the page's main content. Fixed-height list pages
+ * scroll their table body instead of the shell (RDM-125); everything else
+ * still scrolls `app-content`.
+ */
+export function pageScroller(): HTMLElement | null {
+  return (
+    document.querySelector<HTMLElement>('[data-testid="work-item-table-scroll"]') ??
+    document.querySelector<HTMLElement>('[data-testid="app-content"]')
+  );
+}
+
+export function pageScrollTop(): number {
+  return pageScroller()?.scrollTop ?? 0;
 }
 
 export function rememberScroll(path: string, top: number): void {

@@ -62,16 +62,24 @@ interface Props {
 }
 
 const styles = cssMap({
-  sprint: { width: "230px" },
-  kind: { width: "300px" },
-  subtype: { width: "180px" },
-  hasChildren: { width: "150px" },
-  completed: { width: "150px" },
-  status: { width: "200px" },
-  person: { width: "200px" },
-  search: { width: "260px" },
-  order: { width: "200px" },
-  view: { width: "120px" },
+  // The filter band keeps a fixed two-row height (RDM-125); if the viewport is
+  // too narrow the band scrolls horizontally instead of wrapping.
+  toolbar: {
+    flexShrink: 0,
+    overflowX: "auto",
+    overflowY: "hidden",
+    whiteSpace: "nowrap",
+  },
+  sprint: { width: "230px", flexShrink: 0 },
+  kind: { width: "300px", flexShrink: 0 },
+  subtype: { width: "180px", flexShrink: 0 },
+  hasChildren: { width: "150px", flexShrink: 0 },
+  completed: { width: "150px", flexShrink: 0 },
+  status: { width: "200px", flexShrink: 0 },
+  person: { width: "200px", flexShrink: 0 },
+  search: { width: "260px", flexShrink: 0 },
+  order: { width: "200px", flexShrink: 0 },
+  view: { width: "120px", flexShrink: 0 },
 });
 
 function sprintDates(sprint: Sprint): string {
@@ -231,16 +239,15 @@ export default function WorkItemToolbar({
     !kindFixed && (filters.kinds.length === 0 || filters.kinds.includes("task"));
 
   return (
-    <Stack space="space.100">
+    <Stack space="space.100" xcss={styles.toolbar}>
       {/* Row 1: search, high-frequency locators and page actions (RDM-108). */}
       <Inline
         space="space.100"
         alignBlock="center"
         spread="space-between"
-        shouldWrap
         testId="work-item-filters"
       >
-        <Inline space="space.100" alignBlock="center" shouldWrap>
+        <Inline space="space.100" alignBlock="center">
           <Box xcss={styles.search}>
             <Textfield
               placeholder={t("workItemFilters.search")}
@@ -362,7 +369,6 @@ export default function WorkItemToolbar({
       <Inline
         space="space.100"
         alignBlock="center"
-        shouldWrap
         testId="work-item-filters-secondary"
       >
         <Box xcss={styles.status} testId="work-item-filter-status">

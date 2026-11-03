@@ -69,156 +69,158 @@ export default function WorkItemTable({
       style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
       data-testid="work-item-table-container"
     >
-      <table className="rdm-table" aria-label={t("table.ariaLabel")} data-testid="work-item-table">
-        <thead>
-          <tr>
-            <th scope="col" className="col-title">
-              {t("table.colTitle")}
-            </th>
-            <th scope="col" className="col-status">
-              {t("table.colStatus")}
-            </th>
-            <th scope="col" className="col-priority">
-              {t("table.colPriority")}
-            </th>
-            <th scope="col" className="col-sprint">
-              {t("table.colSprint")}
-            </th>
-            <th scope="col" className="col-person">
-              {t("table.colAssignee")}
-            </th>
-            <th scope="col" className="col-day">
-              {t("table.colPlannedStart")}
-            </th>
-            <th scope="col" className="col-day">
-              {t("table.colPlannedEnd")}
-            </th>
-            <th
-              scope="col"
-              className="col-date"
-              aria-sort={
-                order === "created_asc"
-                  ? "ascending"
-                  : order === "created_desc"
-                    ? "descending"
-                    : undefined
-              }
-            >
-              {onOrderChange ? (
-                <button
-                  type="button"
-                  data-testid="work-item-sort-created"
-                  onClick={() =>
-                    onOrderChange(order === "created_desc" ? "created_asc" : "created_desc")
-                  }
-                  style={sortHeader}
-                >
-                  <Inline space="space.025" alignBlock="center">
-                    {t("table.colCreated")}
-                    <span
-                      aria-hidden
-                      style={{
-                        display: "inline-flex",
-                        // Point up when the oldest items come first.
-                        transform: order === "created_asc" ? "rotate(180deg)" : undefined,
-                      }}
-                    >
-                      <ChevronDownIcon label="" size="small" />
-                    </span>
-                  </Inline>
-                </button>
-              ) : (
-                t("table.colCreated")
-              )}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ item: row, depth = 0, childCount = 0, collapsed = false }) => (
-            <tr
-              key={row.id}
-              data-clickable="true"
-              tabIndex={0}
-              data-testid={`work-item-row-${row.display_id}`}
-              onClick={() => onOpen(row)}
-              onKeyDown={(e) => {
-                // Ignore keys bubbling from the row's own buttons.
-                if (e.target !== e.currentTarget) return;
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onOpen(row);
+      <div className="rdm-scroll-area" data-testid="work-item-table-scroll">
+        <table className="rdm-table" aria-label={t("table.ariaLabel")} data-testid="work-item-table">
+          <thead>
+            <tr>
+              <th scope="col" className="col-title">
+                {t("table.colTitle")}
+              </th>
+              <th scope="col" className="col-status">
+                {t("table.colStatus")}
+              </th>
+              <th scope="col" className="col-priority">
+                {t("table.colPriority")}
+              </th>
+              <th scope="col" className="col-sprint">
+                {t("table.colSprint")}
+              </th>
+              <th scope="col" className="col-person">
+                {t("table.colAssignee")}
+              </th>
+              <th scope="col" className="col-day">
+                {t("table.colPlannedStart")}
+              </th>
+              <th scope="col" className="col-day">
+                {t("table.colPlannedEnd")}
+              </th>
+              <th
+                scope="col"
+                className="col-date"
+                aria-sort={
+                  order === "created_asc"
+                    ? "ascending"
+                    : order === "created_desc"
+                      ? "descending"
+                      : undefined
                 }
-              }}
-            >
-              <td>
-                <span
-                  className="cell-title"
-                  style={{
-                    paddingInlineStart: `calc(var(--ds-space-200, 16px) * ${depth})`,
-                  }}
-                >
-                  {onToggle ? (
-                    childCount > 0 ? (
-                      <IconButton
-                        icon={(iconProps) =>
-                          collapsed ? (
-                            <ChevronRightIcon {...iconProps} />
-                          ) : (
-                            <ChevronDownIcon {...iconProps} />
-                          )
-                        }
-                        label={t(
-                          collapsed ? "table.expandChildren" : "table.collapseChildren",
-                          { id: row.display_id },
-                        )}
-                        appearance="subtle"
-                        spacing="compact"
-                        testId={`work-item-toggle-${row.display_id}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onToggle(row);
+              >
+                {onOrderChange ? (
+                  <button
+                    type="button"
+                    data-testid="work-item-sort-created"
+                    onClick={() =>
+                      onOrderChange(order === "created_desc" ? "created_asc" : "created_desc")
+                    }
+                    style={sortHeader}
+                  >
+                    <Inline space="space.025" alignBlock="center">
+                      {t("table.colCreated")}
+                      <span
+                        aria-hidden
+                        style={{
+                          display: "inline-flex",
+                          // Point up when the oldest items come first.
+                          transform: order === "created_asc" ? "rotate(180deg)" : undefined,
                         }}
-                      />
-                    ) : (
-                      <span className="rdm-tree-toggle-spacer" aria-hidden />
-                    )
-                  ) : null}
-                  <TypeKindIcon kind={row.kind} />
-                  <span className="display-id">{row.display_id}</span>
-                  <TruncatedText className="title-text" text={row.title} />
-                </span>
-              </td>
-              <td>
-                <StatusLozenge status={row.status} />
-              </td>
-              <td>
-                <PriorityMark priority={row.priority} />
-              </td>
-              <td>
-                <span className="cell-meta" data-testid={`work-item-sprint-${row.display_id}`}>
-                  {row.sprint?.name ?? "—"}
-                </span>
-              </td>
-              <td>
-                <PersonCell name={row.assignee ? userLabel(row.assignee) : undefined} />
-              </td>
-              <td>
-                <span className="cell-meta" data-testid={`work-item-start-${row.display_id}`}>
-                  {row.planned_start_date ?? "—"}
-                </span>
-              </td>
-              <td>
-                <span className="cell-meta" data-testid={`work-item-end-${row.display_id}`}>
-                  {row.planned_end_date ?? "—"}
-                </span>
-              </td>
-              <td>
-                <span className="cell-meta">{formatDate(row.created_at)}</span>
-              </td>
+                      >
+                        <ChevronDownIcon label="" size="small" />
+                      </span>
+                    </Inline>
+                  </button>
+                ) : (
+                  t("table.colCreated")
+                )}
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map(({ item: row, depth = 0, childCount = 0, collapsed = false }) => (
+              <tr
+                key={row.id}
+                data-clickable="true"
+                tabIndex={0}
+                data-testid={`work-item-row-${row.display_id}`}
+                onClick={() => onOpen(row)}
+                onKeyDown={(e) => {
+                  // Ignore keys bubbling from the row's own buttons.
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onOpen(row);
+                  }
+                }}
+              >
+                <td>
+                  <span
+                    className="cell-title"
+                    style={{
+                      paddingInlineStart: `calc(var(--ds-space-200, 16px) * ${depth})`,
+                    }}
+                  >
+                    {onToggle ? (
+                      childCount > 0 ? (
+                        <IconButton
+                          icon={(iconProps) =>
+                            collapsed ? (
+                              <ChevronRightIcon {...iconProps} />
+                            ) : (
+                              <ChevronDownIcon {...iconProps} />
+                            )
+                          }
+                          label={t(
+                            collapsed ? "table.expandChildren" : "table.collapseChildren",
+                            { id: row.display_id },
+                          )}
+                          appearance="subtle"
+                          spacing="compact"
+                          testId={`work-item-toggle-${row.display_id}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onToggle(row);
+                          }}
+                        />
+                      ) : (
+                        <span className="rdm-tree-toggle-spacer" aria-hidden />
+                      )
+                    ) : null}
+                    <TypeKindIcon kind={row.kind} />
+                    <span className="display-id">{row.display_id}</span>
+                    <TruncatedText className="title-text" text={row.title} />
+                  </span>
+                </td>
+                <td>
+                  <StatusLozenge status={row.status} />
+                </td>
+                <td>
+                  <PriorityMark priority={row.priority} />
+                </td>
+                <td>
+                  <span className="cell-meta" data-testid={`work-item-sprint-${row.display_id}`}>
+                    {row.sprint?.name ?? "—"}
+                  </span>
+                </td>
+                <td>
+                  <PersonCell name={row.assignee ? userLabel(row.assignee) : undefined} />
+                </td>
+                <td>
+                  <span className="cell-meta" data-testid={`work-item-start-${row.display_id}`}>
+                    {row.planned_start_date ?? "—"}
+                  </span>
+                </td>
+                <td>
+                  <span className="cell-meta" data-testid={`work-item-end-${row.display_id}`}>
+                    {row.planned_end_date ?? "—"}
+                  </span>
+                </td>
+                <td>
+                  <span className="cell-meta">{formatDate(row.created_at)}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <div className="rdm-pager" data-testid="work-item-pager">
         <Text size="small" color="color.text.subtlest" testId="work-item-total">
           {t("table.total", { total })}
