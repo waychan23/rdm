@@ -166,6 +166,7 @@ uv run mypy src/rdm/domain src/rdm/application
 # 前端：React 18 + Atlaskit/ADS（唯一前端，architecture §17.160）
 pnpm -C web-next install --ignore-scripts
 pnpm -C web-next dev        # Vite dev server（代理 /api、/.well-known、/mcp 到 8765，HMR）
+pnpm -C web-next lint       # ESLint（type-aware；@typescript-eslint/no-deprecated 为 error）
 pnpm -C web-next build      # 产物到 web-next/dist（不随 wheel 发布）
 ```
 

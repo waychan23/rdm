@@ -1,0 +1,77 @@
+{
+  "src/components/ErrorBoundary.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 1
+    }
+  },
+  "src/components/ErrorState.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 1
+    }
+  },
+  "src/components/LocaleSwitcher.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 2
+    }
+  },
+  "src/pages/BacklogPage.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 1
+    }
+  },
+  "src/pages/InboxPage.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 1
+    }
+  },
+  "src/pages/MailboxPage.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 5
+    }
+  },
+  "src/pages/ReleasesPage.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 2
+    }
+  },
+  "src/pages/SearchPage.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 1
+    }
+  },
+  "src/pages/SprintsPage.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 1
+    }
+  },
+  "src/pages/WorkflowConfigsPage.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 1
+    }
+  },
+  "src/pages/WorkspacesPage.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 1
+    }
+  },
+  "src/pages/item/ItemPanel.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 9
+    }
+  },
+  "src/pages/sprints/SprintDetailDrawer.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 1
+    }
+  },
+  "src/router.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 1
+    }
+  },
+  "src/shell/AppShell.tsx": {
+    "@typescript-eslint/no-deprecated": {
+      "count": 2
+    }
+  }
+}

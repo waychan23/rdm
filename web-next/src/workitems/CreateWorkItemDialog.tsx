@@ -8,6 +8,7 @@ import ModalDialog, {
   ModalHeader,
   ModalTitle,
   ModalTransition,
+  type OnCloseHandler,
 } from "@atlaskit/modal-dialog";
 import { Stack, Text } from "@atlaskit/primitives/compiled";
 import { RadioGroup } from "@atlaskit/radio";
@@ -233,17 +234,21 @@ export default function CreateWorkItemDialog({
   const parentKinds = parentLocked ? [] : allowedParentKinds(kind);
   const kindChoices = kindOptions().filter((option) => kinds.includes(option.value));
 
-  // Escape must not discard a half-filled create form; only the explicit
-  // Close/Cancel actions close it.
+  // `shouldCloseOnEscapePress` is deprecated: ADS asks callers to decide in
+  // `onClose` instead. Escape would discard a half-filled create form, so
+  // ignore only that close reason and let the close button/backdrop through.
+  const interceptClose: OnCloseHandler = (event) => {
+    if (event.type === "keydown" && "key" in event && event.key === "Escape") {
+      event.preventDefault();
+      return;
+    }
+    onClose();
+  };
+
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog
-          onClose={onClose}
-          shouldCloseOnEscapePress={false}
-          width="680px"
-          testId="work-item-create-dialog"
-        >
+        <ModalDialog onClose={interceptClose} width="680px" testId="work-item-create-dialog">
           <ModalHeader>
             <ModalTitle>{dialogTitle ?? t("create.title")}</ModalTitle>
           </ModalHeader>

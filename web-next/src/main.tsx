@@ -8,7 +8,7 @@ import { Link, RouterProvider } from "react-router-dom";
 import { setGlobalTheme } from "@atlaskit/tokens/set-global-theme";
 import "@atlaskit/css-reset";
 import type { RouterLinkComponent } from "@atlaskit/app-provider";
-import AppProvider from "@atlaskit/app-provider";
+import { AppProvider } from "@atlaskit/app-provider/app-provider";
 
 import "./styles/global.css";
 import ErrorBoundary from "./components/ErrorBoundary";

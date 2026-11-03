@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "e2e": "pnpm build && playwright test",
@@ -57,7 +59,10 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.1",
     "vite": "^6.0.7"
   }
 }

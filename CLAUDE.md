@@ -29,6 +29,7 @@ human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，两个组
   手工冒烟：`uv sync --extra postgres`，起 ParadeDB 镜像，
   `RDM_DATABASE_URL=postgresql://postgres:pw@127.0.0.1:5432/rdm uv run rdm init|serve|doctor`。
 - 前端：`pnpm -C web-next dev`（5173，代理 `/api`、`/.well-known`、`/mcp` 到 8765，HMR）、
+  `pnpm -C web-next lint`（deprecated API 门禁）、
   `pnpm -C web-next build`（产物进 `web-next/dist`，独立部署给 nginx，不进 wheel）。
   开发时后端加 `RDM_PUBLIC_BASE_URL=http://127.0.0.1:5173`，登录/恢复链接才指向 dev server。
   前端 e2e（Playwright，重点覆盖工作流引擎）：`pnpm -C web-next e2e`（先 build，再以 `vite preview`
@@ -55,6 +56,11 @@ human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，两个组
 - 深色模式不做（固定 light）；a11y 工具开发时可用，但本期没有 UI 走查/lint/截图门禁，不要自行新建。
 - 认证：所有 `/api/v1` 请求由 `lib/api.ts` 注入 Bearer 并在 401 时单飞刷新；不要在页面里手写 token。
   登录/OAuth 流程见 `lib/oauth.ts`（PKCE、localStorage token、`beginLogin`）。
+- **改完前端必须跑 `pnpm -C web-next lint`**（type-aware ESLint，`@typescript-eslint/no-deprecated` 为 error）。
+  ADS 的废弃 API 以组件 JSDoc 的 `@deprecated` 为准，按提示的替代方案改，不要使用已废弃 prop
+  （例如 `ModalDialog` 的 `shouldCloseOnEscapePress` 已废弃，应在 `onClose` 里按条件拦截）。
+  历史存量违例记录在 `web-next/eslint-suppressions.json`，不要手工新增 suppression；修完用
+  `eslint src --prune-suppressions` 收紧基线。
 
 ## 后端铁律
 
