@@ -14,6 +14,7 @@ import { statusLabel } from "../lib/labels";
 import { allowDrawerEnter, suppressDrawerEnter } from "../lib/drawerMotion";
 import { useOpenWorkItem } from "../lib/itemOverlay";
 import { useListSearchParams } from "../lib/originSearch";
+import { portalMenuProps } from "../lib/portalMenu";
 import { userLabel } from "../lib/users";
 import type { Assignee, Sprint, WorkflowDto } from "../types";
 import { kindOptions } from "./constants";
@@ -265,6 +266,7 @@ export default function WorkItemToolbar({
 
           <Box xcss={styles.sprint} testId="work-item-filter-sprint">
             <Select<SprintOption>
+              {...portalMenuProps}
               options={sprintOptions}
               value={sprintOptions.find((option) => option.value === filters.sprint) ?? null}
               onChange={(option) =>
@@ -293,6 +295,7 @@ export default function WorkItemToolbar({
           {!kindFixed && (
             <Box xcss={styles.kind} testId="work-item-filter-kind">
               <Select<Option, true>
+                {...portalMenuProps}
                 isMulti
                 hideSelectedOptions={false}
                 options={kindSelectOptions}
@@ -312,6 +315,7 @@ export default function WorkItemToolbar({
           {view && onViewChange && (
             <Box xcss={styles.view} testId="work-item-filter-view">
               <Select<Option>
+                {...portalMenuProps}
                 options={viewOptions}
                 value={viewOptions.find((option) => option.value === view) ?? null}
                 onChange={(option) =>
@@ -326,6 +330,7 @@ export default function WorkItemToolbar({
 
           <Box xcss={styles.order} testId="work-item-filter-order">
             <Select<Option>
+              {...portalMenuProps}
               options={orderOptions}
               value={orderOptions.find((option) => option.value === filters.order) ?? null}
               onChange={(option) =>
@@ -373,6 +378,7 @@ export default function WorkItemToolbar({
       >
         <Box xcss={styles.status} testId="work-item-filter-status">
           <Select<Option, true>
+            {...portalMenuProps}
             isMulti
             hideSelectedOptions={false}
             options={statusOptions}
@@ -390,6 +396,7 @@ export default function WorkItemToolbar({
 
         <Box xcss={styles.completed} testId="work-item-filter-completed">
           <Select<Option>
+            {...portalMenuProps}
             options={completedOptions}
             value={completedOptions.find((option) => option.value === filters.completed) ?? null}
             onChange={(option) =>
@@ -410,6 +417,7 @@ export default function WorkItemToolbar({
         {showSubtype && (
           <Box xcss={styles.subtype} testId="work-item-filter-subtype">
             <Select<Option, true>
+              {...portalMenuProps}
               isMulti
               hideSelectedOptions={false}
               options={subtypeOptions}
@@ -428,6 +436,7 @@ export default function WorkItemToolbar({
 
         <Box xcss={styles.person} testId="work-item-filter-assignee">
           <Select<Option, true>
+            {...portalMenuProps}
             isMulti
             isSearchable
             hideSelectedOptions={false}
@@ -446,6 +455,7 @@ export default function WorkItemToolbar({
 
         <Box xcss={styles.person} testId="work-item-filter-participant">
           <Select<Option, true>
+            {...portalMenuProps}
             isMulti
             isSearchable
             hideSelectedOptions={false}
@@ -464,6 +474,7 @@ export default function WorkItemToolbar({
 
         <Box xcss={styles.hasChildren} testId="work-item-filter-has-children">
           <Select<Option>
+            {...portalMenuProps}
             options={hasChildrenOptions}
             value={
               hasChildrenOptions.find(
