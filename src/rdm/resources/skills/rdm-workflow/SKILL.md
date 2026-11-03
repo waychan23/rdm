@@ -11,7 +11,7 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 
 1. 读取当前工作区根目录的 `.rdm/project.json`。
 2. 有 `{"version": 1, "project": "KEY"}`：调用 `project_bind(project="KEY")` 校验；之后所有项目级工具显式传 `project="KEY"`。不要询问用户。
-3. 没有：调用 `project_bind()` 拿到 `options`，把 `key/name/roles` 展示给用户**自己选择**；不要推荐，不要根据信箱有无信、未读数、最近活动或角色推断。调用 `project_bind(project="KEY")`，把返回的 `persist.content` 写入 `.rdm/project.json`；之后项目级工具传 `project="KEY"`。
+3. 没有：调用 `project_bind()` 拿到 `options`，把 `key/name/roles` 展示给用户**自己选择**；不要推荐，不要根据信箱有无信、未读数、最近活动或角色推断。调用 `project_bind(project="KEY")`，把返回的 `persist.content` 写入 `.rdm/project.json`（若文件已有 `web_origin`，合并保留它，见下文“工作项链接的域名”）；之后项目级工具传 `project="KEY"`。
    带 `project` 参数的工具包括 `work_item_list`、`backlog_list`、`sprint_list`、`release_list`、`member_list`、`work_item_create`、`sprint_create`、`release_create`、`mailbox_check`、`mailbox_send`、`artifact_add`、`attachment_list`、`project_get`；按 id 操作的工具（如 `work_item_get`、`work_item_transition`、`sprint_manage`、`release_manage`）不需要传。
 4. 收到 `PROJECT_REQUIRED` / `PROJECT_BINDING_INVALID` 时，按 `details.recovery` 自愈：读文件 → `project_bind` → 带 `project` 重试。**不要**要求用户重新执行 `rdm integrate`，**不要**让用户手输项目 ID。
 5. 改绑：`project_bind(project=NEW, current=OLD)`，先向用户确认返回的 `change`，再覆盖 `.rdm/project.json`。单次跨项目操作直接传 `project=OTHER`，不要改绑文件。
@@ -27,7 +27,15 @@ description: rd-manager（rdm）工作流操作规范。当需要通过 rdm MCP 
 
 **绑定后只处理该项目**：不要遍历 `whoami.projects`，不要查询、处理或建议处理其他项目的信件/工作项，除非用户明确要求。不要在没有上下文时直接改状态或发信。信箱（查信/回信/@mention/已读）的详细规范见 rdm-mailbox skill。
 
-**汇报时带链接**：向用户提到某个工作项时，附上可直接在浏览器打开的链接。`work_item_get` 的 `data.web_url`，以及 `work_item_list` / `my_work_list` / `backlog_list` 每条结果的 `web_url` 都是完整 URL；写成 Markdown 链接，例如 `[RDM-42 修复抽屉背景](http://127.0.0.1:8765/projects/RDM/items/RDM-42)`。不要只给编号，也不要自己猜主机名或拼接 URL。
+**汇报时带链接**：向用户或评论/信件中提到某个工作项时，附上可直接在浏览器打开的链接，并写成 Markdown 链接，例如 `[RDM-42 修复抽屉背景](https://rdm.example.com/projects/RDM/items/RDM-42)`。不要只给编号。
+
+**工作项链接的域名（RDM-127）** 按以下优先级解析，不要猜主机名：
+
+1. 项目根目录 `.rdm/project.json` 的 `web_origin`；
+2. 用户目录 `~/.rdm/config.json` 的 `web_origin`（`rdm skills install --web-origin <origin>` 写入）；
+3. 都没有：使用 MCP 返回的 `web_url`（与服务端同源）。
+
+命中第 1/2 项时，工作项链接统一构造为 `<web_origin>/projects/<project_key>/items/<display_id>`，忽略 `web_url` 中的主机名（路径仍可参考）。写入/合并 `.rdm/project.json` 时必须保留已有的 `web_origin` 字段，不要用 `project_bind` 返回的 `persist.content` 整体覆盖掉它。
 
 ## 2. 认领工作项
 

@@ -1,5 +1,6 @@
 """Tests for `rdm skills install` (plan M1-6, architecture §16.32)."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,9 @@ from rdm.interfaces.cli.skills import (
     SkillTarget,
     bundled_skill_names,
     bundled_skill_text,
+    configure_web_origin,
     install_skill,
+    normalize_web_origin,
     resolve_target_path,
 )
 
@@ -19,6 +22,8 @@ from rdm.interfaces.cli.skills import (
 def test_bundled_skills_catalogue() -> None:
     assert bundled_skill_names() == ["rdm-mailbox", "rdm-workflow"]
     assert "work_item_transition" in bundled_skill_text("rdm-workflow")
+    # RDM-127: the skill tells agents how to resolve the web origin.
+    assert "web_origin" in bundled_skill_text("rdm-workflow")
 
 
 @pytest.mark.parametrize(
@@ -160,3 +165,122 @@ def test_cli_project_scope_installs_into_cwd(tmp_path: Path) -> None:
     dest = repo / ".codex" / "skills" / "rdm-workflow" / "SKILL.md"
     assert dest.exists()
     assert "rdm-managed" in dest.read_text(encoding="utf-8")
+
+
+def test_normalize_web_origin() -> None:
+    assert normalize_web_origin(" https://rdm.example.com/ ") == "https://rdm.example.com"
+    assert normalize_web_origin("http://127.0.0.1:5173") == "http://127.0.0.1:5173"
+    for bad in [
+        "rdm.example.com",
+        "ftp://rdm.example.com",
+        "https://rdm.example.com/x",
+        "https://x?q=1",
+    ]:
+        with pytest.raises(ValueError):
+            normalize_web_origin(bad)
+
+
+def test_configure_web_origin_user_config_merges(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    path = home / ".rdm" / "config.json"
+    path.parent.mkdir(parents=True)
+    path.write_text('{"theme": "dark"}\n', encoding="utf-8")
+
+    written = configure_web_origin("user", "https://rdm.example.com", home=home)
+    assert written == path
+    assert path.read_text(encoding="utf-8") == (
+        '{\n  "theme": "dark",\n  "web_origin": "https://rdm.example.com"\n}\n'
+    )
+
+
+def test_configure_web_origin_project_preserves_binding(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    path = repo / ".rdm" / "project.json"
+    path.parent.mkdir(parents=True)
+    path.write_text('{"version": 1, "project": "RDM"}\n', encoding="utf-8")
+
+    configure_web_origin("project", "http://127.0.0.1:5173/", cwd=repo)
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "version": 1,
+        "project": "RDM",
+        "web_origin": "http://127.0.0.1:5173",
+    }
+
+
+def test_configure_web_origin_rejects_bad_json(tmp_path: Path) -> None:
+    path = tmp_path / "home" / ".rdm" / "config.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("not json", encoding="utf-8")
+    with pytest.raises(ValueError):
+        configure_web_origin("user", "https://rdm.example.com", home=tmp_path / "home")
+
+
+def test_cli_web_origin_user_scope(tmp_path: Path) -> None:
+    runner = CliRunner()
+    env = {"HOME": str(tmp_path / "home")}
+    result = runner.invoke(
+        app,
+        [
+            "skills",
+            "install",
+            "--target",
+            "claude",
+            "--skill",
+            "rdm-workflow",
+            "--web-origin",
+            "https://rdm.example.com",
+        ],
+        env=env,
+    )
+    assert result.exit_code == 0, result.output
+    assert "WEB-ORIGIN" in result.output
+    config = json.loads((tmp_path / "home/.rdm/config.json").read_text(encoding="utf-8"))
+    assert config["web_origin"] == "https://rdm.example.com"
+
+
+def test_cli_web_origin_project_scope_and_invalid(tmp_path: Path) -> None:
+    runner = CliRunner()
+    repo = tmp_path / "repo"
+    (repo / ".rdm").mkdir(parents=True)
+    (repo / ".rdm/project.json").write_text('{"version": 1, "project": "RDM"}\n', encoding="utf-8")
+    env = {"HOME": str(tmp_path / "home")}
+    result = runner.invoke(
+        app,
+        [
+            "skills",
+            "install",
+            "--target",
+            "claude",
+            "--scope",
+            "project",
+            "--cwd",
+            str(repo),
+            "--skill",
+            "rdm-workflow",
+            "--web-origin",
+            "http://127.0.0.1:5173",
+        ],
+        env=env,
+    )
+    assert result.exit_code == 0, result.output
+    data = json.loads((repo / ".rdm/project.json").read_text(encoding="utf-8"))
+    assert data == {
+        "version": 1,
+        "project": "RDM",
+        "web_origin": "http://127.0.0.1:5173",
+    }
+
+    bad = runner.invoke(
+        app,
+        [
+            "skills",
+            "install",
+            "--target",
+            "claude",
+            "--web-origin",
+            "https://rdm.example.com/path",
+        ],
+        env=env,
+    )
+    assert bad.exit_code == 2
+    assert "invalid web origin" in bad.output

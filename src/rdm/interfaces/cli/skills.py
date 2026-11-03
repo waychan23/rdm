@@ -14,13 +14,18 @@ content conflict requires --force.
 
 from __future__ import annotations
 
+import json
 import shutil
 from dataclasses import dataclass
 from enum import StrEnum
 from importlib.resources import files
 from pathlib import Path
+from urllib.parse import urlsplit
 
 MANAGED_MARKER = "<!-- rdm-managed: do not edit; reinstall with `rdm skills install` -->"
+
+USER_CONFIG_RELATIVE = Path(".rdm") / "config.json"
+PROJECT_BINDING_RELATIVE = Path(".rdm") / "project.json"
 
 
 class SkillTarget(StrEnum):
@@ -43,6 +48,62 @@ def bundled_skill_names() -> list[str]:
     root = files("rdm.resources").joinpath("skills")
     names = [p.name for p in root.iterdir() if p.is_dir() and (p / "SKILL.md").is_file()]
     return sorted(names)
+
+
+def _read_json_object(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path} is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return data
+
+
+def _merge_json(path: Path, updates: dict[str, object]) -> None:
+    data = _read_json_object(path)
+    data.update(updates)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def normalize_web_origin(value: str) -> str:
+    """Validate a web frontend origin (scheme + host[:port]) for item links."""
+    raw = value.strip()
+    parts = urlsplit(raw)
+    if (
+        parts.scheme not in {"http", "https"}
+        or not parts.netloc
+        or parts.path not in {"", "/"}
+        or parts.query
+        or parts.fragment
+    ):
+        raise ValueError(
+            f"invalid web origin {value!r}; want http(s)://host[:port] without path/query"
+        )
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def configure_web_origin(
+    scope: str,
+    value: str,
+    *,
+    home: Path | None = None,
+    cwd: Path | None = None,
+) -> Path:
+    """Store the frontend origin agents use to build work item links (RDM-127).
+
+    user scope -> ``~/.rdm/config.json``; project scope -> ``.rdm/project.json``.
+    Existing keys (notably the project binding) are preserved.
+    """
+    origin = normalize_web_origin(value)
+    base = (home or Path.home()) if scope == "user" else (cwd or Path.cwd())
+    relative = USER_CONFIG_RELATIVE if scope == "user" else PROJECT_BINDING_RELATIVE
+    path = base / relative
+    _merge_json(path, {"web_origin": origin})
+    return path
 
 
 def bundled_skill_text(skill_name: str) -> str:

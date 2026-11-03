@@ -490,6 +490,17 @@ def skills_install(
         Path | None, typer.Option("--cwd", help="Project scope: directory to install into.")
     ] = None,
     force: Annotated[bool, typer.Option("--force", help="Overwrite conflicting files.")] = False,
+    web_origin: Annotated[
+        str | None,
+        typer.Option(
+            "--web-origin",
+            help=(
+                "Web frontend origin for work item links (e.g. https://rdm.example.com). "
+                "Stored in ~/.rdm/config.json for --scope user, or .rdm/project.json "
+                "for --scope project."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Install bundled rdm skills into an agent CLI."""
     from rdm.interfaces.cli import skills as skills_commands
@@ -506,6 +517,17 @@ def skills_install(
         typer.secho("--scope project requires --cwd", fg=typer.colors.RED)
         raise typer.Exit(2)
     directory = cwd or Path.cwd()
+
+    if web_origin is not None:
+        try:
+            origin_path = skills_commands.configure_web_origin(scope, web_origin, cwd=directory)
+        except ValueError as exc:
+            typer.secho(str(exc), fg=typer.colors.RED)
+            raise typer.Exit(2) from None
+        typer.secho(
+            f"WEB-ORIGIN {skills_commands.normalize_web_origin(web_origin)} -> {origin_path}",
+            fg=typer.colors.GREEN,
+        )
 
     names = skill or skills_commands.bundled_skill_names()
     had_conflict = False
