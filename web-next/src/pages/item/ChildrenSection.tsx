@@ -33,7 +33,7 @@ interface LinkChildDialogProps {
   allowedKinds: string[];
   excludeIds: string[];
   onClose: () => void;
-  onChanged: () => void;
+  onChanged: (child: WorkItemOption) => void;
 }
 
 function LinkChildDialog({
@@ -74,7 +74,7 @@ function LinkChildDialog({
           parent: parent.display_id,
         }),
       );
-      onChanged();
+      onChanged(existing);
       onClose();
     } catch (e) {
       notify.error(t("children.linkFailed"), errorCause(e)?.message);
@@ -131,7 +131,8 @@ interface ChildrenSectionProps {
   children: WorkItem[];
   allowedKinds: string[];
   onOpen: (id: string) => void;
-  onChanged: () => void;
+  /** Receives the created/relinked child when there is one. */
+  onChanged: (child?: Pick<WorkItem, "id" | "display_id">) => void;
 }
 
 export default function ChildrenSection({
@@ -219,7 +220,7 @@ export default function ChildrenSection({
         parentLocked
         dialogTitle={t("children.createTitle", { id: parent.display_id })}
         onClose={() => setShowCreate(false)}
-        onCreated={() => onChanged()}
+        onCreated={(item) => onChanged(item)}
       />
       <LinkChildDialog
         open={showLink}

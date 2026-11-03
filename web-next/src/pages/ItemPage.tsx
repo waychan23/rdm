@@ -9,6 +9,10 @@ import {
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { BACKDROP_INTERACTIVE } from "../lib/itemOverlay";
+import {
+  nextItemOverlayHostId,
+  useItemOverlayHost,
+} from "../lib/itemOverlayVisibility";
 import { itemPath, originFor } from "../lib/navigation";
 import { OriginSearchProvider } from "../lib/originSearch";
 import BacklogPage from "./BacklogPage";
@@ -99,6 +103,9 @@ export default function ItemPage() {
   const { key: projectKey = "", id = "" } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const [hostId] = useState(nextItemOverlayHostId);
+  // The route-backed panel is one layer; lists behind it queue refresh events.
+  useItemOverlayHost(hostId, 1);
   const initialOrigin = originFor(location.state, `/projects/${projectKey}/backlog`);
   // Backdrop pages may change filters or close their detail drawer while the
   // item is open; remember the live origin so closing returns to that state.

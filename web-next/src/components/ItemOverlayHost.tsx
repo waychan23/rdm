@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 
 import ItemPanel from "../pages/item/ItemPanel";
@@ -8,6 +8,10 @@ import {
   popItemOverlay,
   pushItemOverlay,
 } from "../lib/itemOverlay";
+import {
+  nextItemOverlayHostId,
+  useItemOverlayHost,
+} from "../lib/itemOverlayVisibility";
 import "../styles/item.css";
 
 /**
@@ -43,6 +47,9 @@ export default function ItemOverlayHost() {
     [onLegacyRoute, search],
   );
   const open = stack.length > 0;
+  const [hostId] = useState(nextItemOverlayHostId);
+  // List pages keep update events queued while any layer covers them (RDM-150).
+  useItemOverlayHost(hostId, stack.length);
 
   const close = useCallback(() => {
     const next = new URLSearchParams(params);

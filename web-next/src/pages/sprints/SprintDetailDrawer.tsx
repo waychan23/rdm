@@ -17,6 +17,8 @@ import WorkItemPickerDialog from "../../components/WorkItemPickerDialog";
 import { api, errorCause } from "../../lib/api";
 import { recallDetail, rememberDetail } from "../../lib/detailCache";
 import { useNotify } from "../../lib/flags";
+import { useEventInstanceId, useWorkItemUpdatedRefresh } from "../../hooks/useEventBus";
+import { useItemOverlayOpen } from "../../lib/itemOverlayVisibility";
 import { useListOrigin } from "../../lib/originSearch";
 import type { SprintDetail, WorkItem } from "../../types";
 import StatusLozenge from "../../workitems/status";
@@ -88,6 +90,19 @@ export default function SprintDetailDrawer({
     setConfirmClose(false);
     if (sprintId) void refreshDetail();
   }, [sprintId, refreshDetail]);
+
+  // RDM-150: the sprint's item rows follow changes made in a work item drawer
+  // opened above this one, once that drawer closes.
+  const eventInstanceId = useEventInstanceId();
+  const overlayOpen = useItemOverlayOpen();
+  useWorkItemUpdatedRefresh({
+    instanceId: eventInstanceId,
+    visible: !overlayOpen,
+    matches: (event) =>
+      event.projectKey === projectKey &&
+      (detail?.items.some((item) => item.id === event.workItemId) ?? false),
+    onRefresh: () => void refreshDetail(),
+  });
 
   const afterMutation = async () => {
     await refreshDetail();

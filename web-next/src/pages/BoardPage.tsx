@@ -10,12 +10,14 @@ import { Box, Inline } from "@atlaskit/primitives/compiled";
 
 import { Page, PageHeader } from "../components/Page";
 import ErrorState from "../components/ErrorState";
+import { useEventInstanceId, useWorkItemUpdatedRefresh } from "../hooks/useEventBus";
 import { api, errorCause } from "../lib/api";
 import { statusLabel } from "../lib/labels";
 import { useNotify } from "../lib/flags";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";
 import { useRememberViewScroll } from "../hooks/useRememberViewScroll";
 import { useOpenWorkItem } from "../lib/itemOverlay";
+import { useItemOverlayOpen } from "../lib/itemOverlayVisibility";
 import {
   useListOrigin,
   useListProjectKey,
@@ -283,6 +285,17 @@ export default function BoardPage() {
     // statusesJoined stands in for the statuses identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadColumn, statusesJoined]);
+
+  // RDM-150: keep update events queued while a drawer covers the board, then
+  // revalidate every column once when the last layer closes.
+  const eventInstanceId = useEventInstanceId();
+  const overlayOpen = useItemOverlayOpen();
+  useWorkItemUpdatedRefresh({
+    instanceId: eventInstanceId,
+    visible: !overlayOpen,
+    matches: (event) => event.projectKey === projectKey,
+    onRefresh: refreshAll,
+  });
 
   const loadMore = useCallback(
     (status: string) => {

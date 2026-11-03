@@ -38,8 +38,11 @@ import { api, errorCause } from "../../lib/api";
 import { artifactKindLabel, kindLabel, statusLabel } from "../../lib/labels";
 import { i18n } from "../../i18n";
 import { useCurrentUser } from "../../lib/auth";
+import { CONSUMED, KEEP, drain, publishWorkItemUpdated } from "../../lib/eventBus";
+import type { WorkItemUpdatedEvent } from "../../lib/eventBus";
 import { formatDate, formatSize } from "../../lib/format";
 import { useNotify } from "../../lib/flags";
+import { useEventInstanceId, useWorkItemUpdatedSubscription } from "../../hooks/useEventBus";
 import { flattenMembers } from "../../lib/members";
 import { portalMenuProps } from "../../lib/portalMenu";
 import { userLabel } from "../../lib/users";
@@ -200,6 +203,14 @@ export default function ItemPanel({
   // refresh is still in flight, so read it from a ref instead of render state.
   const versionRef = useRef<number | null>(null);
 
+  // Cross-component refresh (RDM-150): this panel is a bus subscriber like the
+  // list behind it. Its queue survives while a nested layer covers it.
+  const instanceId = useEventInstanceId();
+  const bundleRef = useRef<DetailBundle | null>(bundle);
+  bundleRef.current = bundle;
+  const coveredRef = useRef(covered);
+  coveredRef.current = covered;
+
   const load = useCallback(async () => {
     try {
       const detail = await api.get<WorkItem>(
@@ -278,13 +289,88 @@ export default function ItemPanel({
     setRefreshKey((value) => value + 1);
   }, [load]);
 
-  // A covered layer was left mounted while the user worked on top of it (and
-  // may have deleted/edited entries it lists). Revalidate when it is revealed.
+  // Publish a change so covered drawers and the list behind the stack can
+  // revalidate on demand instead of every open/close.
+  const publishChange = useCallback(
+    (
+      action: WorkItemUpdatedEvent["action"],
+      overrides: Partial<
+        Pick<
+          WorkItemUpdatedEvent,
+          "workItemId" | "displayId" | "parentId" | "previousParentId"
+        >
+      > = {},
+    ) => {
+      publishWorkItemUpdated({
+        projectKey,
+        workItemId: overrides.workItemId ?? itemId,
+        displayId: overrides.displayId ?? bundleRef.current?.item.display_id,
+        parentId:
+          "parentId" in overrides
+            ? overrides.parentId
+            : (bundleRef.current?.parent?.id ?? null),
+        previousParentId: overrides.previousParentId,
+        action,
+        source: instanceId,
+      });
+    },
+    [instanceId, itemId, projectKey],
+  );
+
+  /** Child/parent/ancestor changes are the only ones this panel renders. */
+  const isRelatedEvent = useCallback(
+    (event: WorkItemUpdatedEvent) => {
+      const current = bundleRef.current;
+      if (!current) return false;
+      if (event.workItemId === itemId) return true;
+      if (event.workItemId === current.parent?.id) return true;
+      if (event.parentId === itemId || event.previousParentId === itemId) return true;
+      return current.ancestors.some((node) => node.id === event.workItemId);
+    },
+    [itemId],
+  );
+
+  // Coalesce a burst of events into one reload.
+  const refreshTimer = useRef<number | null>(null);
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimer.current !== null) return;
+    refreshTimer.current = window.setTimeout(() => {
+      refreshTimer.current = null;
+      void refresh();
+    }, 0);
+  }, [refresh]);
+  useEffect(
+    () => () => {
+      if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current);
+    },
+    [],
+  );
+
+  useWorkItemUpdatedSubscription(instanceId, (event) => {
+    // The panel that performed the mutation already refreshed itself.
+    if (event.source === instanceId) return CONSUMED;
+    // Covered layers cannot render the change yet; keep the event queued.
+    if (coveredRef.current) return KEEP;
+    if (isRelatedEvent(event)) scheduleRefresh();
+    return CONSUMED;
+  });
+
+  // A covered layer was left mounted while the user worked on top of it.
+  // Batch-process whatever it kept, then revalidate only when relevant.
   const wasCovered = useRef(covered);
   useEffect(() => {
-    if (wasCovered.current && !covered) void refresh();
+    if (wasCovered.current && !covered) {
+      const queued = drain(instanceId, "work_item_updated") as WorkItemUpdatedEvent[];
+      if (
+        queued.some(
+          (event) => event.source !== instanceId && isRelatedEvent(event),
+        )
+      ) {
+        void refresh();
+      }
+    }
     wasCovered.current = covered;
-  }, [covered, refresh]);
+  }, [covered, instanceId, isRelatedEvent, refresh]);
 
   /**
    * Save one field at a time. Inline editors stay open when this returns
@@ -300,6 +386,7 @@ export default function ItemPanel({
           ...payload,
         });
         versionRef.current = res.data.row_version;
+        publishChange("updated");
         await refresh();
         notify.success(t("panel.saveSuccess"));
         return true;
@@ -309,7 +396,7 @@ export default function ItemPanel({
         return false;
       }
     },
-    [itemId, notify, refresh],
+    [itemId, notify, publishChange, refresh],
   );
 
   useEffect(() => {
@@ -408,6 +495,7 @@ export default function ItemPanel({
       notify.success(t("panel.stepExecuted"));
       setGateMessage(null);
       setStepExecute(null);
+      publishChange("updated");
       await refresh();
     } catch (e) {
       setStepExecute(null);
@@ -425,6 +513,7 @@ export default function ItemPanel({
       notify.success(t("panel.stepStarted", { name: stepStart.name }));
       setGateMessage(null);
       setStepStart(null);
+      publishChange("updated");
       await refresh();
     } catch (e) {
       setStepStart(null);
@@ -442,6 +531,7 @@ export default function ItemPanel({
       notify.success(t("panel.executorsUpdated"));
       setGateMessage(null);
       setStepReassign(null);
+      publishChange("updated");
       await refresh();
     } catch (e) {
       setStepReassign(null);
@@ -459,6 +549,7 @@ export default function ItemPanel({
       });
       notify.success(t("panel.stepCancelled"));
       setGateMessage(null);
+      publishChange("updated");
       await refresh();
     } catch (e) {
       reportGate(e);
@@ -475,6 +566,7 @@ export default function ItemPanel({
       notify.success(t("panel.stepRejected"));
       setGateMessage(null);
       setStepReject(null);
+      publishChange("updated");
       await refresh();
     } catch (e) {
       reportGate(e);
@@ -486,6 +578,7 @@ export default function ItemPanel({
         row_version: active.row_version,
       });
       setGateMessage(null);
+      publishChange("updated");
       await refresh();
     } catch (e) {
       reportGate(e);
@@ -498,6 +591,7 @@ export default function ItemPanel({
     if (bundle?.item.assignee?.id === memberId) return true;
     try {
       await api.post(`/work-items/${itemId}/assign`, { member: memberId });
+      publishChange("updated");
       await refresh();
       notify.success(t("panel.saveSuccess"));
       return true;
@@ -515,6 +609,7 @@ export default function ItemPanel({
         row_version: versionRef.current ?? bundle.item.row_version,
         priority,
       });
+      publishChange("updated");
       await refresh();
       notify.success(t("panel.saveSuccess"));
     } catch (e) {
@@ -529,6 +624,11 @@ export default function ItemPanel({
       await api.post(`/work-items/${itemId}/reparent`, {
         parent: option?.display_id ?? null,
         row_version: versionRef.current ?? bundle.item.row_version,
+      });
+      // Wake both the old and the new parent drawer.
+      publishChange("updated", {
+        parentId: option?.id ?? null,
+        previousParentId: bundle.parent?.id ?? null,
       });
       notify.success(
         option
@@ -644,6 +744,7 @@ export default function ItemPanel({
       if (sprintId) {
         await api.post(`/sprints/${sprintId}/items`, { items: [bundle.item.display_id] });
       }
+      publishChange("updated");
       setSprintEditing(false);
       await refresh();
       notify.success(t("panel.sprintSaved"));
@@ -715,6 +816,7 @@ export default function ItemPanel({
     try {
       await api.del(`/work-items/${itemId}`);
       notify.success(t("panel.itemDeleted", { id: bundle?.item.display_id ?? itemId }));
+      publishChange("deleted");
       setConfirmDelete(false);
       // Close only the deleted item's layer; lower layers stay open (RDM-136).
       if (onBack) onBack();
@@ -1166,7 +1268,14 @@ export default function ItemPanel({
                 children={children}
                 allowedKinds={allowedChildKinds}
                 onOpen={onOpenItem}
-                onChanged={() => void refresh()}
+                onChanged={(changed) => {
+                  void refresh();
+                  publishChange("updated", {
+                    workItemId: changed?.id,
+                    displayId: changed?.display_id,
+                    parentId: item.id,
+                  });
+                }}
               />
             </section>
 
@@ -1788,6 +1897,7 @@ export default function ItemPanel({
         parentOption={parentOption}
         onClose={() => setShowEdit(false)}
         onSaved={() => {
+          publishChange("updated");
           void refresh();
         }}
       />

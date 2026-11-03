@@ -13,9 +13,11 @@ import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { cardBorder } from "../components/cardBorder";
 import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
+import { useEventInstanceId, useWorkItemUpdatedRefresh } from "../hooks/useEventBus";
 import { api } from "../lib/api";
 import { searchTypeLabel } from "../lib/labels";
 import { useOpenWorkItem } from "../lib/itemOverlay";
+import { useItemOverlayOpen } from "../lib/itemOverlayVisibility";
 import { useListSearchParams } from "../lib/originSearch";
 import { useAsync } from "../hooks/useAsync";
 import type { SearchHit } from "../types";
@@ -53,6 +55,15 @@ export default function SearchPage() {
     if (!q.trim()) return [];
     return (await api.get<SearchHit[]>(`/search?q=${encodeURIComponent(q.trim())}`)).data;
   }, [q]);
+
+  // RDM-150: refresh results after an item drawer closes, once per batch.
+  const eventInstanceId = useEventInstanceId();
+  const overlayOpen = useItemOverlayOpen();
+  useWorkItemUpdatedRefresh({
+    instanceId: eventInstanceId,
+    visible: !overlayOpen,
+    onRefresh: state.reload,
+  });
 
   const submit = () => {
     const next = draft.trim();

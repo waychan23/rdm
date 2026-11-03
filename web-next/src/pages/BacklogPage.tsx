@@ -9,11 +9,13 @@ import Spinner from "@atlaskit/spinner";
 import { Box } from "@atlaskit/primitives/compiled";
 
 import { Page, PageHeader } from "../components/Page";
+import { useEventInstanceId, useWorkItemUpdatedRefresh } from "../hooks/useEventBus";
 import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";
 import { useRememberViewScroll } from "../hooks/useRememberViewScroll";
 import { useOpenWorkItem } from "../lib/itemOverlay";
+import { useItemOverlayOpen } from "../lib/itemOverlayVisibility";
 import {
   useListOrigin,
   useListProjectKey,
@@ -159,6 +161,17 @@ function BacklogView({ projectKey }: { projectKey: string }) {
   const [reloadNonce, setReloadNonce] = useState(0);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => readCollapsed(projectKey));
   const treeMode = view === "tree";
+
+  // RDM-150: keep update events queued while a drawer covers the list, then
+  // reload once when the last layer closes. While visible, reload immediately.
+  const eventInstanceId = useEventInstanceId();
+  const overlayOpen = useItemOverlayOpen();
+  useWorkItemUpdatedRefresh({
+    instanceId: eventInstanceId,
+    visible: !overlayOpen,
+    matches: (event) => event.projectKey === projectKey,
+    onRefresh: () => setReloadNonce((nonce) => nonce + 1),
+  });
 
   const patchParams = (patch: Record<string, string | null>, resetPage = true) => {
     const next = new URLSearchParams(searchParams);

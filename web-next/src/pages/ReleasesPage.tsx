@@ -22,11 +22,13 @@ import TruncatedText from "../components/TruncatedText";
 import TypeKindIcon from "../components/TypeKindIcon";
 import WorkItemPickerDialog from "../components/WorkItemPickerDialog";
 import { useAsync } from "../hooks/useAsync";
+import { useEventInstanceId, useWorkItemUpdatedRefresh } from "../hooks/useEventBus";
 import { api, errorCause } from "../lib/api";
 import { recallDetail, rememberDetail } from "../lib/detailCache";
 import { useNotify } from "../lib/flags";
 import { formatDate } from "../lib/format";
 import { allowDrawerEnter, suppressDrawerEnter } from "../lib/drawerMotion";
+import { useItemOverlayOpen } from "../lib/itemOverlayVisibility";
 import { useOpenWorkItem } from "../lib/itemOverlay";
 import {
   useListOrigin,
@@ -173,6 +175,22 @@ export default function ReleasesPage() {
       setDetail(res.data);
     }
   }, [detailId]);
+
+  // RDM-150: refresh the drawer scope after work items changed in a drawer
+  // opened above it (keep events while covered).
+  const eventInstanceId = useEventInstanceId();
+  const overlayOpen = useItemOverlayOpen();
+  useWorkItemUpdatedRefresh({
+    instanceId: eventInstanceId,
+    visible: !overlayOpen,
+    matches: (event) =>
+      event.projectKey === projectKey &&
+      (detail?.items?.some((item) => item.id === event.workItemId) ?? false),
+    onRefresh: () => {
+      void refreshDetail();
+      reload();
+    },
+  });
 
   const create = async (values: ReleaseFormValues) => {
     try {
