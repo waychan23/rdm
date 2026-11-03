@@ -6,6 +6,19 @@ import { BACKDROP_INTERACTIVE, itemOverlaySearch } from "../lib/itemOverlay";
 import "../styles/item.css";
 
 /**
+ * Whether the click landed inside one of `selector`'s matches. Uses the path
+ * captured when the event was dispatched because `event.target` may already be
+ * detached by the time this listener runs: inline fields swap their read view
+ * for the editor during the same click, and `closest()` on a detached node
+ * finds no ancestors (RDM-132/RDM-135).
+ */
+function clickPathMatches(event: MouseEvent, selector: string): boolean {
+  return event
+    .composedPath()
+    .some((node) => node instanceof Element && node.matches(selector));
+}
+
+/**
  * In-page work item drawer. It lives beside the current page (AppShell) so
  * opening/closing it never unmounts the page, its filters or an open
  * sprint/release detail drawer.
@@ -33,10 +46,8 @@ export default function ItemOverlayHost() {
   useEffect(() => {
     if (!open) return;
     const onClick = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (target.closest('[data-testid="item-panel"]')) return;
-      if (target.closest(BACKDROP_INTERACTIVE)) return;
+      if (clickPathMatches(event, '[data-testid="item-panel"]')) return;
+      if (clickPathMatches(event, BACKDROP_INTERACTIVE)) return;
       if (!window.getSelection()?.isCollapsed) return;
       close();
     };

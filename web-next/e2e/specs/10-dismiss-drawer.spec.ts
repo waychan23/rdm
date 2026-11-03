@@ -55,6 +55,37 @@ test.describe("work item drawer dismissal", () => {
     await expect(page.getByTestId("item-panel")).toBeVisible();
   });
 
+  test("clicking inline-editable title and description keeps the drawer open", async ({
+    api,
+    app,
+    page,
+  }) => {
+    const projectKey = await api.createSandboxProject();
+    const item = await api.createItemIn(projectKey, {
+      kind: "task",
+      title: `inline-edit-${Date.now()}`,
+      assignee: "alice",
+    });
+
+    await page.goto(`${app.baseURL}/projects/${projectKey}/backlog`);
+    await page.getByTestId(`work-item-row-${item.display_id}`).click();
+    await expect(page.getByTestId("item-panel")).toBeVisible();
+
+    // RDM-132/RDM-135: the click swaps the read view for the inline editor,
+    // detaching the clicked node before the document-level dismiss listener
+    // runs. The listener must still treat the click as inside the panel.
+    await page.getByTestId("item-panel-title").click();
+    await expect(page.getByTestId("item-panel-title-field-input")).toBeVisible();
+    await expect(page.getByTestId("item-panel")).toBeVisible();
+
+    await page
+      .getByTestId("item-panel-description")
+      .locator(".rdm-inline-read")
+      .click();
+    await expect(page.getByTestId("item-panel-description-input")).toBeVisible();
+    await expect(page.getByTestId("item-panel")).toBeVisible();
+  });
+
   test("the board keeps its cards across open and close", async ({ api, app, page }) => {
     const projectKey = await api.createSandboxProject();
     const item = await api.createItemIn(projectKey, {
