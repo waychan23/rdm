@@ -566,3 +566,73 @@ def test_nested_any_inside_and_is_validated() -> None:
     ]
     with pytest.raises(PydanticValidationError, match=r"when\.all\.and\.any: unknown child kinds"):
         WorkflowSpec.model_validate(raw)
+
+
+def test_trigger_status_must_exist_for_selected_child_workflows() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [
+        {
+            "trigger": {
+                "kinds": ["task"],
+                "tasktypes": ["frontend", "fullstack"],
+                # IN_REVIEW only exists on the code_review subtype.
+                "to": "IN_REVIEW",
+            },
+            "self": {"to": "DONE"},
+        }
+    ]
+    with pytest.raises(
+        PydanticValidationError,
+        match=r"trigger\.to: statuses \['IN_REVIEW'\] not in the selected child workflow states",
+    ):
+        WorkflowSpec.model_validate(raw)
+
+
+def test_when_status_is_scoped_to_the_enclosing_selection() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [
+        {
+            "when": {
+                "all": {
+                    "kinds": ["task"],
+                    "tasktypes": ["fullstack"],
+                    # TO_FIX is an issue state; the enclosing selector is dev tasks.
+                    "and": {"any": {"statuses": ["TO_FIX"]}},
+                }
+            },
+            "self": {"to": "DONE"},
+        }
+    ]
+    with pytest.raises(
+        PydanticValidationError,
+        match=r"when\.all\.and\.any: statuses \['TO_FIX'\] not in the selected",
+    ):
+        WorkflowSpec.model_validate(raw)
+
+
+def test_trigger_status_may_span_several_selected_kinds() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [
+        {
+            "trigger": {"kinds": ["task", "issue"], "to": "TO_FIX"},
+            "self": {"to": "DONE"},
+        }
+    ]
+    trigger = WorkflowSpec.model_validate(raw).resolve("story").child_triggers[0].trigger
+    assert trigger is not None
+    assert trigger.to.statuses == ("TO_FIX",)
+
+
+def test_tasktypes_alone_do_not_widen_the_scope_to_all_kinds() -> None:
+    raw = _raw()
+    raw["kinds"]["story"]["child_triggers"] = [
+        {
+            "trigger": {"tasktypes": ["fullstack"], "to": "TO_FIX"},
+            "self": {"to": "DONE"},
+        }
+    ]
+    with pytest.raises(
+        PydanticValidationError,
+        match=r"trigger\.to: statuses \['TO_FIX'\] not in the selected",
+    ):
+        WorkflowSpec.model_validate(raw)

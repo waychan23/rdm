@@ -1171,14 +1171,23 @@ class WorkflowSpec(BaseModel):
             raise ValueError(f"{where}: unknown task types {unknown_types}")
         if trigger.task_types and trigger.kinds and "task" not in trigger.kinds:
             raise ValueError(f"{where}: tasktypes requires kinds to be empty or include 'task'")
+        scope = self._selector_scope(trigger.kinds, trigger.task_types)
+        self._validate_statuses(trigger.from_.statuses, scope, f"{where}.from")
+        self._validate_statuses(trigger.to.statuses, scope, f"{where}.to")
 
     def _validate_when(self, when: TriggerWhen, where: str) -> None:
+        scope: tuple[frozenset[str], frozenset[str]] = (frozenset(self.kinds), frozenset())
         for key in ("any", "all"):
             clause = getattr(when, key)
             if clause is not None:
-                self._validate_quantifier(clause, f"{where}.{key}")
+                self._validate_quantifier(clause, f"{where}.{key}", scope)
 
-    def _validate_quantifier(self, clause: ChildQuantifier, where: str) -> None:
+    def _validate_quantifier(
+        self,
+        clause: ChildQuantifier,
+        where: str,
+        scope: tuple[frozenset[str], frozenset[str]],
+    ) -> None:
         unknown_kinds = sorted(set(clause.kinds) - set(self.kinds))
         if unknown_kinds:
             raise ValueError(f"{where}: unknown child kinds {unknown_kinds}")
@@ -1187,7 +1196,82 @@ class WorkflowSpec(BaseModel):
             raise ValueError(f"{where}: unknown task types {unknown_types}")
         if clause.task_types and clause.kinds and "task" not in clause.kinds:
             raise ValueError(f"{where}: tasktypes requires kinds to be empty or include 'task'")
+        # Nested clauses are evaluated over the enclosing selection, so their
+        # selectors can only narrow the workflows that may satisfy them.
+        scope = self._intersect_scope(scope, self._selector_scope(clause.kinds, clause.task_types))
+        self._validate_statuses(clause.statuses, scope, where)
         for key in ("any", "all", "and"):
             nested = clause.and_ if key == "and" else getattr(clause, key)
             if nested is not None:
-                self._validate_quantifier(nested, f"{where}.{key}")
+                self._validate_quantifier(nested, f"{where}.{key}", scope)
+
+    def _selector_scope(
+        self, kinds: tuple[str, ...], task_types: tuple[str, ...]
+    ) -> tuple[frozenset[str], frozenset[str]]:
+        """Child workflows a selector may match.
+
+        Returns ``(kinds, task_types)``; an empty ``task_types`` means any task
+        type, and an empty selector means every child kind.
+        """
+        if task_types:
+            # tasktypes alone already restricts the selection to task children.
+            scope_kinds = frozenset(kinds) if kinds else frozenset({"task"})
+            return scope_kinds | {"task"}, frozenset(task_types)
+        scope_kinds = frozenset(kinds) if kinds else frozenset(self.kinds)
+        return scope_kinds, frozenset()
+
+    @staticmethod
+    def _intersect_scope(
+        left: tuple[frozenset[str], frozenset[str]],
+        right: tuple[frozenset[str], frozenset[str]],
+    ) -> tuple[frozenset[str], frozenset[str]]:
+        kinds = left[0] & right[0]
+        if not kinds:
+            return frozenset(), frozenset()
+        # An empty type set on either side means "any task type".
+        left_types, right_types = left[1], right[1]
+        if left_types and right_types:
+            return kinds, left_types & right_types
+        return kinds, left_types or right_types
+
+    def _states_for(self, kind: str, task_type: str | None) -> tuple[str, ...]:
+        base = self.kinds[kind]
+        if kind == "task" and task_type is not None:
+            subtype = base.subtypes.get(task_type)
+            if subtype is not None and subtype.states is not None:
+                return subtype.states
+        return base.states
+
+    def _validate_statuses(
+        self,
+        statuses: tuple[str, ...],
+        scope: tuple[frozenset[str], frozenset[str]],
+        where: str,
+    ) -> None:
+        """Reject status names that no workflow in ``scope`` can reach.
+
+        A rule may span kinds with different concrete state names, so a status
+        is valid as long as one workflow in scope declares it.
+        """
+        kinds, task_types = scope
+        if not statuses or not kinds:
+            return
+        known: set[str] = set()
+        for kind in kinds:
+            if kind != "task":
+                known.update(self._states_for(kind, None))
+                continue
+            if task_types:
+                for task_type in task_types:
+                    known.update(self._states_for("task", task_type))
+            else:
+                # Any task type: the base graph plus every declared subtype.
+                known.update(self._states_for("task", None))
+                for subtype in self.kinds["task"].subtypes.values():
+                    if subtype.states is not None:
+                        known.update(subtype.states)
+        unknown = sorted(set(statuses) - known)
+        if unknown:
+            raise ValueError(
+                f"{where}: statuses {unknown} not in the selected child workflow states"
+            )

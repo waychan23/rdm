@@ -19,7 +19,7 @@
   // 配置修订号：修改任意配置语义内容（含结构变更）时必须 +1（注释/排版除外）。
   // 它仅随定义快照记录为 config_version；是否产生新的 work_item_workflow_version
   // 仍由生效定义的相等性判断决定，单独改 revision 不强制升版本。
-  revision: 18,
+  revision: 24,
   // 任务类型目录：code -> 中文标签；子类型 key 必须出现在这里。
   task_types: {
     other: "其他",
@@ -509,7 +509,7 @@
             any: {
               kinds: ["task"],
               tasktypes: ["frontend", "backend", "fullstack"],
-              statuses: ["IN_PROGRESS", "IN_REVIEW"]
+              statuses: ["IN_PROGRESS"]
             }
           },
           self: {
@@ -771,12 +771,36 @@
             any: {
               kinds: ["task"],
               tasktypes: ["frontend", "backend", "fullstack"],
-              statuses: ["IN_PROGRESS", "IN_REVIEW"]
+              statuses: ["IN_PROGRESS"]
             }
           },
           self: {
             from: ["TO_FIX"],
             to: "FIXING"
+          },
+          on_error: "ignore"
+        },
+        {
+          trigger: {
+            kinds: ["task"],
+            tasktypes: ["frontend", "backend", "fullstack"],
+            to: "TO_REVIEW"
+          },
+          when: {
+            all: {
+              kinds: ["task"],
+              tasktypes: ["frontend", "backend", "fullstack"],
+              statuses: ["TO_REVIEW", "DONE", "CANCELLED"],
+              and: {
+                any: {
+                  statuses: ["TO_REVIEW"]
+                }
+              }
+            }
+          },
+          self: {
+            from: ["FIXING"],
+            to: "TO_TEST"
           },
           on_error: "ignore"
         },
@@ -808,9 +832,12 @@
           },
           when: {
             all: {
+              kinds: ["task"],
               terminal: true,
               and: {
                 any: {
+                  kinds: ["task"],
+                  tasktypes: ["testing"],
                   main_terminal: true
                 }
               }
