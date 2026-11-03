@@ -100,17 +100,6 @@
   color: var(--ds-text-subtle);
   font-weight: var(--ds-font-weight-medium, 500);
 }
-/* The current display id is a copy action (RDM-136). */
-.rdm-item-breadcrumb-copy {
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  font: inherit;
-}
-.rdm-item-breadcrumb-copy:hover .rdm-item-breadcrumb-id {
-  text-decoration: underline;
-}
 .rdm-item-breadcrumb-sep {
   color: var(--ds-text-subtlest);
   flex-shrink: 0;

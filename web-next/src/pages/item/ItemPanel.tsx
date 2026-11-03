@@ -6,6 +6,7 @@ import { cssMap } from "@atlaskit/css";
 import { DatePicker } from "@atlaskit/datetime-picker";
 import Heading from "@atlaskit/heading";
 import ArrowLeftIcon from "@atlaskit/icon/core/arrow-left";
+import CopyIcon from "@atlaskit/icon/core/copy";
 import CrossIcon from "@atlaskit/icon/core/cross";
 import Link from "@atlaskit/link";
 import Lozenge from "@atlaskit/lozenge";
@@ -277,6 +278,14 @@ export default function ItemPanel({
     setRefreshKey((value) => value + 1);
   }, [load]);
 
+  // A covered layer was left mounted while the user worked on top of it (and
+  // may have deleted/edited entries it lists). Revalidate when it is revealed.
+  const wasCovered = useRef(covered);
+  useEffect(() => {
+    if (wasCovered.current && !covered) void refresh();
+    wasCovered.current = covered;
+  }, [covered, refresh]);
+
   /**
    * Save one field at a time. Inline editors stay open when this returns
    * false, so a conflict/validation error never discards the user's draft.
@@ -304,6 +313,9 @@ export default function ItemPanel({
   );
 
   useEffect(() => {
+    // Covered layers stay mounted but must not react to Escape: the visible
+    // top layer owns the key and only pops itself (RDM-136 feedback).
+    if (covered) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       if (
@@ -321,12 +333,15 @@ export default function ItemPanel({
         return;
       }
       event.preventDefault();
-      onClose();
+      if (onBack) onBack();
+      else onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     commentToDelete,
+    covered,
+    onBack,
     onClose,
     parentEditing,
     preview,
@@ -701,7 +716,9 @@ export default function ItemPanel({
       await api.del(`/work-items/${itemId}`);
       notify.success(t("panel.itemDeleted", { id: bundle?.item.display_id ?? itemId }));
       setConfirmDelete(false);
-      onClose();
+      // Close only the deleted item's layer; lower layers stay open (RDM-136).
+      if (onBack) onBack();
+      else onClose();
     } catch (e) {
       notify.error(t("panel.deleteFailed"), errorCause(e)?.message);
       setDeleting(false);
@@ -960,16 +977,17 @@ export default function ItemPanel({
                   </span>
                 )}
                 {last ? (
-                  <button
-                    type="button"
-                    className="rdm-item-breadcrumb-current rdm-item-breadcrumb-copy"
-                    aria-current="page"
-                    title={t("panel.copyDisplayId")}
-                    data-testid="item-panel-copy-id"
-                    onClick={() => void copyDisplayId(node.display_id)}
-                  >
+                  <span className="rdm-item-breadcrumb-current" aria-current="page">
                     {label}
-                  </button>
+                    <IconButton
+                      icon={(iconProps) => <CopyIcon {...iconProps} />}
+                      label={t("panel.copyDisplayId")}
+                      appearance="subtle"
+                      spacing="compact"
+                      testId="item-panel-copy-id"
+                      onClick={() => void copyDisplayId(node.display_id)}
+                    />
+                  </span>
                 ) : (
                   <button
                     type="button"
