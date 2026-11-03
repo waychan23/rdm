@@ -83,11 +83,23 @@ test("drawer stack: drill in, go back, promote duplicates, copy display id", asy
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(
     "sentinel",
   );
-  await page.locator('[data-testid="item-panel-copy-id"]:visible').click();
+  await page
+    .locator(`[data-testid="item-panel-copy-id-${second.display_id}"]:visible`)
+    .click();
   await expect(page.getByTestId("notice-success")).toContainText(second.display_id);
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toBe(second.display_id);
+
+  // Every breadcrumb level has its own copy icon; copying an ancestor must not
+  // navigate away from the current layer.
+  await page
+    .locator(`[data-testid="item-panel-copy-id-${story.display_id}"]:visible`)
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe(story.display_id);
+  await expect(visibleDisplayId).toHaveText(second.display_id);
 
   // Reopen the parent, then delete the other child: only its layer closes and
   // the parent stays open (and refreshes its children list).

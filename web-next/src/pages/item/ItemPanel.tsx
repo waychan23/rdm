@@ -979,14 +979,6 @@ export default function ItemPanel({
                 {last ? (
                   <span className="rdm-item-breadcrumb-current" aria-current="page">
                     {label}
-                    <IconButton
-                      icon={(iconProps) => <CopyIcon {...iconProps} />}
-                      label={t("panel.copyDisplayId")}
-                      appearance="subtle"
-                      spacing="compact"
-                      testId="item-panel-copy-id"
-                      onClick={() => void copyDisplayId(node.display_id)}
-                    />
                   </span>
                 ) : (
                   <button
@@ -998,6 +990,16 @@ export default function ItemPanel({
                     {label}
                   </button>
                 )}
+                {/* Every breadcrumb level gets its own copy affordance; the
+                    icon is a sibling so ancestor navigation keeps working. */}
+                <IconButton
+                  icon={(iconProps) => <CopyIcon {...iconProps} />}
+                  label={t("panel.copyDisplayId")}
+                  appearance="subtle"
+                  spacing="compact"
+                  testId={`item-panel-copy-id-${node.display_id}`}
+                  onClick={() => void copyDisplayId(node.display_id)}
+                />
               </Fragment>
             );
           })}
