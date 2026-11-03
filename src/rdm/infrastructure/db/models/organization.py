@@ -105,8 +105,9 @@ class UserModel(AuditMixin, SoftDeleteMixin, Base):
     notify_webhook_format: Mapped[str] = mapped_column(
         String(10), nullable=False, default="generic", server_default="generic"
     )
-    # Per-type in-app notification switches (§17 M7); missing key = enabled.
-    notification_prefs: Mapped[dict[str, bool]] = mapped_column(
+    # Per-channel/per-type notification switches (RDM-131); missing key =
+    # enabled. Legacy flat rows are interpreted as in-app switches.
+    notification_prefs: Mapped[dict] = mapped_column(
         JSON, nullable=False, default=dict, server_default="{}"
     )
     # argon2id password hash for console login; agents always have NULL (§16.55).

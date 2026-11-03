@@ -119,6 +119,24 @@ class CommentService:
                 }
             },
         )
+        if item.assignee_user_id:
+            from rdm.application.services.notification_service import NotificationService
+
+            await NotificationService(self.uow).create(
+                org_id=project.org_id,
+                recipient_user_id=item.assignee_user_id,
+                type="comment",
+                title_key="notification.comment_title",
+                title_params={"display_id": display_id},
+                body=body_md[:200],
+                project_id=project.id,
+                entity_type="work_item",
+                entity_id=item.id,
+                entity_ref=display_id,
+                url=f"/projects/{project.key}/items/{display_id}",
+                actor_id=actor.id,
+            )
+
         from rdm.application.services import webhook_notify
 
         await webhook_notify.notify_comment(

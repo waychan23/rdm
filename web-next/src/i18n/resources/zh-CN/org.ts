@@ -154,6 +154,9 @@ const org = {
     profile: {
       heading: "个人资料",
       displayName: "展示名称（可选，留空则显示登录名）",
+      email: "Email（可选，仅用于通知）",
+      webhook: "Webhook URL（可选，仅用于通知）",
+      webhookFormat: "Webhook 格式",
       save: "保存",
     },
     password: {
@@ -167,12 +170,22 @@ const org = {
     },
     notifications: {
       heading: "通知设置",
-      hint: "控制站内通知；关闭后仍可在「通知/待办」查看历史。",
+      hint: "按渠道分别选择要通知的内容；未配置 Email/Webhook 时，对应渠道不会发送。关闭站内通知后仍可在「通知/待办」查看历史。",
+      tableAria: "通知渠道设置",
+      content: "通知内容",
+      channels: {
+        inapp: "站内通知（通知/待办）",
+        email: "Email",
+        webhook: "Webhook",
+      },
+      mail: "站内信",
       assignment: "工作项指派",
       step: "步骤分配/审批",
       comment: "评论",
       mention: "被 @ 提到",
       system: "系统通知",
+      notApplicable: "—",
+      missingChannelHint: "填写 Email 或 Webhook 后，对应渠道才会实际发送。",
       saveFailed: "保存通知设置失败",
     },
     tokens: {

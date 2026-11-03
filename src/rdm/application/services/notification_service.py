@@ -8,24 +8,26 @@ and honour per-identity type switches.
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Mapping
 from typing import Any
 
 from rdm.application.security import assert_project_access
 from rdm.domain.actor import Actor
 from rdm.domain.entities import Notification, Project, User, WorkItem
 from rdm.domain.errors import NotFound, ValidationError
+from rdm.domain.notification_prefs import (
+    CHANNEL_TYPES,
+    INAPP_TYPES,
+    channel_enabled,
+    merge_prefs,
+    normalized_prefs,
+)
 from rdm.i18n import tr, translate
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.events.bus import StreamEvent, get_bus
 from rdm.infrastructure.id import new_id
 
-NOTIFICATION_TYPES: tuple[str, ...] = (
-    "assignment",
-    "step",
-    "comment",
-    "mention",
-    "system",
-)
+NOTIFICATION_TYPES: tuple[str, ...] = INAPP_TYPES
 
 
 class NotificationService:
@@ -63,7 +65,9 @@ class NotificationService:
             manager = await self.uow.users.get(recipient.manager_user_id or "")
             if manager is None or not manager.is_active:
                 return None
-        if recipient.notification_prefs.get(type) is False:
+        # Only the in-app record is governed here; email/webhook fan-out is
+        # enqueued independently by the event's own notification path.
+        if not channel_enabled(recipient.notification_prefs, "inapp", type):
             return None
         if actor_id is not None and actor_id == recipient_user_id:
             return None
@@ -276,20 +280,50 @@ class NotificationService:
 
     # --- preferences ------------------------------------------------------
 
-    async def get_prefs(self, actor: Actor) -> dict[str, bool]:
-        user = actor.identity
-        return {t: user.notification_prefs.get(t, True) for t in NOTIFICATION_TYPES}
+    async def get_prefs(self, actor: Actor) -> dict[str, dict[str, bool]]:
+        return normalized_prefs(actor.identity.notification_prefs)
 
-    async def set_prefs(self, actor: Actor, prefs: dict[str, bool]) -> dict[str, bool]:
-        unknown = set(prefs) - set(NOTIFICATION_TYPES)
-        if unknown:
-            raise ValidationError(
-                tr("notification.unknown_type", type=sorted(unknown)), details={"field": "prefs"}
-            )
+    async def set_prefs(self, actor: Actor, prefs: Mapping[str, Any]) -> dict[str, dict[str, bool]]:
+        patch = _validated_patch(prefs)
         assert self.uow.users is not None
         user = await self.uow.users.get(actor.id)
         if user is None:
             raise NotFound(tr("notification.user_not_found"), details={"user_id": actor.id})
-        user.notification_prefs = {**user.notification_prefs, **prefs}
+        user.notification_prefs = merge_prefs(user.notification_prefs, patch)
         await self.uow.users.update(user)
-        return {t: user.notification_prefs.get(t, True) for t in NOTIFICATION_TYPES}
+        return normalized_prefs(user.notification_prefs)
+
+
+def _validated_patch(prefs: Mapping[str, Any]) -> dict[str, dict[str, bool]]:
+    """Accept the channel matrix, or the legacy flat in-app switch map."""
+    if prefs and all(
+        key in INAPP_TYPES and isinstance(value, bool) for key, value in prefs.items()
+    ):
+        return {"inapp": dict(prefs)}
+    unknown_channels = set(prefs) - set(CHANNEL_TYPES)
+    if unknown_channels:
+        raise ValidationError(
+            tr("notification.unknown_channel", type=sorted(unknown_channels)),
+            details={"field": "prefs"},
+        )
+    patch: dict[str, dict[str, bool]] = {}
+    for channel, values in prefs.items():
+        if not isinstance(values, Mapping):
+            raise ValidationError(
+                tr("notification.invalid_channel_prefs", channel=channel),
+                details={"field": f"prefs.{channel}"},
+            )
+        unknown = set(values) - set(CHANNEL_TYPES[channel])
+        if unknown:
+            raise ValidationError(
+                tr("notification.unknown_type", type=sorted(unknown)),
+                details={"field": f"prefs.{channel}"},
+            )
+        invalid = [key for key, value in values.items() if not isinstance(value, bool)]
+        if invalid:
+            raise ValidationError(
+                tr("notification.invalid_channel_prefs", channel=channel),
+                details={"field": f"prefs.{channel}"},
+            )
+        patch[channel] = {str(key): value for key, value in values.items()}
+    return patch

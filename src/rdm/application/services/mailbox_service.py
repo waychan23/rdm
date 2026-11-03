@@ -718,6 +718,24 @@ class MailboxService:
             ref_items=[item],
             reply_to=None,
         )
+        from rdm.application.services.notification_service import NotificationService
+
+        notifications = NotificationService(self.uow)
+        for user in mentioned:
+            await notifications.create(
+                org_id=project.org_id,
+                recipient_user_id=user.id,
+                type="mention",
+                title_key="notification.mention_title",
+                title_params={"display_id": display_id},
+                body=body_md[:200],
+                project_id=project.id,
+                entity_type="work_item",
+                entity_id=item.id,
+                entity_ref=display_id,
+                url=f"/projects/{project.key}/items/{display_id}",
+                actor_id=actor.id,
+            )
         await self._append_message_event(project, actor, message, recipients, [item], mention=True)
 
     # --- events -----------------------------------------------------------
@@ -767,6 +785,7 @@ class MailboxService:
             sender=actor,
             recipients=recipient_users,
             ref_items=ref_items,
+            mention=mention,
         )
 
     async def _append_mailbox_event(

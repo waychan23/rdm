@@ -84,8 +84,9 @@ class User:
     email: str | None = None
     notify_webhook: str | None = None
     notify_webhook_format: str = "generic"
-    # Per-type in-app notification switches; missing keys default to enabled.
-    notification_prefs: dict[str, bool] = field(default_factory=dict)
+    # Per-channel/per-type notification switches (RDM-131); missing keys
+    # default to enabled. Legacy flat rows mean in-app switches.
+    notification_prefs: dict[str, Any] = field(default_factory=dict)
     # argon2id hash for console login; always None for agents (§16.55/§17).
     password_hash: str | None = None
     # Set on creation and after an admin reset; cleared by set-password.
@@ -748,8 +749,9 @@ class OutboxRow:
     project_id: str
     event_id: int
     target_url: str
-    format: str  # generic | dingtalk | feishu
+    format: str  # generic | dingtalk | feishu | email
     payload: dict[str, Any]
+    channel: str = "webhook"  # webhook | email (RDM-131)
     status: str = "pending"  # pending | delivering | delivered | failed
     attempts: int = 0
     next_attempt_at: dt.datetime | None = None

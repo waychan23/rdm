@@ -15,6 +15,8 @@ import datetime as dt
 import logging
 
 from rdm.config import Settings
+from rdm.domain.entities import OutboxRow
+from rdm.domain.errors import EmailSendFailed
 from rdm.infrastructure.webhook.sender import HttpxWebhookSender, SendResult
 from rdm.infrastructure.webhook.signing import WebhookSecretStore
 from rdm.interfaces.http.container import Container
@@ -88,9 +90,44 @@ class WebhookWorker:
         if not rows:
             return 0
         for row in rows:
-            result = await self._sender.post(row)
+            result = await self._deliver(row)
             await self._record(row.id, result)
         return len(rows)
+
+    async def _deliver(self, row: OutboxRow) -> SendResult:
+        if row.channel == "email":
+            return await self._send_email(row)
+        return await self._sender.post(row)
+
+    async def _send_email(self, row: OutboxRow) -> SendResult:
+        """SMTP delivery outside the write lock; config/address errors are final."""
+        async with self._container.uow() as uow:
+            assert uow.projects is not None
+            project = await uow.projects.get(row.project_id)
+            settings = (
+                await uow.email_settings.get(project.org_id)
+                if project is not None and uow.email_settings is not None
+                else None
+            )
+        if (
+            settings is None
+            or not settings.enabled
+            or not settings.smtp_host
+            or not settings.from_address
+        ):
+            return SendResult(False, 400, "email notifications are not configured")
+        subject = str(row.payload.get("subject") or "")
+        text = str(row.payload.get("text") or "")
+        try:
+            await self._container.email_sender.send(
+                settings,
+                recipients=[(row.target_url, "to")],
+                subject=subject,
+                text=text,
+            )
+        except EmailSendFailed as exc:
+            return SendResult(False, None, str(exc)[:900])
+        return SendResult(True, None, None)
 
     async def _record(self, row_id: str, result: SendResult) -> None:
         now = dt.datetime.now(dt.UTC)

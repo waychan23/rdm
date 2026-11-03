@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
@@ -30,7 +32,8 @@ class ReadAllIn(BaseModel):
 class PrefsIn(BaseModel):
     model_config = {"extra": "forbid"}
 
-    prefs: dict[str, bool]
+    # channel -> type -> enabled, or the legacy flat in-app map.
+    prefs: dict[str, Any]
 
 
 @router.get("/notifications")

@@ -68,6 +68,11 @@ class WebhookOutboxModel(Base):
     )
     target_url: Mapped[str] = mapped_column(String(1000), nullable=False)
     format: Mapped[str] = mapped_column(String(10), nullable=False)
+    # webhook | email: email rows target a user address and are delivered by
+    # the same worker through SMTP (RDM-131).
+    channel: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="webhook", server_default="webhook"
+    )
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(String(12), nullable=False, default="pending")
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

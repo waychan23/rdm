@@ -156,6 +156,9 @@ const org = {
     profile: {
       heading: "Profile",
       displayName: "Display name (optional, falls back to the login name)",
+      email: "Email (optional, notifications only)",
+      webhook: "Webhook URL (optional, notifications only)",
+      webhookFormat: "Webhook format",
       save: "Save",
     },
     password: {
@@ -169,12 +172,22 @@ const org = {
     },
     notifications: {
       heading: "Notification settings",
-      hint: "Controls in-app notifications; when off, you can still view history in “Notifications / To-dos”.",
+      hint: "Choose what each channel notifies you about. Email/Webhook are skipped until an address or URL is configured. With in-app notifications off, history stays available in “Notifications / To-dos”.",
+      tableAria: "Notification channel settings",
+      content: "Notification content",
+      channels: {
+        inapp: "In-app (notifications / to-dos)",
+        email: "Email",
+        webhook: "Webhook",
+      },
+      mail: "Mailbox messages",
       assignment: "Work item assignments",
       step: "Step assignments / approvals",
       comment: "Comments",
       mention: "@ mentions",
       system: "System notifications",
+      notApplicable: "—",
+      missingChannelHint: "Email or Webhook only sends after an address or URL is configured.",
       saveFailed: "Failed to save notification settings",
     },
     tokens: {

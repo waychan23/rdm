@@ -69,12 +69,22 @@ function webhookFormatOptions() {
   ];
 }
 
-const NOTIFICATION_PREFS = [
+type NotificationPrefs = Record<string, Record<string, boolean>>;
+
+// Matrix rows: wire values are product identifiers and stay untranslated.
+const NOTIFICATION_TYPES = [
+  { type: "mail", key: "personal.notifications.mail" },
   { type: "assignment", key: "personal.notifications.assignment" },
   { type: "step", key: "personal.notifications.step" },
   { type: "comment", key: "personal.notifications.comment" },
   { type: "mention", key: "personal.notifications.mention" },
   { type: "system", key: "personal.notifications.system" },
+] as const;
+
+const NOTIFICATION_CHANNELS = [
+  { channel: "inapp", key: "personal.notifications.channels.inapp" },
+  { channel: "email", key: "personal.notifications.channels.email" },
+  { channel: "webhook", key: "personal.notifications.channels.webhook" },
 ] as const;
 
 export default function PersonalSettingsPage() {
@@ -94,38 +104,63 @@ export default function PersonalSettingsPage() {
      async () => (await api.get<OrgUser[]>("/me/agents")).data,
      [nonce],
   );
-  const prefsState = useAsync<Record<string, boolean>>(
+  const prefsState = useAsync<NotificationPrefs>(
      async () =>
-       (await api.get<{ prefs: Record<string, boolean> }>("/me/notification-prefs")).data.prefs,
+       (await api.get<{ prefs: NotificationPrefs }>("/me/notification-prefs")).data.prefs,
      [nonce],
   );
-  const [prefs, setPrefs] = useState<Record<string, boolean>>({});
+  const [prefs, setPrefs] = useState<NotificationPrefs>({});
   useEffect(() => {
      if (prefsState.data) setPrefs(prefsState.data);
   }, [prefsState.data]);
   const loadError = tokensError ?? agentsError ?? prefsState.error;
 
-  const togglePref = async (type: string, enabled: boolean) => {
-     setPrefs((prev) => ({ ...prev, [type]: enabled }));
+  const prefEnabled = (channel: string, type: string) => prefs[channel]?.[type] ?? true;
+
+  const togglePref = async (channel: string, type: string, enabled: boolean) => {
+     setPrefs((prev) => ({
+       ...prev,
+       [channel]: { ...prev[channel], [type]: enabled },
+     }));
      try {
-       await api.patch("/me/notification-prefs", { prefs: { [type]: enabled } });
+       await api.patch("/me/notification-prefs", { prefs: { [channel]: { [type]: enabled } } });
      } catch (e) {
-       setPrefs((prev) => ({ ...prev, [type]: !enabled }));
+       setPrefs((prev) => ({
+         ...prev,
+         [channel]: { ...prev[channel], [type]: !enabled },
+       }));
        notify.error(t("personal.notifications.saveFailed"), errorCause(e)?.message);
      }
   };
 
   // --- profile ---
   const [profileDisplayName, setProfileDisplayName] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
+  const [profileWebhook, setProfileWebhook] = useState("");
+  const [profileWebhookFormat, setProfileWebhookFormat] = useState("generic");
   const [savingProfile, setSavingProfile] = useState(false);
   useEffect(() => {
      setProfileDisplayName(me?.user.display_name ?? "");
-  }, [me?.user.id, me?.user.display_name]);
+     setProfileEmail(me?.user.email ?? "");
+     setProfileWebhook(me?.user.notify_webhook ?? "");
+     setProfileWebhookFormat(me?.user.notify_webhook_format ?? "generic");
+  }, [
+    me?.user.id,
+    me?.user.display_name,
+    me?.user.email,
+    me?.user.notify_webhook,
+    me?.user.notify_webhook_format,
+  ]);
   const saveProfile = async () => {
      if (savingProfile) return;
      setSavingProfile(true);
      try {
-       await api.patch("/me", { display_name: profileDisplayName.trim() || null });
+       await api.patch("/me", {
+         display_name: profileDisplayName.trim() || null,
+         email: profileEmail.trim() || null,
+         notify_webhook: profileWebhook.trim() || null,
+         notify_webhook_format: profileWebhookFormat,
+       });
        await refreshSession();
        notify.success(t("personal.saved"));
      } catch (e) {
@@ -297,6 +332,36 @@ export default function PersonalSettingsPage() {
               onChange={(e) => setProfileDisplayName(e.currentTarget.value)}
             />
           </FormField>
+          <FormField label={t("personal.profile.email")} htmlFor="profile-email">
+            <Textfield
+              id="profile-email"
+              type="email"
+              value={profileEmail}
+              testId="personal-email"
+              onChange={(e) => setProfileEmail(e.currentTarget.value)}
+            />
+          </FormField>
+          <FormField label={t("personal.profile.webhook")} htmlFor="profile-webhook">
+            <Textfield
+              id="profile-webhook"
+              value={profileWebhook}
+              testId="personal-webhook"
+              onChange={(e) => setProfileWebhook(e.currentTarget.value)}
+            />
+          </FormField>
+          <FormField
+            label={t("personal.profile.webhookFormat")}
+            htmlFor="profile-webhook-format"
+          >
+            <Select
+              inputId="profile-webhook-format"
+              spacing="compact"
+              options={webhookFormats}
+              value={webhookFormats.find((o) => o.value === profileWebhookFormat)}
+              onChange={(option) => setProfileWebhookFormat(option?.value ?? "generic")}
+              testId="personal-webhook-format"
+            />
+          </FormField>
           <Inline>
             <Button
               appearance="primary"
@@ -355,17 +420,54 @@ export default function PersonalSettingsPage() {
            <Text size="small" color="color.text.subtle">
              {t("personal.notifications.hint")}
            </Text>
-           <Inline space="space.200" shouldWrap>
-             {NOTIFICATION_PREFS.map(({ type, key }) => (
-               <Checkbox
-                 key={type}
-                 label={t(key)}
-                 isChecked={prefs[type] ?? true}
-                 testId={`personal-notification-${type}`}
-                 onChange={(e) => void togglePref(type, e.currentTarget.checked)}
-               />
-             ))}
-           </Inline>
+           <table
+             className="rdm-table"
+             aria-label={t("personal.notifications.tableAria")}
+             data-testid="personal-notification-matrix"
+           >
+             <thead>
+               <tr>
+                 <th scope="col" className="col-person">
+                   {t("personal.notifications.content")}
+                 </th>
+                 {NOTIFICATION_CHANNELS.map(({ channel, key }) => (
+                   <th key={channel} scope="col" className="col-active">
+                     {t(key)}
+                   </th>
+                 ))}
+               </tr>
+             </thead>
+             <tbody>
+               {NOTIFICATION_TYPES.map(({ type, key }) => (
+                 <tr key={type}>
+                   <td>{t(key)}</td>
+                   {NOTIFICATION_CHANNELS.map(({ channel }) => (
+                     <td key={channel} className="col-active">
+                       {channel === "inapp" && type === "mail" ? (
+                         <Text size="small" color="color.text.subtlest">
+                           {t("personal.notifications.notApplicable")}
+                         </Text>
+                       ) : (
+                         <Checkbox
+                           label=""
+                           isChecked={prefEnabled(channel, type)}
+                           testId={`personal-notification-${channel}-${type}`}
+                           onChange={(e) =>
+                             void togglePref(channel, type, e.currentTarget.checked)
+                           }
+                         />
+                       )}
+                     </td>
+                   ))}
+                 </tr>
+               ))}
+             </tbody>
+           </table>
+           {!profileEmail.trim() || !profileWebhook.trim() ? (
+             <Text size="small" color="color.text.subtlest">
+               {t("personal.notifications.missingChannelHint")}
+             </Text>
+           ) : null}
          </Stack>
        </Box>
 

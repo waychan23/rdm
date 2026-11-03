@@ -24,6 +24,7 @@ from rdm.domain.entities import (
     User,
     WorkItem,
 )
+from rdm.domain.notification_prefs import channel_enabled
 from rdm.domain.timefmt import iso_utc
 from rdm.i18n import tr
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
@@ -231,6 +232,19 @@ def _human_summary(view: dict[str, Any]) -> tuple[str, list[str]]:
 # --- enqueue ---------------------------------------------------------------
 
 
+def notification_category(logical_event: str, data: dict[str, Any]) -> str:
+    """Map an event to the notification content category (RDM-131)."""
+    if logical_event == "work_item.assigned":
+        return "assignment"
+    if logical_event.startswith("work_item.step_"):
+        return "step"
+    if logical_event == "comment.created":
+        return "comment"
+    if logical_event == "mailbox.delivered":
+        return "mention" if data.get("mention") else "mail"
+    return "system"
+
+
 async def enqueue(
     uow: SqlAlchemyUnitOfWork,
     *,
@@ -241,10 +255,11 @@ async def enqueue(
     targets: Sequence[str] | None,
     data: dict[str, Any],
 ) -> int:
-    """Insert one pending outbox row per configured target member.
+    """Insert webhook/email outbox rows for the configured target members.
 
-    targets=None means "every active project member with a webhook"
-    (sprint broadcasts). The actor never receives their own event.
+    targets=None means "every active project member with a channel configured"
+    (sprint/release broadcasts). The actor never receives their own event.
+    Per-channel preferences filter each delivery independently (§17.162).
     """
     assert uow.users is not None and uow.outboxes is not None and uow.memberships is not None
     members = []
@@ -269,26 +284,57 @@ async def enqueue(
         data=data,
     )
     now = dt.datetime.now(dt.UTC)
+    category = notification_category(logical_event, data)
+    email_settings = (
+        await uow.email_settings.get(project.org_id) if uow.email_settings is not None else None
+    )
+    email_ready = bool(
+        email_settings is not None
+        and email_settings.enabled
+        and email_settings.smtp_host
+        and email_settings.from_address
+    )
+    email_subject, email_lines = _human_summary(view)
+    email_text = "\n".join(email_lines)
     rows = 0
     for member in members:
-        if not member.is_active or not member.notify_webhook:
-            continue
-        if member.id == actor_id:
+        if not member.is_active or member.id == actor_id:
             continue
         if target_set is not None and member.id not in target_set:
             continue
-        fmt = effective_format(member.notify_webhook_format, member.notify_webhook)
-        row = OutboxRow(
-            id=new_id(),
-            project_id=project.id,
-            event_id=event_id,
-            target_url=member.notify_webhook,
-            format=fmt,
-            payload=render_payload(fmt, view),
-            created_at=now,
-        )
-        await uow.outboxes.add(row)
-        rows += 1
+        if member.notify_webhook and channel_enabled(
+            member.notification_prefs, "webhook", category
+        ):
+            fmt = effective_format(member.notify_webhook_format, member.notify_webhook)
+            row = OutboxRow(
+                id=new_id(),
+                project_id=project.id,
+                event_id=event_id,
+                target_url=member.notify_webhook,
+                format=fmt,
+                payload=render_payload(fmt, view),
+                channel="webhook",
+                created_at=now,
+            )
+            await uow.outboxes.add(row)
+            rows += 1
+        if (
+            email_ready
+            and member.email
+            and channel_enabled(member.notification_prefs, "email", category)
+        ):
+            row = OutboxRow(
+                id=new_id(),
+                project_id=project.id,
+                event_id=event_id,
+                target_url=member.email,
+                format="email",
+                payload={"subject": email_subject, "text": email_text},
+                channel="email",
+                created_at=now,
+            )
+            await uow.outboxes.add(row)
+            rows += 1
     return rows
 
 
@@ -364,6 +410,7 @@ async def notify_message(
     sender: Actor,
     recipients: Sequence[User],
     ref_items: Sequence[WorkItem],
+    mention: bool = False,
 ) -> None:
     """message.sent fans out one mailbox.delivered row per recipient (§16.40)."""
     data_base = {
@@ -373,6 +420,7 @@ async def notify_message(
         "from_name": sender.label,
         "body_excerpt": _excerpt(message.body_md),
         "refs": [f"{project.key}-{i.display_no}" for i in ref_items],
+        "mention": mention,
     }
     await enqueue(
         uow,
