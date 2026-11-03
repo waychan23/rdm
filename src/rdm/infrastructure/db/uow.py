@@ -24,6 +24,7 @@ from rdm.infrastructure.db.repositories.collaboration import (
     CommentRepository,
     WorkspaceRepository,
 )
+from rdm.infrastructure.db.repositories.email import EmailSettingsRepository
 from rdm.infrastructure.db.repositories.event_store import EventStore
 from rdm.infrastructure.db.repositories.mailbox import (
     MailboxRepository,
@@ -106,6 +107,7 @@ class SqlAlchemyUnitOfWork:
         self.release_items: ProductReleaseItemRepository | None = None
         self.mailboxes: MailboxRepository | None = None
         self.messages: MessageRepository | None = None
+        self.email_settings: EmailSettingsRepository | None = None
         self.comments: CommentRepository | None = None
         self.attachments: AttachmentRepository | None = None
         self.artifacts: ArtifactRepository | None = None
@@ -145,6 +147,7 @@ class SqlAlchemyUnitOfWork:
             self.release_items = ProductReleaseItemRepository(self.session)
             self.mailboxes = MailboxRepository(self.session)
             self.messages = MessageRepository(self.session)
+            self.email_settings = EmailSettingsRepository(self.session)
             self.comments = CommentRepository(self.session)
             self.attachments = AttachmentRepository(self.session)
             self.artifacts = ArtifactRepository(self.session)

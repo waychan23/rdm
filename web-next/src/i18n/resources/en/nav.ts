@@ -16,6 +16,7 @@ const nav = {
     inbox: "Notifications / To-dos",
     orgUsers: "Users",
     workflows: "Workflow configs",
+    emailSettings: "Email",
     settings: "My settings",
   },
   topbar: {

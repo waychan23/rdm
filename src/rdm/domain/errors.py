@@ -31,6 +31,7 @@ class ErrorCode(StrEnum):
     RELEASE_NOT_READY = "RELEASE_NOT_READY"
     ATTACHMENT_TOO_LARGE = "ATTACHMENT_TOO_LARGE"
     UNSUPPORTED_MIME = "UNSUPPORTED_MIME"
+    EMAIL_SEND_FAILED = "EMAIL_SEND_FAILED"
     RDM_SERVER_UNREACHABLE = "RDM_SERVER_UNREACHABLE"
     AUTH_INVALID_TOKEN = "AUTH_INVALID_TOKEN"
     AUTH_INVALID_CREDENTIALS = "AUTH_INVALID_CREDENTIALS"
@@ -183,3 +184,10 @@ class AttachmentTooLarge(RdmError):
 class UnsupportedMime(RdmError):
     code = ErrorCode.UNSUPPORTED_MIME
     http_status = 415
+
+
+class EmailSendFailed(RdmError):
+    """SMTP delivery failed or outbound email is not configured (RDM-122)."""
+
+    code = ErrorCode.EMAIL_SEND_FAILED
+    http_status = 502

@@ -57,14 +57,17 @@ def register(mcp: FastMCP, container: Container) -> None:
         项目级或没有对应工作项的事项才用本工具。
         project 传当前绑定项目的 KEY，只向当前绑定项目发信；不要向其他项目
         发信，除非用户明确要求切换项目。
-        to/cc 传成员 name/id 或 group 名；refs 附工作项 id（KEY-42/ULID）。
+        to/cc 传成员 name/id、group 名或外部邮箱地址；外部地址走组织配置的
+        SMTP 发信（未配置时服务端报错）。refs 附工作项 id（KEY-42/ULID）。
         reply_to 传同一事项上一封信的 message_id（mailbox_check 返回的
         message_id），服务端记录 reply_to_id 形成回信链路；不要用「Re: 原题」
         另起一封新信。不要重复发送同一内容。
         """
 
         async def run(uow, actor):
-            _proj, message, count = await MailboxService(uow).send(
+            _proj, message, count, external_count = await MailboxService(
+                uow, email_sender=container.email_sender
+            ).send(
                 actor,
                 project,
                 to=to,
@@ -79,6 +82,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                     "message_id": message.id,
                     "reply_to_id": message.reply_to_id,
                     "deliveries": count,
+                    "external_recipients": external_count,
                 }
             )
 

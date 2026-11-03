@@ -117,6 +117,7 @@ class MessageRepository:
                 body_md=message.body_md,
                 reply_to_id=message.reply_to_id,
                 thread_id=message.thread_id,
+                external_recipients=message.external_recipients,
                 created_at=message.created_at,
             )
         )

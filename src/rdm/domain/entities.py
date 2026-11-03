@@ -492,6 +492,9 @@ class Message:
     reply_to_id: str | None = None
     # Root message id for threading (self for a new thread).
     thread_id: str | None = None
+    # External email recipients delivered via SMTP (RDM-122); internal
+    # deliveries live in message_delivery.
+    external_recipients: list[dict[str, str]] = field(default_factory=list)
     created_at: dt.datetime = field(default_factory=_utcnow)
     deleted_at: dt.datetime | None = None
     deleted_by: str | None = None
@@ -709,6 +712,34 @@ class Notification:
     read_at: dt.datetime | None = None
     created_at: dt.datetime = field(default_factory=_utcnow)
     created_by: str | None = None
+
+
+@dataclass(kw_only=True)
+class EmailSettings:
+    """Org-wide outbound SMTP configuration (RDM-122).
+
+    The SMTP password is stored encrypted (``password_ciphertext``) and never
+    serialized back to clients; Web users only learn whether one is set.
+    """
+
+    id: str
+    org_id: str
+    enabled: bool = False
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_security: str = "starttls"  # none | starttls | ssl
+    smtp_username: str | None = None
+    password_ciphertext: str | None = None
+    from_address: str | None = None
+    from_name: str | None = None
+    created_at: dt.datetime = field(default_factory=_utcnow)
+    created_by: str | None = None
+    updated_at: dt.datetime | None = None
+    updated_by: str | None = None
+
+    @property
+    def has_password(self) -> bool:
+        return bool(self.password_ciphertext)
 
 
 @dataclass(kw_only=True)

@@ -11,6 +11,7 @@ import auth from "./auth";
 import collab from "./collab";
 import common from "./common";
 import components from "./components";
+import emailSettings from "./emailSettings";
 import labels from "./labels";
 import nav from "./nav";
 import workflows from "./workflows";
@@ -34,4 +35,5 @@ export const en = {
   members,
   org,
   item,
+  emailSettings,
 };

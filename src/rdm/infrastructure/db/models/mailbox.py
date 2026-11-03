@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, text
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from rdm.infrastructure.db.base import AuditMixin, Base, SoftDeleteMixin
@@ -68,6 +68,10 @@ class MessageModel(SoftDeleteMixin, Base):
     body_md: Mapped[str] = mapped_column(Text, nullable=False)
     reply_to_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     thread_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # [{address, recipient_type}] delivered through SMTP (RDM-122).
+    external_recipients: Mapped[list[dict[str, str]]] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
+    )
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

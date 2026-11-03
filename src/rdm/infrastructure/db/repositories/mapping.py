@@ -8,6 +8,7 @@ from rdm.domain.entities import (
     Artifact,
     Attachment,
     Comment,
+    EmailSettings,
     IssueFields,
     Mailbox,
     MailboxMember,
@@ -46,6 +47,7 @@ from rdm.infrastructure.db.models import (
     ArtifactModel,
     AttachmentModel,
     CommentModel,
+    EmailSettingsModel,
     MailboxMemberModel,
     MailboxModel,
     MessageDeliveryModel,
@@ -321,9 +323,29 @@ def message_to_domain(row: MessageModel) -> Message:
         body_md=row.body_md,
         reply_to_id=row.reply_to_id,
         thread_id=row.thread_id,
+        external_recipients=list(row.external_recipients or []),
         created_at=row.created_at,
         deleted_at=row.deleted_at,
         deleted_by=row.deleted_by,
+    )
+
+
+def email_settings_to_domain(row: EmailSettingsModel) -> EmailSettings:
+    return EmailSettings(
+        id=row.id,
+        org_id=row.org_id,
+        enabled=row.enabled,
+        smtp_host=row.smtp_host,
+        smtp_port=row.smtp_port,
+        smtp_security=row.smtp_security,
+        smtp_username=row.smtp_username,
+        password_ciphertext=row.password_ciphertext,
+        from_address=row.from_address,
+        from_name=row.from_name,
+        created_at=row.created_at,
+        created_by=row.created_by,
+        updated_at=row.updated_at,
+        updated_by=row.updated_by,
     )
 
 

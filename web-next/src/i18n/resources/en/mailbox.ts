@@ -45,7 +45,7 @@ const mailbox = {
     allProjects: "All projects",
     allIdentities: "All identities",
     search: "Search subject/body",
-    selectRecipients: "Select members or group mailboxes",
+    selectRecipients: "Select members/groups, or type an external email",
     selectMembers: "Select members",
   },
   empty: {
@@ -73,6 +73,9 @@ const mailbox = {
   compose: {
     replyTitle: "Reply",
     newTitle: "New message",
+    externalHint:
+      "Type a full email address to send to an external mailbox (an admin must configure SMTP in Email settings first).",
+    createExternal: "Send to {{email}}",
   },
   group: {
     title: "Group mailboxes",

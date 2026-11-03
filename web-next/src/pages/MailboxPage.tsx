@@ -14,7 +14,7 @@ import ModalDialog, {
   ModalTitle,
   ModalTransition,
 } from "@atlaskit/modal-dialog";
-import Select from "@atlaskit/select";
+import Select, { CreatableSelect } from "@atlaskit/select";
 import Spinner from "@atlaskit/spinner";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
@@ -73,6 +73,12 @@ const styles = cssMap({
 interface Option {
   label: string;
   value: string;
+}
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+function isEmail(value: string): boolean {
+  return EMAIL_RE.test(value.trim());
 }
 
 export default function MailboxPage() {
@@ -726,14 +732,28 @@ export default function MailboxPage() {
             </ModalHeader>
             <ModalBody>
               <Stack space="space.150">
-                <FormField label={t("fields.recipients")} htmlFor="mail-to">
-                  <Select<Option, true> {...portalMenuProps}
+                <FormField
+                  label={t("fields.recipients")}
+                  htmlFor="mail-to"
+                  hint={t("compose.externalHint")}
+                >
+                  <CreatableSelect<Option, true> {...portalMenuProps}
                     inputId="mail-to"
                     isMulti
                     options={recipientOptions}
                     value={compose.to}
                     onChange={(opts) => setCompose({ ...compose, to: opts as Option[] })}
+                    isValidNewOption={(input) =>
+                      isEmail(input) &&
+                      !recipientOptions.some(
+                        (option) => option.value.toLowerCase() === input.trim().toLowerCase(),
+                      )
+                    }
+                    formatCreateLabel={(input) =>
+                      t("compose.createExternal", { email: input.trim() })
+                    }
                     placeholder={t("placeholders.selectRecipients")}
+                    testId="mailbox-compose-recipients"
                   />
                 </FormField>
                 <FormField label={t("fields.subject")} htmlFor="mail-subject">

@@ -357,6 +357,22 @@ export interface Mailbox {
   unread_count: number;
 }
 
+export type EmailSecurity = "none" | "starttls" | "ssl";
+
+export interface EmailSettings {
+  id: string;
+  enabled: boolean;
+  smtp_host: string | null;
+  smtp_port: number;
+  smtp_security: EmailSecurity;
+  smtp_username: string | null;
+  from_address: string | null;
+  from_name: string | null;
+  has_password: boolean;
+  updated_at?: string | null;
+  updated_by?: string | null;
+}
+
 export interface CustomFieldDef {
   key: string;
   label: string;

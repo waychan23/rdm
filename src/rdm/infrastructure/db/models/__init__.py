@@ -24,6 +24,7 @@ from rdm.infrastructure.db.models.oauth import (
     OAuthLoginTicketModel,
 )
 from rdm.infrastructure.db.models.organization import (
+    EmailSettingsModel,
     OrganizationModel,
     PasswordTicketModel,
     UserModel,
@@ -54,6 +55,7 @@ from rdm.infrastructure.db.models.workitem import (
 __all__ = [
     "Base",
     "OrganizationModel",
+    "EmailSettingsModel",
     "UserModel",
     "UserTokenModel",
     "PasswordTicketModel",

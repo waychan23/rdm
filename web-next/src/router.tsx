@@ -32,6 +32,7 @@ const MembersPage = lazy(() => import("./pages/MembersPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const OrgUsersPage = lazy(() => import("./pages/OrgUsersPage"));
 const WorkflowConfigsPage = lazy(() => import("./pages/WorkflowConfigsPage"));
+const EmailSettingsPage = lazy(() => import("./pages/EmailSettingsPage"));
 const PersonalSettingsPage = lazy(() => import("./pages/PersonalSettingsPage"));
 const ItemPage = lazy(() => import("./pages/ItemPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
@@ -101,6 +102,11 @@ export const router = createBrowserRouter([
       {
         path: "workflow-configs",
         Component: () => withSuspense(<WorkflowConfigsPage />),
+      },
+      {
+        path: "email-settings",
+        loader: requireOrgAdmin,
+        Component: () => withSuspense(<EmailSettingsPage />),
       },
       { path: "settings", Component: () => withSuspense(<PersonalSettingsPage />) },
       { path: "*", Component: () => withSuspense(<NotFoundPage />) },

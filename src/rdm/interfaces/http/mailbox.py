@@ -113,7 +113,9 @@ async def send_message(
     actor: Actor = Depends(get_actor),
 ) -> dict:
     async with container.uow() as uow:
-        _project, message, count = await MailboxService(uow).send(
+        _project, message, count, external_count = await MailboxService(
+            uow, email_sender=container.email_sender
+        ).send(
             actor,
             key,
             to=body.to,
@@ -128,6 +130,7 @@ async def send_message(
             "message_id": message.id,
             "reply_to_id": message.reply_to_id,
             "deliveries": count,
+            "external_recipients": external_count,
         }
     }
 

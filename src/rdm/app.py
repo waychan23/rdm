@@ -17,6 +17,7 @@ from rdm.interfaces.http.auth import router as auth_router
 from rdm.interfaces.http.comments import router as comments_router
 from rdm.interfaces.http.container import Container
 from rdm.interfaces.http.dispatch import OAUTH_PREFIX, OAuthRoutesOnly, RootDispatch
+from rdm.interfaces.http.email_settings import router as email_settings_router
 from rdm.interfaces.http.errors import install_exception_handlers
 from rdm.interfaces.http.local import router as local_router
 from rdm.interfaces.http.logging import RequestContextMiddleware, configure_logging
@@ -126,6 +127,7 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     app.include_router(workspaces_router)
     app.include_router(workflow_router)
     app.include_router(workflow_config_router)
+    app.include_router(email_settings_router)
     app.include_router(overview_router)
     app.include_router(notifications_router)
     app.include_router(todos_router)

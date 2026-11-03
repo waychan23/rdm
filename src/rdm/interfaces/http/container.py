@@ -23,6 +23,7 @@ from rdm.domain.errors import AuthInvalidToken
 from rdm.i18n import tr
 from rdm.infrastructure.db.session import make_engine, make_session_factory
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
+from rdm.infrastructure.email.sender import EmailSecretBox, SmtpEmailSender
 from rdm.infrastructure.files.local_store import LocalFileStore
 
 
@@ -34,6 +35,8 @@ class Container:
         self.authenticator = Authenticator(self.session_factory)
         self.file_store: FileStore = LocalFileStore(settings.projects_dir)
         self.attachment_signer = AttachmentUrlSigner.from_path(settings.attachment_secret_path)
+        self.email_secret_box = EmailSecretBox.from_path(settings.email_secret_path)
+        self.email_sender = SmtpEmailSender(self.email_secret_box)
         # One process-local login throttle shared for the app's life (§16.55).
         self.login_throttler = LoginThrottler()
 

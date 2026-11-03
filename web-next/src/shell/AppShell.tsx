@@ -300,6 +300,10 @@ export default function AppShell() {
               who?.org_roles.includes("user_manager")) && (
               <RailItem to="/workflow-configs" label={t("rail.workflows")} testId="workflow-configs" icon={BranchIcon} />
             )}
+            {(who?.org_roles.includes("org_owner") ||
+              who?.org_roles.includes("user_manager")) && (
+              <RailItem to="/email-settings" label={t("rail.emailSettings")} testId="email-settings" icon={EmailIcon} />
+            )}
             <RailItem to="/settings" label={t("rail.settings")} testId="settings" icon={SettingsIcon} end />
           </div>
           {projectKey && (

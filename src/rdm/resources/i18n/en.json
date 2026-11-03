@@ -356,5 +356,19 @@
     "publish_reason": "Shipped with release {name}",
     "resource_label": "release",
     "date_invalid": "target_date must be YYYY-MM-DD; got {value!r}"
+  },
+  "email": {
+    "disabled": "Outbound email is disabled; configure an SMTP server in Email settings first.",
+    "incomplete": "Email settings are incomplete: SMTP host and sender address are required.",
+    "send_failed": "SMTP delivery failed: {reason}",
+    "password_decrypt_failed": "The SMTP password cannot be decrypted (the secret key may have changed). Enter the password again in Email settings.",
+    "settings_required": "Only an organization owner or user manager can manage email settings.",
+    "host_required": "SMTP host is required when outbound email is enabled.",
+    "from_required": "Sender address is required when outbound email is enabled.",
+    "address_invalid": "Invalid email address: {value!r}",
+    "port_invalid": "SMTP port must be between 1 and 65535.",
+    "security_invalid": "SMTP security must be none/starttls/ssl.",
+    "test_subject": "rdm email settings test",
+    "test_body": "Hi {name},\n\nThis is a test message from rdm; your SMTP configuration works."
   }
 }

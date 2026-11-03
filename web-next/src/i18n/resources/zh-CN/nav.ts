@@ -16,6 +16,7 @@ const nav = {
     inbox: "通知/待办",
     orgUsers: "用户",
     workflows: "工作流",
+    emailSettings: "邮件设置",
     settings: "我的",
   },
   topbar: {

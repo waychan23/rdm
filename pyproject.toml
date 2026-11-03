@@ -36,6 +36,7 @@ dependencies = [
     "python-ulid",
     "python-multipart",
     "argon2-cffi>=25.1.0",
+    "cryptography>=43",
     "pyjson5>=2.0.1",
 ]
 

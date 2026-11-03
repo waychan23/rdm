@@ -126,6 +126,11 @@ class Settings(BaseSettings):
         return self.data_dir / "attachment-secret"
 
     @property
+    def email_secret_path(self) -> Path:
+        """Fernet key protecting the stored SMTP password (RDM-122)."""
+        return self.data_dir / "email-secret"
+
+    @property
     def internal_base_url(self) -> str:
         """Origin the server actually binds."""
         host = f"[{self.host}]" if ":" in self.host else self.host

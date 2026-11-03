@@ -32,6 +32,45 @@ class OrganizationModel(Base):
     updated_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class EmailSettingsModel(Base):
+    """One outbound SMTP configuration per organization (RDM-122)."""
+
+    __tablename__ = "email_settings"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    org_id: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("organization.id", deferrable=True, initially="DEFERRED"),
+        nullable=False,
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    smtp_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    smtp_port: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=587, server_default="587"
+    )
+    smtp_security: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="starttls", server_default="starttls"
+    )
+    smtp_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    password_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
+    from_address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    from_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    updated_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "smtp_security in ('none', 'starttls', 'ssl')",
+            name="ck_email_settings_security",
+        ),
+        Index("ux_email_settings_org", "org_id", unique=True),
+    )
+
+
 class UserModel(AuditMixin, SoftDeleteMixin, Base):
     """Human and agent identities owned by the organization (§17).
 

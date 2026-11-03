@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 
 from rdm.application.dto import user_brief
 from rdm.application.services.attachment_commit import commit_inline_images
+from rdm.application.services.email_settings_service import is_email_address
 from rdm.application.services.membership_service import MembershipService
 from rdm.application.services.workitem_service import WorkItemService
 from rdm.domain.actor import Actor
@@ -35,19 +36,23 @@ from rdm.domain.entities import (
     WorkItem,
 )
 from rdm.domain.enums import MailboxKind, RecipientType
-from rdm.domain.errors import NotFound, ValidationError
+from rdm.domain.errors import EmailSendFailed, NotFound, ValidationError
 from rdm.domain.events import EventType
 from rdm.domain.timefmt import iso_utc
 from rdm.i18n import tr
 from rdm.infrastructure.db.errors import translate_integrity
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
+from rdm.infrastructure.email.sender import SmtpEmailSender
 from rdm.infrastructure.id import new_id
 
 
 class MailboxService:
-    def __init__(self, uow: SqlAlchemyUnitOfWork) -> None:
+    def __init__(
+        self, uow: SqlAlchemyUnitOfWork, *, email_sender: SmtpEmailSender | None = None
+    ) -> None:
         self.uow = uow
         self.items = WorkItemService(uow)
+        self.email_sender = email_sender
 
     # --- provisioning -----------------------------------------------------
 
@@ -153,7 +158,7 @@ class MailboxService:
         body_md: str,
         refs: Sequence[str] = (),
         reply_to: str | None = None,
-    ) -> tuple[Project, Message, int]:
+    ) -> tuple[Project, Message, int, int]:
         project = await self.items.resolve_project(actor, project_key)
         subject = (subject or "").strip()
         body_md = (body_md or "").strip()
@@ -166,8 +171,8 @@ class MailboxService:
                 tr("comment.body_required", default="body_md 必填"), details={"field": "body_md"}
             )
 
-        recipients = await self._resolve_recipients(project.id, to, cc)
-        if not recipients:
+        recipients, external = await self._resolve_recipients(project.id, to, cc)
+        if not recipients and not external:
             raise ValidationError(
                 tr("mailbox.recipient_required", default="至少需要一个收件人"),
                 details={"field": "to"},
@@ -194,10 +199,35 @@ class MailboxService:
             ref_items=ref_items,
             reply_to=reply_to,
             thread_id=thread_id,
+            external=external,
         )
+        if external:
+            await self._send_external(actor, external, subject=subject, body_md=body_md)
         await commit_inline_images(self.uow, project.id, body_md)
         await self._append_message_event(project, actor, message, recipients, ref_items)
-        return project, message, len(deliveries)
+        return project, message, len(deliveries), len(external)
+
+    async def _send_external(
+        self,
+        actor: Actor,
+        external: Sequence[dict[str, str]],
+        *,
+        subject: str,
+        body_md: str,
+    ) -> None:
+        if self.email_sender is None:
+            raise EmailSendFailed(tr("email.disabled"))
+        assert self.uow.email_settings is not None
+        settings = await self.uow.email_settings.get(actor.org_id)
+        if settings is None:
+            raise EmailSendFailed(tr("email.disabled"))
+        await self.email_sender.send(
+            settings,
+            recipients=[(row["address"], row["recipient_type"]) for row in external],
+            subject=subject,
+            text=body_md,
+            reply_to=actor.human.email,
+        )
 
     async def _fan_out(
         self,
@@ -210,6 +240,7 @@ class MailboxService:
         ref_items: Sequence[WorkItem],
         reply_to: str | None,
         thread_id: str | None = None,
+        external: Sequence[dict[str, str]] = (),
     ) -> tuple[Message, list[MessageDelivery]]:
         assert self.uow.messages is not None
         now = dt.datetime.now(dt.UTC)
@@ -220,6 +251,7 @@ class MailboxService:
             subject=subject,
             body_md=body_md,
             reply_to_id=reply_to,
+            external_recipients=list(external),
             created_at=now,
         )
         message.thread_id = thread_id or message.id
@@ -257,37 +289,50 @@ class MailboxService:
 
     async def _resolve_recipients(
         self, project_id: str, to: Sequence[str], cc: Sequence[str]
-    ) -> dict[str, str]:
-        """user_id -> 'to'/'cc'; to wins over cc; group names expand."""
+    ) -> tuple[dict[str, str], list[dict[str, str]]]:
+        """Split recipients into internal members and external email addresses.
+
+        Internal: user_id -> 'to'/'cc'; to wins over cc; group names expand.
+        External: [{address, recipient_type}] deduplicated with to winning.
+        Unknown tokens that are not email addresses still fail (never guess).
+        """
         result: dict[str, str] = {}
-        # to first: a later cc for the same member must not downgrade it.
+        external: dict[str, str] = {}
+        # to first: a later cc for the same recipient must not downgrade it.
         tokens = [(t, RecipientType.to) for t in to]
         tokens += [(t, RecipientType.cc) for t in cc]
         memberships = MembershipService(self.uow)
         users = await memberships.users_index(project_id)
         for token, kind in tokens:
+            token = (token or "").strip()
+            if not token:
+                continue
             user = users.get(token) or next((u for u in users.values() if u.name == token), None)
             if user is not None:
                 result.setdefault(user.id, kind)
                 continue
             assert self.uow.mailboxes is not None
             group = await self.uow.mailboxes.get_group_by_name(project_id, token)
-            if group is None:
-                raise NotFound(
-                    tr(
-                        "mailbox.recipient_not_found",
-                        default=(
-                            "收件人 {token!r} 既不是项目成"
-                            "员也不是 group 信箱；请先确认"
-                            "名字，不要猜。"
-                        ),
-                        token=token,
+            if group is not None:
+                for link in await self.uow.mailboxes.list_members(group.id):
+                    result.setdefault(link.user_id, kind)
+                continue
+            if is_email_address(token):
+                external.setdefault(token.lower(), kind)
+                continue
+            raise NotFound(
+                tr(
+                    "mailbox.recipient_not_found",
+                    default=(
+                        "收件人 {token!r} 既不是项目成员也不是 group 信箱；请先确认名字，不要猜。"
                     ),
-                    details={"ref": token},
-                )
-            for link in await self.uow.mailboxes.list_members(group.id):
-                result.setdefault(link.user_id, kind)
-        return result
+                    token=token,
+                ),
+                details={"ref": token},
+            )
+        return result, [
+            {"address": address, "recipient_type": kind} for address, kind in external.items()
+        ]
 
     async def _user(self, project_id: str, user_id: str) -> User:
         assert self.uow.users is not None and self.uow.memberships is not None
@@ -485,6 +530,20 @@ class MailboxService:
                     "recipient_type": delivery.recipient_type,
                 }
             )
+        for message in page:
+            for external in message.external_recipients or []:
+                address = external.get("address") or ""
+                if not address:
+                    continue
+                recipients.setdefault(message.id, []).append(
+                    {
+                        "id": address,
+                        "name": address,
+                        "display_name": None,
+                        "type": "external",
+                        "recipient_type": external.get("recipient_type") or "to",
+                    }
+                )
         refs = await self.uow.messages.list_refs([m.id for m in page])
         item_by_id = {}
         if len(project_ids) == 1 and refs:

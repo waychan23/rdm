@@ -356,5 +356,19 @@
     "publish_reason": "随版本 {name} 发布",
     "resource_label": "版本",
     "date_invalid": "target_date 必须是 YYYY-MM-DD，收到 {value!r}"
+  },
+  "email": {
+    "disabled": "外部邮件未启用，请先在「邮件设置」中配置 SMTP 服务器。",
+    "incomplete": "邮件设置不完整：需要 SMTP 主机和发信人地址。",
+    "send_failed": "SMTP 发送失败：{reason}",
+    "password_decrypt_failed": "无法解密 SMTP 密码（密钥文件可能已更换），请在「邮件设置」中重新填写密码。",
+    "settings_required": "权限不足：只有组织所有者或用户管理员可以管理邮件设置。",
+    "host_required": "启用外部邮件时 SMTP 主机必填。",
+    "from_required": "启用外部邮件时发信人地址必填。",
+    "address_invalid": "邮箱地址格式不正确：{value!r}",
+    "port_invalid": "SMTP 端口必须在 1-65535 之间。",
+    "security_invalid": "SMTP 加密方式必须是 none/starttls/ssl。",
+    "test_subject": "rdm 邮件设置测试",
+    "test_body": "{name} 你好：\n\n这是一封来自 rdm 的测试邮件，说明 SMTP 配置可用。"
   }
 }

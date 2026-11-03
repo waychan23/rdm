@@ -45,7 +45,7 @@ const mailbox = {
     allProjects: "全部项目",
     allIdentities: "全部身份",
     search: "搜索主题/正文",
-    selectRecipients: "选择成员或群信箱",
+    selectRecipients: "选择成员/群信箱，或输入外部邮箱",
     selectMembers: "选择成员",
   },
   empty: {
@@ -73,6 +73,9 @@ const mailbox = {
   compose: {
     replyTitle: "回复信件",
     newTitle: "发站内信",
+    externalHint:
+      "输入完整邮箱地址可发送到外部邮箱（需管理员先在「邮件设置」中配置 SMTP）。",
+    createExternal: "发送到 {{email}}",
   },
   group: {
     title: "群信箱",
