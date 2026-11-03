@@ -24,7 +24,7 @@ import {
 import { recall, remember } from "../lib/pageCache";
 import { appContentScrollTop, rememberScroll } from "../lib/scrollMemory";
 import type { WorkItem, WorkflowDto } from "../types";
-import { KIND_VALUES, PAGE_SIZE } from "../workitems/constants";
+import { BOARD_COLUMN_PAGE_SIZE, KIND_VALUES } from "../workitems/constants";
 import { useWorkItemViewMemory } from "../workitems/viewMemory";
 import BoardCard from "./board/BoardCard";
 import BoardColumn from "./board/BoardColumn";
@@ -181,7 +181,7 @@ export default function BoardPage() {
     async (status: string, offset: number, generation: number, silent = false) => {
       const params = new URLSearchParams(stateRef.current.filterParams);
       params.set("status", status);
-      params.set("limit", String(PAGE_SIZE));
+      params.set("limit", String(BOARD_COLUMN_PAGE_SIZE));
       params.set("offset", String(offset));
       setColumns((prev) => {
         const current = prev[status];

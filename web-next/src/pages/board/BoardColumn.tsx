@@ -146,5 +146,6 @@ const styles = cssMap({
   // needs an explicit flex row (Text is inline-level).
   message: {
     justifyContent: "center",
+    paddingBlock: "var(--ds-space-100)",
   },
 });

@@ -42,3 +42,6 @@ export function taskTypeOptions(): { value: string; label: string }[] {
 }
 
 export const PAGE_SIZE = 20;
+// Board columns paginate independently and keep their own scroll offset; a
+// smaller page avoids over-fetching while the column scrolls in more rows.
+export const BOARD_COLUMN_PAGE_SIZE = 10;

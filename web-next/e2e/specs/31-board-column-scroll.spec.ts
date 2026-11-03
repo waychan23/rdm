@@ -19,8 +19,10 @@ test("board columns scroll and paginate independently", async ({ api, app, page 
   await expect(page.getByTestId("board-column-count-TODO")).toHaveText("25");
 
   const body = page.getByTestId("board-column-body-TODO");
-  // Only the first page is rendered until the column is scrolled down.
-  await expect(todo.locator('[data-testid^="board-card-"]')).toHaveCount(20);
+  const cards = todo.locator('[data-testid^="board-card-"]');
+  // Board columns fetch 10 rows per page (BOARD_COLUMN_PAGE_SIZE); only the
+  // first page is rendered until the column is scrolled down.
+  await expect(cards).toHaveCount(10);
   await expect(page.getByTestId("board-column-end-TODO")).toHaveCount(0);
   expect(
     await body.evaluate((el) => el.scrollHeight > el.clientHeight),
@@ -29,7 +31,12 @@ test("board columns scroll and paginate independently", async ({ api, app, page 
   await body.evaluate((el) => {
     el.scrollTop = el.scrollHeight;
   });
-  await expect(todo.locator('[data-testid^="board-card-"]')).toHaveCount(25);
+  await expect(cards).toHaveCount(20);
+
+  await body.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await expect(cards).toHaveCount(25);
   await expect(page.getByTestId("board-column-end-TODO")).toContainText("没有更多数据");
 
   // The header (status + count) is outside the scroll body and stays visible.

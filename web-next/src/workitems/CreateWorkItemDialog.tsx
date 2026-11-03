@@ -233,10 +233,17 @@ export default function CreateWorkItemDialog({
   const parentKinds = parentLocked ? [] : allowedParentKinds(kind);
   const kindChoices = kindOptions().filter((option) => kinds.includes(option.value));
 
+  // Escape must not discard a half-filled create form; only the explicit
+  // Close/Cancel actions close it.
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog onClose={onClose} width="680px" testId="work-item-create-dialog">
+        <ModalDialog
+          onClose={onClose}
+          shouldCloseOnEscapePress={false}
+          width="680px"
+          testId="work-item-create-dialog"
+        >
           <ModalHeader>
             <ModalTitle>{dialogTitle ?? t("create.title")}</ModalTitle>
           </ModalHeader>
