@@ -3,11 +3,16 @@ import type { LoaderFunctionArgs } from "react-router-dom";
 import { Navigate, createBrowserRouter, redirect } from "react-router-dom";
 
 import Spinner from "@atlaskit/spinner";
+import { cssMap } from "@atlaskit/css";
 import { Box } from "@atlaskit/primitives/compiled";
 
 import { ensureSession } from "./lib/auth";
 import AppShell from "./shell/AppShell";
 import LoginPage from "./pages/LoginPage";
+
+const styles = cssMap({
+  fallback: { padding: "var(--ds-space-400)" },
+});
 
 // Route-level code splitting (the old single chunk was >1MB; Batch 6).
 const AuthCallbackPage = lazy(() => import("./pages/AuthCallbackPage"));
@@ -53,7 +58,7 @@ function withSuspense(node: ReactNode) {
   return (
     <Suspense
       fallback={
-        <Box padding="space.400" style={{ display: "flex", justifyContent: "center" }}>
+        <Box xcss={styles.fallback} style={{ display: "flex", justifyContent: "center" }}>
           <Spinner size="large" />
         </Box>
       }

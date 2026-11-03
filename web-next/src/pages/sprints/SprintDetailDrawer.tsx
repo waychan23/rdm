@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import Button from "@atlaskit/button/default/button";
+import { cssMap } from "@atlaskit/css";
 import Drawer from "@atlaskit/drawer";
 import Heading from "@atlaskit/heading";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
@@ -21,6 +22,10 @@ import type { SprintDetail, WorkItem } from "../../types";
 import StatusLozenge from "../../workitems/status";
 import SprintFormDialog, { type SprintFormValues } from "./SprintFormDialog";
 import { sprintLozenge } from "./sprintStatus";
+
+const styles = cssMap({
+  detail: { padding: "var(--ds-space-300)" },
+});
 
 interface Props {
   projectKey: string;
@@ -153,7 +158,7 @@ export default function SprintDetailDrawer({
       >
         {detail && (
           <div className="rdm-drawer-scroll">
-            <Box padding="space.300" testId="sprint-detail">
+            <Box xcss={styles.detail} testId="sprint-detail">
               <Stack space="space.200">
               <Inline space="space.150" alignBlock="center">
                 {sprintLozenge(detail.status)}

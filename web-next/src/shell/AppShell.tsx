@@ -5,7 +5,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from "reac
 import { cssMap } from "@atlaskit/css";
 import IconButton from "@atlaskit/button/icon/button";
 import Badge from "@atlaskit/badge";
-import { Box, Inline, Text } from "@atlaskit/primitives/compiled";
+import { Box, Flex, Inline, Text } from "@atlaskit/primitives/compiled";
 
 import TruncatedText from "../components/TruncatedText";
 import NotificationIcon from "@atlaskit/icon/core/notification";
@@ -95,6 +95,12 @@ const styles = cssMap({
   bellWrapper: {
     display: "inline-flex",
     position: "relative",
+  },
+  iconSpacing: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "var(--ds-space-050)",
   },
 });
 
@@ -220,7 +226,11 @@ export default function AppShell() {
           />
           <Box xcss={styles.bellWrapper}>
             <IconButton
-              icon={(iconProps) => <InboxIcon {...iconProps} spacing="spacious" />}
+              icon={(iconProps) => (
+                <Flex xcss={styles.iconSpacing}>
+                  <InboxIcon {...iconProps} />
+                </Flex>
+              )}
               label={t("topbar.notifications")}
               appearance="subtle"
               testId="topbar-inbox"
@@ -234,7 +244,11 @@ export default function AppShell() {
           </Box>
           <Box xcss={styles.bellWrapper}>
             <IconButton
-              icon={(iconProps) => <NotificationIcon {...iconProps} spacing="spacious" />}
+              icon={(iconProps) => (
+                <Flex xcss={styles.iconSpacing}>
+                  <NotificationIcon {...iconProps} />
+                </Flex>
+              )}
               label={t("topbar.mailbox")}
               appearance="subtle"
               testId="topbar-mailbox"

@@ -53,6 +53,21 @@ const styles = cssMap({
     justifyContent: "center",
     padding: "var(--ds-space-400)",
   },
+  messageBody: {
+    paddingInlineStart: "var(--ds-space-300)",
+  },
+  threadCard: {
+    padding: "var(--ds-space-100)",
+  },
+  threadBody: {
+    paddingBlockStart: "var(--ds-space-100)",
+  },
+  loadMore: {
+    paddingBlock: "var(--ds-space-200)",
+  },
+  groupCard: {
+    padding: "var(--ds-space-100)",
+  },
 });
 
 interface Option {
@@ -460,7 +475,7 @@ export default function MailboxPage() {
               {t("actions.reply")}
             </TextButton>
           </Inline>
-          <Box paddingInlineStart="space.300">
+          <Box xcss={styles.messageBody}>
             <MarkdownText source={m.body_md} onImageClick={setPreview} />
           </Box>
           {m.refs.length > 0 && (
@@ -629,7 +644,7 @@ export default function MailboxPage() {
                   <Box
                     key={thread.id}
                     style={cardBorder}
-                    padding="space.100"
+                    xcss={styles.threadCard}
                     testId={`mailbox-thread-${thread.id}`}
                   >
                     <Box
@@ -674,7 +689,7 @@ export default function MailboxPage() {
                       </Inline>
                     </Box>
                     {!collapsed && (
-                      <Box paddingBlockStart="space.100">
+                      <Box xcss={styles.threadBody}>
                         <Stack space="space.100">
                           {thread.messages.map((m) => renderMessage(m))}
                         </Stack>
@@ -689,7 +704,7 @@ export default function MailboxPage() {
       )}
 
       {nextCursor && (
-        <Box paddingBlock="space.200" style={{ textAlign: "center" }}>
+        <Box xcss={styles.loadMore} style={{ textAlign: "center" }}>
           <Button testId="mailbox-load-more" onClick={() => void fetchPage(nextCursor, false)}>
             {t("actions.loadMore")}
           </Button>
@@ -801,7 +816,12 @@ export default function MailboxPage() {
                 </Button>
                 <Stack space="space.050" testId="mailbox-group-list">
                   {groups.map((g) => (
-                    <Box key={g.id} style={cardBorder} padding="space.100" testId={`mailbox-group-${g.id}`}>
+                    <Box
+                      key={g.id}
+                      style={cardBorder}
+                      xcss={styles.groupCard}
+                      testId={`mailbox-group-${g.id}`}
+                    >
                       <Inline space="space.100" alignBlock="center" shouldWrap>
                         <Text weight="medium">{g.name}</Text>
                         <Text size="small" color="color.text.subtlest">

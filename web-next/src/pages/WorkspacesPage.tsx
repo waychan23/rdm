@@ -42,6 +42,9 @@ const styles = cssMap({
     justifyContent: "center",
     padding: "var(--ds-space-400)",
   },
+  saveError: {
+    paddingBlockEnd: "var(--ds-space-150)",
+  },
 });
 
 interface Option {
@@ -239,7 +242,7 @@ export default function WorkspacesPage() {
             </ModalHeader>
             <ModalBody>
               {saveError && (
-                <Box paddingBlockEnd="space.150">
+                <Box xcss={styles.saveError}>
                   <SectionMessage
                     appearance="error"
                     title={t("workspaces.saveFailed")}

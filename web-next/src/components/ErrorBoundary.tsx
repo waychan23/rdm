@@ -1,10 +1,15 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
 import Button from "@atlaskit/button/default/button";
+import { cssMap } from "@atlaskit/css";
 import SectionMessage from "@atlaskit/section-message";
 import { Box } from "@atlaskit/primitives/compiled";
 
 import { i18n } from "../i18n";
+
+const styles = cssMap({
+  padded: { padding: "var(--ds-space-600)" },
+});
 
 interface Props {
   children: ReactNode;
@@ -30,7 +35,7 @@ export default class ErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <Box padding="space.600" testId="error-boundary">
+      <Box xcss={styles.padded} testId="error-boundary">
         <SectionMessage
           appearance="error"
           title={i18n.t("error.pageError", { ns: "common" })}

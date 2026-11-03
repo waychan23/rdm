@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import Button from "@atlaskit/button/default/button";
+import { cssMap } from "@atlaskit/css";
 import EmptyState from "@atlaskit/empty-state";
 import Spinner from "@atlaskit/spinner";
 import { Box, Text } from "@atlaskit/primitives/compiled";
@@ -22,6 +23,10 @@ import { sprintLozenge } from "./sprints/sprintStatus";
 import "../styles/table.css";
 
 const centeredRow = { display: "flex", justifyContent: "center" } as const;
+
+const styles = cssMap({
+  loading: { padding: "var(--ds-space-400)" },
+});
 
 export default function SprintsPage() {
   const { t } = useTranslation("sprints");
@@ -78,7 +83,7 @@ export default function SprintsPage() {
       {error ? (
         <ErrorState error={error} onRetry={reload} testId="sprints-error" />
       ) : loading ? (
-        <Box padding="space.400" style={centeredRow} testId="sprints-loading">
+        <Box xcss={styles.loading} style={centeredRow} testId="sprints-loading">
           <Spinner size="large" />
         </Box>
       ) : (sprints ?? []).length === 0 ? (

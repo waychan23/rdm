@@ -48,6 +48,7 @@ const styles = cssMap({
   },
   meta: {
     color: "var(--ds-text-subtlest)",
+    paddingBlockEnd: "var(--ds-space-200)",
   },
 });
 
@@ -192,7 +193,7 @@ export default function WorkflowConfigsPage() {
   return (
     <Page testId="page-workflow-configs">
       <PageHeader title={t("title")} testId="workflow-configs-header" />
-      <Box xcss={styles.meta} paddingBlockEnd="space.200">
+      <Box xcss={styles.meta}>
         <Text size="small">{t("subtitle")}</Text>
       </Box>
 

@@ -19,24 +19,21 @@ export default function LocaleSwitcher() {
   ];
   const current = options.find((option) => option.value === apiLocale()) ?? options[0];
   return (
-    <Select<LocaleOption>
-      options={options}
-      value={current}
-      onChange={(option) => {
-        if (option) void setLocale(option.value);
-      }}
-      spacing="compact"
-      appearance="subtle"
-      isSearchable={false}
-      aria-label={t("locale.label")}
-      testId="locale-switcher"
-      menuPortalTarget={document.body}
-      menuPosition="fixed"
-      styles={{
-        container: (base) => ({ ...base, width: WIDTH }),
-        control: (base) => ({ ...base, minHeight: 32 }),
-        menuPortal: (base) => ({ ...base, zIndex: 600 }),
-      }}
-    />
+    <div style={{ width: WIDTH }}>
+      <Select<LocaleOption>
+        options={options}
+        value={current}
+        onChange={(option) => {
+          if (option) void setLocale(option.value);
+        }}
+        spacing="compact"
+        appearance="subtle"
+        isSearchable={false}
+        label={t("locale.label")}
+        testId="locale-switcher"
+        menuPortalTarget={document.body}
+        menuPosition="fixed"
+      />
+    </div>
   );
 }

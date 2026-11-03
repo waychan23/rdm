@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
 import Button from "@atlaskit/button/default/button";
+import { cssMap } from "@atlaskit/css";
 import Drawer from "@atlaskit/drawer";
 import EmptyState from "@atlaskit/empty-state";
 import Heading from "@atlaskit/heading";
@@ -38,6 +39,11 @@ import ReleaseFormDialog, { type ReleaseFormValues } from "./releases/ReleaseFor
 import "../styles/table.css";
 
 const centeredRow = { display: "flex", justifyContent: "center" } as const;
+
+const styles = cssMap({
+  loading: { padding: "var(--ds-space-400)" },
+  detail: { padding: "var(--ds-space-300)" },
+});
 
 function ReleaseStatusLozenge({ status }: { status: string }) {
   const { t } = useTranslation("releases");
@@ -256,7 +262,7 @@ export default function ReleasesPage() {
       {error ? (
         <ErrorState error={error} onRetry={reload} testId="releases-error" />
       ) : loading ? (
-        <Box padding="space.400" style={centeredRow} testId="releases-loading">
+        <Box xcss={styles.loading} style={centeredRow} testId="releases-loading">
           <Spinner size="large" />
         </Box>
       ) : (releases ?? []).length === 0 ? (
@@ -363,7 +369,7 @@ export default function ReleasesPage() {
       >
         {detail && (
           <div className="rdm-drawer-scroll">
-            <Box padding="space.300" testId="release-detail">
+            <Box xcss={styles.detail} testId="release-detail">
               <Stack space="space.200">
               <Inline space="space.150" alignBlock="center" shouldWrap>
                 <ReleaseStatusLozenge status={detail.status} />

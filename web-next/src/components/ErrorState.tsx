@@ -1,9 +1,14 @@
 import Button from "@atlaskit/button/default/button";
+import { cssMap } from "@atlaskit/css";
 import SectionMessage from "@atlaskit/section-message";
 import { Box, Inline } from "@atlaskit/primitives/compiled";
 import { useTranslation } from "react-i18next";
 
 import { errorCause } from "../lib/api";
+
+const styles = cssMap({
+  padded: { padding: "var(--ds-space-400)" },
+});
 
 interface Props {
   error: unknown;
@@ -22,7 +27,7 @@ export default function ErrorState({
   const { t } = useTranslation("common");
   const cause = errorCause(error);
   return (
-    <Box padding="space.400" testId={testId}>
+    <Box xcss={styles.padded} testId={testId}>
       <SectionMessage
         appearance="error"
         title={title ?? t("error.loadFailed")}

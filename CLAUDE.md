@@ -59,8 +59,7 @@ human/agent 协同研发管理工具：Python/FastAPI/FastMCP 单体，两个组
 - **改完前端必须跑 `pnpm -C web-next lint`**（type-aware ESLint，`@typescript-eslint/no-deprecated` 为 error）。
   ADS 的废弃 API 以组件 JSDoc 的 `@deprecated` 为准，按提示的替代方案改，不要使用已废弃 prop
   （例如 `ModalDialog` 的 `shouldCloseOnEscapePress` 已废弃，应在 `onClose` 里按条件拦截）。
-  历史存量违例记录在 `web-next/eslint-suppressions.json`，不要手工新增 suppression；修完用
-  `eslint src --prune-suppressions` 收紧基线。
+  不要用 `eslint-disable` 绕过；如果确实无法避免，先和用户确认。
 
 ## 后端铁律
 

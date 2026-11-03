@@ -84,6 +84,10 @@ const pageStyles = cssMap({
     justifyContent: "center",
     padding: "var(--ds-space-400)",
   },
+
+  treeTruncated: {
+    paddingBlockEnd: "var(--ds-space-150)",
+  },
 });
 
 interface ItemsResult {
@@ -278,7 +282,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
         ) : (
           <>
             {treeMode && itemsData?.truncated && (
-              <Box paddingBlockEnd="space.150" testId="work-item-tree-truncated">
+              <Box xcss={pageStyles.treeTruncated} testId="work-item-tree-truncated">
                 <SectionMessage appearance="warning">
                   {t("backlog.treeTruncated", { limit: TREE_LIMIT })}
                 </SectionMessage>

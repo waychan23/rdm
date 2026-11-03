@@ -34,6 +34,9 @@ const styles = cssMap({
     justifyContent: "center",
     padding: "var(--ds-space-400)",
   },
+  snippet: {
+    paddingBlockStart: "var(--ds-space-050)",
+  },
 });
 
 export default function SearchPage() {
@@ -134,7 +137,7 @@ export default function SearchPage() {
                 </Text>
               </Inline>
               {hit.snippet ? (
-                <Box paddingBlockStart="space.050">
+                <Box xcss={styles.snippet}>
                   <Text size="small" color="color.text.subtle">
                     {hit.snippet}
                   </Text>

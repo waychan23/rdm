@@ -65,8 +65,8 @@ jobs:
       # --ignore-scripts also keeps the install independent of build approval.
       - name: Install
         run: pnpm install --frozen-lockfile --ignore-scripts
-      # Type-aware `@typescript-eslint/no-deprecated` gate. Pre-existing ADS
-      # deprecations are recorded in eslint-suppressions.json; new code fails.
+      # Type-aware `@typescript-eslint/no-deprecated` gate; any deprecated
+      # ADS prop/API fails the build.
       - name: Lint (deprecated APIs)
         run: pnpm lint
       - name: Type-check and build

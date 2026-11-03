@@ -53,6 +53,9 @@ const styles = cssMap({
   sectionTitle: {
     marginBlockStart: "var(--ds-space-200)",
   },
+  notificationBody: {
+    paddingBlockStart: "var(--ds-space-050)",
+  },
 });
 
 function unreadStyle(read: boolean) {
@@ -310,7 +313,7 @@ export default function InboxPage() {
                   </Text>
                 </Inline>
                 {n.body ? (
-                  <Box paddingBlockStart="space.050">
+                  <Box xcss={styles.notificationBody}>
                     <Text color="color.text.subtle" size="small">
                       {n.body}
                     </Text>

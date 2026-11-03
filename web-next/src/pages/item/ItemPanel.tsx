@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 
 import Button from "@atlaskit/button/default/button";
 import IconButton from "@atlaskit/button/icon/button";
+import { cssMap } from "@atlaskit/css";
 import { DatePicker } from "@atlaskit/datetime-picker";
 import Heading from "@atlaskit/heading";
 import CrossIcon from "@atlaskit/icon/core/cross";
@@ -69,6 +70,15 @@ import {
   type MemberOption,
 } from "./InlineFields";
 import WorkItemFieldsView from "./WorkItemFieldsView";
+
+const styles = cssMap({
+  padded400: { padding: "var(--ds-space-400)" },
+  paddingBlockStart200: { paddingBlockStart: "var(--ds-space-200)" },
+  paddingBlockStart100: { paddingBlockStart: "var(--ds-space-100)" },
+  paddingBlockStart050: { paddingBlockStart: "var(--ds-space-050)" },
+  paddingBlockEnd150: { paddingBlockEnd: "var(--ds-space-150)" },
+  paddingBlockEnd100: { paddingBlockEnd: "var(--ds-space-100)" },
+});
 
 interface Props {
   projectKey: string;
@@ -732,9 +742,9 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   if (loadError) {
     return (
       <aside className="rdm-item-panel" aria-label={t("panel.ariaLabel")} data-testid="item-panel">
-        <Box padding="space.400">
+        <Box xcss={styles.padded400}>
           <SectionMessage appearance="error">{t("panel.loadFailed")}</SectionMessage>
-          <Box paddingBlockStart="space.200">
+          <Box xcss={styles.paddingBlockStart200}>
             <Button appearance="primary" testId="item-panel-error-back" onClick={onClose}>
               {t("panel.backToList")}
             </Button>
@@ -746,7 +756,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
   if (!bundle) {
     return (
       <aside className="rdm-item-panel" aria-label={t("panel.ariaLabel")} data-testid="item-panel">
-        <Box padding="space.400" testId="item-panel-loading">
+        <Box xcss={styles.padded400} testId="item-panel-loading">
           <Spinner size="large" />
         </Box>
       </aside>
@@ -1221,7 +1231,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
               );
             })}
             {hasMoreComments && (
-              <Box paddingBlockStart="space.100">
+              <Box xcss={styles.paddingBlockStart100}>
                 <TextButton
                   data-testid="item-comment-more"
                   onClick={() => void loadMoreComments()}
@@ -1240,7 +1250,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
 
         <section className="rdm-item-fields" data-testid="item-panel-fields">
           {gateMessage && (
-            <Box paddingBlockEnd="space.150">
+            <Box xcss={styles.paddingBlockEnd150}>
               <SectionMessage appearance="warning" onDismiss={() => setGateMessage(null)}>
                 {gateMessage}
               </SectionMessage>
@@ -1265,7 +1275,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                     {t("panel.noParent")}
                   </Text>
                 )}
-                <Box paddingBlockStart="space.100">
+                <Box xcss={styles.paddingBlockStart100}>
                   {parentEditing ? (
                     <Stack space="space.100">
                       <WorkItemPicker
@@ -1316,7 +1326,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
                     {t("panel.noSprint")}
                   </Text>
                 )}
-                <Box paddingBlockStart="space.100">
+                <Box xcss={styles.paddingBlockStart100}>
                   {sprintEditing ? (
                     <Stack space="space.100">
                       <Box testId="item-sprint-picker">
@@ -1430,7 +1440,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
           <div className="rdm-item-field" data-testid="item-field-steps">
             <div className="rdm-item-section-label">{t("panel.availableSteps")}</div>
             {activeStep && (
-              <Box paddingBlockEnd="space.100">
+              <Box xcss={styles.paddingBlockEnd100}>
                 <ActiveStepCard
                   step={activeStep}
                   onExecute={() =>
@@ -1484,7 +1494,7 @@ export default function ItemPanel({ projectKey, itemId, onClose, onOpenItem }: P
             {steps.some(
               (step) => !step.can_start && !step.can_execute && step.blocked_reasons.length > 0,
             ) && (
-              <Box paddingBlockStart="space.050">
+              <Box xcss={styles.paddingBlockStart050}>
                 <Text size="small" color="color.text.subtlest">
                   {steps
                     .filter((step) => !step.can_start && !step.can_execute)
