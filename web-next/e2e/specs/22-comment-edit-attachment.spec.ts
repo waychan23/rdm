@@ -37,4 +37,41 @@ test.describe("comments and attachments", () => {
     await expect(page.getByTestId("attachment-preview-dialog")).toBeVisible();
     await expect(page.getByTestId("attachment-preview-body")).toContainText("hello preview");
   });
+
+  test("preview a docx attachment", async ({ api, app, page }) => {
+    const item = await api.createItem({
+      kind: "task",
+      title: `docx-preview-${Date.now()}`,
+    });
+
+    await openItem(page, app, item);
+    await page.getByTestId("item-attachment-input").setInputFiles("e2e/fixtures/sample.docx");
+    const attachmentRow = page
+      .locator('[data-testid^="item-attachment-"]')
+      .filter({ hasText: "sample.docx" });
+    await expect(attachmentRow).toBeVisible();
+    await attachmentRow.getByText("预览", { exact: true }).click();
+    await expect(page.getByTestId("attachment-preview-body")).toContainText(
+      "hello office preview",
+      { timeout: 20_000 },
+    );
+  });
+
+  test("preview a pdf attachment", async ({ api, app, page }) => {
+    const item = await api.createItem({
+      kind: "task",
+      title: `pdf-preview-${Date.now()}`,
+    });
+
+    await openItem(page, app, item);
+    await page.getByTestId("item-attachment-input").setInputFiles("e2e/fixtures/sample.pdf");
+    const attachmentRow = page
+      .locator('[data-testid^="item-attachment-"]')
+      .filter({ hasText: "sample.pdf" });
+    await expect(attachmentRow).toBeVisible();
+    await attachmentRow.getByText("预览", { exact: true }).click();
+    await expect(page.getByTestId("attachment-preview-body").locator("canvas")).toBeVisible({
+      timeout: 20_000,
+    });
+  });
 });

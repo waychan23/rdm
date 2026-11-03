@@ -1,3 +1,4 @@
+import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 import compiled from "@compiled/vite-plugin";
 import react from "@vitejs/plugin-react";
@@ -21,6 +22,11 @@ export default defineConfig({
     // pnpm + Atlaskit transitive deps must resolve a single React copy. The
     // Compiled runtime must also be a single copy for class-name parity.
     dedupe: ["react", "react-dom", "@compiled/react"],
+    alias: {
+      // pdf.js requires this from its Node-only canvas factory; the real
+      // package has a native binding that cannot be bundled for the browser.
+      "@napi-rs/canvas": fileURLToPath(new URL("./src/lib/nodeOnlyCanvas.ts", import.meta.url)),
+    },
   },
   server: {
     proxy: {
