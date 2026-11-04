@@ -8,6 +8,7 @@ import {
   popItemOverlay,
   pushItemOverlay,
 } from "../lib/itemOverlay";
+import { hasOpenModalDialog } from "../lib/modalDialog";
 import {
   nextItemOverlayHostId,
   useItemOverlayHost,
@@ -88,18 +89,26 @@ export default function ItemOverlayHost() {
     };
     let startedBlank = false;
     let endedBlank = false;
+    // Snapshot at pointerdown: an open dialog owns this gesture, and the
+    // dialog may already have unmounted by the time `click` fires.
+    let startedWithDialog = false;
     const onPointerDown = (event: PointerEvent) => {
       startedBlank = isBlank(event);
       endedBlank = false;
+      startedWithDialog = hasOpenModalDialog();
     };
     const onPointerUp = (event: PointerEvent) => {
       endedBlank = isBlank(event);
     };
     const onClick = (event: MouseEvent) => {
       const blankClick = startedBlank && endedBlank && isBlank(event);
+      const withDialog = startedWithDialog || hasOpenModalDialog();
       startedBlank = false;
       endedBlank = false;
-      if (!blankClick) return;
+      startedWithDialog = false;
+      // A dialog above the drawer owns the backdrop (RDM-163): a stray click
+      // while a half-filled form is open must not also dismiss the drawer.
+      if (!blankClick || withDialog) return;
       if (!window.getSelection()?.isCollapsed) return;
       close();
     };

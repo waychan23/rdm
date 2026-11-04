@@ -80,6 +80,7 @@ import { useNotify } from "../../lib/flags";
 import { useEventInstanceId } from "../../hooks/useEventBus";
 import { useWorkItemUpdatedSubscription } from "../../hooks/useWorkItemEvents";
 import { flattenMembers, loadProjectMembers } from "../../lib/members";
+import { hasOpenModalDialog } from "../../lib/modalDialog";
 import { portalMenuProps } from "../../lib/portalMenu";
 import { userLabel } from "../../lib/users";
 import type {
@@ -444,7 +445,7 @@ export default function ItemPanel({
       // DOM instead of listing each dialog's state flag: dialogs opened by
       // child sections (create/link child) are not local state here, and a
       // newly added one must not let Escape fall through to the drawer.
-      if (document.querySelector('[role="dialog"]')) return;
+      if (hasOpenModalDialog()) return;
       event.preventDefault();
       if (onBack) onBack();
       else onClose();
