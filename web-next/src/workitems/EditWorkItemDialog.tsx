@@ -227,7 +227,13 @@ export default function EditWorkItemDialog({
   return (
     <ModalTransition>
       {open && item && (
-        <ModalDialog onClose={onClose} width="680px" testId="work-item-edit-dialog">
+        <ModalDialog
+          onClose={onClose}
+          width="680px"
+          // Backdrop clicks must not discard a half-filled form (RDM-163).
+          shouldCloseOnOverlayClick={false}
+          testId="work-item-edit-dialog"
+        >
           <ModalHeader>
             <ModalTitle>{t("edit.title")}</ModalTitle>
           </ModalHeader>

@@ -84,7 +84,13 @@ export default function StepExecuteDialog({
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog onClose={onClose} width="640px" testId="step-execute-dialog">
+        <ModalDialog
+          onClose={onClose}
+          width="640px"
+          // Backdrop clicks must not discard a half-filled form (RDM-163).
+          shouldCloseOnOverlayClick={false}
+          testId="step-execute-dialog"
+        >
           <ModalHeader>
             <ModalTitle>{t("stepExecute.title", { name: stepName })}</ModalTitle>
           </ModalHeader>

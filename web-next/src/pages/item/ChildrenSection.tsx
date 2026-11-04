@@ -84,7 +84,13 @@ function LinkChildDialog({
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog onClose={onClose} width="640px" testId="link-child-dialog">
+        <ModalDialog
+          onClose={onClose}
+          width="640px"
+          // Backdrop clicks must not discard a half-filled form (RDM-163).
+          shouldCloseOnOverlayClick={false}
+          testId="link-child-dialog"
+        >
           <ModalHeader>
             <ModalTitle>{t("children.linkTitle", { id: parent.display_id })}</ModalTitle>
           </ModalHeader>

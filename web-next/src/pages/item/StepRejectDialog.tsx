@@ -44,7 +44,13 @@ export default function StepRejectDialog({ open, stepName, onClose, onConfirm }:
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog onClose={onClose} width="520px" testId="step-reject-dialog">
+        <ModalDialog
+          onClose={onClose}
+          width="520px"
+          // Backdrop clicks must not discard a half-filled form (RDM-163).
+          shouldCloseOnOverlayClick={false}
+          testId="step-reject-dialog"
+        >
           <ModalHeader>
             <ModalTitle>{t("stepReject.title", { name: stepName })}</ModalTitle>
           </ModalHeader>

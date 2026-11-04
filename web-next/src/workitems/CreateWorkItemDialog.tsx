@@ -249,7 +249,13 @@ export default function CreateWorkItemDialog({
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog onClose={interceptClose} width="680px" testId="work-item-create-dialog">
+        <ModalDialog
+          onClose={interceptClose}
+          width="680px"
+          // A stray backdrop click must not discard a half-filled form (RDM-163).
+          shouldCloseOnOverlayClick={false}
+          testId="work-item-create-dialog"
+        >
           <ModalHeader>
             <ModalTitle>{dialogTitle ?? t("create.title")}</ModalTitle>
           </ModalHeader>

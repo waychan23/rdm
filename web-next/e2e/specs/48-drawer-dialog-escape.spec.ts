@@ -36,9 +36,8 @@ test("Escape with a child-create dialog open keeps both layers", async ({
 });
 
 // A blank click with a dialog open is an accidental backdrop hit, not a
-// request to dismiss the drawer: the drawer stays put (the dialog may close
-// through its own backdrop behaviour).
-test("blank click with a child-create dialog open keeps the drawer", async ({
+// request to dismiss anything: both the drawer and the half-filled form stay.
+test("blank click with a child-create dialog open keeps both layers", async ({
   api,
   app,
   page,
@@ -56,8 +55,10 @@ test("blank click with a child-create dialog open keeps the drawer", async ({
   await expect(panel).toBeVisible();
 
   await page.getByTestId("item-child-create").click();
-  await expect(page.getByTestId("work-item-create-dialog")).toBeVisible();
+  const dialog = page.getByTestId("work-item-create-dialog");
+  await expect(dialog).toBeVisible();
 
   await page.mouse.click(700, 20);
+  await expect(dialog).toBeVisible();
   await expect(panel).toBeVisible();
 });

@@ -64,7 +64,13 @@ export default function StepStartDialog({
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog onClose={onClose} width="560px" testId="step-start-dialog">
+        <ModalDialog
+          onClose={onClose}
+          width="560px"
+          // Backdrop clicks must not discard a half-filled form (RDM-163).
+          shouldCloseOnOverlayClick={false}
+          testId="step-start-dialog"
+        >
           <ModalHeader>
             <ModalTitle>
               {mode === "reassign"

@@ -36,7 +36,13 @@ export default function ArtifactDialog({ open, onClose, onSave }: Props) {
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog onClose={onClose} width="440px" testId="artifact-dialog">
+        <ModalDialog
+          onClose={onClose}
+          width="440px"
+          // Backdrop clicks must not discard a half-filled form (RDM-163).
+          shouldCloseOnOverlayClick={false}
+          testId="artifact-dialog"
+        >
           <ModalHeader>
             <ModalTitle>{t("artifact.title")}</ModalTitle>
           </ModalHeader>
