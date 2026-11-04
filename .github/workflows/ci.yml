@@ -84,10 +84,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: web-next-dist
-          path: dist
+          # upload-artifact ignores `defaults.run.working-directory`, so this
+          # path is resolved from the repository root.
+          path: web-next/dist
 
   web-e2e:
-    runs-on: ubuntu-latest
+    # Playwright 1.58 has no ubuntu26.04 build, and ubuntu-latest now maps to
+    # 26.04; pin the last supported LTS so `playwright install --with-deps`
+    # keeps working. Revisit after bumping Playwright.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: web-next
