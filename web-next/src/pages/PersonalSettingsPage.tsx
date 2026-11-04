@@ -40,6 +40,7 @@ import {
   desktopNotificationState,
   desktopNotificationsEnabled,
   requestDesktopNotificationPermission,
+  sendTestDesktopNotification,
   setDesktopNotificationsEnabled,
   type DesktopNotificationState,
 } from "../lib/desktopNotifications";
@@ -145,6 +146,13 @@ export default function PersonalSettingsPage() {
     if (state === "granted") {
       notify.success(t("personal.desktopNotifications.enabled"));
     }
+  };
+  const testDesktopNotification = () => {
+    const shown = sendTestDesktopNotification(
+      t("personal.desktopNotifications.testTitle"),
+      t("personal.desktopNotifications.testBody"),
+    );
+    if (!shown) notify.error(t("personal.desktopNotifications.testFailed"));
   };
 
   const togglePref = async (channel: string, type: string, enabled: boolean) => {
@@ -511,21 +519,47 @@ export default function PersonalSettingsPage() {
              <Text size="small" color="color.text.subtlest">
                {t("personal.desktopNotifications.unsupported")}
              </Text>
-           ) : desktopPermission === "denied" ? (
-             <Text size="small" color="color.text.danger">
-               {t("personal.desktopNotifications.denied")}
+           ) : desktopPermission === "insecure" ? (
+             <Text size="small" color="color.text.subtlest">
+               {t("personal.desktopNotifications.insecure")}
              </Text>
            ) : desktopPermission === "granted" ? (
-             <Checkbox
-               label={t("personal.desktopNotifications.enable")}
-               isChecked={desktopEnabled}
-               testId="personal-desktop-notification-toggle"
-               onChange={(e) => {
-                 const enabled = e.currentTarget.checked;
-                 setDesktopNotificationsEnabled(enabled);
-                 setDesktopEnabled(enabled);
-               }}
-             />
+             <Stack space="space.100">
+               <Checkbox
+                 label={t("personal.desktopNotifications.enable")}
+                 isChecked={desktopEnabled}
+                 testId="personal-desktop-notification-toggle"
+                 onChange={(e) => {
+                   const enabled = e.currentTarget.checked;
+                   setDesktopNotificationsEnabled(enabled);
+                   setDesktopEnabled(enabled);
+                 }}
+               />
+               <Inline>
+                 <Button
+                   spacing="compact"
+                   testId="personal-desktop-notification-test"
+                   onClick={testDesktopNotification}
+                 >
+                   {t("personal.desktopNotifications.test")}
+                 </Button>
+               </Inline>
+             </Stack>
+           ) : desktopPermission === "denied" ? (
+             <Stack space="space.050">
+               <Inline>
+                 <Button
+                   appearance="primary"
+                   testId="personal-desktop-notification-request-again"
+                   onClick={() => void enableDesktopNotifications()}
+                 >
+                   {t("personal.desktopNotifications.requestAgain")}
+                 </Button>
+               </Inline>
+               <Text size="small" color="color.text.danger">
+                 {t("personal.desktopNotifications.denied")}
+               </Text>
+             </Stack>
            ) : (
              <Inline>
                <Button

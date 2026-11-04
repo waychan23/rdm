@@ -88,3 +88,46 @@ test("a focused tab leaves the native notification to the in-app bell", async ({
   });
   expect(await recordedTitles(page)).toEqual([]);
 });
+
+test("settings requests permission from the click and can send a test notification", async ({
+  app,
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      __rdmPermissionRequested: boolean;
+      __rdmTestNotifications: string[];
+    };
+    w.__rdmPermissionRequested = false;
+    w.__rdmTestNotifications = [];
+    class FakeNotification {
+      static permission: NotificationPermission = "default";
+      static requestPermission = async (): Promise<NotificationPermission> => {
+        w.__rdmPermissionRequested = true;
+        FakeNotification.permission = "granted";
+        return "granted";
+      };
+      constructor(title: string) {
+        w.__rdmTestNotifications.push(title);
+      }
+      close() {}
+    }
+    Object.defineProperty(window, "Notification", {
+      value: FakeNotification,
+      configurable: true,
+    });
+  });
+
+  await page.goto(`${app.baseURL}/settings`);
+  await expect(page.getByTestId("personal-desktop-notification-enable")).toBeVisible();
+  await page.getByTestId("personal-desktop-notification-enable").click();
+
+  // ADS Checkbox suffixes its testId, so address it by its accessible name.
+  await expect(page.getByRole("checkbox", { name: "允许桌面通知" })).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__rdmPermissionRequested)).toBe(true);
+
+  await page.getByTestId("personal-desktop-notification-test").click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__rdmTestNotifications.length))
+    .toBe(1);
+});

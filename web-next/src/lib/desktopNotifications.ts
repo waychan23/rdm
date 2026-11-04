@@ -13,7 +13,7 @@
 
 const ENABLED_KEY = "rdm.desktop-notifications";
 
-export type DesktopNotificationState = "unsupported" | NotificationPermission;
+export type DesktopNotificationState = "unsupported" | "insecure" | NotificationPermission;
 
 function supported(): boolean {
   return typeof window !== "undefined" && "Notification" in window;
@@ -21,13 +21,19 @@ function supported(): boolean {
 
 export function desktopNotificationState(): DesktopNotificationState {
   if (!supported()) return "unsupported";
+  // Notifications are gated on a secure context; a LAN host served over plain
+  // HTTP can never prompt, so say so instead of pretending the user blocked it.
+  if (!window.isSecureContext) return "insecure";
   return Notification.permission;
 }
 
 /** Must be called from a user gesture (browser requirement). */
 export async function requestDesktopNotificationPermission(): Promise<DesktopNotificationState> {
   if (!supported()) return "unsupported";
-  if (Notification.permission !== "default") return Notification.permission;
+  if (!window.isSecureContext) return "insecure";
+  if (Notification.permission === "granted") return "granted";
+  // After an explicit block the browser resolves this immediately with
+  // "denied" and shows nothing; there is no API to re-open its prompt.
   const state = await Notification.requestPermission();
   // Granting through this page is an explicit request to receive them, so do
   // not make the user flip a second switch.
@@ -77,5 +83,19 @@ export function showDesktopNotification(notification: DesktopNotification): void
     };
   } catch {
     // A missed toast must never break the stream handler.
+  }
+}
+
+/**
+ * Show a notification right away, even while this tab is focused — used by the
+ * settings page so the user can verify the permission and the OS channel.
+ */
+export function sendTestDesktopNotification(title: string, body: string): boolean {
+  if (desktopNotificationState() !== "granted") return false;
+  try {
+    new Notification(title, { body, tag: "rdm-test-notification" });
+    return true;
+  } catch {
+    return false;
   }
 }
