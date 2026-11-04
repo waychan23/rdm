@@ -33,8 +33,8 @@ import { api, errorCause } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { useNotify } from "../lib/flags";
 import { useCurrentUser } from "../lib/auth";
-import type { MailGroup, MailMessage, Mailbox, OrgUser, ProjectMemberRow } from "../types";
-import { flattenMembers } from "../lib/members";
+import type { MailGroup, MailMessage, Mailbox, OrgUser } from "../types";
+import { flattenMembers, loadProjectMembers } from "../lib/members";
 import { useOpenWorkItem } from "../lib/itemOverlay";
 import {
   useListProjectKey,
@@ -190,9 +190,8 @@ export default function MailboxPage() {
       setMembers([]);
       return;
     }
-    api
-      .get<ProjectMemberRow[]>(`/projects/${projectFilter}/members`)
-      .then((r) => setMembers(flattenMembers(r.data)))
+    loadProjectMembers(projectFilter)
+      .then((rows) => setMembers(flattenMembers(rows)))
       .catch(() => {});
   }, [projectFilter]);
 

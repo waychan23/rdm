@@ -7,11 +7,10 @@ import { useTranslation } from "react-i18next";
 
 import FormField from "../components/FormField";
 import MarkdownEditor from "../components/MarkdownEditor";
-import { api } from "../lib/api";
-import { flattenMembers } from "../lib/members";
+import { flattenMembers, loadProjectMembers } from "../lib/members";
 import { portalMenuProps } from "../lib/portalMenu";
 import { userLabel } from "../lib/users";
-import type { OrgUser, ProjectMemberRow, WorkflowFields } from "../types";
+import type { OrgUser, WorkflowFields } from "../types";
 
 export interface OptionalFieldValues {
   assignee: string | null;
@@ -51,10 +50,9 @@ export default function WorkItemPeopleFields({
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<ProjectMemberRow[]>(`/projects/${projectKey}/members`)
-      .then((res) => {
-        if (!cancelled) setMembers(flattenMembers(res.data));
+    loadProjectMembers(projectKey)
+      .then((rows) => {
+        if (!cancelled) setMembers(flattenMembers(rows));
       })
       .catch(() => {
         if (!cancelled) setMembers([]);

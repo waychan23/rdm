@@ -15,6 +15,10 @@ import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { roleLabel } from "../lib/labels";
+import {
+  invalidateProjectMembers,
+  loadProjectMembers,
+} from "../lib/members";
 import { userLabel } from "../lib/users";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
@@ -82,7 +86,7 @@ export default function MembersPage() {
   const [nonce, setNonce] = useState(0);
 
   const { data: members, loading, error, reload: reloadAsync } = useAsync<ProjectMemberRow[]>(
-    async () => (await api.get<ProjectMemberRow[]>(`/projects/${projectKey}/members`)).data,
+    async () => loadProjectMembers(projectKey, { force: nonce > 0 }),
     [projectKey, nonce],
   );
   const { data: orgUsers } = useAsync<OrgUser[]>(
@@ -106,6 +110,7 @@ export default function MembersPage() {
   const add = async (userId: string, roles: string[]) => {
     try {
       await api.post(`/projects/${projectKey}/members`, { user_id: userId, roles });
+      invalidateProjectMembers(projectKey);
       setShowAdd(false);
       reload();
     } catch (e) {
@@ -116,6 +121,7 @@ export default function MembersPage() {
   const saveRoles = async (userId: string, roles: string[]) => {
     try {
       await api.patch(`/projects/${projectKey}/members/${userId}`, { roles });
+      invalidateProjectMembers(projectKey);
       setEditMember(null);
       reload();
       notify.success(t("notices.saved"));
@@ -128,6 +134,7 @@ export default function MembersPage() {
     if (!removeTarget) return;
     try {
       await api.del(`/projects/${projectKey}/members/${removeTarget.id}`);
+      invalidateProjectMembers(projectKey);
       setRemoveTarget(null);
       reload();
     } catch (e) {

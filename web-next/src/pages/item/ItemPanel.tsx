@@ -48,7 +48,7 @@ import { formatDate, formatSize } from "../../lib/format";
 import { useNotify } from "../../lib/flags";
 import { useEventInstanceId } from "../../hooks/useEventBus";
 import { useWorkItemUpdatedSubscription } from "../../hooks/useWorkItemEvents";
-import { flattenMembers } from "../../lib/members";
+import { flattenMembers, loadProjectMembers } from "../../lib/members";
 import { portalMenuProps } from "../../lib/portalMenu";
 import { userLabel } from "../../lib/users";
 import type {
@@ -57,7 +57,6 @@ import type {
   Attachment,
   Comment,
   OrgUser,
-  ProjectMemberRow,
   Sprint,
   WorkItem,
   WorkItemDetailMeta,
@@ -226,7 +225,7 @@ export default function ItemPanel({
         api.get<Comment[]>(
           `/work-items/${itemId}/comments?limit=${COMMENTS_PAGE}&offset=0`,
         ),
-        api.get<ProjectMemberRow[]>(`/projects/${projectKey}/members`),
+        loadProjectMembers(projectKey),
         api.get<Attachment[]>(
           `/projects/${projectKey}/attachments?owner_type=work_item&owner_ref=${encodeURIComponent(itemId)}`,
         ),
@@ -250,7 +249,7 @@ export default function ItemPanel({
         permissions: meta.permissions ?? {},
         workflowFields: effectiveFields(wf.data, detail.data),
         comments: cm.data,
-        members: flattenMembers(mm.data),
+        members: flattenMembers(mm),
         attachments: am.data,
         artifacts: artm.data,
         sprint: sprintInfo.data.sprint,

@@ -23,10 +23,10 @@ import MarkdownText from "./MarkdownText";
 import TextButton from "./TextButton";
 import { api, errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
-import { flattenMembers } from "../lib/members";
+import { flattenMembers, loadProjectMembers } from "../lib/members";
 import { portalMenuProps } from "../lib/portalMenu";
 import { userLabel } from "../lib/users";
-import type { Attachment, OrgUser, ProjectMemberRow } from "../types";
+import type { Attachment, OrgUser } from "../types";
 import "../styles/markdown-editor.css";
 
 export interface MarkdownImageClick {
@@ -80,12 +80,11 @@ export default function MarkdownEditor({
 
   useEffect(() => {
     let alive = true;
-    api
-      .get<ProjectMemberRow[]>(`/projects/${projectKey}/members`)
-      .then((res) => {
+    loadProjectMembers(projectKey)
+      .then((rows) => {
         if (!alive) return;
         setMembers(
-          flattenMembers(res.data).map((m: OrgUser) => ({
+          flattenMembers(rows).map((m: OrgUser) => ({
             label: userLabel(m),
             value: m.name,
           })),

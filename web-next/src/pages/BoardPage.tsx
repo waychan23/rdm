@@ -61,6 +61,20 @@ interface BoardSnapshot {
 const boardCacheKey = (projectKey: string, requestParams: string) =>
   `board|${projectKey}|${requestParams}`;
 
+/**
+ * Keep the cached object when the server payload is semantically identical.
+ * React bails out of the state update, so the columns effect does not run a
+ * second time just because a pageCache snapshot was replaced by a fresh fetch
+ * of the same workflow (Bug: duplicate column loads on board revisit).
+ */
+function sameWorkflow(a: WorkflowDto, b: WorkflowDto): boolean {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
 const DEFAULT_BOARD_KINDS = DEFAULT_KINDS;
 
 const styles = cssMap({
@@ -146,7 +160,9 @@ export default function BoardPage() {
       .get<WorkflowDto>(`/workflow?project=${encodeURIComponent(projectKey)}`)
       .then((res) => {
         if (alive) {
-          setWorkflow(res.data);
+          setWorkflow((prev) =>
+            prev && sameWorkflow(prev, res.data) ? prev : res.data,
+          );
           setWorkflowError(null);
         }
       })

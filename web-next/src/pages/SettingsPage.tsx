@@ -20,6 +20,10 @@ import MarkdownEditor from "../components/MarkdownEditor";
 import { Page, PageHeader } from "../components/Page";
 import { api, errorCause } from "../lib/api";
 import { statusLabel } from "../lib/labels";
+import {
+  invalidateProjectMembers,
+  loadProjectMembers,
+} from "../lib/members";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
 import { userLabel } from "../lib/users";
@@ -69,9 +73,9 @@ export default function SettingsPage() {
      async () => {
        const [p, m] = await Promise.all([
          api.get<Project>(`/projects/${projectKey}`),
-         api.get<ProjectMemberRow[]>(`/projects/${projectKey}/members`),
+         loadProjectMembers(projectKey),
        ]);
-       return { project: p.data, members: m.data };
+       return { project: p.data, members: m };
      },
      [projectKey, nonce],
   );
@@ -191,6 +195,7 @@ export default function SettingsPage() {
       await api.post(`/projects/${projectKey}/transfer-owner`, {
         user_id: pendingOwnerId,
       });
+      invalidateProjectMembers(projectKey);
       setOwnerId(pendingOwnerId);
       setPendingOwnerId(null);
       reload();
@@ -206,6 +211,7 @@ export default function SettingsPage() {
      setConfirmArchive(false);
      try {
        await api.post(`/projects/${projectKey}/archive`);
+       invalidateProjectMembers(projectKey);
        reload();
      } catch (e) {
        notify.error(t("projectSettings.errors.archiveFailed"), errorCause(e)?.message);

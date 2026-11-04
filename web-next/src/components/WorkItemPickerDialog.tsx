@@ -20,7 +20,7 @@ import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { statusLabel } from "../lib/labels";
-import { flattenMembers } from "../lib/members";
+import { flattenMembers, loadProjectMembers } from "../lib/members";
 import { portalMenuProps } from "../lib/portalMenu";
 import { userLabel } from "../lib/users";
 import type { Assignee, ProjectMemberRow, WorkItem, WorkflowDto } from "../types";
@@ -146,7 +146,7 @@ export default function WorkItemPickerDialog({
   const membersState = useAsync<ProjectMemberRow[]>(
     async () => {
       if (!open) return [];
-      return (await api.get<ProjectMemberRow[]>(`/projects/${projectKey}/members`)).data;
+      return loadProjectMembers(projectKey);
     },
     [open, projectKey],
   );

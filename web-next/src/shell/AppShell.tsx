@@ -27,7 +27,7 @@ import { token } from "@atlaskit/tokens";
 
 import ItemOverlayHost from "../components/ItemOverlayHost";
 import LocaleSwitcher from "../components/LocaleSwitcher";
-import { logout, refreshSession, useCurrentUser } from "../lib/auth";
+import { logout, refreshSession, refreshSessionIfStale, useCurrentUser } from "../lib/auth";
 import { safePostLoginPath } from "../lib/oauth";
 import { startEventStream } from "../lib/stream";
 import { userLabel } from "../lib/users";
@@ -165,7 +165,10 @@ export default function AppShell() {
   );
 
   useEffect(() => {
-    void refreshSession();
+    // The router loader has just resolved the identity on a hard load; do not
+    // fetch /whoami a second time here. Project switches still refresh when the
+    // cached identity is older than the stale window.
+    void refreshSessionIfStale();
     const timer = window.setInterval(() => void refreshSession(), 60_000);
     return () => window.clearInterval(timer);
   }, [projectKey]);
