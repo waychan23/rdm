@@ -29,6 +29,9 @@ def _utcnow() -> dt.datetime:
 class Organization:
     id: str
     name: str
+    # Web frontend origin agents use to build work item links (RDM-127).
+    # NULL means "not configured"; the MCP server origin remains the fallback.
+    web_origin: str | None = None
     # Org-wide event stream ordinal (§17): org-level events have no project.
     event_seq: int = 0
     created_at: dt.datetime = field(default_factory=_utcnow)

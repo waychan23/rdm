@@ -85,6 +85,7 @@ def organization_to_domain(row: OrganizationModel) -> Organization:
     return Organization(
         id=row.id,
         name=row.name,
+        web_origin=row.web_origin,
         event_seq=row.event_seq,
         created_at=row.created_at,
         updated_at=row.updated_at,

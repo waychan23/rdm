@@ -24,6 +24,7 @@ from rdm.interfaces.http.logging import RequestContextMiddleware, configure_logg
 from rdm.interfaces.http.mailbox import router as mailbox_router
 from rdm.interfaces.http.me import router as me_router
 from rdm.interfaces.http.notifications import router as notifications_router
+from rdm.interfaces.http.org_settings import router as org_settings_router
 from rdm.interfaces.http.overview import router as overview_router
 from rdm.interfaces.http.release import router as releases_router
 from rdm.interfaces.http.routers import (
@@ -128,6 +129,7 @@ def create_app(settings: Settings, *, bootstrap: bool = True) -> FastAPI:
     app.include_router(workflow_router)
     app.include_router(workflow_config_router)
     app.include_router(email_settings_router)
+    app.include_router(org_settings_router)
     app.include_router(overview_router)
     app.include_router(notifications_router)
     app.include_router(todos_router)

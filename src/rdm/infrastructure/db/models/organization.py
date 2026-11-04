@@ -26,6 +26,8 @@ class OrganizationModel(Base):
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Web frontend origin for work item links (RDM-127); NULL = not configured.
+    web_origin: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Org-wide event sequence: org-level events have no project (§17).
     event_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)

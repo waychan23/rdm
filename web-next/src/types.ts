@@ -373,6 +373,14 @@ export interface EmailSettings {
   updated_by?: string | null;
 }
 
+export interface OrgSettings {
+  /** Organization Web frontend origin for agent links; null = not configured. */
+  web_origin: string | null;
+  /** Fallback origin (MCP server public origin) when the setting is empty. */
+  default_web_origin: string;
+  updated_at?: string | null;
+}
+
 export interface CustomFieldDef {
   key: string;
   label: string;

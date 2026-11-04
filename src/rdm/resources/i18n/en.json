@@ -374,5 +374,9 @@
     "security_invalid": "SMTP security must be none/starttls/ssl.",
     "test_subject": "rdm email settings test",
     "test_body": "Hi {name},\n\nThis is a test message from rdm; your SMTP configuration works."
+  },
+  "org": {
+    "not_found": "Organization not found.",
+    "web_origin_invalid": "The Web frontend origin must be http(s)://host[:port] with no path, query or fragment."
   }
 }

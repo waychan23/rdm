@@ -21,6 +21,7 @@ import EmailIcon from "@atlaskit/icon/core/email";
 import FolderIcon from "@atlaskit/icon/core/folder-open";
 import PeopleIcon from "@atlaskit/icon/core/people-group";
 import SettingsIcon from "@atlaskit/icon/core/settings";
+import DashboardIcon from "@atlaskit/icon/core/dashboard";
 import LogOutIcon from "@atlaskit/icon/core/log-out";
 import BranchIcon from "@atlaskit/icon/core/branch";
 import { token } from "@atlaskit/tokens";
@@ -306,6 +307,10 @@ export default function AppShell() {
             {(who?.org_roles.includes("org_owner") ||
               who?.org_roles.includes("user_manager")) && (
               <RailItem to="/email-settings" label={t("rail.emailSettings")} testId="email-settings" icon={EmailIcon} />
+            )}
+            {(who?.org_roles.includes("org_owner") ||
+              who?.org_roles.includes("user_manager")) && (
+              <RailItem to="/system-settings" label={t("rail.systemSettings")} testId="system-settings" icon={DashboardIcon} />
             )}
             <RailItem to="/settings" label={t("rail.settings")} testId="settings" icon={SettingsIcon} end />
           </div>

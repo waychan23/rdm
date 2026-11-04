@@ -58,6 +58,7 @@ void i18n.use(initReactI18next).init({
     "org",
     "item",
     "emailSettings",
+    "systemSettings",
   ],
   initAsync: false,
   interpolation: { escapeValue: false },

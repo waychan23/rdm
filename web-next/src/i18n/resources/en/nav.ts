@@ -17,6 +17,7 @@ const nav = {
     orgUsers: "Users",
     workflows: "Workflow configs",
     emailSettings: "Email",
+    systemSettings: "System settings",
     settings: "My settings",
   },
   topbar: {

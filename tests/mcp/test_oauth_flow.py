@@ -213,7 +213,7 @@ async def test_authorize_requires_login_then_consent_and_token(server) -> None:
     )
     async with Client(transport) as mcp_client:
         tools = await mcp_client.list_tools()
-        assert len({t.name for t in tools}) == 35
+        assert len({t.name for t in tools}) == 36
         result = await mcp_client.call_tool("whoami", {})
         payload = result.structured_content or result.data
         assert payload["data"]["user"]["name"] == "owner"

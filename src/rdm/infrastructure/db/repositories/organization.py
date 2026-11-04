@@ -25,6 +25,7 @@ class OrganizationRepository:
             OrganizationModel(
                 id=org.id,
                 name=org.name,
+                web_origin=org.web_origin,
                 event_seq=org.event_seq,
                 created_at=org.created_at,
                 updated_at=org.updated_at,
@@ -35,5 +36,9 @@ class OrganizationRepository:
         await self._s.execute(
             update(OrganizationModel)
             .where(OrganizationModel.id == org.id)
-            .values(name=org.name, updated_at=dt.datetime.now(dt.UTC))
+            .values(
+                name=org.name,
+                web_origin=org.web_origin,
+                updated_at=dt.datetime.now(dt.UTC),
+            )
         )

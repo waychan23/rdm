@@ -1,4 +1,4 @@
-"""FastMCP factory: register every MCP tool module (35 tools, M9)."""
+"""FastMCP factory: register every MCP tool module (36 tools, RDM-127)."""
 
 from __future__ import annotations
 
@@ -16,6 +16,9 @@ from rdm.interfaces.mcp.tools import (
 )
 from rdm.interfaces.mcp.tools import (
     member as member_tools,
+)
+from rdm.interfaces.mcp.tools import (
+    organization as organization_tools,
 )
 from rdm.interfaces.mcp.tools import (
     project as project_tools,
@@ -45,5 +48,6 @@ def build_mcp(container: Container, auth) -> FastMCP:  # type: ignore[no-untyped
     release_tools.register(mcp, container)
     mailbox_tools.register(mcp, container)
     member_tools.register(mcp, container)
+    organization_tools.register(mcp, container)
     collaboration_tools.register(mcp, container)
     return mcp

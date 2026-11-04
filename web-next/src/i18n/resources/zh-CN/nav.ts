@@ -17,6 +17,7 @@ const nav = {
     orgUsers: "用户",
     workflows: "工作流",
     emailSettings: "邮件设置",
+    systemSettings: "系统设置",
     settings: "我的",
   },
   topbar: {

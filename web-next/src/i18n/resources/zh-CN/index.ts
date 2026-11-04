@@ -14,6 +14,7 @@ import components from "./components";
 import emailSettings from "./emailSettings";
 import labels from "./labels";
 import nav from "./nav";
+import systemSettings from "./systemSettings";
 import workflows from "./workflows";
 import workitems from "./workitems";
 
@@ -36,6 +37,7 @@ export const zhCN = {
   org,
   item,
   emailSettings,
+  systemSettings,
 };
 
 export type Resources = typeof zhCN;

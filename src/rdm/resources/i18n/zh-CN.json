@@ -374,5 +374,9 @@
     "security_invalid": "SMTP 加密方式必须是 none/starttls/ssl。",
     "test_subject": "rdm 邮件设置测试",
     "test_body": "{name} 你好：\n\n这是一封来自 rdm 的测试邮件，说明 SMTP 配置可用。"
+  },
+  "org": {
+    "not_found": "组织不存在。",
+    "web_origin_invalid": "Web 前台站点必须是 http(s)://host[:port] 形式，不能包含路径、查询或片段。"
   }
 }

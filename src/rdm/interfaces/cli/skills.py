@@ -20,7 +20,24 @@ from dataclasses import dataclass
 from enum import StrEnum
 from importlib.resources import files
 from pathlib import Path
-from urllib.parse import urlsplit
+
+from rdm.domain.web_origin import normalize_web_origin as _normalize_web_origin
+
+__all__ = [
+    "MANAGED_MARKER",
+    "USER_CONFIG_RELATIVE",
+    "PROJECT_BINDING_RELATIVE",
+    "SkillTarget",
+    "InstallResult",
+    "UninstallResult",
+    "bundled_skill_names",
+    "configure_web_origin",
+    "normalize_web_origin",
+    "bundled_skill_text",
+    "resolve_target_path",
+    "install_skill",
+    "uninstall_skill",
+]
 
 MANAGED_MARKER = "<!-- rdm-managed: do not edit; reinstall with `rdm skills install` -->"
 
@@ -71,19 +88,7 @@ def _merge_json(path: Path, updates: dict[str, object]) -> None:
 
 def normalize_web_origin(value: str) -> str:
     """Validate a web frontend origin (scheme + host[:port]) for item links."""
-    raw = value.strip()
-    parts = urlsplit(raw)
-    if (
-        parts.scheme not in {"http", "https"}
-        or not parts.netloc
-        or parts.path not in {"", "/"}
-        or parts.query
-        or parts.fragment
-    ):
-        raise ValueError(
-            f"invalid web origin {value!r}; want http(s)://host[:port] without path/query"
-        )
-    return f"{parts.scheme}://{parts.netloc}"
+    return _normalize_web_origin(value)
 
 
 def configure_web_origin(

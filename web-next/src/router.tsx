@@ -33,6 +33,7 @@ const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const OrgUsersPage = lazy(() => import("./pages/OrgUsersPage"));
 const WorkflowConfigsPage = lazy(() => import("./pages/WorkflowConfigsPage"));
 const EmailSettingsPage = lazy(() => import("./pages/EmailSettingsPage"));
+const SystemSettingsPage = lazy(() => import("./pages/SystemSettingsPage"));
 const PersonalSettingsPage = lazy(() => import("./pages/PersonalSettingsPage"));
 const ItemPage = lazy(() => import("./pages/ItemPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
@@ -107,6 +108,11 @@ export const router = createBrowserRouter([
         path: "email-settings",
         loader: requireOrgAdmin,
         Component: () => withSuspense(<EmailSettingsPage />),
+      },
+      {
+        path: "system-settings",
+        loader: requireOrgAdmin,
+        Component: () => withSuspense(<SystemSettingsPage />),
       },
       { path: "settings", Component: () => withSuspense(<PersonalSettingsPage />) },
       { path: "*", Component: () => withSuspense(<NotFoundPage />) },
