@@ -9,7 +9,8 @@ import Spinner from "@atlaskit/spinner";
 import { Box } from "@atlaskit/primitives/compiled";
 
 import { Page, PageHeader } from "../components/Page";
-import { useEventInstanceId, useWorkItemUpdatedRefresh } from "../hooks/useEventBus";
+import { useEventInstanceId } from "../hooks/useEventBus";
+import { useWorkItemUpdatedRefresh } from "../hooks/useWorkItemEvents";
 import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";

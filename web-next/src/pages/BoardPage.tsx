@@ -10,7 +10,8 @@ import { Box, Inline } from "@atlaskit/primitives/compiled";
 
 import { Page, PageHeader } from "../components/Page";
 import ErrorState from "../components/ErrorState";
-import { useEventInstanceId, useWorkItemUpdatedRefresh } from "../hooks/useEventBus";
+import { useEventInstanceId } from "../hooks/useEventBus";
+import { useWorkItemUpdatedRefresh } from "../hooks/useWorkItemEvents";
 import { api, errorCause } from "../lib/api";
 import { statusLabel } from "../lib/labels";
 import { useNotify } from "../lib/flags";

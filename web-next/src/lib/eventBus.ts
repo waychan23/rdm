@@ -1,13 +1,20 @@
 /**
- * In-browser publish/subscribe bus for cross-component refresh (RDM-150).
+ * Business-neutral in-browser publish/subscribe bus.
  *
  * Each subscriber owns one queue per event type. Publishing pushes the event
- * into every subscribed queue and runs the handlers immediately; a handler can
- * ACK the event (return `CONSUMED`) to drop it from the queue, or keep it
+ * into every subscribed queue and runs the queue's handler immediately; the
+ * handler can ACK the event (return `CONSUMED`) to drop it, or keep it
  * (`KEEP`) so a component that is currently covered can batch-process it when
  * it becomes visible again.
  *
- * Queues are keyed by component-instance id, so unmounting an instance
+ * A queue has exactly one handler: when a subscriber replaces it, it must pass
+ * `override: true` explicitly, and a first-time subscription must not pass it.
+ * This makes accidental double-subscription a loud error instead of silently
+ * dropping events for one of the handlers. A component that genuinely needs
+ * several independent queues should use a different owner/instance id per
+ * subscription point.
+ *
+ * Queues are keyed by owner id + event type; unmounting an owner
  * (`disposeOwner`) drops its unread events and prevents leaks.
  */
 
@@ -15,40 +22,55 @@ export const CONSUMED = "CONSUMED" as const;
 export const KEEP = "KEEP" as const;
 export type EventAck = typeof CONSUMED | typeof KEEP;
 
-export interface WorkItemUpdatedEvent {
-  type: "work_item_updated";
-  /** Event time, used to order/batch queued events. */
-  eventTime: number;
-  projectKey: string;
-  workItemId: string;
-  displayId?: string;
-  /** Parent after the change (null when the item is now a root). */
-  parentId?: string | null;
-  /** Parent before the change, so a reparent also wakes the old parent. */
-  previousParentId?: string | null;
-  action: "created" | "updated" | "deleted";
-  /** Component instance that caused the change; it already refreshed itself. */
-  source?: string;
+/** Minimal shape every bus event must satisfy. */
+export interface BusEvent {
+  type: string;
 }
-
-export type BusEvent = WorkItemUpdatedEvent;
-export type BusEventType = BusEvent["type"];
 
 export type EventHandler<E extends BusEvent = BusEvent> = (
   event: E,
 ) => EventAck | void;
 
+export interface SubscribeOptions {
+  /**
+   * Explicitly replace the handler already registered for this owner + type.
+   * Omit on the first subscription; passing it then is an error too.
+   */
+  override?: boolean;
+}
+
+export class SubscriptionConflictError extends Error {
+  constructor(ownerId: string, type: string) {
+    super(
+      `subscription for ${ownerId}/${type} already exists; ` +
+        "pass { override: true } to replace it deliberately, or use a " +
+        "different instance id for an independent queue",
+    );
+    this.name = "SubscriptionConflictError";
+  }
+}
+
+export class SubscriptionOverrideError extends Error {
+  constructor(ownerId: string, type: string) {
+    super(
+      `{ override: true } was passed for ${ownerId}/${type} but no ` +
+        "subscription exists; omit override on the first subscription",
+    );
+    this.name = "SubscriptionOverrideError";
+  }
+}
+
 interface OwnerQueue {
   ownerId: string;
-  type: BusEventType;
+  type: string;
   events: BusEvent[];
-  handlers: EventHandler[];
+  handler: EventHandler;
 }
 
 const queues = new Map<string, OwnerQueue>();
 const owners = new Map<string, Set<string>>();
 
-function queueKey(ownerId: string, type: BusEventType): string {
+function queueKey(ownerId: string, type: string): string {
   return `${ownerId}\u0000${type}`;
 }
 
@@ -61,29 +83,46 @@ function ownerKeys(ownerId: string): Set<string> {
   return set;
 }
 
-/** Subscribe an instance to one event type. Returns an unsubscribe function. */
-export function subscribe<E extends BusEvent = BusEvent>(
+/**
+ * Subscribe an instance to one event type. Returns an unsubscribe function.
+ *
+ * The first subscription on a queue must omit `override`; replacing an
+ * existing handler requires `{ override: true }`.
+ */
+export function subscribe<E extends BusEvent>(
   ownerId: string,
   type: E["type"],
   handler: EventHandler<E>,
+  options: SubscribeOptions = {},
 ): () => void {
   const key = queueKey(ownerId, type);
-  let queue = queues.get(key);
-  if (!queue) {
-    queue = { ownerId, type, events: [], handlers: [] };
-    queues.set(key, queue);
+  const existing = queues.get(key);
+  const override = options.override === true;
+
+  if (existing) {
+    if (!override) throw new SubscriptionConflictError(ownerId, type);
+    // Keep the queued (unread) events: the new handler takes over the queue.
+    existing.handler = handler as EventHandler;
+  } else {
+    if (override) {
+      // `override` means "replace something"; there is nothing to replace.
+      throw new SubscriptionOverrideError(ownerId, type);
+    }
+    queues.set(key, {
+      ownerId,
+      type,
+      events: [],
+      handler: handler as EventHandler,
+    });
     ownerKeys(ownerId).add(key);
   }
-  queue.handlers.push(handler as EventHandler);
+
   return () => {
     const current = queues.get(key);
-    if (!current) return;
-    current.handlers = current.handlers.filter((item) => item !== handler);
-    if (current.handlers.length === 0) {
-      // Unsubscribing also discards the instance's unread events for this type.
-      queues.delete(key);
-      ownerKeys(ownerId).delete(key);
-    }
+    // A replaced handler's stale unsubscribe must not remove the new one.
+    if (!current || current.handler !== handler) return;
+    queues.delete(key);
+    ownerKeys(ownerId).delete(key);
   };
 }
 
@@ -96,26 +135,23 @@ export function disposeOwner(ownerId: string): void {
 }
 
 /**
- * Publish an event: enqueue it for every subscriber, then let their handlers
+ * Publish an event: enqueue it for every subscriber, then let each handler
  * decide synchronously whether to consume it.
  */
 export function publish(event: BusEvent): void {
   for (const queue of [...queues.values()]) {
     if (queue.type !== event.type) continue;
     queue.events.push(event);
-    for (const handler of [...queue.handlers]) {
-      let ack: EventAck | void;
-      try {
-        ack = handler(event);
-      } catch {
-        // A broken handler must not lose the event; keep it for the next drain.
-        ack = KEEP;
-      }
-      if (ack === CONSUMED) {
-        const index = queue.events.indexOf(event);
-        if (index >= 0) queue.events.splice(index, 1);
-        break;
-      }
+    let ack: EventAck | void;
+    try {
+      ack = queue.handler(event);
+    } catch {
+      // A broken handler must not lose the event; keep it for the next drain.
+      ack = KEEP;
+    }
+    if (ack === CONSUMED) {
+      const index = queue.events.indexOf(event);
+      if (index >= 0) queue.events.splice(index, 1);
     }
   }
 }
@@ -123,7 +159,7 @@ export function publish(event: BusEvent): void {
 /** Read (without consuming) the queued events for an instance. */
 export function pending(
   ownerId: string,
-  type: BusEventType,
+  type: string,
 ): readonly BusEvent[] {
   return queues.get(queueKey(ownerId, type))?.events ?? [];
 }
@@ -132,21 +168,10 @@ export function pending(
  * Take every queued event for an instance: the caller batch-processes them and
  * owns the ACK (they are removed from the queue).
  */
-export function drain(ownerId: string, type: BusEventType): BusEvent[] {
+export function drain(ownerId: string, type: string): BusEvent[] {
   const queue = queues.get(queueKey(ownerId, type));
   if (!queue || queue.events.length === 0) return [];
   const events = queue.events;
   queue.events = [];
   return events;
-}
-
-/** Publish the common "this work item changed" event. */
-export function publishWorkItemUpdated(
-  event: Omit<WorkItemUpdatedEvent, "type" | "eventTime"> & { eventTime?: number },
-): void {
-  publish({
-    type: "work_item_updated",
-    eventTime: event.eventTime ?? Date.now(),
-    ...event,
-  });
 }

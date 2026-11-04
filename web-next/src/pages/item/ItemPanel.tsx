@@ -38,11 +38,16 @@ import { api, errorCause } from "../../lib/api";
 import { artifactKindLabel, kindLabel, statusLabel } from "../../lib/labels";
 import { i18n } from "../../i18n";
 import { useCurrentUser } from "../../lib/auth";
-import { CONSUMED, KEEP, drain, publishWorkItemUpdated } from "../../lib/eventBus";
-import type { WorkItemUpdatedEvent } from "../../lib/eventBus";
+import { CONSUMED, KEEP, drain } from "../../lib/eventBus";
+import {
+  WORK_ITEM_UPDATED,
+  publishWorkItemUpdated,
+  type WorkItemUpdatedEvent,
+} from "../../lib/workItemEvents";
 import { formatDate, formatSize } from "../../lib/format";
 import { useNotify } from "../../lib/flags";
-import { useEventInstanceId, useWorkItemUpdatedSubscription } from "../../hooks/useEventBus";
+import { useEventInstanceId } from "../../hooks/useEventBus";
+import { useWorkItemUpdatedSubscription } from "../../hooks/useWorkItemEvents";
 import { flattenMembers } from "../../lib/members";
 import { portalMenuProps } from "../../lib/portalMenu";
 import { userLabel } from "../../lib/users";
@@ -360,7 +365,7 @@ export default function ItemPanel({
   const wasCovered = useRef(covered);
   useEffect(() => {
     if (wasCovered.current && !covered) {
-      const queued = drain(instanceId, "work_item_updated") as WorkItemUpdatedEvent[];
+      const queued = drain(instanceId, WORK_ITEM_UPDATED) as WorkItemUpdatedEvent[];
       if (
         queued.some(
           (event) => event.source !== instanceId && isRelatedEvent(event),
