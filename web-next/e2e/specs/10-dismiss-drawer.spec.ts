@@ -86,6 +86,39 @@ test.describe("work item drawer dismissal", () => {
     await expect(page.getByTestId("item-panel")).toBeVisible();
   });
 
+  test("dragging from the panel to blank space does not dismiss it", async ({
+    api,
+    app,
+    page,
+  }) => {
+    const projectKey = await api.createSandboxProject();
+    const item = await api.createItemIn(projectKey, {
+      kind: "task",
+      title: `dismiss-drag-${Date.now()}`,
+      assignee: "alice",
+    });
+
+    await page.goto(`${app.baseURL}/projects/${projectKey}/backlog`);
+    await page.getByTestId(`work-item-row-${item.display_id}`).click();
+    const panel = page.getByTestId("item-panel");
+    await expect(panel).toBeVisible();
+    const box = await panel.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+
+    // RDM-159: the gesture starts inside the panel and ends on blank chrome.
+    // The browser dispatches `click` on their common ancestor, which used to
+    // be mistaken for a blank click and closed the drawer mid-selection.
+    await page.mouse.move(box.x + box.width / 2, box.y + 40);
+    await page.mouse.down();
+    await page.mouse.move(700, 20, { steps: 12 });
+    await page.mouse.up();
+    await expect(panel).toBeVisible();
+
+    // A complete blank click still closes it.
+    await dismissByBlankClick(page);
+  });
+
   test("the board keeps its cards across open and close", async ({ api, app, page }) => {
     const projectKey = await api.createSandboxProject();
     const item = await api.createItemIn(projectKey, {

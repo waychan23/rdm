@@ -15,7 +15,7 @@ import FormField from "../components/FormField";
 import { errorCause } from "../lib/api";
 import { submitLogin } from "../lib/auth";
 import { useNotify } from "../lib/flags";
-import { beginLogin, getAccessToken, safePostLoginPath } from "../lib/oauth";
+import { beginLogin, getAccessToken, refreshLoginTicket, safePostLoginPath } from "../lib/oauth";
 
 const styles = cssMap({
   wrap: {
@@ -38,13 +38,20 @@ const styles = cssMap({
 
 export default function LoginPage() {
   const { t } = useTranslation("auth");
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const notify = useNotify();
   const authKey = params.get("auth_key");
   const redirectTarget = safePostLoginPath(params.get("redirect"));
   // React StrictMode mounts effects twice in dev; one full-page redirect is enough.
   const startedRef = useRef(false);
+  // The ticket in the URL can expire while the user types. After a silent
+  // reissue the form keeps submitting against the new key even though the old
+  // one is still in the address bar until React re-renders the URL.
+  const activeAuthKeyRef = useRef(authKey);
+  useEffect(() => {
+    activeAuthKeyRef.current = authKey;
+  }, [authKey]);
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
@@ -67,10 +74,28 @@ export default function LoginPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (loading || !authKey) return;
+    const key = activeAuthKeyRef.current;
+    if (loading || !key) return;
     setLoading(true);
     try {
-      const result = await submitLogin(authKey, name.trim(), password, remember);
+      let result: Awaited<ReturnType<typeof submitLogin>>;
+      try {
+        result = await submitLogin(key, name.trim(), password, remember);
+      } catch (error) {
+        const cause = errorCause(error);
+        const ticketExpired =
+          cause?.code === "VALIDATION_ERROR" && cause.details?.field === "auth_key";
+        if (!ticketExpired) throw error;
+        // RDM-165: the parked OAuth request expired. Start a fresh one behind
+        // the scenes and replay the credentials already entered, so the user
+        // never has to re-enter them after a refresh.
+        const freshKey = await refreshLoginTicket(params.get("redirect") ?? undefined);
+        activeAuthKeyRef.current = freshKey;
+        const next = new URLSearchParams(params);
+        next.set("auth_key", freshKey);
+        setParams(next, { replace: true });
+        result = await submitLogin(freshKey, name.trim(), password, remember);
+      }
       if (result.must_reset && result.set_password_url) {
         window.location.assign(result.set_password_url);
         return;

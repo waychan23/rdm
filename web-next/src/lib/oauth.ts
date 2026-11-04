@@ -61,6 +61,19 @@ export function safePostLoginPath(target: string | null | undefined): string {
   return target;
 }
 
+async function authorizationUrl(verifier: string, state: string): Promise<string> {
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: CLIENT_ID,
+    redirect_uri: callbackUrl(),
+    scope: SCOPE,
+    state,
+    code_challenge: await challengeFor(verifier),
+    code_challenge_method: "S256",
+  });
+  return `${OAUTH_BASE}/authorize?${params.toString()}`;
+}
+
 /** Start the full-page OAuth flow, remembering where to return afterwards. */
 export async function beginLogin(postLoginPath?: string): Promise<void> {
   const verifier = randomString(48);
@@ -71,16 +84,36 @@ export async function beginLogin(postLoginPath?: string): Promise<void> {
     POST_LOGIN_KEY,
     safePostLoginPath(postLoginPath ?? window.location.pathname + window.location.search),
   );
-  const params = new URLSearchParams({
-    response_type: "code",
-    client_id: CLIENT_ID,
-    redirect_uri: callbackUrl(),
-    scope: SCOPE,
-    state,
-    code_challenge: await challengeFor(verifier),
-    code_challenge_method: "S256",
+  window.location.assign(await authorizationUrl(verifier, state));
+}
+
+/**
+ * Obtain a fresh login ticket without leaving the page (RDM-166).
+ *
+ * The login form's `auth_key` parks the OAuth request for 15 minutes. When it
+ * expires while the user is typing, the form recovers by starting a brand-new
+ * authorization request — with a fresh PKCE verifier and state, exactly what a
+ * page reload does — and reading the `auth_key` the server redirects to. The
+ * expired ticket itself stays expired, so this grants nothing extra; only the
+ * credentials the user already typed are re-posted against the new ticket.
+ */
+export async function refreshLoginTicket(postLoginPath?: string): Promise<string> {
+  const verifier = randomString(48);
+  const state = randomString(16);
+  sessionStorage.setItem(VERIFIER_KEY, verifier);
+  sessionStorage.setItem(STATE_KEY, state);
+  // Keep the destination chosen by the original `beginLogin` unless the login
+  // URL itself carries an explicit redirect target.
+  if (postLoginPath) {
+    sessionStorage.setItem(POST_LOGIN_KEY, safePostLoginPath(postLoginPath));
+  }
+  const res = await fetch(await authorizationUrl(verifier, state), {
+    headers: { Accept: "text/html" },
+    redirect: "follow",
   });
-  window.location.assign(`${OAUTH_BASE}/authorize?${params.toString()}`);
+  const authKey = new URL(res.url, window.location.href).searchParams.get("auth_key");
+  if (!authKey) throw new Error("login ticket unavailable");
+  return authKey;
 }
 
 export function takePostLoginPath(): string {

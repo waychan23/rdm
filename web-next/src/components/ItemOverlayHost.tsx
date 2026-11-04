@@ -76,15 +76,42 @@ export default function ItemOverlayHost() {
 
   useEffect(() => {
     if (!open) return;
+    // Dismiss only on a complete click on blank space (RDM-159): a gesture that
+    // starts inside the panel and ends outside (text selection dragged across
+    // the edge) still dispatches `click` on the common ancestor, which must not
+    // close the drawer. Track both ends of the gesture instead of trusting the
+    // synthetic click target, which lies for cross-boundary drags.
+    const isBlank = (event: MouseEvent) => {
+      if (clickPathMatches(event, '[data-testid="item-panel"]')) return false;
+      if (clickPathMatches(event, BACKDROP_INTERACTIVE)) return false;
+      return true;
+    };
+    let startedBlank = false;
+    let endedBlank = false;
+    const onPointerDown = (event: PointerEvent) => {
+      startedBlank = isBlank(event);
+      endedBlank = false;
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      endedBlank = isBlank(event);
+    };
     const onClick = (event: MouseEvent) => {
-      if (clickPathMatches(event, '[data-testid="item-panel"]')) return;
-      if (clickPathMatches(event, BACKDROP_INTERACTIVE)) return;
+      const blankClick = startedBlank && endedBlank && isBlank(event);
+      startedBlank = false;
+      endedBlank = false;
+      if (!blankClick) return;
       if (!window.getSelection()?.isCollapsed) return;
       close();
     };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("pointerup", onPointerUp, true);
     // Bubble phase so list rows/navigation run first.
     document.addEventListener("click", onClick);
-    return () => document.removeEventListener("click", onClick);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("pointerup", onPointerUp, true);
+      document.removeEventListener("click", onClick);
+    };
   }, [open, close]);
 
   if (!open) return null;

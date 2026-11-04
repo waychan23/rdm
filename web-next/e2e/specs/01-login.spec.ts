@@ -31,4 +31,55 @@ test.describe("browser authentication", () => {
       await context.close();
     }
   });
+
+  test("an expired login ticket is renewed silently and the typed credentials are replayed", async ({
+    browser,
+    app,
+  }) => {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await context.newPage();
+    let authorizeRequests = 0;
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname === "/api/oauth/authorize") {
+        authorizeRequests += 1;
+      }
+    });
+    // Force the first submit to look like an expired ticket; the retry must go
+    // through untouched. RDM-165.
+    let rejectedOnce = false;
+    await page.route("**/api/v1/auth/login", async (route) => {
+      if (rejectedOnce) {
+        await route.continue();
+        return;
+      }
+      rejectedOnce = true;
+      await route.fulfill({
+        status: 422,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "登录会话已过期，请重新登录",
+            details: { field: "auth_key" },
+          },
+        }),
+      });
+    });
+    try {
+      await page.goto(`${app.baseURL}/projects`);
+
+      await expect(page.getByTestId("page-login")).toBeVisible({ timeout: 20_000 });
+      await page.getByTestId("login-username").fill("owner");
+      await page.getByTestId("login-password").fill(OWNER_PASSWORD);
+      await page.getByTestId("login-submit").click();
+
+      // The form renewed the ticket itself; no second credential entry.
+      await expect(page.getByTestId("page-projects")).toBeVisible({ timeout: 20_000 });
+      expect(rejectedOnce).toBe(true);
+      expect(authorizeRequests).toBeGreaterThanOrEqual(2);
+      expect(await page.evaluate(() => localStorage.getItem("rdm.access"))).toBeTruthy();
+    } finally {
+      await context.close();
+    }
+  });
 });
