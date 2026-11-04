@@ -90,10 +90,24 @@ export function showDesktopNotification(notification: DesktopNotification): void
  * Show a notification right away, even while this tab is focused — used by the
  * settings page so the user can verify the permission and the OS channel.
  */
+let testNotification: Notification | null = null;
+
 export function sendTestDesktopNotification(title: string, body: string): boolean {
   if (desktopNotificationState() !== "granted") return false;
   try {
-    new Notification(title, { body, tag: "rdm-test-notification" });
+    const note = new Notification(title, {
+      body,
+      tag: "rdm-test-notification",
+      // Keep it on screen until dismissed; a banner that auto-hides is easy to
+      // miss while the user is looking at the settings page.
+      requireInteraction: true,
+    });
+    // Some engines close a notification whose object is garbage-collected;
+    // keep a reference until the user dismisses it.
+    testNotification = note;
+    note.onclose = () => {
+      testNotification = null;
+    };
     return true;
   } catch {
     return false;

@@ -202,6 +202,8 @@ const org = {
       test: "Send test notification",
       testTitle: "rdm test notification",
       testBody: "This is a test notification from rdm.",
+      testSent: "Test notification sent",
+      testSentHint: "If you did not see it, check the OS notification permission (macOS: System Settings → Notifications → this browser), Do Not Disturb/Focus, and the site permission in the browser.",
       testFailed: "Failed to send the test notification",
       enabled: "Browser notifications enabled",
     },

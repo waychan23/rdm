@@ -200,6 +200,8 @@ const org = {
       test: "发送测试通知",
       testTitle: "rdm 测试通知",
       testBody: "这是一条来自 rdm 的测试通知。",
+      testSent: "测试通知已发送",
+      testSentHint: "如果没有看到系统通知，请检查操作系统的通知权限（macOS：系统设置 → 通知 → 当前浏览器）、勿扰/专注模式，以及该站点在浏览器中的通知权限。",
       testFailed: "测试通知发送失败",
       enabled: "浏览器通知已开启",
     },

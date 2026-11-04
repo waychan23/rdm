@@ -152,7 +152,14 @@ export default function PersonalSettingsPage() {
       t("personal.desktopNotifications.testTitle"),
       t("personal.desktopNotifications.testBody"),
     );
-    if (!shown) notify.error(t("personal.desktopNotifications.testFailed"));
+    if (shown) {
+      notify.success(
+        t("personal.desktopNotifications.testSent"),
+        t("personal.desktopNotifications.testSentHint"),
+      );
+    } else {
+      notify.error(t("personal.desktopNotifications.testFailed"));
+    }
   };
 
   const togglePref = async (channel: string, type: string, enabled: boolean) => {
