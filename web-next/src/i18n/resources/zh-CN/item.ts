@@ -170,6 +170,7 @@ const item = {
     breadcrumbLabel: "层级面包屑",
     editFull: "完整编辑",
     copyLink: "复制链接",
+    refresh: "刷新",
     linkCopied: "链接已复制",
     copyFailed: "复制失败",
     clipboardDenied: "浏览器未授予剪贴板权限",

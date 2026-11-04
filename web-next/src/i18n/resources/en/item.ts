@@ -172,6 +172,7 @@ const item = {
     breadcrumbLabel: "Hierarchy breadcrumb",
     editFull: "Edit all fields",
     copyLink: "Copy link",
+    refresh: "Refresh",
     linkCopied: "Link copied",
     copyFailed: "Copy failed",
     clipboardDenied: "The browser did not grant clipboard permission",

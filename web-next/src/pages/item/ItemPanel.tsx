@@ -8,6 +8,7 @@ import Heading from "@atlaskit/heading";
 import ArrowLeftIcon from "@atlaskit/icon/core/arrow-left";
 import CopyIcon from "@atlaskit/icon/core/copy";
 import CrossIcon from "@atlaskit/icon/core/cross";
+import RefreshIcon from "@atlaskit/icon/core/refresh";
 import Link from "@atlaskit/link";
 import Lozenge from "@atlaskit/lozenge";
 import Select from "@atlaskit/select";
@@ -1156,6 +1157,13 @@ export default function ItemPanel({
           })}
         </nav>
         <div className="rdm-item-head-actions">
+          <IconButton
+            icon={(iconProps) => <RefreshIcon {...iconProps} />}
+            label={t("panel.refresh")}
+            appearance="subtle"
+            testId="item-panel-refresh"
+            onClick={() => void refresh()}
+          />
           {canEdit && (
             <TextButton data-testid="item-panel-edit" onClick={() => setShowEdit(true)}>
               {t("panel.editFull")}
