@@ -192,6 +192,13 @@ export default function MailboxPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unreadOnly, projectFilter, identity, folder, query, order]);
 
+  // A message delivered over SSE should show up without a manual reload.
+  useEffect(() => {
+    const onMail = () => void fetchPage(null, true);
+    window.addEventListener("rdm:mailbox", onMail);
+    return () => window.removeEventListener("rdm:mailbox", onMail);
+  }, [fetchPage]);
+
   useEffect(() => setSearchDraft(query), [query]);
 
   useEffect(() => {

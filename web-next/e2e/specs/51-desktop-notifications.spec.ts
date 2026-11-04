@@ -89,6 +89,24 @@ test("a focused tab leaves the native notification to the in-app bell", async ({
   expect(await recordedTitles(page)).toEqual([]);
 });
 
+test("a mailbox message raises a native notification for the recipient", async ({
+  api,
+  app,
+  browser,
+}) => {
+  const page = await openAlice(browser, app.baseURL, { hidden: true });
+  const subject = `mail-${Date.now()}`;
+  await api.post(`/projects/${app.projectKey}/messages`, {
+    to: ["alice"],
+    subject,
+    body_md: "请查收",
+  });
+
+  await expect
+    .poll(() => recordedTitles(page), { timeout: 10_000 })
+    .toContain(subject);
+});
+
 test("settings requests permission from the click and can send a test notification", async ({
   app,
   page,

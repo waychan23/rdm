@@ -43,6 +43,7 @@ from rdm.i18n import tr
 from rdm.infrastructure.db.errors import translate_integrity
 from rdm.infrastructure.db.uow import SqlAlchemyUnitOfWork
 from rdm.infrastructure.email.sender import SmtpEmailSender
+from rdm.infrastructure.events.bus import StreamEvent, get_bus
 from rdm.infrastructure.id import new_id
 
 
@@ -787,6 +788,28 @@ class MailboxService:
             ref_items=ref_items,
             mention=mention,
         )
+        # Plain mail has no in-app notification row (the mailbox is its own
+        # inbox), but connected clients still need a live signal to refresh the
+        # unread badge and raise a desktop notification (RDM-130). Mentions are
+        # skipped: they already emit notification.created.
+        if not mention:
+            stream_event = StreamEvent(
+                event="mailbox.delivered",
+                id=message.id,
+                data={
+                    "message_id": message.id,
+                    "thread_id": message.thread_id or message.id,
+                    "subject": message.subject,
+                    "body": message.body_md[:200],
+                    "from": actor.label,
+                    "project_key": project.key,
+                    "url": f"/projects/{project.key}/mailbox",
+                },
+            )
+            for user_id in recipients:
+                self.uow.defer_after_commit(
+                    lambda uid=user_id: get_bus().publish_user(uid, stream_event)
+                )
 
     async def _append_mailbox_event(
         self,

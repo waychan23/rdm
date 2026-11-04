@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 
 API = "/api/v1"
@@ -510,3 +512,37 @@ async def test_org_mailbox_sent_and_unread_counts(server, owner_token: str) -> N
     sent = r.json()["data"]["messages"]
     assert {m["project"]["key"] for m in sent} >= {"DEMO", "OTHER"}
     assert all(m["recipients"] for m in sent)
+
+
+async def test_plain_mail_publishes_a_stream_event_to_recipients(server, owner_token: str) -> None:
+    """RDM-130: mailbox deliveries have no notification row, so the SSE stream
+    carries ``mailbox.delivered`` for the badge and desktop notifications."""
+    from rdm.infrastructure.events.bus import get_bus
+
+    client, _settings, _app = server
+    await _project(client, owner_token)
+    sender_id, sender = await _member(client, owner_token, "sender")
+    recipient_id, _recipient = await _member(client, owner_token, "receiver")
+
+    bus = get_bus()
+    subscriber = await bus.subscribe(recipient_id, [])
+    sender_subscriber = await bus.subscribe(sender_id, [])
+    try:
+        r = await client.post(
+            f"{API}/projects/DEMO/messages",
+            json={"to": ["receiver"], "subject": "联调通知", "body_md": "请查收"},
+            headers=auth(sender),
+        )
+        assert r.status_code == 201, r.text
+
+        event = await asyncio.wait_for(subscriber.queue.get(), timeout=1)
+        assert event.event == "mailbox.delivered"
+        assert event.data["subject"] == "联调通知"
+        assert event.data["body"] == "请查收"
+        assert event.data["project_key"] == "DEMO"
+        assert event.data["url"] == "/projects/DEMO/mailbox"
+        # The sender is not a recipient and must not be alerted for their own mail.
+        assert sender_subscriber.queue.empty()
+    finally:
+        await bus.unsubscribe(subscriber)
+        await bus.unsubscribe(sender_subscriber)

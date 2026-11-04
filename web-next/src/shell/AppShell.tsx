@@ -198,6 +198,25 @@ export default function AppShell() {
         });
       } else if (event.event === "work_item.changed" || event.event === "comment.changed") {
         window.dispatchEvent(new CustomEvent("rdm:data-changed", { detail: event.data }));
+      } else if (event.event === "mailbox.delivered") {
+        // Mailbox deliveries have no notification row, so refresh the badge and
+        // raise the desktop toast from the live event itself (RDM-130).
+        void refreshSession();
+        window.dispatchEvent(new CustomEvent("rdm:mailbox", { detail: event.data }));
+        const url = typeof event.data.url === "string" ? event.data.url : "";
+        const from = typeof event.data.from === "string" ? event.data.from : "";
+        const preview = typeof event.data.body === "string" ? event.data.body : "";
+        showDesktopNotification({
+          id: String(event.data.message_id ?? ""),
+          title:
+            typeof event.data.subject === "string" && event.data.subject
+              ? event.data.subject
+              : t("topbar.mailbox"),
+          body: [from, preview].filter(Boolean).join(": "),
+          onActivate: () => {
+            if (url) navigate(url);
+          },
+        });
       }
     });
     return stop;
