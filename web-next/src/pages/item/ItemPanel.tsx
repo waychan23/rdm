@@ -439,41 +439,18 @@ export default function ItemPanel({
     if (covered) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
-      if (
-        showEdit ||
-        showArtifact ||
-        stepStart ||
-        stepExecute ||
-        stepReassign ||
-        stepCancel ||
-        stepReject ||
-        preview ||
-        commentToDelete ||
-        parentEditing
-      ) {
-        return;
-      }
+      // A modal dialog opened above this drawer owns Escape (RDM-162). Ask the
+      // DOM instead of listing each dialog's state flag: dialogs opened by
+      // child sections (create/link child) are not local state here, and a
+      // newly added one must not let Escape fall through to the drawer.
+      if (document.querySelector('[role="dialog"]')) return;
       event.preventDefault();
       if (onBack) onBack();
       else onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
-    commentToDelete,
-    covered,
-    onBack,
-    onClose,
-    parentEditing,
-    preview,
-    showArtifact,
-    showEdit,
-    stepCancel,
-    stepExecute,
-    stepReassign,
-    stepReject,
-    stepStart,
-  ]);
+  }, [covered, onBack, onClose]);
 
   const reportGate = (e: unknown) => {
     const cause = errorCause(e);
