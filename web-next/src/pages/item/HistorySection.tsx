@@ -11,7 +11,8 @@ import { useTranslation } from "react-i18next";
 import TextButton from "../../components/TextButton";
 import PersonCell from "../../components/PersonCell";
 import StatusLozenge from "../../workitems/status";
-import { api, errorCause } from "../../lib/api";
+import { getWorkItemHistory } from "../../api/work-items-api";
+import { errorCause } from "../../lib/api";
 import { formatDate } from "../../lib/format";
 import { useNotify } from "../../lib/flags";
 import { userLabel } from "../../lib/users";
@@ -122,9 +123,7 @@ export default function HistorySection({ itemId, refreshKey }: Props) {
       try {
         const params = new URLSearchParams({ limit: "30" });
         if (before !== null) params.set("before_seq", String(before));
-        const res = await api.get<HistoryEntry[]>(
-          `/work-items/${encodeURIComponent(itemId)}/history?${params.toString()}`,
-        );
+        const res = await getWorkItemHistory(itemId, params);
         setEntries((prev) => (replace ? res.data : [...prev, ...res.data]));
         setHasMore(Boolean(res.meta?.has_more));
         const next = res.meta?.next_before_seq;

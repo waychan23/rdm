@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { listProjectMembers } from "../api/projects-api";
 import { apiLocale } from "../i18n";
 import { getAccessToken } from "./oauth";
 import type { OrgUser, ProjectMemberRow } from "../types";
@@ -66,14 +66,13 @@ export function loadProjectMembers(
   if (pending) return pending;
 
   const requestGeneration = generation;
-  const request = api
-    .get<ProjectMemberRow[]>(`/projects/${projectKey}/members`)
-    .then((res) => {
+  const request = listProjectMembers(projectKey)
+    .then((rows) => {
       // Only cache if no identity switch / invalidation happened meanwhile.
       if (generation === requestGeneration) {
-        cache.set(projectKey, { rows: res.data, at: Date.now() });
+        cache.set(projectKey, { rows, at: Date.now() });
       }
-      return res.data;
+      return rows;
     })
     .finally(() => {
       if (inflight.get(projectKey) === request) inflight.delete(projectKey);

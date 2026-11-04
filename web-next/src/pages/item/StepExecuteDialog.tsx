@@ -12,7 +12,8 @@ import { Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { useTranslation } from "react-i18next";
 
 import MarkdownEditor, { type MarkdownImageClick } from "../../components/MarkdownEditor";
-import { api, errorCause } from "../../lib/api";
+import { uploadProjectAttachment } from "../../api/attachments-api";
+import { errorCause } from "../../lib/api";
 import { useNotify } from "../../lib/flags";
 import type { Attachment } from "../../types";
 
@@ -65,9 +66,9 @@ export default function StepExecuteDialog({
         form.append("file", file);
         form.append("owner_type", "work_item");
         form.append("owner_ref", itemId);
-        const res = await api.upload<Attachment>(`/projects/${projectKey}/attachments`, form);
-        pendingIds.current.push(res.data.id);
-        setPending((current) => [...current, { name: file.name, id: res.data.id }]);
+        const attachment = await uploadProjectAttachment(projectKey, form);
+        pendingIds.current.push(attachment.id);
+        setPending((current) => [...current, { name: file.name, id: attachment.id }]);
       }
       notify.success(t("stepExecute.uploaded"));
     } catch (e) {

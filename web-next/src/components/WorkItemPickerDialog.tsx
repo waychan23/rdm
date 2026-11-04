@@ -17,7 +17,8 @@ import Spinner from "@atlaskit/spinner";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
-import { api } from "../lib/api";
+import { listWorkItems } from "../api/work-items-api";
+import { getWorkflow } from "../api/workflow-api";
 import { useAsync } from "../hooks/useAsync";
 import { statusLabel } from "../lib/labels";
 import { flattenMembers, loadProjectMembers } from "../lib/members";
@@ -153,7 +154,7 @@ export default function WorkItemPickerDialog({
   const workflowState = useAsync<WorkflowDto | null>(
     async () => {
       if (!open) return null;
-      return (await api.get<WorkflowDto>(`/workflow?project=${encodeURIComponent(projectKey)}`)).data;
+      return getWorkflow(projectKey);
     },
     [open, projectKey],
   );
@@ -200,9 +201,7 @@ export default function WorkItemPickerDialog({
   const itemsState = useAsync<ItemsResult>(
     async () => {
       if (!open) return { items: [], total: 0 };
-      const res = await api.get<WorkItem[]>(
-        `/projects/${projectKey}/work-items?${requestParams}`,
-      );
+      const res = await listWorkItems(projectKey, requestParams);
       return {
         items: res.data,
         total: Number(res.meta?.total ?? res.data.length),

@@ -13,7 +13,14 @@ import { useTranslation } from "react-i18next";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
-import { api, errorCause } from "../lib/api";
+import {
+  addProjectMember,
+  getProject,
+  removeProjectMember,
+  updateProjectMember,
+} from "../api/projects-api";
+import { listUsers } from "../api/users-api";
+import { errorCause } from "../lib/api";
 import { roleLabel } from "../lib/labels";
 import {
   invalidateProjectMembers,
@@ -22,7 +29,7 @@ import {
 import { userLabel } from "../lib/users";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
-import type { OrgUser, Project, ProjectMemberRow } from "../types";
+import type { OrgUser, ProjectMemberRow } from "../types";
 import { AddMemberDialog, MemberEditDialog } from "../members/memberForms";
 import "../styles/table.css";
 
@@ -89,15 +96,9 @@ export default function MembersPage() {
     async () => loadProjectMembers(projectKey, { force: nonce > 0 }),
     [projectKey, nonce],
   );
-  const { data: orgUsers } = useAsync<OrgUser[]>(
-    async () => (await api.get<OrgUser[]>("/users?type=human")).data,
-    [projectKey, nonce],
-  );
+  const { data: orgUsers } = useAsync<OrgUser[]>(() => listUsers("human"), [projectKey, nonce]);
   // project.owner_user_id is the single source of truth for the 项目经理 badge.
-  const { data: project } = useAsync<Project>(
-    async () => (await api.get<Project>(`/projects/${projectKey}`)).data,
-    [projectKey, nonce],
-  );
+  const { data: project } = useAsync(() => getProject(projectKey), [projectKey, nonce]);
   const ownerUserId = project?.owner_user_id ?? null;
 
   const reload = () => setNonce((n) => n + 1);
@@ -109,7 +110,7 @@ export default function MembersPage() {
 
   const add = async (userId: string, roles: string[]) => {
     try {
-      await api.post(`/projects/${projectKey}/members`, { user_id: userId, roles });
+      await addProjectMember(projectKey, userId, roles);
       invalidateProjectMembers(projectKey);
       setShowAdd(false);
       reload();
@@ -120,7 +121,7 @@ export default function MembersPage() {
 
   const saveRoles = async (userId: string, roles: string[]) => {
     try {
-      await api.patch(`/projects/${projectKey}/members/${userId}`, { roles });
+      await updateProjectMember(projectKey, userId, roles);
       invalidateProjectMembers(projectKey);
       setEditMember(null);
       reload();
@@ -133,7 +134,7 @@ export default function MembersPage() {
   const remove = async () => {
     if (!removeTarget) return;
     try {
-      await api.del(`/projects/${projectKey}/members/${removeTarget.id}`);
+      await removeProjectMember(projectKey, removeTarget.id);
       invalidateProjectMembers(projectKey);
       setRemoveTarget(null);
       reload();

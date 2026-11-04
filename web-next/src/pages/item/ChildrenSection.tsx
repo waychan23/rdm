@@ -19,7 +19,8 @@ import WorkItemPicker, {
   toWorkItemOption,
   type WorkItemOption,
 } from "../../components/WorkItemPicker";
-import { api, errorCause } from "../../lib/api";
+import { reparentWorkItem } from "../../api/work-items-api";
+import { errorCause } from "../../lib/api";
 import { useNotify } from "../../lib/flags";
 import { userLabel } from "../../lib/users";
 import type { WorkItem } from "../../types";
@@ -64,10 +65,7 @@ function LinkChildDialog({
     }
     setSaving(true);
     try {
-      await api.post(`/work-items/${existing.display_id}/reparent`, {
-        parent: parent.display_id,
-        row_version: existing.row_version,
-      });
+      await reparentWorkItem(existing.display_id, parent.display_id, existing.row_version);
       notify.success(
         t("children.linked", {
           child: existing.display_id,

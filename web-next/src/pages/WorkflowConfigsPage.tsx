@@ -22,7 +22,15 @@ import { useTranslation } from "react-i18next";
 import { cardBorder } from "../components/cardBorder";
 import FormField from "../components/FormField";
 import { Page, PageHeader } from "../components/Page";
-import { api, errorCause } from "../lib/api";
+import {
+  createWorkflowConfigVersion,
+  forkWorkflowConfig,
+  getWorkflowConfig,
+  getWorkflowConfigVersion,
+  listWorkflowConfigs,
+  setWorkflowConfigEnabled,
+} from "../api/workflow-api";
+import { errorCause } from "../lib/api";
 import { useCurrentUser } from "../lib/auth";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
@@ -93,7 +101,7 @@ export default function WorkflowConfigsPage() {
   const [forking, setForking] = useState(false);
 
   const { data: configs, loading, error } = useAsync(
-    async () => (await api.get<WorkflowConfig[]>("/workflow-configs")).data,
+    () => listWorkflowConfigs(),
     [nonce],
   );
 
@@ -107,7 +115,7 @@ export default function WorkflowConfigsPage() {
 
   const open = async (key: string) => {
     try {
-      const detail = (await api.get<WorkflowConfig>(`/workflow-configs/${encodeURIComponent(key)}`)).data;
+      const detail = await getWorkflowConfig(key);
       setSelected(detail);
     } catch (e) {
       notify.error(t("loadFailed"), errorCause(e)?.message);
@@ -116,11 +124,7 @@ export default function WorkflowConfigsPage() {
 
   const viewVersion = async (version: WorkflowConfigVersion) => {
     try {
-      const detail = (
-        await api.get<WorkflowConfigVersion>(
-          `/workflow-configs/versions/${encodeURIComponent(version.id)}`,
-        )
-      ).data;
+      const detail = await getWorkflowConfigVersion(version.id);
       setContent(detail.content_text ?? "");
       setViewing(detail);
     } catch (e) {
@@ -137,12 +141,12 @@ export default function WorkflowConfigsPage() {
     if (!selected?.active_version || saving || viewing) return;
     setSaving(true);
     try {
-      const result = await api.post<{ created: boolean; version: WorkflowConfigVersion }>(
-        `/workflow-configs/${encodeURIComponent(selected.key)}/versions`,
-        { content_text: content, base_version_id: selected.active_version.id },
-      );
-      if (result.data.created) {
-        notify.success(t("editor.saveSuccess", { version: result.data.version.version }));
+      const result = await createWorkflowConfigVersion(selected.key, {
+        content_text: content,
+        base_version_id: selected.active_version.id,
+      });
+      if (result.created) {
+        notify.success(t("editor.saveSuccess", { version: result.version.version }));
       } else {
         notify.success(t("editor.noChange"));
       }
@@ -157,9 +161,7 @@ export default function WorkflowConfigsPage() {
 
   const toggle = async (config: WorkflowConfig) => {
     try {
-      await api.patch(`/workflow-configs/${encodeURIComponent(config.key)}`, {
-        enabled: !config.enabled,
-      });
+      await setWorkflowConfigEnabled(config.key, !config.enabled);
       notify.success(
         t("editor.toggleSuccess", {
           name: config.name,
@@ -177,7 +179,7 @@ export default function WorkflowConfigsPage() {
     if (!selected || forking) return;
     setForking(true);
     try {
-      await api.post(`/workflow-configs/${encodeURIComponent(selected.key)}/fork`, forkForm);
+      await forkWorkflowConfig(selected.key, forkForm);
       notify.success(t("editor.forkSuccess", { key: forkForm.key }));
       setForkOpen(false);
       setForkForm(EMPTY_FORK);

@@ -15,7 +15,7 @@ import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
 import { useEventInstanceId } from "../hooks/useEventBus";
 import { useWorkItemUpdatedRefresh } from "../hooks/useWorkItemEvents";
-import { api } from "../lib/api";
+import { search } from "../api/search-api";
 import { searchTypeLabel } from "../lib/labels";
 import { useOpenWorkItem } from "../lib/itemOverlay";
 import { useItemOverlayOpen } from "../lib/itemOverlayVisibility";
@@ -54,7 +54,7 @@ export default function SearchPage() {
 
   const state = useAsync<SearchHit[]>(async () => {
     if (!q.trim()) return [];
-    return (await api.get<SearchHit[]>(`/search?q=${encodeURIComponent(q.trim())}`)).data;
+    return search(q);
   }, [q]);
 
   // RDM-150: refresh results after an item drawer closes, once per batch.

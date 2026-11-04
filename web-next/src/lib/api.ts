@@ -73,9 +73,14 @@ async function fetchWithTimeout(input: string, init: RequestInit): Promise<Respo
   }
 }
 
+/** Absolute URL of a REST path (service modules pass `/work-items/...`). */
+export function apiUrl(path: string): string {
+  return `/api/v1${path}`;
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const send = (token: string | null) =>
-    fetchWithTimeout(`/api/v1${path}`, {
+    fetchWithTimeout(apiUrl(path), {
       method,
       headers: requestHeaders(body, token),
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -93,7 +98,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return payload as T;
 }
 
-interface Envelope<T> {
+export interface Envelope<T> {
   data: T;
   meta?: Record<string, unknown>;
 }
@@ -108,7 +113,7 @@ export const api = {
   // Multipart upload: do not set Content-Type (the browser adds the boundary).
   async upload<T>(path: string, form: FormData): Promise<Envelope<T>> {
     const send = (token: string | null) =>
-      fetchWithTimeout(`/api/v1${path}`, {
+      fetchWithTimeout(apiUrl(path), {
         method: "POST",
         headers: {
           "Accept-Language": apiLocale(),
@@ -134,7 +139,7 @@ export const api = {
   ): Promise<Envelope<T>> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", `/api/v1${path}`);
+      xhr.open("POST", apiUrl(path));
       xhr.setRequestHeader("Accept-Language", apiLocale());
       const token = getAccessToken();
       if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
@@ -181,7 +186,7 @@ export const api = {
       ? downloadUrl.slice("/api/v1".length)
       : downloadUrl;
     const send = (token: string | null) =>
-      fetchWithTimeout(`/api/v1${path}`, {
+      fetchWithTimeout(apiUrl(path), {
         headers: {
           "Accept-Language": apiLocale(),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),

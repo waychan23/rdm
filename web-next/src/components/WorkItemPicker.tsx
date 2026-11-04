@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Select from "@atlaskit/select";
 
-import { api } from "../lib/api";
+import { listWorkItems } from "../api/work-items-api";
 import { portalMenuProps } from "../lib/portalMenu";
 import type { WorkItem } from "../types";
 
@@ -97,9 +97,7 @@ export default function WorkItemPicker(props: Props) {
             const params = new URLSearchParams({ limit: "20", kind });
             if (term.trim()) params.set("q", term.trim());
             if (backlogOnly) params.set("backlog", "true");
-            return api.get<WorkItem[]>(
-              `/projects/${projectKey}/work-items?${params.toString()}`,
-            );
+            return listWorkItems(projectKey, params);
           }),
         );
         const seen = new Set<string>();

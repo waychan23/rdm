@@ -11,7 +11,8 @@ import { Box } from "@atlaskit/primitives/compiled";
 import { Page, PageHeader } from "../components/Page";
 import { useEventInstanceId } from "../hooks/useEventBus";
 import { useWorkItemUpdatedRefresh } from "../hooks/useWorkItemEvents";
-import { api } from "../lib/api";
+import { listWorkItems } from "../api/work-items-api";
+import { getWorkflow } from "../api/workflow-api";
 import { useAsync } from "../hooks/useAsync";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";
 import { useRememberViewScroll } from "../hooks/useRememberViewScroll";
@@ -110,7 +111,7 @@ async function loadTreeItems(projectKey: string, filterParams: string): Promise<
     const params = new URLSearchParams(filterParams);
     params.set("limit", String(TREE_BATCH));
     params.set("offset", String(offset));
-    const res = await api.get<WorkItem[]>(`/projects/${projectKey}/work-items?${params}`);
+    const res = await listWorkItems(projectKey, params);
     total = Number(res.meta?.total ?? res.data.length);
     items.push(...res.data);
     if (items.length >= total || res.data.length === 0) break;
@@ -189,7 +190,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
   };
 
   const workflowState = useAsync<WorkflowDto>(
-    async () => (await api.get<WorkflowDto>(`/workflow?project=${encodeURIComponent(projectKey)}`)).data,
+    () => getWorkflow(projectKey),
     [projectKey],
   );
 
@@ -212,7 +213,7 @@ function BacklogView({ projectKey }: { projectKey: string }) {
         const params = new URLSearchParams(filterParams);
         params.set("limit", String(PAGE_SIZE));
         params.set("offset", String((page - 1) * PAGE_SIZE));
-        const res = await api.get<WorkItem[]>(`/projects/${projectKey}/work-items?${params}`);
+        const res = await listWorkItems(projectKey, params);
         result = {
           items: res.data,
           total: Number(res.meta?.total ?? res.data.length),

@@ -14,7 +14,15 @@ import TextButton from "../../components/TextButton";
 import TruncatedText from "../../components/TruncatedText";
 import TypeKindIcon from "../../components/TypeKindIcon";
 import WorkItemPickerDialog from "../../components/WorkItemPickerDialog";
-import { api, errorCause } from "../../lib/api";
+import {
+  addSprintItems,
+  closeSprint,
+  getSprintDetail,
+  removeSprintItem,
+  startSprint as startSprintRequest,
+  updateSprint,
+} from "../../api/sprints-api";
+import { errorCause } from "../../lib/api";
 import { recallDetail, rememberDetail } from "../../lib/detailCache";
 import { useNotify } from "../../lib/flags";
 import { useEventInstanceId } from "../../hooks/useEventBus";
@@ -74,9 +82,9 @@ export default function SprintDetailDrawer({
   const refreshDetail = useCallback(async () => {
     if (!sprintId) return;
     try {
-      const res = await api.get<SprintDetail>(`/sprints/${sprintId}`);
-      rememberDetail(`sprint:${sprintId}`, res.data);
-      setDetail(res.data);
+      const detail = await getSprintDetail(sprintId);
+      rememberDetail(`sprint:${sprintId}`, detail);
+      setDetail(detail);
     } catch (e) {
       notify.error(t("loadFailed"), errorCause(e)?.message);
     }
@@ -113,7 +121,7 @@ export default function SprintDetailDrawer({
   const saveEdit = async (v: SprintFormValues) => {
     if (!detail) return;
     try {
-      await api.patch(`/sprints/${detail.id}`, v);
+      await updateSprint(detail.id, v);
       setShowEdit(false);
       await afterMutation();
       notify.success(t("saveSuccess"));
@@ -126,9 +134,10 @@ export default function SprintDetailDrawer({
     if (!detail || items.length === 0 || busy) return;
     setBusy(true);
     try {
-      await api.post(`/sprints/${detail.id}/items`, {
-        items: items.map((item) => item.display_id),
-      });
+      await addSprintItems(
+        detail.id,
+        items.map((item) => item.display_id),
+      );
       setPickerOpen(false);
       await afterMutation();
     } catch (e) {
@@ -141,7 +150,7 @@ export default function SprintDetailDrawer({
   const removeItem = async (displayId: string) => {
     if (!detail) return;
     try {
-      await api.del(`/sprints/${detail.id}/items/${encodeURIComponent(displayId)}`);
+      await removeSprintItem(detail.id, displayId);
       await afterMutation();
     } catch (e) {
       notify.error(t("removeFailed"), errorCause(e)?.message);
@@ -151,7 +160,7 @@ export default function SprintDetailDrawer({
   const startSprint = async () => {
     if (!detail) return;
     try {
-      await api.post(`/sprints/${detail.id}/start`, {});
+      await startSprintRequest(detail.id);
       await afterMutation();
     } catch (e) {
       notify.error(t("startFailed"), errorCause(e)?.message);
@@ -162,7 +171,7 @@ export default function SprintDetailDrawer({
     if (!detail) return;
     setConfirmClose(false);
     try {
-      await api.post(`/sprints/${detail.id}/close`, {});
+      await closeSprint(detail.id);
       await afterMutation();
     } catch (e) {
       notify.error(t("closeFailed"), errorCause(e)?.message);

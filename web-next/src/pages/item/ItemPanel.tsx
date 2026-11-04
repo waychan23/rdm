@@ -34,7 +34,36 @@ import EditWorkItemDialog from "../../workitems/EditWorkItemDialog";
 import { SPRINT_ITEM_KINDS, taskTypeOptions } from "../../workitems/constants";
 import { priorityOptions, priorityColor, priorityOption } from "../../workitems/priority";
 import StatusLozenge from "../../workitems/status";
-import { api, errorCause } from "../../lib/api";
+import {
+  assignWorkItem,
+  cancelStepInstance,
+  createWorkItemComment,
+  deleteComment as deleteCommentRequest,
+  deleteWorkItem,
+  executeStepInstance,
+  getWorkItem,
+  getWorkItemSprint,
+  listWorkItemComments,
+  reassignStepInstance,
+  rejectStepInstance,
+  reparentWorkItem,
+  retryStepInstance,
+  runWorkItemStep,
+  updateComment,
+  updateWorkItem,
+} from "../../api/work-items-api";
+import {
+  createProjectArtifact,
+  deleteArtifact,
+  deleteAttachment,
+  downloadAttachment,
+  listWorkItemArtifacts,
+  listWorkItemAttachments,
+  uploadProjectAttachment,
+} from "../../api/attachments-api";
+import { addSprintItems, listProjectSprints, removeSprintItem } from "../../api/sprints-api";
+import { getWorkflow } from "../../api/workflow-api";
+import { errorCause } from "../../lib/api";
 import { artifactKindLabel, kindLabel, statusLabel } from "../../lib/labels";
 import { i18n } from "../../i18n";
 import { useCurrentUser } from "../../lib/auth";
@@ -217,24 +246,16 @@ export default function ItemPanel({
 
   const load = useCallback(async () => {
     try {
-      const detail = await api.get<WorkItem>(
-        `/work-items/${encodeURIComponent(itemId)}`,
-      );
+      const detail = await getWorkItem(itemId);
       const meta = (detail.meta ?? {}) as WorkItemDetailMeta;
-      const [cm, mm, am, artm, wf, sprintInfo, sprintList] = await Promise.all([
-        api.get<Comment[]>(
-          `/work-items/${itemId}/comments?limit=${COMMENTS_PAGE}&offset=0`,
-        ),
+      const [cm, mm, am, artm, workflow, sprintInfo, sprintList] = await Promise.all([
+        listWorkItemComments(itemId, { limit: COMMENTS_PAGE, offset: 0 }),
         loadProjectMembers(projectKey),
-        api.get<Attachment[]>(
-          `/projects/${projectKey}/attachments?owner_type=work_item&owner_ref=${encodeURIComponent(itemId)}`,
-        ),
-        api.get<Artifact[]>(
-          `/projects/${projectKey}/artifacts?owner_type=work_item&owner_ref=${encodeURIComponent(itemId)}`,
-        ),
-        api.get<WorkflowDto>(`/workflow?project=${encodeURIComponent(projectKey)}`),
-        api.get<{ sprint: Sprint | null }>(`/work-items/${itemId}/sprint`),
-        api.get<Sprint[]>(`/projects/${projectKey}/sprints`),
+        listWorkItemAttachments(projectKey, itemId),
+        listWorkItemArtifacts(projectKey, itemId),
+        getWorkflow(projectKey),
+        getWorkItemSprint(itemId),
+        listProjectSprints(projectKey),
       ]);
       setBundle({
         item: detail.data,
@@ -247,13 +268,13 @@ export default function ItemPanel({
         steps: meta.available_steps ?? [],
         activeStep: meta.active_step ?? null,
         permissions: meta.permissions ?? {},
-        workflowFields: effectiveFields(wf.data, detail.data),
+        workflowFields: effectiveFields(workflow, detail.data),
         comments: cm.data,
         members: flattenMembers(mm),
-        attachments: am.data,
-        artifacts: artm.data,
-        sprint: sprintInfo.data.sprint,
-        sprints: sprintList.data,
+        attachments: am,
+        artifacts: artm,
+        sprint: sprintInfo.sprint,
+        sprints: sprintList,
       });
       versionRef.current = detail.data.row_version;
       setHasMoreComments(cm.data.length >= COMMENTS_PAGE);
@@ -385,11 +406,11 @@ export default function ItemPanel({
       const rowVersion = versionRef.current;
       if (rowVersion === null) return false;
       try {
-        const res = await api.patch<WorkItem>(`/work-items/${itemId}`, {
+        const updated = await updateWorkItem(itemId, {
           row_version: rowVersion,
           ...payload,
         });
-        versionRef.current = res.data.row_version;
+        versionRef.current = updated.row_version;
         publishChange("updated");
         await refresh();
         notify.success(t("panel.saveSuccess"));
@@ -485,12 +506,12 @@ export default function ItemPanel({
     if (!bundle || !stepExecute) return;
     try {
       if (stepExecute.active) {
-        await api.post(`/work-item-steps/${stepExecute.active.id}/execute`, {
+        await executeStepInstance(stepExecute.active.id, {
           note_md: noteMd,
           attachment_ids: attachmentIds,
         });
       } else if (stepExecute.step) {
-        await api.post(`/work-items/${itemId}/steps/${stepExecute.step.key}`, {
+        await runWorkItemStep(itemId, stepExecute.step.key, {
           row_version: versionRef.current ?? bundle.item.row_version,
           note_md: noteMd,
           attachment_ids: attachmentIds,
@@ -510,7 +531,7 @@ export default function ItemPanel({
   const startStep = async (executors: string[]) => {
     if (!bundle || !stepStart) return;
     try {
-      await api.post(`/work-items/${itemId}/steps/${stepStart.key}`, {
+      await runWorkItemStep(itemId, stepStart.key, {
         row_version: versionRef.current ?? bundle.item.row_version,
         executors,
       });
@@ -528,7 +549,7 @@ export default function ItemPanel({
   const reassignStep = async (executors: string[]) => {
     if (!stepReassign) return;
     try {
-      await api.post(`/work-item-steps/${stepReassign.active.id}/reassign`, {
+      await reassignStepInstance(stepReassign.active.id, {
         row_version: stepReassign.active.row_version,
         executors,
       });
@@ -548,9 +569,7 @@ export default function ItemPanel({
     const target = stepCancel;
     setStepCancel(null);
     try {
-      await api.post(`/work-item-steps/${target.id}/cancel`, {
-        row_version: target.row_version,
-      });
+      await cancelStepInstance(target);
       notify.success(t("panel.stepCancelled"));
       setGateMessage(null);
       publishChange("updated");
@@ -563,10 +582,7 @@ export default function ItemPanel({
   const rejectStep = async (reason: string) => {
     if (!stepReject) return;
     try {
-      await api.post(`/work-item-steps/${stepReject.id}/reject`, {
-        row_version: stepReject.row_version,
-        reason,
-      });
+      await rejectStepInstance(stepReject, reason);
       notify.success(t("panel.stepRejected"));
       setGateMessage(null);
       setStepReject(null);
@@ -578,9 +594,7 @@ export default function ItemPanel({
   };
 
   const retryStep = async (active: ActiveStep) => {    try {
-      await api.post(`/work-item-steps/${active.id}/retry`, {
-        row_version: active.row_version,
-      });
+      await retryStepInstance(active);
       setGateMessage(null);
       publishChange("updated");
       await refresh();
@@ -594,7 +608,7 @@ export default function ItemPanel({
     if (!memberId) return false;
     if (bundle?.item.assignee?.id === memberId) return true;
     try {
-      await api.post(`/work-items/${itemId}/assign`, { member: memberId });
+      await assignWorkItem(itemId, memberId);
       publishChange("updated");
       await refresh();
       notify.success(t("panel.saveSuccess"));
@@ -609,7 +623,7 @@ export default function ItemPanel({
   const changePriority = async (priority: number) => {
     if (!bundle) return;
     try {
-      await api.patch(`/work-items/${itemId}`, {
+      await updateWorkItem(itemId, {
         row_version: versionRef.current ?? bundle.item.row_version,
         priority,
       });
@@ -625,10 +639,11 @@ export default function ItemPanel({
   const reparent = async (option: WorkItemOption | null) => {
     if (!bundle) return;
     try {
-      await api.post(`/work-items/${itemId}/reparent`, {
-        parent: option?.display_id ?? null,
-        row_version: versionRef.current ?? bundle.item.row_version,
-      });
+      await reparentWorkItem(
+        itemId,
+        option?.display_id ?? null,
+        versionRef.current ?? bundle.item.row_version,
+      );
       // Wake both the old and the new parent drawer.
       publishChange("updated", {
         parentId: option?.id ?? null,
@@ -656,17 +671,19 @@ export default function ItemPanel({
         form.append("file", file);
         form.append("owner_type", "work_item");
         form.append("owner_ref", itemId);
-        const res = await api.uploadWithProgress<Attachment>(
-          `/projects/${projectKey}/attachments`,
+        const attachment = await uploadProjectAttachment(
+          projectKey,
           form,
           setUploadProgress,
         );
         setUploadProgress(null);
         if (attachToComment) {
-          pendingIds.current.push(res.data.id);
-          setPendingFiles((p) => [...p, { name: file.name, id: res.data.id }]);
+          pendingIds.current.push(attachment.id);
+          setPendingFiles((p) => [...p, { name: file.name, id: attachment.id }]);
         } else {
-          setBundle((b) => (b ? { ...b, attachments: [...b.attachments, res.data] } : b));
+          setBundle((b) =>
+            b ? { ...b, attachments: [...b.attachments, attachment] } : b,
+          );
         }
       }
       if (attachToComment) notify.success(t("panel.attachmentsUploaded"));
@@ -680,7 +697,7 @@ export default function ItemPanel({
 
   const removeAttachment = async (id: string) => {
     try {
-      await api.del(`/attachments/${id}`);
+      await deleteAttachment(id);
       setBundle((b) =>
         b ? { ...b, attachments: b.attachments.filter((a) => a.id !== id) } : b,
       );
@@ -710,9 +727,10 @@ export default function ItemPanel({
   const loadMoreComments = async () => {    if (!bundle || loadingMoreComments) return;
     setLoadingMoreComments(true);
     try {
-      const res = await api.get<Comment[]>(
-        `/work-items/${itemId}/comments?limit=${COMMENTS_PAGE}&offset=${bundle.comments.length}`,
-      );
+      const res = await listWorkItemComments(itemId, {
+        limit: COMMENTS_PAGE,
+        offset: bundle.comments.length,
+      });
       setBundle((b) =>
         b ? { ...b, comments: [...b.comments, ...res.data] } : b,
       );
@@ -725,7 +743,7 @@ export default function ItemPanel({
   };
 
   const removeArtifact = async (id: string) => {    try {
-      await api.post(`/artifacts/${id}/delete`, {});
+      await deleteArtifact(id);
       setBundle((b) =>
         b ? { ...b, artifacts: b.artifacts.filter((a) => a.id !== id) } : b,
       );
@@ -741,12 +759,10 @@ export default function ItemPanel({
     setSavingSprint(true);
     try {
       if (bundle.sprint) {
-        await api.del(
-          `/sprints/${bundle.sprint.id}/items/${encodeURIComponent(bundle.item.display_id)}`,
-        );
+        await removeSprintItem(bundle.sprint.id, bundle.item.display_id);
       }
       if (sprintId) {
-        await api.post(`/sprints/${sprintId}/items`, { items: [bundle.item.display_id] });
+        await addSprintItems(sprintId, [bundle.item.display_id]);
       }
       publishChange("updated");
       setSprintEditing(false);
@@ -781,13 +797,13 @@ export default function ItemPanel({
     if (!draft.trim() || savingComment || uploadingDraftImage) return;
     setSavingComment(true);
     try {
-      const res = await api.post<Comment>(`/work-items/${itemId}/comments`, {
+      const comment = await createWorkItemComment(itemId, {
         body_md: draft,
         reply_to_id: replyTo?.id ?? null,
         attachment_ids: pendingIds.current,
       });
       setBundle((b) =>
-        b ? { ...b, comments: [...b.comments, res.data] } : b,
+        b ? { ...b, comments: [...b.comments, comment] } : b,
       );
       setRefreshKey((value) => value + 1);
       setDraft("");
@@ -807,7 +823,7 @@ export default function ItemPanel({
     const target = commentToDelete;
     setCommentToDelete(null);
     try {
-      await api.del(`/comments/${target.id}`);
+      await deleteCommentRequest(target.id);
       await refresh();
     } catch (e) {
       notify.error(t("panel.commentDeleteFailed"), errorCause(e)?.message);
@@ -818,7 +834,7 @@ export default function ItemPanel({
     if (deleting) return;
     setDeleting(true);
     try {
-      await api.del(`/work-items/${itemId}`);
+      await deleteWorkItem(itemId);
       notify.success(t("panel.itemDeleted", { id: bundle?.item.display_id ?? itemId }));
       publishChange("deleted");
       setConfirmDelete(false);
@@ -834,9 +850,7 @@ export default function ItemPanel({
   const saveCommentEdit = async () => {
     if (!editingComment || !editingComment.body.trim()) return;
     try {
-      await api.patch(`/comments/${editingComment.id}`, {
-        body_md: editingComment.body.trim(),
-      });
+      await updateComment(editingComment.id, editingComment.body.trim());
       setEditingComment(null);
       notify.success(t("panel.commentUpdated"));
       await refresh();
@@ -851,7 +865,7 @@ export default function ItemPanel({
       return;
     }
     try {
-      const res = await api.post<Artifact>(`/projects/${projectKey}/artifacts`, {
+      const artifact = await createProjectArtifact(projectKey, {
         owner_type: "work_item",
         owner_ref: itemId,
         kind: a.kind,
@@ -859,7 +873,7 @@ export default function ItemPanel({
         url: a.url,
         description_md: "",
       });
-      setBundle((b) => (b ? { ...b, artifacts: [...b.artifacts, res.data] } : b));
+      setBundle((b) => (b ? { ...b, artifacts: [...b.artifacts, artifact] } : b));
       setShowArtifact(false);
     } catch (e) {
       notify.error(t("panel.artifactAddFailed"), errorCause(e)?.message);
@@ -1200,7 +1214,9 @@ export default function ItemPanel({
                     className="rdm-item-att"
                     data-testid={`item-attachment-${a.id}`}
                   >
-                    <TextButton onClick={() => api.download(a.download_url, a.filename)}>
+                    <TextButton
+                      onClick={() => downloadAttachment(a.download_url, a.filename)}
+                    >
                       <TruncatedText className="rdm-item-att-name" text={a.filename} />
                     </TextButton>
                     <Text size="small" color="color.text.subtlest">
@@ -1397,7 +1413,9 @@ export default function ItemPanel({
                       className="rdm-item-att"
                       style={{ marginTop: token("space.050") }}
                     >
-                      <TextButton onClick={() => api.download(a.download_url, a.filename)}>
+                      <TextButton
+                        onClick={() => downloadAttachment(a.download_url, a.filename)}
+                      >
                         📎 {a.filename}
                       </TextButton>
                     </div>

@@ -12,7 +12,7 @@ import ModalDialog, {
 import Spinner from "@atlaskit/spinner";
 import { Box } from "@atlaskit/primitives/compiled";
 
-import { api } from "../lib/api";
+import { downloadAttachment } from "../api/attachments-api";
 import type { Attachment } from "../types";
 
 // The viewer runtime is loaded on first use; see FileViewerPreview.
@@ -44,7 +44,7 @@ export default function AttachmentPreviewDialog({ attachment, onClose }: Props) 
             <Button appearance="subtle" onClick={onClose}>
               {t("attachment.close")}
             </Button>
-            <Button onClick={() => api.download(attachment.download_url, attachment.filename)}>
+            <Button onClick={() => downloadAttachment(attachment.download_url, attachment.filename)}>
               {t("attachment.download")}
             </Button>
           </ModalFooter>

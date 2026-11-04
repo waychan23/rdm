@@ -19,7 +19,9 @@ import { useTranslation } from "react-i18next";
 import FormField from "../components/FormField";
 import MarkdownEditor from "../components/MarkdownEditor";
 import WorkItemPicker, { type WorkItemOption } from "../components/WorkItemPicker";
-import { api, errorCause } from "../lib/api";
+import { createWorkItem } from "../api/work-items-api";
+import { getWorkflow } from "../api/workflow-api";
+import { errorCause } from "../lib/api";
 import { useCurrentUser } from "../lib/auth";
 import { useNotify } from "../lib/flags";
 import { parseHoursInput } from "../lib/format";
@@ -115,10 +117,9 @@ export default function CreateWorkItemDialog({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    api
-      .get<WorkflowDto>(`/workflow?project=${encodeURIComponent(projectKey)}`)
-      .then((res) => {
-        if (!cancelled) setWorkflow(res.data);
+    getWorkflow(projectKey)
+      .then((workflow) => {
+        if (!cancelled) setWorkflow(workflow);
       })
       .catch(() => {
         if (!cancelled) setWorkflow(null);
@@ -219,8 +220,8 @@ export default function CreateWorkItemDialog({
         );
       }
       const item = (
-        await api.post<WorkItem>(`/projects/${projectKey}/work-items`, payload)
-      ).data;
+        await createWorkItem(projectKey, payload)
+      );
       notify.success(t("create.created", { id: item.display_id }));
       onCreated(item);
       onClose();

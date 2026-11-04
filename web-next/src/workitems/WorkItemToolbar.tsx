@@ -8,7 +8,8 @@ import Select from "@atlaskit/select";
 import Textfield from "@atlaskit/textfield";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
-import { api } from "../lib/api";
+import { getFilterOptions, type FilterOptions } from "../api/work-items-api";
+import { listProjectSprints } from "../api/sprints-api";
 import { useAsync } from "../hooks/useAsync";
 import { statusLabel } from "../lib/labels";
 import { allowDrawerEnter, suppressDrawerEnter } from "../lib/drawerMotion";
@@ -37,12 +38,6 @@ interface Option {
 
 interface SprintOption extends Option {
   sprint: Sprint;
-}
-
-interface FilterOptions {
-  statuses: string[];
-  assignees: Assignee[];
-  participants: Assignee[];
 }
 
 interface Props {
@@ -140,10 +135,9 @@ export default function WorkItemToolbar({
 
   useEffect(() => {
     let alive = true;
-    api
-      .get<Sprint[]>(`/projects/${projectKey}/sprints`)
-      .then((res) => {
-        if (alive) setSprints(res.data);
+    listProjectSprints(projectKey)
+      .then((sprints) => {
+        if (alive) setSprints(sprints);
       })
       .catch(() => {
         // The filter stays empty; the data view still works unfiltered.
@@ -159,10 +153,7 @@ export default function WorkItemToolbar({
   const requestParams = buildRequestParams(filters).toString();
   const optionsState = useAsync<FilterOptions>(
     async () => {
-      const res = await api.get<FilterOptions>(
-        `/projects/${projectKey}/work-items/filter-options?${requestParams}`,
-      );
-      return res.data;
+      return getFilterOptions(projectKey, requestParams);
     },
     [projectKey, requestParams],
   );

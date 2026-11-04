@@ -29,11 +29,21 @@ import MarkdownEditor from "../components/MarkdownEditor";
 import MarkdownText from "../components/MarkdownText";
 import { Page, PageHeader } from "../components/Page";
 import TextButton from "../components/TextButton";
-import { api, errorCause } from "../lib/api";
+import {
+  archiveMessages,
+  createMailGroup,
+  deleteMessages,
+  getMailbox,
+  listMailGroups,
+  markMessagesRead,
+  sendProjectMessage,
+} from "../api/mailbox-api";
+import { listMyAgents } from "../api/users-api";
+import { errorCause } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { useNotify } from "../lib/flags";
 import { useCurrentUser } from "../lib/auth";
-import type { MailGroup, MailMessage, Mailbox, OrgUser } from "../types";
+import type { MailGroup, MailMessage, OrgUser } from "../types";
 import { flattenMembers, loadProjectMembers } from "../lib/members";
 import { useOpenWorkItem } from "../lib/itemOverlay";
 import {
@@ -164,8 +174,7 @@ export default function MailboxPage() {
         if (query.trim()) params.set("q", query.trim());
         params.set("order", order);
         if (cursor) params.set(order === "desc" ? "before" : "since", cursor);
-        const base = projectFilter ? `/projects/${projectFilter}/mailbox` : "/mailbox";
-        const box = (await api.get<Mailbox>(`${base}?${params}`)).data;
+        const box = await getMailbox(projectFilter, params);
         setMessages((prev) => (replace ? box.messages : [...prev, ...box.messages]));
         setNextCursor(box.next_cursor);
       } catch (e) {
@@ -196,9 +205,8 @@ export default function MailboxPage() {
   }, [projectFilter]);
 
   useEffect(() => {
-    api
-      .get<OrgUser[]>("/me/agents")
-      .then((r) => setAgents(r.data))
+    listMyAgents()
+      .then(setAgents)
       .catch(() => {});
   }, []);
 
@@ -212,7 +220,7 @@ export default function MailboxPage() {
 
   const markRead = async (ids: string[]) => {
     try {
-      await api.post("/messages/read", { delivery_ids: ids });
+      await markMessagesRead(ids);
       const remaining = new Set(
         [...selected].filter((id) => !ids.includes(id)),
       );
@@ -225,7 +233,7 @@ export default function MailboxPage() {
 
   const archive = async (ids: string[], archived: boolean) => {
     try {
-      await api.post("/messages/archive", { delivery_ids: ids, archived });
+      await archiveMessages(ids, archived);
       setSelected(new Set());
       notify.success(archived ? t("notify.archived") : t("notify.unarchived"));
       await fetchPage(null, true);
@@ -236,7 +244,7 @@ export default function MailboxPage() {
 
   const remove = async (ids: string[]) => {
     try {
-      await api.post("/messages/delete", { delivery_ids: ids });
+      await deleteMessages(ids);
       setSelected(new Set());
       notify.success(t("notify.deleted"));
       await fetchPage(null, true);
@@ -251,8 +259,7 @@ export default function MailboxPage() {
       return;
     }
     try {
-      const res = await api.get<MailGroup[]>(`/projects/${projectFilter}/mailboxes`);
-      setGroups(res.data);
+      setGroups(await listMailGroups(projectFilter));
     } catch (e) {
       notify.error(t("notify.loadGroupsFailed"), errorCause(e)?.message);
     }
@@ -283,7 +290,7 @@ export default function MailboxPage() {
       return;
     }
     try {
-      await api.post(`/projects/${projectKey}/mailboxes`, {
+      await createMailGroup(projectKey, {
         name: groupName.trim(),
         members: groupMembers.map((m) => m.value),
       });
@@ -307,7 +314,7 @@ export default function MailboxPage() {
     }
     setSending(true);
     try {
-      await api.post(`/projects/${projectFilter}/messages`, {
+      await sendProjectMessage(projectFilter, {
         to: compose.to.map((o) => o.value),
         subject: compose.subject,
         body_md: compose.body,

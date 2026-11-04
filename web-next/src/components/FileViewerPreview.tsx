@@ -22,7 +22,7 @@ import pdfLegacyWorkerSrc from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
 
 import Spinner from "@atlaskit/spinner";
 
-import { api } from "../lib/api";
+import { fetchAttachmentBlob } from "../api/attachments-api";
 import type { Attachment } from "../types";
 
 interface Props {
@@ -53,8 +53,7 @@ export default function FileViewerPreview({ attachment }: Props) {
     let alive = true;
     setBlob(null);
     setFailed(false);
-    api
-      .fetchBlob(attachment.download_url)
+    fetchAttachmentBlob(attachment.download_url)
       .then((value) => alive && setBlob(value))
       .catch(() => alive && setFailed(true));
     return () => {

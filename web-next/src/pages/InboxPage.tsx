@@ -15,7 +15,14 @@ import { token } from "@atlaskit/tokens";
 import { cardBorder } from "../components/cardBorder";
 import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
-import { api, errorCause } from "../lib/api";
+import {
+  getTodos,
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationsRead,
+} from "../api/inbox-api";
+import { listMyAgents } from "../api/users-api";
+import { errorCause } from "../lib/api";
 import { reloadSession, useCurrentUser } from "../lib/auth";
 import { useAsync } from "../hooks/useAsync";
 import { formatDate } from "../lib/format";
@@ -79,9 +86,8 @@ export default function InboxPage() {
   const me = useCurrentUser();
   const [agents, setAgents] = useState<OrgUser[]>([]);
   useEffect(() => {
-    api
-      .get<OrgUser[]>("/me/agents")
-      .then((res) => setAgents(res.data))
+    listMyAgents()
+      .then(setAgents)
       .catch(() => {
         // Keep only the "me" option when the agent list cannot be loaded.
       });
@@ -118,7 +124,7 @@ export default function InboxPage() {
       limit: "100",
     });
     if (identity) params.set("identity", identity);
-    const res = await api.get<Notification[]>(`/notifications?${params}`);
+    const res = await listNotifications(params);
     return {
       items: res.data,
       unread: Number(res.meta?.unread ?? 0),
@@ -130,8 +136,7 @@ export default function InboxPage() {
     if (tab !== "todo") {
       return { assigned: [], pending_steps: [], approvals: [], overdue: [], mentions: [] };
     }
-    const suffix = identity ? `?identity=${encodeURIComponent(identity)}` : "";
-    return (await api.get<TodoBundle>(`/todos${suffix}`)).data;
+    return getTodos(identity);
   }, [tab, identity]);
 
   useEffect(() => {
@@ -150,10 +155,7 @@ export default function InboxPage() {
   const openNotification = async (n: Notification) => {
     if (!n.read_at) {
       try {
-        await api.post("/notifications/read", {
-          ids: [n.id],
-          ...(identity ? { identity } : {}),
-        });
+        await markNotificationsRead([n.id], identity);
         await reloadSession();
         notifications.reload();
       } catch (e) {
@@ -170,10 +172,8 @@ export default function InboxPage() {
 
   const markAll = async () => {
     try {
-      const res = await api.post<{ updated: number }>("/notifications/read-all", {
-        ...(identity ? { identity } : {}),
-      });
-      notify.success(t("notify.markAllSuccess", { count: res.data.updated }));
+      const updated = await markAllNotificationsRead(identity);
+      notify.success(t("notify.markAllSuccess", { count: updated }));
       await reloadSession();
       notifications.reload();
     } catch (e) {

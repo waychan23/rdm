@@ -2,7 +2,7 @@
 // exposed as revocable object URLs. MarkdownText uses this module so the same
 // image is downloaded once even when it appears in the preview and the list.
 
-import { api } from "./api";
+import { attachmentBlobUrl } from "../api/attachments-api";
 
 interface Entry {
   url?: string;
@@ -32,8 +32,7 @@ export async function acquireAttachmentImage(src: string): Promise<string> {
   if (entry.url) return entry.url;
   if (!entry.promise) {
     const current = entry;
-    current.promise = api
-      .blobUrl(src)
+    current.promise = attachmentBlobUrl(src)
       .then((url) => {
         if (cache.get(src) === current) {
           current.url = url;

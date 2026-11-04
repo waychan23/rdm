@@ -17,7 +17,9 @@ import { useTranslation } from "react-i18next";
 import FormField from "../components/FormField";
 import MarkdownEditor from "../components/MarkdownEditor";
 import WorkItemPicker, { type WorkItemOption } from "../components/WorkItemPicker";
-import { api, errorCause } from "../lib/api";
+import { reparentWorkItem, updateWorkItem } from "../api/work-items-api";
+import { getWorkflow } from "../api/workflow-api";
+import { errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 import { parseHoursInput } from "../lib/format";
 import { portalMenuProps } from "../lib/portalMenu";
@@ -101,10 +103,9 @@ export default function EditWorkItemDialog({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    api
-      .get<WorkflowDto>(`/workflow?project=${encodeURIComponent(projectKey)}`)
-      .then((res) => {
-        if (!cancelled) setWorkflow(res.data);
+    getWorkflow(projectKey)
+      .then((workflow) => {
+        if (!cancelled) setWorkflow(workflow);
       })
       .catch(() => {
         if (!cancelled) setWorkflow(null);
@@ -201,18 +202,15 @@ export default function EditWorkItemDialog({
         );
       }
       let updated = (
-        await api.patch<WorkItem>(`/work-items/${item.display_id}`, payload)
-      ).data;
+        await updateWorkItem(item.display_id, payload)
+      );
 
       const wantedParent = parent?.display_id ?? null;
       const currentParent = parentOption?.display_id ?? null;
       if (wantedParent !== currentParent) {
         updated = (
-          await api.post<WorkItem>(`/work-items/${item.display_id}/reparent`, {
-            parent: wantedParent,
-            row_version: updated.row_version,
-          })
-        ).data;
+          await reparentWorkItem(item.display_id, wantedParent, updated.row_version)
+        );
       }
       notify.success(t("edit.saved"));
       onSaved(updated);

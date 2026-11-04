@@ -18,7 +18,9 @@ import { cardBorder } from "../components/cardBorder";
 import FormField from "../components/FormField";
 import MarkdownEditor from "../components/MarkdownEditor";
 import { Page, PageHeader } from "../components/Page";
-import { api, errorCause } from "../lib/api";
+import { archiveProject, getProject, transferProjectOwner, updateProject } from "../api/projects-api";
+import { listWorkflowConfigs } from "../api/workflow-api";
+import { errorCause } from "../lib/api";
 import { statusLabel } from "../lib/labels";
 import {
   invalidateProjectMembers,
@@ -27,7 +29,7 @@ import {
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
 import { userLabel } from "../lib/users";
-import type { OrgUser, Project, ProjectMemberRow, WorkflowConfig } from "../types";
+import type { OrgUser, Project, ProjectMemberRow } from "../types";
 
 const styles = cssMap({
   infoBlock: {
@@ -71,19 +73,16 @@ export default function SettingsPage() {
 
   const { data, loading, error, reload: reloadAsync } = useAsync<{ project: Project; members: ProjectMemberRow[] }>(
      async () => {
-       const [p, m] = await Promise.all([
-         api.get<Project>(`/projects/${projectKey}`),
+       const [project, members] = await Promise.all([
+         getProject(projectKey),
          loadProjectMembers(projectKey),
        ]);
-       return { project: p.data, members: m };
+       return { project, members };
      },
      [projectKey, nonce],
   );
 
-  const { data: workflowConfigs } = useAsync(
-    async () => (await api.get<WorkflowConfig[]>("/workflow-configs?enabled=true")).data,
-    [],
-  );
+  const { data: workflowConfigs } = useAsync(() => listWorkflowConfigs(true), []);
 
   useEffect(() => {
      if (data) {
@@ -144,7 +143,7 @@ export default function SettingsPage() {
      setSaving(true);
      try {
        const currentVersionId = data?.project.workflow_config_version_id ?? "";
-       await api.patch(`/projects/${projectKey}`, {
+       await updateProject(projectKey, {
          name,
          description_md: description,
          // Only send a changed selection: an unchanged disabled/old pinned
@@ -167,7 +166,7 @@ export default function SettingsPage() {
     if (!selection?.latest_version_id || upgrading) return;
     setUpgrading(true);
     try {
-      await api.patch(`/projects/${projectKey}`, {
+      await updateProject(projectKey, {
         workflow_config_version_id: selection.latest_version_id,
       });
       setWorkflowVersionId(selection.latest_version_id);
@@ -192,9 +191,7 @@ export default function SettingsPage() {
     }
     setReassigning(true);
     try {
-      await api.post(`/projects/${projectKey}/transfer-owner`, {
-        user_id: pendingOwnerId,
-      });
+      await transferProjectOwner(projectKey, pendingOwnerId);
       invalidateProjectMembers(projectKey);
       setOwnerId(pendingOwnerId);
       setPendingOwnerId(null);
@@ -210,7 +207,7 @@ export default function SettingsPage() {
   const archive = async () => {
      setConfirmArchive(false);
      try {
-       await api.post(`/projects/${projectKey}/archive`);
+       await archiveProject(projectKey);
        invalidateProjectMembers(projectKey);
        reload();
      } catch (e) {

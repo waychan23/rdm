@@ -15,7 +15,12 @@ import ErrorState from "../components/ErrorState";
 import FormField from "../components/FormField";
 import { Page, PageHeader } from "../components/Page";
 import { useAsync } from "../hooks/useAsync";
-import { api, errorCause } from "../lib/api";
+import {
+  getEmailSettings,
+  sendTestEmail,
+  updateEmailSettings,
+} from "../api/email-api";
+import { errorCause } from "../lib/api";
 import { useCurrentUser } from "../lib/auth";
 import { useNotify } from "../lib/flags";
 import type { EmailSecurity, EmailSettings } from "../types";
@@ -78,10 +83,7 @@ export default function EmailSettingsPage() {
   const [testTo, setTestTo] = useState("");
   const [testing, setTesting] = useState(false);
 
-  const { data, loading, error, reload } = useAsync(
-    async () => (await api.get<EmailSettings>("/email-settings")).data,
-    [],
-  );
+  const { data, loading, error, reload } = useAsync(getEmailSettings, []);
 
   useEffect(() => {
     if (data) setForm(fromSettings(data));
@@ -107,7 +109,7 @@ export default function EmailSettingsPage() {
       };
       if (form.clearPassword) payload.password = "";
       else if (form.password) payload.password = form.password;
-      await api.patch("/email-settings", payload);
+      await updateEmailSettings(payload);
       notify.success(t("notify.saved"));
       reload();
     } catch (e) {
@@ -120,10 +122,8 @@ export default function EmailSettingsPage() {
   const sendTest = async () => {
     setTesting(true);
     try {
-      const res = await api.post<{ sent: boolean; to: string }>("/email-settings/test", {
-        to: testTo.trim() || null,
-      });
-      notify.success(t("notify.testSent", { to: res.data.to }));
+      const result = await sendTestEmail(testTo.trim() || null);
+      notify.success(t("notify.testSent", { to: result.to }));
     } catch (e) {
       notify.error(t("notify.testFailed"), errorCause(e)?.message);
     } finally {

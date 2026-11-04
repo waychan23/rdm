@@ -26,7 +26,13 @@ import ErrorState from "../components/ErrorState";
 import FormField from "../components/FormField";
 import MarkdownEditor from "../components/MarkdownEditor";
 import { Page, PageHeader } from "../components/Page";
-import { api, errorCause } from "../lib/api";
+import {
+  createWorkspace,
+  deleteWorkspace,
+  listWorkspaces,
+  updateWorkspace,
+} from "../api/workspaces-api";
+import { errorCause } from "../lib/api";
 import { workspaceKindLabel } from "../lib/labels";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
@@ -81,7 +87,7 @@ export default function WorkspacesPage() {
   });
 
   const { data: workspaces, loading, error } = useAsync<Workspace[]>(
-    async () => (await api.get<Workspace[]>(`/projects/${projectKey}/workspaces`)).data,
+    () => listWorkspaces(projectKey),
     [projectKey, nonce],
   );
 
@@ -122,8 +128,8 @@ export default function WorkspacesPage() {
       description_md: form.description_md || null,
     };
     try {
-      if (form.id) await api.patch(`/workspaces/${form.id}`, payload);
-      else await api.post(`/projects/${projectKey}/workspaces`, payload);
+      if (form.id) await updateWorkspace(form.id, payload);
+      else await createWorkspace(projectKey, payload);
       setDialogOpen(false);
       reload();
       notify.success(t("workspaces.saveSuccess"));
@@ -137,7 +143,7 @@ export default function WorkspacesPage() {
   const remove = async () => {
     if (!confirmId) return;
     try {
-      await api.del(`/workspaces/${confirmId}`);
+      await deleteWorkspace(confirmId);
       reload();
     } catch (e) {
       notify.error(t("workspaces.deleteFailed"), errorCause(e)?.message);

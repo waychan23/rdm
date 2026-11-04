@@ -23,7 +23,19 @@ import FormField from "../components/FormField";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
-import { api, errorCause } from "../lib/api";
+import { changePassword as changePasswordRequest } from "../api/auth-api";
+import {
+  createMyAgent,
+  createMyToken,
+  getNotificationPrefs,
+  listMyAgents,
+  listMyTokens,
+  revokeMyToken,
+  updateMe,
+  updateMyAgent,
+  updateNotificationPrefs,
+} from "../api/users-api";
+import { errorCause } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { kindLabel } from "../lib/labels";
 import { useAsync } from "../hooks/useAsync";
@@ -97,18 +109,14 @@ export default function PersonalSettingsPage() {
   const reload = () => setNonce((n) => n + 1);
 
   const { data: tokens, error: tokensError } = useAsync<Token[]>(
-     async () => (await api.get<Token[]>("/me/tokens")).data,
+     listMyTokens,
      [nonce],
   );
   const { data: agents, error: agentsError } = useAsync<OrgUser[]>(
-     async () => (await api.get<OrgUser[]>("/me/agents")).data,
+     listMyAgents,
      [nonce],
   );
-  const prefsState = useAsync<NotificationPrefs>(
-     async () =>
-       (await api.get<{ prefs: NotificationPrefs }>("/me/notification-prefs")).data.prefs,
-     [nonce],
-  );
+  const prefsState = useAsync<NotificationPrefs>(getNotificationPrefs, [nonce]);
   const [prefs, setPrefs] = useState<NotificationPrefs>({});
   useEffect(() => {
      if (prefsState.data) setPrefs(prefsState.data);
@@ -123,7 +131,7 @@ export default function PersonalSettingsPage() {
        [channel]: { ...prev[channel], [type]: enabled },
      }));
      try {
-       await api.patch("/me/notification-prefs", { prefs: { [channel]: { [type]: enabled } } });
+       await updateNotificationPrefs({ [channel]: { [type]: enabled } });
      } catch (e) {
        setPrefs((prev) => ({
          ...prev,
@@ -155,7 +163,7 @@ export default function PersonalSettingsPage() {
      if (savingProfile) return;
      setSavingProfile(true);
      try {
-       await api.patch("/me", {
+       await updateMe({
          display_name: profileDisplayName.trim() || null,
          email: profileEmail.trim() || null,
          notify_webhook: profileWebhook.trim() || null,
@@ -175,7 +183,7 @@ export default function PersonalSettingsPage() {
   const [newPw, setNewPw] = useState("");
   const changePassword = async () => {
      try {
-       await api.post("/auth/password", { old_password: oldPw, new_password: newPw });
+       await changePasswordRequest(oldPw, newPw);
        setOldPw("");
        setNewPw("");
        notify.success(t("personal.password.changed"));
@@ -200,8 +208,8 @@ export default function PersonalSettingsPage() {
        const body: Record<string, unknown> = { label: tokenLabel };
        if (tokenDays.trim()) body.expires_in_days = Number(tokenDays);
        if (actAs) body.act_as_user_id = actAs;
-       const res = await api.post<Token>("/me/tokens", body);
-       setIssued(res.data.token ?? "");
+       const token = await createMyToken(body);
+       setIssued(token.token ?? "");
        reload();
      } catch (e) {
        notify.error(t("personal.tokens.issueFailed"), errorCause(e)?.message);
@@ -229,7 +237,7 @@ export default function PersonalSettingsPage() {
      if (!revokeTarget || revoking) return;
      setRevoking(true);
      try {
-       await api.del(`/me/tokens/${revokeTarget.id}`);
+       await revokeMyToken(revokeTarget.id);
        setRevokeTarget(null);
        reload();
        notify.success(t("personal.tokens.revokedNotice"));
@@ -261,7 +269,7 @@ export default function PersonalSettingsPage() {
          notify_webhook: agentForm.notify_webhook || null,
          notify_webhook_format: agentForm.notify_webhook_format,
        };
-       await api.post("/me/agents", body);
+       await createMyAgent(body);
        setAgentOpen(false);
        setAgentForm(defaultAgentForm());
        reload();
@@ -274,7 +282,7 @@ export default function PersonalSettingsPage() {
 
   const toggleAgent = async (agent: OrgUser) => {
      try {
-       await api.patch(`/me/agents/${agent.id}`, { is_active: !agent.is_active });
+       await updateMyAgent(agent.id, { is_active: !agent.is_active });
        reload();
      } catch (e) {
        notify.error(t("personal.actionFailed"), errorCause(e)?.message);
@@ -297,7 +305,7 @@ export default function PersonalSettingsPage() {
   const saveAgent = async () => {
      if (!editAgent) return;
      try {
-       await api.patch(`/me/agents/${editAgent.id}`, {
+       await updateMyAgent(editAgent.id, {
          display_name: editDisplayName.trim() || null,
          notify_webhook: editHook || null,
          notify_webhook_format: editFmt,

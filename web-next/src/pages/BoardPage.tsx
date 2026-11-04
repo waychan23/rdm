@@ -12,7 +12,9 @@ import { Page, PageHeader } from "../components/Page";
 import ErrorState from "../components/ErrorState";
 import { useEventInstanceId } from "../hooks/useEventBus";
 import { useWorkItemUpdatedRefresh } from "../hooks/useWorkItemEvents";
-import { api, errorCause } from "../lib/api";
+import { listWorkItems, runWorkItemStep } from "../api/work-items-api";
+import { getWorkflow } from "../api/workflow-api";
+import { errorCause } from "../lib/api";
 import { statusLabel } from "../lib/labels";
 import { useNotify } from "../lib/flags";
 import { useRestoreScroll } from "../hooks/useRestoreScroll";
@@ -156,12 +158,11 @@ export default function BoardPage() {
 
   useEffect(() => {
     let alive = true;
-    api
-      .get<WorkflowDto>(`/workflow?project=${encodeURIComponent(projectKey)}`)
-      .then((res) => {
+    getWorkflow(projectKey)
+      .then((workflow) => {
         if (alive) {
           setWorkflow((prev) =>
-            prev && sameWorkflow(prev, res.data) ? prev : res.data,
+            prev && sameWorkflow(prev, workflow) ? prev : workflow,
           );
           setWorkflowError(null);
         }
@@ -216,9 +217,7 @@ export default function BoardPage() {
         };
       });
       try {
-        const res = await api.get<WorkItem[]>(
-          `/projects/${projectKey}/work-items?${params.toString()}`,
-        );
+        const res = await listWorkItems(projectKey, params);
         if (generationRef.current !== generation) return;
         const total = Number(res.meta?.total ?? res.data.length);
         setColumns((prev) => {
@@ -386,7 +385,7 @@ export default function BoardPage() {
         return next;
       });
       try {
-        await api.post(`/work-items/${item.display_id}/steps/${step.key}`, {
+        await runWorkItemStep(item.display_id, step.key, {
           row_version: item.row_version,
           note_md: null,
         });

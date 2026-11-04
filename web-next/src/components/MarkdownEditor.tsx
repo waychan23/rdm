@@ -21,7 +21,8 @@ import TextStyleIcon from "@atlaskit/icon/core/text-style";
 
 import MarkdownText from "./MarkdownText";
 import TextButton from "./TextButton";
-import { api, errorCause } from "../lib/api";
+import { uploadProjectAttachment } from "../api/attachments-api";
+import { errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 import { flattenMembers, loadProjectMembers } from "../lib/members";
 import { portalMenuProps } from "../lib/portalMenu";
@@ -143,12 +144,9 @@ export default function MarkdownEditor({
         form.append("owner_type", "project");
         form.append("owner_ref", projectKey);
         form.append("state", "temp");
-        const res = await api.upload<Attachment>(
-          `/projects/${projectKey}/attachments`,
-          form,
-        );
+        const attachment = await uploadProjectAttachment(projectKey, form);
         const alt = file.name.replace(/[[\]]/g, "");
-        inserted.push(`![${alt}](${res.data.download_url})`);
+        inserted.push(`![${alt}](${attachment.download_url})`);
       }
       if (inserted.length > 0) {
         const text = `\n${inserted.join("\n")}\n`;

@@ -23,11 +23,12 @@ import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 import { cardBorder } from "../components/cardBorder";
 import FormField from "../components/FormField";
 import { Page, PageHeader } from "../components/Page";
-import { api, errorCause } from "../lib/api";
+import { listProjects, createProject } from "../api/projects-api";
+import { listWorkflowConfigs } from "../api/workflow-api";
+import { errorCause } from "../lib/api";
 import { useCurrentUser } from "../lib/auth";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
-import type { Project, WorkflowConfig } from "../types";
 
 const styles = cssMap({
   card: {
@@ -73,14 +74,8 @@ export default function ProjectsPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(FORM_INITIAL);
 
-  const { data: projects, error, loading, reload } = useAsync(
-    async () => (await api.get<Project[]>("/projects")).data,
-    [],
-  );
-  const { data: workflowConfigs } = useAsync(
-    async () => (await api.get<WorkflowConfig[]>("/workflow-configs?enabled=true")).data,
-    [],
-  );
+  const { data: projects, error, loading, reload } = useAsync(listProjects, []);
+  const { data: workflowConfigs } = useAsync(() => listWorkflowConfigs(true), []);
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
@@ -91,7 +86,7 @@ export default function ProjectsPage() {
     }
     setSaving(true);
     try {
-      await api.post("/projects", { ...form });
+      await createProject({ ...form });
       setDialogOpen(false);
       setForm(FORM_INITIAL);
       reload();

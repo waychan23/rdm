@@ -5,7 +5,11 @@
 // useCurrentUser().
 import { useSyncExternalStore } from "react";
 
-import { api } from "./api";
+import {
+  fetchWhoami as fetchWhoamiApi,
+  submitLogin as submitLoginApi,
+  submitLogout,
+} from "../api/auth-api";
 import { clearTokens, getAccessToken } from "./oauth";
 import { clearPageCache } from "./pageCache";
 import { clearProjectMembersCache } from "./members";
@@ -26,10 +30,10 @@ function emit() {
   listeners.forEach((l) => l());
 }
 
-async function fetchWhoami(): Promise<Whoami | null> {
+async function loadWhoami(): Promise<Whoami | null> {
   if (!getAccessToken()) return null;
   try {
-    const user = (await api.get<Whoami>("/whoami")).data;
+    const user = await fetchWhoamiApi();
     lastFetchedAt = Date.now();
     return user;
   } catch {
@@ -40,7 +44,7 @@ async function fetchWhoami(): Promise<Whoami | null> {
 /** Resolve the identity once per page load; reuse the in-flight promise. */
 export function ensureSession(): Promise<Whoami | null> {
   if (currentUser) return Promise.resolve(currentUser);
-  readiness ??= fetchWhoami().then((u) => {
+  readiness ??= loadWhoami().then((u) => {
     currentUser = u;
     emit();
     return u;
@@ -65,7 +69,7 @@ export async function reloadSession(): Promise<Whoami | null> {
  */
 export function refreshSession(): Promise<Whoami | null> {
   if (refreshInFlight) return refreshInFlight;
-  const request = fetchWhoami().then((user) => {
+  const request = loadWhoami().then((user) => {
     currentUser = user;
     emit();
     return user;
@@ -91,32 +95,19 @@ export function refreshSessionIfStale(
   return refreshSession();
 }
 
-export interface LoginResult {
-  must_reset: boolean;
-  redirect_to?: string;
-  set_password_url?: string;
-}
-
 /** Submit the SPA login form for an OAuth login ticket. */
-export async function submitLogin(
+export function submitLogin(
   authKey: string,
   name: string,
   password: string,
   remember: boolean,
-): Promise<LoginResult> {
-  return (
-    await api.post<LoginResult>("/auth/login", {
-      auth_key: authKey,
-      name,
-      password,
-      remember,
-    })
-  ).data;
+) {
+  return submitLoginApi({ authKey, name, password, remember });
 }
 
 export async function logout() {
   try {
-    if (getAccessToken()) await api.post("/auth/logout", {});
+    if (getAccessToken()) await submitLogout();
   } finally {
     clearPageCache();
     clearScrollMemory();

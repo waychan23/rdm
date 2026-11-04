@@ -10,16 +10,9 @@ import { RadioGroup } from "@atlaskit/radio";
 import Spinner from "@atlaskit/spinner";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
+import { fetchConsentInfo, submitConsentDecision, type ConsentInfo } from "../api/auth-api";
 import { cardBorder } from "../components/cardBorder";
-import { apiLocale } from "../i18n";
 import { userLabel } from "../lib/users";
-import type { OrgUser } from "../types";
-
-interface ConsentInfo {
-  client: { client_id: string; client_name: string | null };
-  scopes: string[];
-  selectable_users: OrgUser[];
-}
 
 const styles = cssMap({
   wrap: {
@@ -43,20 +36,6 @@ const styles = cssMap({
   },
 });
 
-// Consent is authenticated by the one-shot capability key in the URL (§17);
-// it must not use the Bearer-injecting api client.
-async function consentFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/v1${path}`, {
-    ...init,
-    headers: { "Accept-Language": apiLocale(), ...(init?.headers ?? {}) },
-  });
-  const payload = await res.json();
-  if (!res.ok) {
-     throw new Error(payload?.error?.message ?? `HTTP ${res.status}`);
-  }
-  return payload.data as T;
-}
-
 export default function ConsentPage() {
   const { t } = useTranslation("auth");
   const { id = "" } = useParams();
@@ -70,9 +49,7 @@ export default function ConsentPage() {
   useEffect(() => {
      void (async () => {
        try {
-         const data = await consentFetch<ConsentInfo>(
-           `/oauth/consent/${id}?key=${encodeURIComponent(key)}`,
-         );
+         const data = await fetchConsentInfo(id, key);
          setInfo(data);
          setUserId(
            data.selectable_users.find((u) => u.type === "human")?.id ??
@@ -89,17 +66,10 @@ export default function ConsentPage() {
      if (loading) return;
      setLoading(true);
      try {
-       const body = allow
-         ? { decision: "allow", act_as_user_id: userId }
-         : { decision: "deny" };
-       const result = await consentFetch<{ redirect_to: string }>(
-         `/oauth/consent/${id}/decision?key=${encodeURIComponent(key)}`,
-         {
-           method: "POST",
-           headers: { "Content-Type": "application/json" },
-           body: JSON.stringify(body),
-         },
-       );
+       const decision = allow
+         ? ({ decision: "allow", act_as_user_id: userId } as const)
+         : ({ decision: "deny" } as const);
+       const result = await submitConsentDecision(id, key, decision);
        window.location.assign(result.redirect_to);
      } catch (e) {
        setError((e as Error).message);

@@ -25,7 +25,17 @@ import ErrorState from "../components/ErrorState";
 import ConfirmDialog from "../components/ConfirmDialog";
 import FormField from "../components/FormField";
 import { Page, PageHeader } from "../components/Page";
-import { api, errorCause } from "../lib/api";
+import {
+  createPasswordResetToken,
+  createUser,
+  listUsers,
+  revokeAllUserTokens,
+  setUserActive,
+  setUserOrgRoles,
+  transferOrgOwner,
+  updateUser,
+} from "../api/users-api";
+import { errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { refreshSession, useCurrentUser } from "../lib/auth";
 import { roleLabel } from "../lib/labels";
@@ -60,7 +70,7 @@ export default function OrgUsersPage() {
   const reload = () => setNonce((n) => n + 1);
 
   const { data: users, loading, error, reload: reloadUsers } = useAsync<OrgUser[]>(
-    async () => (await api.get<OrgUser[]>("/users")).data,
+    listUsers,
     [nonce],
   );
 
@@ -88,12 +98,12 @@ export default function OrgUsersPage() {
 
   const createHuman = async () => {
     try {
-      const res = await api.post<{ user: OrgUser; password_reset_url: string }>("/users", {
-        name: name.trim(),
+      const result = await createUser({
+        name,
         display_name: displayName.trim() || null,
         email: email || null,
       });
-      setCreatedUrl(absoluteUrl(res.data.password_reset_url));
+      setCreatedUrl(absoluteUrl(result.password_reset_url));
       setName("");
       setDisplayName("");
       setEmail("");
@@ -116,10 +126,8 @@ export default function OrgUsersPage() {
   const [resetUrl, setResetUrl] = useState("");
   const resetPassword = async (user: OrgUser) => {
     try {
-      const res = await api.post<{ password_reset_url: string }>(
-        `/users/${user.id}/password-reset-token`,
-      );
-      const url = absoluteUrl(res.data.password_reset_url);
+      const result = await createPasswordResetToken(user.id);
+      const url = absoluteUrl(result.password_reset_url);
       setResetUrl(url);
       void copy(url);
     } catch (e) {
@@ -127,9 +135,9 @@ export default function OrgUsersPage() {
     }
   };
 
-  const setActive = async (user: OrgUser, active: boolean) => {
+  const updateActive = async (user: OrgUser, active: boolean) => {
     try {
-      await api.post(`/users/${user.id}/${active ? "enable" : "disable"}`);
+      await setUserActive(user.id, active);
       reload();
     } catch (e) {
       notify.error(t("users.errors.actionFailed"), errorCause(e)?.message);
@@ -141,14 +149,14 @@ export default function OrgUsersPage() {
     if (!disableTarget) return;
     const target = disableTarget;
     setDisableTarget(null);
-    await setActive(target, false);
+    await updateActive(target, false);
   };
 
   const [confirmRevoke, setConfirmRevoke] = useState<OrgUser | null>(null);
   const revokeAll = async () => {
     if (!confirmRevoke) return;
     try {
-      await api.post(`/users/${confirmRevoke.id}/tokens/revoke-all`);
+      await revokeAllUserTokens(confirmRevoke.id);
       setConfirmRevoke(null);
       notify.success(t("users.notices.tokensRevoked"));
     } catch (e) {
@@ -170,7 +178,7 @@ export default function OrgUsersPage() {
   const saveUser = async () => {
     if (!editTarget) return;
     try {
-      await api.patch(`/users/${editTarget.id}`, {
+      await updateUser(editTarget.id, {
         display_name: editDisplayName.trim() || null,
         email: editEmail.trim() || null,
         description_md: editDescription.trim() || null,
@@ -192,7 +200,7 @@ export default function OrgUsersPage() {
   const saveRoles = async () => {
     if (!rolesTarget) return;
     try {
-      await api.put(`/users/${rolesTarget.id}/org-roles`, { roles });
+      await setUserOrgRoles(rolesTarget.id, roles);
       setRolesTarget(null);
       reload();
       notify.success(t("users.notices.saved"));
@@ -205,7 +213,7 @@ export default function OrgUsersPage() {
   const transferOwner = async () => {
     if (!confirmTransfer) return;
     try {
-      await api.post("/org/transfer-owner", { user_id: confirmTransfer.id });
+      await transferOrgOwner(confirmTransfer.id);
       setConfirmTransfer(null);
       notify.success(t("users.notices.ownerTransferred"));
       // The caller just lost org_owner; refresh the identity store and leave
@@ -276,7 +284,7 @@ export default function OrgUsersPage() {
                 onReset={() => void resetPassword(h)}
                 onToggle={() => {
                   if (h.is_active) setDisableTarget(h);
-                  else void setActive(h, true);
+                  else void updateActive(h, true);
                 }}
                 onRevoke={() => setConfirmRevoke(h)}
                 onEdit={() => openEdit(h)}

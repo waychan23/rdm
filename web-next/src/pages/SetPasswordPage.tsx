@@ -11,9 +11,10 @@ import Spinner from "@atlaskit/spinner";
 import Textfield from "@atlaskit/textfield";
 import { Box, Stack, Text } from "@atlaskit/primitives/compiled";
 
+import { checkPasswordTicket, setPasswordWithTicket } from "../api/auth-api";
 import { cardBorder } from "../components/cardBorder";
 import FormField from "../components/FormField";
-import { api, errorCause } from "../lib/api";
+import { errorCause } from "../lib/api";
 import { useNotify } from "../lib/flags";
 
 const styles = cssMap({
@@ -34,13 +35,6 @@ const styles = cssMap({
     boxShadow: "var(--ds-shadow-raised)",
   },
 });
-
-interface TicketStatus {
-  valid: boolean;
-  reason: string | null;
-  kind: string | null;
-  expires_at: string | null;
-}
 
 type TicketState =
   | { phase: "checking" }
@@ -97,7 +91,7 @@ export default function SetPasswordPage() {
     if (!ticket) return;
     setStatus({ phase: "checking" });
     try {
-      const { data } = await api.post<TicketStatus>("/auth/password-ticket/check", { ticket });
+      const data = await checkPasswordTicket(ticket);
       setStatus(
         data.valid
           ? { phase: "valid" }
@@ -123,7 +117,7 @@ export default function SetPasswordPage() {
     }
     setLoading(true);
     try {
-      await api.post("/auth/set-password", { ticket, new_password: password });
+      await setPasswordWithTicket(ticket, password);
       setDone(true);
     } catch (e) {
       notify.error(t("setPassword.errors.failed"), errorCause(e)?.message);

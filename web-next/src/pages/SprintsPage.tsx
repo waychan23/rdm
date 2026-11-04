@@ -10,13 +10,13 @@ import { Box, Text } from "@atlaskit/primitives/compiled";
 
 import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
-import { api, errorCause } from "../lib/api";
+import { createSprint, listProjectSprints } from "../api/sprints-api";
+import { errorCause } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import { useNotify } from "../lib/flags";
 import { allowDrawerEnter, suppressDrawerEnter } from "../lib/drawerMotion";
 import { useOpenWorkItem } from "../lib/itemOverlay";
 import { useListProjectKey, useListSearchParams } from "../lib/originSearch";
-import type { Sprint } from "../types";
 import SprintDetailDrawer from "./sprints/SprintDetailDrawer";
 import SprintFormDialog, { type SprintFormValues } from "./sprints/SprintFormDialog";
 import { sprintLozenge } from "./sprints/sprintStatus";
@@ -49,14 +49,14 @@ export default function SprintsPage() {
   };
 
   const loadSprints = useCallback(
-    async () => (await api.get<Sprint[]>(`/projects/${projectKey}/sprints`)).data,
+    () => listProjectSprints(projectKey),
     [projectKey],
   );
   const { data: sprints, loading, error, reload } = useAsync(loadSprints, [projectKey]);
 
   const create = async (v: SprintFormValues) => {
     try {
-      await api.post(`/projects/${projectKey}/sprints`, v);
+      await createSprint(projectKey, v);
       setShowCreate(false);
       await reload();
     } catch (e) {

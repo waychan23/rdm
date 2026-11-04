@@ -24,7 +24,17 @@ import WorkItemPickerDialog from "../components/WorkItemPickerDialog";
 import { useAsync } from "../hooks/useAsync";
 import { useEventInstanceId } from "../hooks/useEventBus";
 import { useWorkItemUpdatedRefresh } from "../hooks/useWorkItemEvents";
-import { api, errorCause } from "../lib/api";
+import {
+  addReleaseItems,
+  cancelRelease as cancelReleaseRequest,
+  createRelease,
+  getReleaseDetail,
+  listProjectReleases,
+  publishRelease,
+  removeReleaseItem,
+  updateRelease,
+} from "../api/releases-api";
+import { errorCause } from "../lib/api";
 import { recallDetail, rememberDetail } from "../lib/detailCache";
 import { useNotify } from "../lib/flags";
 import { formatDate } from "../lib/format";
@@ -36,7 +46,7 @@ import {
   useListProjectKey,
   useListSearchParams,
 } from "../lib/originSearch";
-import type { Release, ReleaseDetail, ReleaseStats, WorkItem } from "../types";
+import type { ReleaseDetail, ReleaseStats, WorkItem } from "../types";
 import StatusLozenge from "../workitems/status";
 import ReleaseFormDialog, { type ReleaseFormValues } from "./releases/ReleaseFormDialog";
 import "../styles/table.css";
@@ -135,7 +145,7 @@ export default function ReleasesPage() {
   const [busy, setBusy] = useState(false);
 
   const loadReleases = useCallback(
-    async () => (await api.get<Release[]>(`/projects/${projectKey}/releases`)).data,
+    () => listProjectReleases(projectKey),
     [projectKey],
   );
   const { data: releases, loading, error, reload } = useAsync(loadReleases, [projectKey]);
@@ -153,12 +163,11 @@ export default function ReleasesPage() {
     // empty for a frame before the fetch resolves.
     setDetail(recallDetail<ReleaseDetail>(`release:${detailId}`));
     let alive = true;
-    api
-      .get<ReleaseDetail>(`/releases/${detailId}`)
-      .then((res) => {
+    getReleaseDetail(detailId)
+      .then((release) => {
         if (alive) {
-          rememberDetail(`release:${detailId}`, res.data);
-          setDetail(res.data);
+          rememberDetail(`release:${detailId}`, release);
+          setDetail(release);
         }
       })
       .catch((e) => {
@@ -171,9 +180,9 @@ export default function ReleasesPage() {
 
   const refreshDetail = useCallback(async () => {
     if (detailId) {
-      const res = await api.get<ReleaseDetail>(`/releases/${detailId}`);
-      rememberDetail(`release:${detailId}`, res.data);
-      setDetail(res.data);
+      const detail = await getReleaseDetail(detailId);
+      rememberDetail(`release:${detailId}`, detail);
+      setDetail(detail);
     }
   }, [detailId]);
 
@@ -195,7 +204,7 @@ export default function ReleasesPage() {
 
   const create = async (values: ReleaseFormValues) => {
     try {
-      await api.post(`/projects/${projectKey}/releases`, values);
+      await createRelease(projectKey, values);
       setShowCreate(false);
       await reload();
     } catch (e) {
@@ -206,7 +215,7 @@ export default function ReleasesPage() {
   const saveEdit = async (values: ReleaseFormValues) => {
     if (!detail) return;
     try {
-      await api.patch(`/releases/${detail.id}`, values);
+      await updateRelease(detail.id, values);
       setShowEdit(false);
       await Promise.all([refreshDetail(), reload()]);
       notify.success(t("saveSuccess"));
@@ -219,9 +228,10 @@ export default function ReleasesPage() {
     if (!detail || items.length === 0 || busy) return;
     setBusy(true);
     try {
-      await api.post(`/releases/${detail.id}/items`, {
-        items: items.map((item) => item.display_id),
-      });
+      await addReleaseItems(
+        detail.id,
+        items.map((item) => item.display_id),
+      );
       setPickerOpen(false);
       await Promise.all([refreshDetail(), reload()]);
     } catch (e) {
@@ -234,7 +244,7 @@ export default function ReleasesPage() {
   const removeItem = async (displayId: string) => {
     if (!detail) return;
     try {
-      await api.del(`/releases/${detail.id}/items/${encodeURIComponent(displayId)}`);
+      await removeReleaseItem(detail.id, displayId);
       await Promise.all([refreshDetail(), reload()]);
     } catch (e) {
       notify.error(t("removeFailed"), errorCause(e)?.message);
@@ -246,7 +256,7 @@ export default function ReleasesPage() {
     setConfirmPublish(false);
     setBusy(true);
     try {
-      await api.post(`/releases/${detail.id}/publish`, {});
+      await publishRelease(detail.id);
       await Promise.all([refreshDetail(), reload()]);
       notify.success(t("status.RELEASED"));
     } catch (e) {
@@ -261,7 +271,7 @@ export default function ReleasesPage() {
     setConfirmCancel(false);
     setBusy(true);
     try {
-      await api.post(`/releases/${detail.id}/cancel`, {});
+      await cancelReleaseRequest(detail.id);
       await Promise.all([refreshDetail(), reload()]);
     } catch (e) {
       notify.error(t("cancelFailed"), errorCause(e)?.message);

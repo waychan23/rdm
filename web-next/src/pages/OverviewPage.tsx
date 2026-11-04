@@ -8,28 +8,14 @@ import Heading from "@atlaskit/heading";
 import Spinner from "@atlaskit/spinner";
 import { Box, Inline, Stack, Text } from "@atlaskit/primitives/compiled";
 
+import { getProjectOverview, type ProjectOverview } from "../api/projects-api";
 import { cardBorder } from "../components/cardBorder";
 import ErrorState from "../components/ErrorState";
 import { Page, PageHeader } from "../components/Page";
-import { api } from "../lib/api";
 import { useAsync } from "../hooks/useAsync";
 import TypeKindIcon from "../components/TypeKindIcon";
 import StatusLozenge from "../workitems/status";
 import { kindOptions } from "../workitems/constants";
-
-interface Overview {
-  total_items: number;
-  open_items: number;
-  my_open_items: number;
-  members: number;
-  by_kind: Record<string, number>;
-  by_status: Record<string, number>;
-  active_sprint: {
-    name: string;
-    total: number;
-    by_status: Record<string, number>;
-  } | null;
-}
 
 const kindLabel = (k: string) => kindOptions().find((o) => o.value === k)?.label ?? k;
 
@@ -63,8 +49,8 @@ export default function OverviewPage() {
   // The origin URL owns the project while this page is a drawer backdrop.
   const projectKey = useListProjectKey(routeKey);
   const navigate = useNavigate();
-  const { data, loading, error, reload } = useAsync<Overview>(
-    async () => (await api.get<Overview>(`/projects/${projectKey}/overview`)).data,
+  const { data, loading, error, reload } = useAsync<ProjectOverview>(
+    () => getProjectOverview(projectKey),
     [projectKey],
   );
 
