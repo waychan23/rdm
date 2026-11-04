@@ -50,8 +50,20 @@ def project_out(p: Project) -> dict:
     }
 
 
-def user_out(u: User, *, effective_active: bool | None = None) -> dict:
-    return {
+def user_out(
+    u: User,
+    *,
+    effective_active: bool | None = None,
+    include_private: bool = False,
+) -> dict:
+    """Serialize a user.
+
+    Notification webhooks are private (RDM-180): only the user themselves and
+    the manager of an agent may read them. Callers serializing the requester
+    or their own agents pass ``include_private=True``; directory/admin views
+    must leave it off so the fields are not part of the payload at all.
+    """
+    out = {
         "id": u.id,
         "type": u.type,
         "name": u.name,
@@ -61,13 +73,15 @@ def user_out(u: User, *, effective_active: bool | None = None) -> dict:
         "org_roles": list(u.org_roles),
         "accept_kinds": u.accept_kinds,
         "email": u.email,
-        "notify_webhook": u.notify_webhook,
-        "notify_webhook_format": u.notify_webhook_format,
         "must_reset_password": u.must_reset_password,
         "is_active": u.is_active,
         "effective_active": u.is_active if effective_active is None else effective_active,
         "created_at": _iso(u.created_at),
     }
+    if include_private:
+        out["notify_webhook"] = u.notify_webhook
+        out["notify_webhook_format"] = u.notify_webhook_format
+    return out
 
 
 def project_member_out(
@@ -77,6 +91,7 @@ def project_member_out(
     agents: list[tuple[User, ProjectMember]] | None = None,
     effective_active: bool | None = None,
 ) -> dict:
+    # Directory payload: never expose another user's webhook (RDM-180).
     out = user_out(user, effective_active=effective_active)
     out.update(
         {

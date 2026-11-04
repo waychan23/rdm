@@ -65,7 +65,7 @@ async def update_me(
     """Update my own profile (email / notification webhook)."""
     async with container.uow() as uow:
         user = await UserService(uow).update_self(actor, data=body.model_dump(exclude_unset=True))
-    return {"data": user_out(user)}
+    return {"data": user_out(user, include_private=True)}
 
 
 # --- tokens ---------------------------------------------------------------
@@ -120,7 +120,11 @@ async def list_agents(
         agents = await UserService(uow).list_my_agents(actor)
     return {
         "data": [
-            user_out(a, effective_active=bool(a.is_active and actor.human.is_active))
+            user_out(
+                a,
+                effective_active=bool(a.is_active and actor.human.is_active),
+                include_private=True,
+            )
             for a in agents
         ]
     }
@@ -134,7 +138,7 @@ async def create_agent(
 ) -> dict:
     async with container.uow() as uow:
         agent = await UserService(uow).create_agent(actor, data=body.model_dump())
-    return {"data": user_out(agent)}
+    return {"data": user_out(agent, include_private=True)}
 
 
 @router.patch("/agents/{agent_id}")
@@ -148,4 +152,4 @@ async def update_agent(
         agent = await UserService(uow).update_agent(
             actor, agent_id, data=body.model_dump(exclude_unset=True)
         )
-    return {"data": user_out(agent)}
+    return {"data": user_out(agent, include_private=True)}

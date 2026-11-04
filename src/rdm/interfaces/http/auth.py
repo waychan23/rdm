@@ -138,7 +138,7 @@ async def change_password(
 
 @router.get("/auth/me")
 async def me(actor: Actor = Depends(get_actor)) -> dict:
-    return {"data": user_out(actor.human)}
+    return {"data": user_out(actor.human, include_private=True)}
 
 
 @router.get("/oauth/consent/{consent_id}")

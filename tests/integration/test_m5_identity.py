@@ -432,3 +432,59 @@ async def test_user_display_name(server, owner_token) -> None:
         json={"display_name": "nope"},
     )
     assert r.status_code == 422
+
+
+async def test_notification_webhook_is_private(server, owner_token) -> None:
+    """RDM-180: only the user themselves or an agent's manager may read webhooks."""
+    client, _settings, app = server
+    await ensure_owner_access(client, app)
+
+    await client.post(
+        "/api/v1/projects", headers=auth(owner_token), json={"key": "LEAK", "name": "Leak"}
+    )
+    other_id = await create_human(client, owner_token, "webhook-other")
+    await add_to_project(client, owner_token, "LEAK", other_id, ["worker"])
+    other_token = await login_pat(client, "webhook-other")
+
+    # A user reads and updates their own webhook through /me.
+    r = await client.patch(
+        "/api/v1/me",
+        headers=auth(other_token),
+        json={"notify_webhook": "https://hook.example/secret", "notify_webhook_format": "feishu"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["notify_webhook"] == "https://hook.example/secret"
+    me = (await client.get("/api/v1/auth/me", headers=auth(other_token))).json()["data"]
+    assert me["notify_webhook"] == "https://hook.example/secret"
+    who = (await client.get("/api/v1/whoami", headers=auth(other_token))).json()["data"]
+    assert who["user"]["notify_webhook"] == "https://hook.example/secret"
+
+    # A manager reads and sets the webhook of an agent they own.
+    agent_id = await create_agent(client, other_token, "hook-agent")
+    r = await client.patch(
+        f"/api/v1/me/agents/{agent_id}",
+        headers=auth(other_token),
+        json={"notify_webhook": "https://hook.example/agent"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["notify_webhook"] == "https://hook.example/agent"
+    agents = (await client.get("/api/v1/me/agents", headers=auth(other_token))).json()["data"]
+    assert [a["notify_webhook"] for a in agents] == ["https://hook.example/agent"]
+
+    # Org user administration and the project member directory never carry
+    # webhook fields, not even for the org owner.
+    users = (await client.get("/api/v1/users", headers=auth(owner_token))).json()["data"]
+    assert users
+    for user in users:
+        assert "notify_webhook" not in user
+        assert "notify_webhook_format" not in user
+    rows = (await client.get("/api/v1/projects/LEAK/members", headers=auth(owner_token))).json()[
+        "data"
+    ]
+    assert rows
+    for row in rows:
+        assert "notify_webhook" not in row
+        assert "notify_webhook_format" not in row
+        for agent in row.get("agents", []):
+            assert "notify_webhook" not in agent["user"]
+            assert "notify_webhook_format" not in agent["user"]

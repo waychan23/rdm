@@ -41,7 +41,7 @@ def register(mcp: FastMCP, container: Container) -> None:
             my_open = await WorkItemService(uow).my_open_items(actor)
             return ok(
                 {
-                    "user": user_out(actor.human),
+                    "user": user_out(actor.human, include_private=True),
                     "identity": {
                         "id": actor.id,
                         "name": actor.name,
@@ -50,7 +50,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                         "act_as": actor.is_act_as,
                     },
                     "org_roles": actor.org_roles,
-                    "agents": [user_out(a) for a in agents],
+                    "agents": [user_out(a, include_private=True) for a in agents],
                     "projects": [
                         {
                             **project_out(p),

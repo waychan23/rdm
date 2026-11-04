@@ -66,11 +66,6 @@ function AgentRow({ agent }: { agent: NonNullable<ProjectMemberRow["agents"]>[nu
         </Text>
       </td>
       <td>
-        <Text size="small" color="color.text.subtlest">
-          {agent.user.notify_webhook ?? "—"}
-        </Text>
-      </td>
-      <td>
         <Lozenge appearance={agent.user.effective_active ? "success" : "default"}>
           {agent.user.effective_active ? t("agent.status.enabled") : t("agent.status.disabled")}
         </Lozenge>
@@ -184,7 +179,6 @@ export default function MembersPage() {
                 {t("table.type")}
               </th>
               <th scope="col">{t("table.roles")}</th>
-              <th scope="col">{t("table.webhook")}</th>
               <th scope="col" className="col-active">
                 {t("table.active")}
               </th>
@@ -277,12 +271,6 @@ function MemberGroup({
               ))
             )}
           </Inline>
-        </td>
-        <td>
-          <Text size="small" color="color.text.subtlest">
-            {member.notify_webhook ?? "—"}
-            {member.notify_webhook ? ` ${member.notify_webhook_format}` : ""}
-          </Text>
         </td>
         <td>
           <Lozenge appearance={member.is_active ? "success" : "default"}>

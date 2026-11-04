@@ -74,6 +74,7 @@ export interface OrgUser {
   org_roles: string[];
   accept_kinds?: string[];
   email?: string | null;
+  /** Private: only present for the current user or agents they manage (RDM-180). */
   notify_webhook?: string | null;
   notify_webhook_format?: string;
   must_reset_password?: boolean;

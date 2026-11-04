@@ -21,7 +21,6 @@ const members = {
     name: "名称",
     type: "类型",
     roles: "项目角色",
-    webhook: "Webhook",
     active: "活跃",
     actions: "操作",
   },

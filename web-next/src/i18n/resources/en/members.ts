@@ -21,7 +21,6 @@ const members = {
     name: "Name",
     type: "Type",
     roles: "Project roles",
-    webhook: "Webhook",
     active: "Active",
     actions: "Actions",
   },

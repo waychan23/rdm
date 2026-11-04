@@ -50,7 +50,7 @@ async def whoami(
         memberships = {pid: actor.membership(pid) for pid in actor.project_ids()}
     return {
         "data": {
-            "user": user_out(actor.human),
+            "user": user_out(actor.human, include_private=True),
             "identity": {
                 "id": actor.id,
                 "name": actor.name,
@@ -59,7 +59,7 @@ async def whoami(
                 "act_as": actor.is_act_as,
             },
             "org_roles": actor.org_roles,
-            "agents": [user_out(a) for a in agents],
+            "agents": [user_out(a, include_private=True) for a in agents],
             "projects": [
                 {
                     **project_out(p),
