@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime as dt
 from collections.abc import Mapping, Sequence
+from functools import partial
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
@@ -806,10 +807,9 @@ class MailboxService:
                     "url": f"/projects/{project.key}/mailbox",
                 },
             )
+            bus = get_bus()
             for user_id in recipients:
-                self.uow.defer_after_commit(
-                    lambda uid=user_id: get_bus().publish_user(uid, stream_event)
-                )
+                self.uow.defer_after_commit(partial(bus.publish_user, user_id, stream_event))
 
     async def _append_mailbox_event(
         self,
