@@ -13,6 +13,26 @@ human/agent 协作的研发工作管理，核心取向是**渐进式协作**：�
 （可选 PostgreSQL + ParadeDB 搜索）。服务默认只监听 127.0.0.1；企业内网/容器部署可绑定内网地址，
 敏感恢复端点仍仅限本机。
 
+## 技术栈
+
+| 分类 | 技术选型 | 用途 |
+|---|---|---|
+| 运行时 | Python 3.13；Node.js 22 + pnpm 12 | 后端 API/CLI；前端开发与构建 |
+| 后端框架 | FastAPI、Uvicorn、FastMCP、Typer | REST API、ASGI 服务、MCP endpoint、`rdm` CLI |
+| 配置与校验 | Pydantic v2、pydantic-settings | 请求/响应模型、环境变量配置 |
+| 数据访问 | SQLAlchemy 2（async）、Alembic | 仓储实现与数据库迁移 |
+| 数据与搜索 | SQLite（默认，FTS5 trigram）；PostgreSQL 18 + ParadeDB（可选，BM25 + jieba） | 开箱即用；可选共享数据库与中文全文搜索 |
+| 认证与安全 | OAuth 2.1（Authorization Code + PKCE）、PAT、argon2id、HMAC-SHA256 | 无状态 Bearer、CLI/CI 令牌、密码哈希、Webhook 签名 |
+| 前端 | React 18、TypeScript 5、Vite 6、React Router 6 | 单页应用，独立构建后由 nginx 托管 |
+| UI | Atlassian Design System（Atlaskit）、@compiled/react | 组件库、主题 token 与样式 |
+| 前端能力 | i18next、marked + DOMPurify、pdfjs-dist、@open-file-viewer、Pragmatic drag and drop | 国际化、Markdown 安全渲染、附件预览、看板拖拽 |
+| 测试 | pytest / pytest-asyncio、testcontainers、Playwright | 后端单元/集成测试、PostgreSQL 容器测试、Web e2e |
+| 质量 | Ruff、mypy、ESLint（type-aware） | Python lint/格式化、类型检查、前端废弃 API 门禁 |
+| 构建与部署 | uv + hatchling、Docker Compose、nginx、systemd、GitHub Actions | wheel 打包、容器/主机部署与 CI |
+
+后端按 `interfaces → application → domain ← infrastructure` 分层，REST 与 MCP 共用同一套领域规则；
+MCP endpoint 同时支持 OAuth 2.1 与 PAT。组件与部署拓扑见 [docs/architecture.md](docs/architecture.md)。
+
 ## 安装与部署
 
 - **生产部署**（从 Release 下载 wheel + 前端产物，systemd + nginx）：[docs/deployment.md](docs/deployment.md)
