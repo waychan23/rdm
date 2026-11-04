@@ -239,6 +239,8 @@ export default function WorkspacesPage() {
           <ModalDialog
             onClose={() => setDialogOpen(false)}
             width="460px"
+            // Backdrop clicks must not discard a half-filled form (RDM-163).
+            shouldCloseOnOverlayClick={false}
             testId="workspace-form-dialog"
           >
             <ModalHeader>

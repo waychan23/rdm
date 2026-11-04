@@ -173,7 +173,12 @@ export default function ProjectsPage() {
 
       <ModalTransition>
         {dialogOpen && (
-          <ModalDialog onClose={() => setDialogOpen(false)} testId="project-create-dialog">
+          <ModalDialog
+            onClose={() => setDialogOpen(false)}
+            // Backdrop clicks must not discard a half-filled form (RDM-163).
+            shouldCloseOnOverlayClick={false}
+            testId="project-create-dialog"
+          >
             <ModalHeader>
               <ModalTitle>{t("create.title")}</ModalTitle>
             </ModalHeader>

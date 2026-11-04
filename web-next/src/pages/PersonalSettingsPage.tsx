@@ -668,6 +668,8 @@ export default function PersonalSettingsPage() {
              onClose={() => setTokenOpen(false)}
              width="520px"
              label={t("personal.tokenDialog.dialogLabel")}
+             // Backdrop clicks must not discard a half-filled form (RDM-163).
+             shouldCloseOnOverlayClick={false}
              testId="personal-token-dialog"
            >
              <ModalHeader>
@@ -773,6 +775,8 @@ export default function PersonalSettingsPage() {
              onClose={() => setAgentOpen(false)}
              width="520px"
              label={t("personal.agentDialog.dialogLabel")}
+             // Backdrop clicks must not discard a half-filled form (RDM-163).
+             shouldCloseOnOverlayClick={false}
              testId="personal-agent-dialog"
            >
              <ModalHeader>
@@ -870,6 +874,8 @@ export default function PersonalSettingsPage() {
            <ModalDialog
              onClose={() => setEditAgent(null)}
              label={t("personal.agentNotify.title", { name: userLabel(editAgent) })}
+             // Backdrop clicks must not discard a half-filled form (RDM-163).
+             shouldCloseOnOverlayClick={false}
              testId="personal-agent-notify-dialog"
            >
              <ModalHeader>

@@ -261,7 +261,13 @@ export default function WorkflowConfigsPage() {
 
       <ModalTransition>
         {selected ? (
-          <ModalDialog width="x-large" onClose={() => setSelected(null)} testId="workflow-config-dialog">
+          <ModalDialog
+            width="x-large"
+            onClose={() => setSelected(null)}
+            // Backdrop clicks must not discard an edited config (RDM-163).
+            shouldCloseOnOverlayClick={false}
+            testId="workflow-config-dialog"
+          >
             <ModalHeader>
               <ModalTitle>{t("editor.title", { name: selected.name })}</ModalTitle>
             </ModalHeader>
@@ -390,7 +396,12 @@ export default function WorkflowConfigsPage() {
 
       <ModalTransition>
         {forkOpen && selected ? (
-          <ModalDialog onClose={() => setForkOpen(false)} testId="workflow-config-fork-dialog">
+          <ModalDialog
+            onClose={() => setForkOpen(false)}
+            // Backdrop clicks must not discard a half-filled form (RDM-163).
+            shouldCloseOnOverlayClick={false}
+            testId="workflow-config-fork-dialog"
+          >
             <ModalHeader>
               <ModalTitle>{t("editor.forkTitle")}</ModalTitle>
             </ModalHeader>

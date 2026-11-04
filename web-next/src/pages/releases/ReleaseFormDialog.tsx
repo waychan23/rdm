@@ -72,7 +72,13 @@ export default function ReleaseFormDialog({
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog onClose={onClose} width="480px" testId="release-form-dialog">
+        <ModalDialog
+          onClose={onClose}
+          width="480px"
+          // Backdrop clicks must not discard a half-filled form (RDM-163).
+          shouldCloseOnOverlayClick={false}
+          testId="release-form-dialog"
+        >
           <ModalHeader>
             <ModalTitle>{title}</ModalTitle>
           </ModalHeader>

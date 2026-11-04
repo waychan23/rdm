@@ -70,7 +70,12 @@ export function AddMemberDialog({
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog onClose={onClose} testId="member-add-dialog">
+        <ModalDialog
+          onClose={onClose}
+          // Backdrop clicks must not discard a half-filled form (RDM-163).
+          shouldCloseOnOverlayClick={false}
+          testId="member-add-dialog"
+        >
           <ModalHeader>
             <ModalTitle>{t("addDialog.title")}</ModalTitle>
           </ModalHeader>
@@ -178,7 +183,12 @@ export function MemberEditDialog({
   return (
     <ModalTransition>
       {open && member && (
-        <ModalDialog onClose={onClose} testId="member-edit-dialog">
+        <ModalDialog
+          onClose={onClose}
+          // Backdrop clicks must not discard a half-filled form (RDM-163).
+          shouldCloseOnOverlayClick={false}
+          testId="member-edit-dialog"
+        >
           <ModalHeader>
             <ModalTitle>{t("editDialog.title", { name: userLabel(member) })}</ModalTitle>
           </ModalHeader>

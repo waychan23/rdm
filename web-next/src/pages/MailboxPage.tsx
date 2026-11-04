@@ -729,6 +729,8 @@ export default function MailboxPage() {
             onClose={() => setShowCompose(false)}
             width="520px"
             label={compose.replyTo ? t("compose.replyTitle") : t("compose.newTitle")}
+            // Backdrop clicks must not discard a half-filled draft (RDM-163).
+            shouldCloseOnOverlayClick={false}
             testId="mailbox-compose-dialog"
           >
             <ModalHeader>
@@ -808,6 +810,8 @@ export default function MailboxPage() {
             onClose={() => setShowGroups(false)}
             width="560px"
             label={t("group.title")}
+            // Backdrop clicks must not discard the in-progress group form (RDM-163).
+            shouldCloseOnOverlayClick={false}
             testId="mailbox-groups-dialog"
           >
             <ModalHeader>

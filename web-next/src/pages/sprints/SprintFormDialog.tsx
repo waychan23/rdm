@@ -78,7 +78,13 @@ export default function SprintFormDialog({
   return (
     <ModalTransition>
       {open && (
-        <ModalDialog onClose={onClose} width="440px" testId="sprint-form-dialog">
+        <ModalDialog
+          onClose={onClose}
+          width="440px"
+          // Backdrop clicks must not discard a half-filled form (RDM-163).
+          shouldCloseOnOverlayClick={false}
+          testId="sprint-form-dialog"
+        >
           <ModalHeader>
             <ModalTitle>{title}</ModalTitle>
           </ModalHeader>

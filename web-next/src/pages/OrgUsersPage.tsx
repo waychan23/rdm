@@ -302,6 +302,8 @@ export default function OrgUsersPage() {
             onClose={() => setEditTarget(null)}
             width="520px"
             label={t("editUser.dialogLabel")}
+            // Backdrop clicks must not discard a half-filled form (RDM-163).
+            shouldCloseOnOverlayClick={false}
             testId="org-user-edit-dialog"
           >
             <ModalHeader>
@@ -364,6 +366,8 @@ export default function OrgUsersPage() {
             onClose={() => setCreateOpen(false)}
             width="520px"
             label={t("createUser.dialogLabel")}
+            // Backdrop clicks must not discard a half-filled form (RDM-163).
+            shouldCloseOnOverlayClick={false}
             testId="org-user-create-dialog"
           >
             <ModalHeader>
@@ -445,6 +449,8 @@ export default function OrgUsersPage() {
           <ModalDialog
             onClose={() => setRolesTarget(null)}
             label={t("rolesDialog.dialogLabel")}
+            // Backdrop clicks must not discard the role selection (RDM-163).
+            shouldCloseOnOverlayClick={false}
             testId="org-user-roles-dialog"
           >
             <ModalHeader>

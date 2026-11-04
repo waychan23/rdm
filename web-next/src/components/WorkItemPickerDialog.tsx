@@ -291,6 +291,8 @@ export default function WorkItemPickerDialog({
           onClose={onClose}
           width="50vw"
           height="60vh"
+          // Backdrop clicks must not discard the selection (RDM-163).
+          shouldCloseOnOverlayClick={false}
           testId="work-item-picker-dialog"
         >
           <ModalHeader>
