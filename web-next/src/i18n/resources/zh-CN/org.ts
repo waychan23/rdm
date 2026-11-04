@@ -188,6 +188,15 @@ const org = {
       missingChannelHint: "填写 Email 或 Webhook 后，对应渠道才会实际发送。",
       saveFailed: "保存通知设置失败",
     },
+    desktopNotifications: {
+      heading: "浏览器通知",
+      hint: "开启后，当页面在后台或窗口失去焦点时，新通知会以系统通知弹出；点击通知可回到 rdm 对应页面。关闭浏览器后不会收到通知。",
+      unsupported: "当前浏览器不支持通知。",
+      denied: "浏览器已拒绝通知权限；请在浏览器的网站设置中允许后刷新页面。",
+      enable: "允许桌面通知",
+      request: "开启浏览器通知",
+      enabled: "浏览器通知已开启",
+    },
     tokens: {
       heading: "访问令牌（PAT）",
       hideRevoked: "隐藏已吊销",

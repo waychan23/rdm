@@ -26,6 +26,7 @@ const nav = {
     mailbox: "Mailbox",
     logout: "Sign out",
     actingAs: "{{identity}} (as {{user}})",
+    notificationFallback: "New notification",
   },
   notFound: {
     header: "Page not found (404)",

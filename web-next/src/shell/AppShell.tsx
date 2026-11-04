@@ -29,6 +29,7 @@ import { token } from "@atlaskit/tokens";
 import ItemOverlayHost from "../components/ItemOverlayHost";
 import LocaleSwitcher from "../components/LocaleSwitcher";
 import { logout, refreshSession, refreshSessionIfStale, useCurrentUser } from "../lib/auth";
+import { showDesktopNotification } from "../lib/desktopNotifications";
 import { safePostLoginPath } from "../lib/oauth";
 import { startEventStream } from "../lib/stream";
 import { userLabel } from "../lib/users";
@@ -179,12 +180,28 @@ export default function AppShell() {
       if (event.event === "notification.created") {
         void refreshSession();
         window.dispatchEvent(new CustomEvent("rdm:notification", { detail: event.data }));
+        // On (re)connect the stream replays unread notifications; toasting
+        // those would repeat old news after every network hiccup (RDM-130).
+        if (event.data.replay === true) return;
+        showDesktopNotification({
+          id: String(event.data.id ?? ""),
+          title:
+            typeof event.data.title === "string" && event.data.title
+              ? event.data.title
+              : t("topbar.notificationFallback"),
+          body: typeof event.data.body === "string" ? event.data.body : undefined,
+          onActivate: () => {
+            if (typeof event.data.url === "string" && event.data.url) {
+              navigate(event.data.url);
+            }
+          },
+        });
       } else if (event.event === "work_item.changed" || event.event === "comment.changed") {
         window.dispatchEvent(new CustomEvent("rdm:data-changed", { detail: event.data }));
       }
     });
     return stop;
-  }, []);
+  }, [navigate, t]);
 
   const unreadCount = projectKey
     ? (who?.projects.find((p) => p.key === projectKey)?.unread_count ?? 0)

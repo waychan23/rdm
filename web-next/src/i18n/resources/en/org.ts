@@ -190,6 +190,15 @@ const org = {
       missingChannelHint: "Email or Webhook only sends after an address or URL is configured.",
       saveFailed: "Failed to save notification settings",
     },
+    desktopNotifications: {
+      heading: "Browser notifications",
+      hint: "When enabled, new notifications appear as system notifications while this tab is in the background or the window is unfocused. Click one to open the related rdm page. Notifications are not delivered after the browser is closed.",
+      unsupported: "This browser does not support notifications.",
+      denied: "Notifications are blocked; allow them in the browser's site settings and reload this page.",
+      enable: "Enable desktop notifications",
+      request: "Enable browser notifications",
+      enabled: "Browser notifications enabled",
+    },
     tokens: {
       heading: "Access tokens (PAT)",
       hideRevoked: "Hide revoked",

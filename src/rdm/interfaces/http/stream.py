@@ -72,6 +72,9 @@ async def stream(
                     "entity_ref": n.entity_ref,
                     "url": n.url,
                     "created_at": n.created_at.isoformat(),
+                    # Marks the reconnect replay so clients can refresh state
+                    # without re-alerting the user for old notifications.
+                    "replay": True,
                 },
             )
             for n in items

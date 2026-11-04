@@ -26,6 +26,7 @@ const nav = {
     mailbox: "信箱",
     logout: "登出",
     actingAs: "{{identity}}（以 {{user}} 身份）",
+    notificationFallback: "新通知",
   },
   notFound: {
     header: "页面不存在（404）",
