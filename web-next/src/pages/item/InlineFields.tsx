@@ -70,10 +70,16 @@ function EditorShell({ children }: { children: ReactNode }) {
   return (
     <div
       className="rdm-inline-editor"
-      // The panel closes on Escape; prevent that while a field editor is open.
-      // InlineEdit's own form handler still cancels the edit view.
-      onKeyDownCapture={(event) => {
-        if (event.key === "Escape") event.preventDefault();
+      // Escape must leave the draft alone (RDM-174): an IME candidate window
+      // routinely swallows Escape, and cancelling would discard what the user
+      // typed. Stop the key here — InlineEdit's form handler (which cancels the
+      // edit view) and the panel's window listener (which closes the drawer)
+      // both sit on ancestors. Descendant handlers run first, so an open Select
+      // menu still closes itself on Escape.
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
       }}
     >
       {children}
