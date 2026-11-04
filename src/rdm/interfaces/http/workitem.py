@@ -29,6 +29,7 @@ from rdm.interfaces.http.schemas import (
     StepRetryIn,
     StepStartIn,
     TransitionIn,
+    WorkflowUpgradeIn,
     WorkItemAssignIn,
     WorkItemCreateIn,
     WorkItemUpdateIn,
@@ -240,6 +241,7 @@ async def get_work_item(
             "ancestors": ([work_item_summary_out(a, project, members) for a in ancestors]),
             "allowed_parent_kinds": allowed_parent_kinds(item.kind),
             "allowed_child_kinds": allowed_child_kinds(item.kind),
+            "workflow_upgrade": await service.workflow_upgrade_status(project, item),
             **step_meta,
         }
     return {"data": data, "meta": meta}
@@ -259,6 +261,25 @@ async def update_work_item(
         members = await _users_map(uow, project.id)
         out = work_item_out(item, project, members)
     return {"data": out}
+
+
+@router.post("/work-items/{ref}/upgrade-workflow")
+async def upgrade_work_item_workflow(
+    ref: str,
+    body: WorkflowUpgradeIn,
+    container: Container = Depends(get_container),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    async with container.uow() as uow:
+        project, item, upgrade, changed = await WorkItemService(uow).upgrade_workflow(
+            actor, ref, row_version=body.row_version
+        )
+        members = await _users_map(uow, project.id)
+        data = work_item_out(item, project, members)
+    return {
+        "data": data,
+        "meta": {"workflow_upgrade": upgrade, "changed": changed},
+    }
 
 
 @router.get("/work-items/{ref}/history")

@@ -267,6 +267,12 @@ class WorkItem:
     workflow_version: int = 1
     # Pinned effective definition row (§17.120); None on legacy/unmigrated rows.
     workflow_def_id: str | None = None
+    # Which workflow config version this pinned definition came from. The
+    # definition snapshot is deduplicated by content, so provenance cannot be
+    # derived from ``workflow_def_id``; these snapshots are recorded here.
+    workflow_config_key: str | None = None
+    workflow_config_version: int | None = None
+    workflow_config_version_id: str | None = None
     row_version: int = 0
     fields: KindFields | None = None
     # M6: explicit participant/reviewer rows and configurable fields.

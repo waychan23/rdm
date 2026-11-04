@@ -350,6 +350,25 @@ class WorkflowConfigService:
             return None
         return await self._repo.get_version(project.workflow_config_version_id)
 
+    async def config_for_version(self, version: WorkflowConfigVersion) -> WorkflowConfig | None:
+        """The key-level config row a version belongs to (upgrade provenance)."""
+        return await self._repo.get_config(version.config_id)
+
+    async def default_active(self) -> tuple[WorkflowConfig, WorkflowConfigVersion] | None:
+        """The builtin ``default`` config's active version, if imported.
+
+        Projects without an explicit selection run the packaged default. The
+        config row normally exists (startup sync imports it), which gives the
+        item a human-readable key/version snapshot.
+        """
+        config = await self._repo.get_by_key("default")
+        if config is None or config.current_version_id is None:
+            return None
+        version = await self._repo.get_version(config.current_version_id)
+        if version is None:
+            return None
+        return config, version
+
     async def project_selection(self, project: Project) -> dict[str, object] | None:
         """Echo the project's pinned version, even if it is old or disabled.
 

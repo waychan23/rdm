@@ -13,9 +13,11 @@ Business rules (docs/architecture.md §3.2, §5; rulings §16.22-26, §17 M6):
 from __future__ import annotations
 
 import datetime as dt
+import json
 import logging
 import re
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
@@ -41,6 +43,7 @@ from rdm.domain.entities import (
 from rdm.domain.errors import (
     AlreadyAssigned,
     AlreadyDeleted,
+    ConflictVersion,
     NotFound,
     ValidationError,
     WorkflowGateBlocked,
@@ -97,6 +100,30 @@ def _display_no_from_query(project: Project, q: str | None) -> int | None:
 # A child change may cascade through parents; the parent chain is acyclic, but
 # cap the walk so a misconfigured trigger set cannot loop (§17.137).
 MAX_PARENT_TRIGGER_DEPTH = 10
+
+
+def _upgrade_item(code: str, message: str) -> dict[str, str]:
+    return {"code": code, "message": message}
+
+
+@dataclass(frozen=True)
+class WorkflowUpgradeContext:
+    """Internal result of the upgrade assessment (RDM-147).
+
+    ``public`` is the API shape; the remaining fields keep the resolved target
+    so the write path does not re-resolve the engine.
+    """
+
+    public: dict[str, Any]
+    is_latest: bool
+    target_engine: WorkflowEngine | None
+    target_resolved: ResolvedKindWorkflow | None
+    target_def_id: str | None
+    target_def_version: int | None
+    target_config_key: str | None
+    target_config_version: int | None
+    target_config_version_id: str | None
+
 
 # Fields that may appear for each kind on create/update.
 KIND_FIELDS: dict[str, set[str]] = {
@@ -889,6 +916,326 @@ class WorkItemService:
             return load_engine()
         return await WorkflowConfigService(self.uow).engine_for_project(project)
 
+    async def _workflow_config_snapshot(
+        self, project: Project
+    ) -> tuple[str, int | None, str | None]:
+        """Human-readable provenance for the definition a new item pins (RDM-147)."""
+        service = WorkflowConfigService(self.uow)
+        version = await service.selected_version(project)
+        if version is not None:
+            config = await service.config_for_version(version)
+            if config is not None:
+                return config.key, version.version, version.id
+        elif not project.workflow_config_version_id:
+            default_active = await service.default_active()
+            if default_active is not None:
+                config, version = default_active
+                return config.key, version.version, version.id
+        return "default", None, None
+
+    async def workflow_upgrade_status(self, project: Project, item: WorkItem) -> dict[str, Any]:
+        """Public upgrade assessment used by REST/MCP detail responses."""
+        return (await self._assess_workflow_upgrade(project, item)).public
+
+    async def _assess_workflow_upgrade(
+        self, project: Project, item: WorkItem
+    ) -> WorkflowUpgradeContext:
+        """Evaluate whether ``item`` can move to the project's current config.
+
+        Read-only: never inserts a definition version. The write path calls this
+        again and only then persists (RDM-147).
+        """
+        blockers: list[dict[str, str]] = []
+        warnings: list[dict[str, str]] = []
+
+        pinned_row = None
+        if item.workflow_def_id:
+            assert self.uow.workflow_versions is not None
+            pinned_row = await self.uow.workflow_versions.get(item.workflow_def_id)
+        current = {
+            "def_id": item.workflow_def_id,
+            "def_version": item.workflow_version,
+            "definition_schema_version": (
+                pinned_row.config_schema_version if pinned_row is not None else None
+            ),
+            "config_key": item.workflow_config_key,
+            "config_version": item.workflow_config_version,
+            "config_version_id": item.workflow_config_version_id,
+        }
+
+        config_service = WorkflowConfigService(self.uow)
+        target_config = None
+        target_config_version = None
+        target_engine: WorkflowEngine | None = None
+        if project.workflow_config_version_id:
+            target_config_version = await config_service.selected_version(project)
+            if target_config_version is None:
+                blockers.append(
+                    _upgrade_item(
+                        "PROJECT_CONFIG_UNAVAILABLE",
+                        "项目当前选用的工作流配置版本不存在",
+                    )
+                )
+            else:
+                target_config = await config_service.config_for_version(target_config_version)
+                if target_config is None:
+                    blockers.append(
+                        _upgrade_item(
+                            "PROJECT_CONFIG_UNAVAILABLE",
+                            "项目当前选用的工作流配置不存在",
+                        )
+                    )
+                    target_config_version = None
+                else:
+                    target_engine = await config_service.engine_for_project(project)
+        else:
+            default_active = await config_service.default_active()
+            if default_active is not None:
+                target_config, target_config_version = default_active
+            target_engine = load_engine()
+
+        target_config_key = (
+            target_config.key
+            if target_config is not None
+            else ("default" if not project.workflow_config_version_id else None)
+        )
+        target_config_number = (
+            target_config_version.version if target_config_version is not None else None
+        )
+        target_config_id = target_config_version.id if target_config_version is not None else None
+
+        target: dict[str, Any] | None = None
+        target_resolved: ResolvedKindWorkflow | None = None
+        target_def_id: str | None = None
+        target_def_version: int | None = None
+
+        if target_engine is not None:
+            task_type = item_task_type(item)
+            if not target_engine.spec.has_kind(item.kind):
+                blockers.append(
+                    _upgrade_item(
+                        "KIND_REMOVED",
+                        f"目标流程不包含工作项类型 {item.kind}",
+                    )
+                )
+            elif item.kind == "task" and task_type not in target_engine.spec.task_types:
+                blockers.append(
+                    _upgrade_item(
+                        "TASK_TYPE_REMOVED",
+                        f"目标流程不包含任务类型 {task_type}",
+                    )
+                )
+            else:
+                try:
+                    preview = await WorkflowVersionService(self.uow, target_engine).preview_target(
+                        item, target_engine
+                    )
+                except ValidationError:
+                    blockers.append(_upgrade_item("DEFINITION_INVALID", "目标工作流定义无效"))
+                else:
+                    target_resolved = preview.resolved
+                    target_def_id = preview.def_id
+                    target_def_version = preview.version
+                    target = {
+                        "config_id": target_config.id if target_config is not None else None,
+                        "config_key": target_config_key,
+                        "config_version": target_config_number,
+                        "config_version_id": target_config_id,
+                        "def_version": preview.version,
+                        "definition_schema_version": preview.schema_version,
+                        "definition_hash": preview.definition_hash,
+                    }
+
+                    if item.workflow_def_id is None:
+                        blockers.append(
+                            _upgrade_item(
+                                "LEGACY_DEFINITION_UNRESOLVED",
+                                "工作项尚未固定流程定义",
+                            )
+                        )
+                    if item.status not in preview.resolved.states:
+                        blockers.append(
+                            _upgrade_item(
+                                "STATUS_NOT_IN_TARGET",
+                                f"当前状态 {item.status} 不存在于目标流程",
+                            )
+                        )
+                    if (
+                        item.status not in preview.resolved.terminal
+                        and not preview.resolved.steps.get(item.status)
+                    ):
+                        blockers.append(
+                            _upgrade_item(
+                                "NO_OUTGOING_STEPS",
+                                f"当前状态 {item.status} 在目标流程中没有出边",
+                            )
+                        )
+                    assert self.uow.work_item_steps is not None
+                    active = await self.uow.work_item_steps.get_active_for_item(item.id)
+                    if active is not None:
+                        blockers.append(
+                            _upgrade_item(
+                                "ACTIVE_STEP_IN_PROGRESS",
+                                "工作项存在进行中的步骤",
+                            )
+                        )
+
+                    old_engine: WorkflowEngine | None = None
+                    old_resolved: ResolvedKindWorkflow | None = None
+                    try:
+                        old_engine = await WorkflowVersionService(
+                            self.uow, load_engine()
+                        ).engine_for(item)
+                        old_resolved = old_engine.resolve(item.kind, task_type)
+                    except ValidationError:
+                        old_resolved = None
+                    if old_resolved is not None:
+                        assert old_engine is not None
+                        if (item.status in old_resolved.terminal) != (
+                            item.status in preview.resolved.terminal
+                        ):
+                            warnings.append(
+                                _upgrade_item(
+                                    "TERMINAL_SEMANTICS_CHANGED",
+                                    "当前状态的终态语义发生变化",
+                                )
+                            )
+                        if self._outgoing_signature(old_engine, item) != self._outgoing_signature(
+                            target_engine, item
+                        ):
+                            warnings.append(
+                                _upgrade_item(
+                                    "GATE_CHANGED",
+                                    "当前状态可达步骤的 gate 与旧定义不同",
+                                )
+                            )
+                        if old_resolved.all_field_keys() != preview.resolved.all_field_keys():
+                            warnings.append(
+                                _upgrade_item(
+                                    "CUSTOM_FIELDS_CHANGED",
+                                    "目标流程声明的字段与旧定义不同",
+                                )
+                            )
+
+        is_latest = target_def_id is not None and target_def_id == item.workflow_def_id
+        available = bool(target_resolved) and not blockers and not is_latest
+        public = {
+            "current": current,
+            "target": target,
+            "available": available,
+            "blockers": blockers,
+            "warnings": warnings,
+        }
+        return WorkflowUpgradeContext(
+            public=public,
+            is_latest=is_latest,
+            target_engine=target_engine,
+            target_resolved=target_resolved,
+            target_def_id=target_def_id,
+            target_def_version=target_def_version,
+            target_config_key=target_config_key,
+            target_config_version=target_config_number,
+            target_config_version_id=target_config_id,
+        )
+
+    def _outgoing_signature(
+        self, engine: WorkflowEngine, item: WorkItem
+    ) -> tuple[tuple[str, str, str | None], ...] | None:
+        """Comparable snapshot of the item's outgoing steps under one engine."""
+        task_type = item_task_type(item)
+        try:
+            resolved = engine.resolve(item.kind, task_type)
+        except ValidationError:
+            return None
+        if item.status not in resolved.states:
+            return None
+        signature: list[tuple[str, str, str | None]] = []
+        for step in resolved.steps_from(item.status):
+            gate = engine.effective_gate(item.kind, item.status, step, task_type=task_type)
+            signature.append(
+                (
+                    step.key,
+                    step.to,
+                    json.dumps(gate.model_dump(), sort_keys=True) if gate else None,
+                )
+            )
+        return tuple(signature)
+
+    async def upgrade_workflow(
+        self, actor: Actor, ref: str, *, row_version: int
+    ) -> tuple[Project, WorkItem, dict[str, Any], bool]:
+        """Re-pin an item to the project's current workflow definition (RDM-147)."""
+        project, item = await self.get_item(actor, ref)
+        display_id = self.display_id(project, item)
+        security.require_can_edit(actor, item, display_id, item.participant_user_ids)
+        if item.row_version != row_version:
+            raise ConflictVersion(
+                tr(
+                    "work_item.version_conflict_upgrade",
+                    default=(
+                        "{display_id} 已被他人修改（当前版本 {version}），"
+                        "请先 work_item_get 重读再升级。"
+                    ),
+                    display_id=display_id,
+                    version=item.row_version,
+                ),
+                details={"id": item.id, "current_version": item.row_version},
+            )
+
+        context = await self._assess_workflow_upgrade(project, item)
+        if context.is_latest:
+            return project, item, context.public, False
+        if context.public["blockers"] or context.target_resolved is None:
+            raise ValidationError(
+                tr(
+                    "work_item.workflow_upgrade_blocked",
+                    default="工作项当前不可升级到目标流程",
+                ),
+                details={
+                    "code": "WORKFLOW_UPGRADE_BLOCKED",
+                    "blockers": context.public["blockers"],
+                },
+            )
+
+        target_row = await WorkflowVersionService(self.uow, context.target_engine).ensure(
+            item.kind,
+            item_task_type(item),
+            resolved=context.target_resolved,
+            created_by=actor.id,
+        )
+        from_snapshot = {
+            "def_id": item.workflow_def_id,
+            "def_version": item.workflow_version,
+            "config_key": item.workflow_config_key,
+            "config_version": item.workflow_config_version,
+            "config_version_id": item.workflow_config_version_id,
+        }
+        item.workflow_def_id = target_row.id
+        item.workflow_version = target_row.version
+        item.workflow_config_key = context.target_config_key
+        item.workflow_config_version = context.target_config_version
+        item.workflow_config_version_id = context.target_config_version_id
+        assert self.uow.work_items is not None
+        await self.uow.work_items.save(item)
+        await self._append_event(
+            project.id,
+            item,
+            EventType.WORK_ITEM_WORKFLOW_UPGRADED,
+            {
+                "from": from_snapshot,
+                "to": {
+                    "def_id": target_row.id,
+                    "def_version": target_row.version,
+                    "config_key": item.workflow_config_key,
+                    "config_version": item.workflow_config_version,
+                    "config_version_id": item.workflow_config_version_id,
+                },
+                "reason": "manual",
+            },
+            actor=actor,
+        )
+        return project, item, await self.workflow_upgrade_status(project, item), True
+
     def _versions(self) -> WorkflowVersionService:
         return WorkflowVersionService(self.uow, load_engine())
 
@@ -1112,6 +1459,9 @@ class WorkItemService:
         workflow_version = await WorkflowVersionService(self.uow, engine).ensure(
             kind, task_type, resolved=workflow, created_by=actor.id
         )
+        config_key, config_version, config_version_id = await self._workflow_config_snapshot(
+            project
+        )
         display_no = await self.uow.allocate_display_no(project.id)
         item = WorkItem(
             id=new_id(),
@@ -1128,6 +1478,9 @@ class WorkItemService:
             assignee_user_id=assignee.id if assignee else None,
             workflow_version=workflow_version.version,
             workflow_def_id=workflow_version.id,
+            workflow_config_key=config_key,
+            workflow_config_version=config_version,
+            workflow_config_version_id=config_version_id,
             fields=fields,
             participant_user_ids=participant_ids,
             reviewer_user_ids=reviewer_ids,

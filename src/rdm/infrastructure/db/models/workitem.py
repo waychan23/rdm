@@ -58,6 +58,12 @@ class WorkItemModel(AuditMixin, SoftDeleteMixin, Base):
         ),
         nullable=True,
     )
+    # Provenance of the pinned definition (RDM-147). The definition snapshot is
+    # deduplicated by content, so the config key/version cannot be inferred
+    # from ``workflow_def_id``; keep a human-readable snapshot on the item.
+    workflow_config_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    workflow_config_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    workflow_config_version_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Built-in optional field enabled per workflow (architecture §17, M6).
     review_content_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Kind/type custom field values (text/number/user-id lists), not searchable.

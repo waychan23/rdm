@@ -32,6 +32,17 @@ def sync_rows(settings: Settings, sql: str, params: dict[str, Any] | None = None
         engine.dispose()
 
 
+def sync_execute(settings: Settings, sql: str, params: dict[str, Any] | None = None) -> int:
+    """Run a write statement and commit; returns the row count."""
+    engine = create_engine(settings.db_sync_url)
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(text(sql), params or {})
+            return result.rowcount or 0
+    finally:
+        engine.dispose()
+
+
 def json_text(value: Any) -> str:
     """Serialize a JSON column for substring assertions across dialects."""
     return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)

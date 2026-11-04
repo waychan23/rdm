@@ -51,6 +51,7 @@ import {
   runWorkItemStep,
   updateComment,
   updateWorkItem,
+  upgradeWorkItemWorkflow,
 } from "../../api/work-items-api";
 import {
   createProjectArtifact,
@@ -93,6 +94,8 @@ import type {
   WorkflowDto,
   WorkflowFields,
   WorkflowStepDef,
+  WorkflowUpgrade,
+  WorkflowUpgradeIssue,
 } from "../../types";
 import ActiveStepCard from "./ActiveStepCard";
 import ArtifactDialog from "./ArtifactDialog";
@@ -140,6 +143,7 @@ interface DetailBundle {
   steps: WorkflowStepDef[];
   activeStep: ActiveStep | null;
   permissions: WorkItemPermissions;
+  workflowUpgrade: WorkflowUpgrade | null;
   workflowFields: WorkflowFields;
   comments: Comment[];
   members: OrgUser[];
@@ -214,6 +218,8 @@ export default function ItemPanel({
   const [commentToDelete, setCommentToDelete] = useState<Comment | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmUpgrade, setConfirmUpgrade] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
   const [editingComment, setEditingComment] = useState<{ id: string; body: string } | null>(
     null,
   );
@@ -268,6 +274,7 @@ export default function ItemPanel({
         steps: meta.available_steps ?? [],
         activeStep: meta.active_step ?? null,
         permissions: meta.permissions ?? {},
+        workflowUpgrade: meta.workflow_upgrade ?? null,
         workflowFields: effectiveFields(workflow, detail.data),
         comments: cm.data,
         members: flattenMembers(mm),
@@ -297,6 +304,8 @@ export default function ItemPanel({
     setParentEditing(false);
     setSprintEditing(false);
     setShowEdit(false);
+    setConfirmUpgrade(false);
+    setUpgrading(false);
     setShowArtifact(false);
     setCommentToDelete(null);
     setPreview(null);
@@ -847,8 +856,24 @@ export default function ItemPanel({
     }
   };
 
-  const saveCommentEdit = async () => {
-    if (!editingComment || !editingComment.body.trim()) return;
+  const upgradeWorkflow = async () => {
+    if (upgrading) return;
+    const current = bundleRef.current?.item;
+    if (!current) return;
+    setUpgrading(true);
+    try {
+      await upgradeWorkItemWorkflow(current.id, current.row_version);
+      notify.success(t("panel.workflowUpgradeSuccess"));
+      setConfirmUpgrade(false);
+      publishChange("updated");
+      await refresh();
+    } catch (e) {
+      notify.error(t("panel.workflowUpgradeFailed"), errorCause(e)?.message);
+      setUpgrading(false);
+    }
+  };
+
+  const saveCommentEdit = async () => {    if (!editingComment || !editingComment.body.trim()) return;
     try {
       await updateComment(editingComment.id, editingComment.body.trim());
       setEditingComment(null);
@@ -932,6 +957,7 @@ export default function ItemPanel({
     steps,
     activeStep,
     permissions,
+    workflowUpgrade,
     workflowFields,
     comments,
     members,
@@ -957,6 +983,34 @@ export default function ItemPanel({
   const canEdit = Boolean(permissions.can_edit);
   const canAssign = Boolean(permissions.can_assign);
   const canDelete = Boolean(permissions.can_delete ?? canModerate);
+  const upgradeReason = (issue: WorkflowUpgradeIssue): string => {
+    switch (issue.code) {
+      case "PROJECT_CONFIG_UNAVAILABLE":
+        return t("panel.workflowBlocker.projectConfigUnavailable");
+      case "KIND_REMOVED":
+        return t("panel.workflowBlocker.kindRemoved");
+      case "TASK_TYPE_REMOVED":
+        return t("panel.workflowBlocker.taskTypeRemoved");
+      case "DEFINITION_INVALID":
+        return t("panel.workflowBlocker.definitionInvalid");
+      case "STATUS_NOT_IN_TARGET":
+        return t("panel.workflowBlocker.statusNotInTarget");
+      case "ACTIVE_STEP_IN_PROGRESS":
+        return t("panel.workflowBlocker.activeStepInProgress");
+      case "NO_OUTGOING_STEPS":
+        return t("panel.workflowBlocker.noOutgoingSteps");
+      case "LEGACY_DEFINITION_UNRESOLVED":
+        return t("panel.workflowBlocker.legacyDefinitionUnresolved");
+      case "TERMINAL_SEMANTICS_CHANGED":
+        return t("panel.workflowWarning.terminalSemanticsChanged");
+      case "GATE_CHANGED":
+        return t("panel.workflowWarning.gateChanged");
+      case "CUSTOM_FIELDS_CHANGED":
+        return t("panel.workflowWarning.customFieldsChanged");
+      default:
+        return issue.message;
+    }
+  };
   // Epic has no kind extension table; empty field maps render no editor either.
   const hasKindFields =
     item.kind !== "epic" && Object.keys(item.fields ?? {}).length > 0;
@@ -1851,9 +1905,61 @@ export default function ItemPanel({
           <div data-testid="item-section-metadata">
             <div className="rdm-item-field">
               <div className="rdm-item-section-label">{t("panel.typeVersion")}</div>
-              <Text size="small" color="color.text.subtlest">
-                {kindLabel(item.kind)} · v{item.workflow_version ?? "—"} · v{item.row_version}
-              </Text>
+              <Stack space="space.050">
+                <Text
+                  size="small"
+                  color="color.text.subtlest"
+                  testId="item-version-line"
+                >
+                  {kindLabel(item.kind)} · {item.workflow_config_key ?? "—"} · v
+                  {item.workflow_version ?? "—"} · v{item.row_version}
+                </Text>
+                {workflowUpgrade && (
+                  <>
+                    {workflowUpgrade.blockers.length > 0 && (
+                      <Stack space="space.025">
+                        {workflowUpgrade.blockers.map((blocker) => (
+                          <Text
+                            key={blocker.code}
+                            size="small"
+                            color="color.text.danger"
+                          >
+                            {upgradeReason(blocker)}
+                          </Text>
+                        ))}
+                      </Stack>
+                    )}
+                    {workflowUpgrade.available && canEdit && (
+                      <Button
+                        spacing="compact"
+                        testId="item-workflow-upgrade"
+                        onClick={() => setConfirmUpgrade(true)}
+                      >
+                        {t("panel.workflowUpgradeAction")}
+                      </Button>
+                    )}
+                    {!workflowUpgrade.available &&
+                      workflowUpgrade.blockers.length === 0 && (
+                        <Text size="small" color="color.text.subtlest">
+                          {t("panel.workflowUpToDate")}
+                        </Text>
+                      )}
+                    {workflowUpgrade.warnings.length > 0 && (
+                      <Stack space="space.025">
+                        {workflowUpgrade.warnings.map((warning) => (
+                          <Text
+                            key={warning.code}
+                            size="small"
+                            color="color.text.subtlest"
+                          >
+                            {upgradeReason(warning)}
+                          </Text>
+                        ))}
+                      </Stack>
+                    )}
+                  </>
+                )}
+              </Stack>
             </div>
             <div className="rdm-item-field">
               <div className="rdm-item-section-label">{t("panel.createdAt")}</div>
@@ -1967,6 +2073,24 @@ export default function ItemPanel({
         onConfirm={discardComment}
       >
         {t("panel.discardCommentBody")}
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={confirmUpgrade}
+        title={t("panel.workflowUpgradeTitle")}
+        confirmLabel={t("panel.workflowUpgradeConfirm")}
+        busy={upgrading}
+        testId="item-workflow-upgrade-dialog"
+        onClose={() => {
+          if (!upgrading) setConfirmUpgrade(false);
+        }}
+        onConfirm={() => void upgradeWorkflow()}
+      >
+        {t("panel.workflowUpgradeBody", {
+          from: workflowUpgrade?.current.def_version ?? "—",
+          to: workflowUpgrade?.target?.def_version ?? "—",
+          config: workflowUpgrade?.target?.config_key ?? "—",
+          configVersion: workflowUpgrade?.target?.config_version ?? "—",
+        })}
       </ConfirmDialog>
     </aside>
   );

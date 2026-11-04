@@ -78,6 +78,15 @@ export function updateWorkItem(
   return api.patch<WorkItem>(`/work-items/${encode(id)}`, payload).then((res) => res.data);
 }
 
+export function upgradeWorkItemWorkflow(
+  id: string,
+  rowVersion: number,
+): Promise<Envelope<WorkItem>> {
+  return api.post<WorkItem>(`/work-items/${encode(id)}/upgrade-workflow`, {
+    row_version: rowVersion,
+  });
+}
+
 export function reparentWorkItem(
   id: string,
   parent: string | null,

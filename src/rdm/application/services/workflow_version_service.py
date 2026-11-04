@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Sequence
+from dataclasses import dataclass
 from functools import lru_cache
 
 from rdm.domain.entities import WorkflowVersion, WorkItem
@@ -40,6 +41,17 @@ def _deserialize_cached(
         json.loads(payload_json),
         schema_version=schema_version,
     )
+
+
+@dataclass(frozen=True)
+class TargetDefinitionPreview:
+    """Read-only preview of the definition an item would move to (RDM-147)."""
+
+    def_id: str | None
+    version: int
+    schema_version: int
+    definition_hash: str
+    resolved: ResolvedKindWorkflow
 
 
 class WorkflowVersionService:
@@ -104,6 +116,42 @@ class WorkflowVersionService:
     async def resolved_for(self, item: WorkItem) -> ResolvedKindWorkflow:
         engine = await self.engine_for(item)
         return engine.resolve(item.kind, item_task_type(item))
+
+    async def preview_target(
+        self, item: WorkItem, engine: WorkflowEngine
+    ) -> TargetDefinitionPreview:
+        """Compute the definition row an upgrade would land on, without writing.
+
+        Mirrors :meth:`ensure`'s reuse rule: same canonical definition *and*
+        same config schema version reuses the latest row; otherwise the next
+        version would be inserted.
+        """
+        kind = item.kind
+        task_type = item_task_type(item)
+        resolved = engine.resolve(kind, task_type)
+        payload = serialize_definition(resolved, schema_version=engine.spec.version)
+        digest = definition_hash(payload)
+        latest = await self._repo.latest(kind, normalized_subtype(kind, task_type))
+        if (
+            latest is not None
+            and latest.def_hash == digest
+            and latest.config_schema_version == engine.spec.version
+            and definitions_equal(latest.definition, payload)
+        ):
+            return TargetDefinitionPreview(
+                def_id=latest.id,
+                version=latest.version,
+                schema_version=latest.config_schema_version,
+                definition_hash=digest,
+                resolved=resolved,
+            )
+        return TargetDefinitionPreview(
+            def_id=None,
+            version=1 if latest is None else latest.version + 1,
+            schema_version=engine.spec.version,
+            definition_hash=digest,
+            resolved=resolved,
+        )
 
     async def engine_for(self, item: WorkItem) -> WorkflowEngine:
         current = self._engine()

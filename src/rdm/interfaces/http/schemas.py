@@ -89,6 +89,10 @@ class WorkItemAssignIn(_Strict):
     member: str = Field(min_length=1)
 
 
+class WorkflowUpgradeIn(_Strict):
+    row_version: int
+
+
 class TransitionIn(_Strict):
     to: str = Field(min_length=1)
     row_version: int

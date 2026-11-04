@@ -266,6 +266,7 @@ def register(mcp: FastMCP, container: Container) -> None:
                 latest_comment_at=(
                     latest_comment_at.isoformat() if latest_comment_at is not None else None
                 ),
+                workflow_upgrade=await service.workflow_upgrade_status(proj, item),
                 **step_meta,
             )
 

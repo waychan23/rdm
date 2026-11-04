@@ -60,6 +60,34 @@ function nameOf(ref: unknown, t: TFunction<"item">): string {
   return t("history.unassigned");
 }
 
+interface WorkflowUpgradeSide {
+  config_key?: string | null;
+  config_version?: number | null;
+  def_version?: number | null;
+}
+
+function upgradeSide(entry: HistoryEntry, key: "from" | "to"): WorkflowUpgradeSide | null {
+  const value = entry.meta?.[key];
+  return value && typeof value === "object" ? (value as WorkflowUpgradeSide) : null;
+}
+
+function upgradeSideLabel(side: WorkflowUpgradeSide | null, t: TFunction<"item">): string {
+  if (!side) return t("history.unknownVersion");
+  const version = side.def_version != null ? `v${side.def_version}` : "—";
+  if (!side.config_key) return t("history.definitionVersion", { version });
+  if (side.config_version == null) {
+    return t("history.workflowSideNoConfigVersion", {
+      config: side.config_key,
+      version,
+    });
+  }
+  return t("history.workflowSide", {
+    config: side.config_key,
+    configVersion: side.config_version,
+    version,
+  });
+}
+
 function describe(entry: HistoryEntry, t: TFunction<"item">) {
   switch (entry.action) {
     case "created":
@@ -82,6 +110,11 @@ function describe(entry: HistoryEntry, t: TFunction<"item">) {
       return t("history.deleted");
     case "restored":
       return t("history.restored");
+    case "workflow_upgraded":
+      return t("history.workflowUpgraded", {
+        from: upgradeSideLabel(upgradeSide(entry, "from"), t),
+        to: upgradeSideLabel(upgradeSide(entry, "to"), t),
+      });
     case "comment_created":
       return t("history.commentCreated");
     case "comment_deleted":

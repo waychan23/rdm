@@ -165,6 +165,13 @@ class HistoryService:
                 changes["status"] = {"from": pair[0], "to": pair[1]}
             reason = payload.get("reason")
             meta = {"reason": reason} if reason else None
+        elif event_type == "work_item.workflow_upgraded":
+            action = "workflow_upgraded"
+            meta = {
+                "from": payload.get("from"),
+                "to": payload.get("to"),
+                "reason": payload.get("reason"),
+            }
         elif event_type in {"work_item.deleted", "work_item.restored"}:
             action = "deleted" if event_type.endswith("deleted") else "restored"
             snapshot = payload.get("snapshot", {})

@@ -46,6 +46,7 @@ class EventType(StrEnum):
     WORK_ITEM_UPDATED = "work_item.updated"
     WORK_ITEM_ASSIGNED = "work_item.assigned"
     WORK_ITEM_STATUS_CHANGED = "work_item.status_changed"
+    WORK_ITEM_WORKFLOW_UPGRADED = "work_item.workflow_upgraded"
     WORK_ITEM_STEP_STARTED = "work_item.step_started"
     WORK_ITEM_STEP_EXECUTED = "work_item.step_executed"
     WORK_ITEM_STEP_COMPLETED = "work_item.step_completed"

@@ -119,6 +119,10 @@ export interface WorkItem {
   fields?: Record<string, unknown> | null;
   workflow_version?: number;
   workflow_def_id?: string | null;
+  /** Workflow config provenance of the pinned definition (RDM-147). */
+  workflow_config_key?: string | null;
+  workflow_config_version?: number | null;
+  workflow_config_version_id?: string | null;
   /** Sprint the item currently belongs to (list/board summaries, RDM-59). */
   sprint?: { id: string; name: string } | null;
   row_version: number;
@@ -184,6 +188,30 @@ export interface WorkItemPermissions {
   can_delete?: boolean;
 }
 
+export interface WorkflowUpgradeVersionInfo {
+  def_id?: string | null;
+  def_version?: number | null;
+  definition_schema_version?: number | null;
+  config_id?: string | null;
+  config_key?: string | null;
+  config_version?: number | null;
+  config_version_id?: string | null;
+  definition_hash?: string | null;
+}
+
+export interface WorkflowUpgradeIssue {
+  code: string;
+  message: string;
+}
+
+export interface WorkflowUpgrade {
+  current: WorkflowUpgradeVersionInfo;
+  target: WorkflowUpgradeVersionInfo | null;
+  available: boolean;
+  blockers: WorkflowUpgradeIssue[];
+  warnings: WorkflowUpgradeIssue[];
+}
+
 export interface WorkItemDetailMeta {
   allowed_transitions?: string[];
   children?: WorkItem[];
@@ -195,6 +223,7 @@ export interface WorkItemDetailMeta {
   available_steps?: WorkflowStepDef[];
   active_step?: ActiveStep | null;
   permissions?: WorkItemPermissions;
+  workflow_upgrade?: WorkflowUpgrade;
 }
 
 export interface HistoryChange {
