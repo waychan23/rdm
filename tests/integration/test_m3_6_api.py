@@ -45,12 +45,37 @@ async def test_overview_aggregates(server, owner_token) -> None:
     client, _settings, _app = server
     await _ensure_project(client, owner_token)
     await _create_item(client, owner_token, kind="story", title="s")
+    overdue = await _create_item(
+        client,
+        owner_token,
+        kind="task",
+        title="late",
+        priority=1,
+        planned_end_date="2000-01-01",
+    )
+    await client.post(
+        f"/api/v1/work-items/{overdue['display_id']}/assign",
+        headers=auth(owner_token),
+        json={"member": "me"},
+    )
+
     r = await client.get("/api/v1/projects/DEMO/overview", headers=auth(owner_token))
     assert r.status_code == 200, r.text
     data = r.json()["data"]
+    assert data["project_name"] == "DEMO"
     assert data["by_kind"]["story"] >= 1
     assert data["members"] >= 1
     assert "by_status" in data and "my_open_items" in data
+    # Stable priority shape for the distribution panel.
+    assert set(data["by_priority"]) >= {"1", "2", "3", "4"}
+    # Actionable lists: the overdue item is both mine and project risk.
+    assert data["overdue_count"] >= 1
+    assert overdue["display_id"] in [i["display_id"] for i in data["overdue_items"]]
+    assert data["my_open_items"] >= 1
+    assert overdue["display_id"] in [i["display_id"] for i in data["my_items"]]
+    assert len(data["recent_items"]) >= 1
+    assert data["releases"] == []
+    assert data["active_sprint"] is None
 
 
 async def test_project_update_and_archive(server, owner_token) -> None:

@@ -114,6 +114,7 @@ class WorkItemRepository:
         display_no: int | None = None,
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
+        planned_end_before: dt.date | None = None,
         backlog_only: bool = False,
         include_deleted: bool = False,
     ):
@@ -188,6 +189,13 @@ class WorkItemRepository:
             stmt = stmt.where(child_exists if has_children else ~child_exists)
         if priorities:
             stmt = stmt.where(WorkItemModel.priority.in_(list(priorities)))
+        if planned_end_before is not None:
+            # Overdue is "has a planned end date and it is in the past"; undated
+            # items are not overdue (project overview risk panel).
+            stmt = stmt.where(
+                WorkItemModel.planned_end_date.is_not(None),
+                WorkItemModel.planned_end_date < planned_end_before,
+            )
         if exclude_ids:
             stmt = stmt.where(WorkItemModel.id.notin_(list(exclude_ids)))
         if subtypes:
@@ -237,6 +245,7 @@ class WorkItemRepository:
         display_no: int | None = None,
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
+        planned_end_before: dt.date | None = None,
         backlog_only: bool = False,
         order: str | None = None,
         expand: bool = False,
@@ -265,6 +274,7 @@ class WorkItemRepository:
             display_no=display_no,
             include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,
+            planned_end_before=planned_end_before,
             backlog_only=backlog_only,
             include_deleted=include_deleted,
         )
@@ -273,6 +283,13 @@ class WorkItemRepository:
             stmt = stmt.order_by(WorkItemModel.created_at.desc(), WorkItemModel.display_no.desc())
         elif order == "created_asc":
             stmt = stmt.order_by(WorkItemModel.created_at.asc(), WorkItemModel.display_no.asc())
+        elif order == "updated_desc":
+            # "Recently active" feeds the project overview. Rows touched only by
+            # creation have a null updated_at, so fall back to created_at.
+            stmt = stmt.order_by(
+                func.coalesce(WorkItemModel.updated_at, WorkItemModel.created_at).desc(),
+                WorkItemModel.display_no.desc(),
+            )
         elif order == "composite":
             # Priority 1 is the most urgent, so ascending puts urgent first.
             # Undated items sort after dated ones at each date level.
@@ -314,6 +331,7 @@ class WorkItemRepository:
         display_no: int | None = None,
         include_statuses: Sequence[str] | None = None,
         exclude_statuses: Sequence[str] | None = None,
+        planned_end_before: dt.date | None = None,
         backlog_only: bool = False,
         include_deleted: bool = False,
     ) -> int:
@@ -338,6 +356,7 @@ class WorkItemRepository:
             display_no=display_no,
             include_statuses=include_statuses,
             exclude_statuses=exclude_statuses,
+            planned_end_before=planned_end_before,
             backlog_only=backlog_only,
             include_deleted=include_deleted,
         )
@@ -377,6 +396,17 @@ class WorkItemRepository:
             .group_by(WorkItemModel.status)
         )
         return {status: int(count) for status, count in await self._s.execute(stmt)}
+
+    async def count_by_priority(self, project_id: str) -> dict[int, int]:
+        stmt = (
+            select(WorkItemModel.priority, func.count())
+            .where(
+                WorkItemModel.project_id == project_id,
+                WorkItemModel.deleted_at.is_(None),
+            )
+            .group_by(WorkItemModel.priority)
+        )
+        return {int(priority): int(count) for priority, count in await self._s.execute(stmt)}
 
     async def get_by_display_no(
         self, project_id: str, display_no: int, *, include_deleted: bool = False

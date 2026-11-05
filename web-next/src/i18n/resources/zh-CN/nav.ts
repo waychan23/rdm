@@ -1,5 +1,6 @@
 const nav = {
   project: {
+    overview: "概览",
     board: "看板",
     backlog: "工作项",
     issues: "缺陷",

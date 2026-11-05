@@ -1,21 +1,43 @@
 // Project endpoints plus membership and the project overview.
 
 import { api } from "../lib/api";
-import type { Project, ProjectMemberRow } from "../types";
+import type { Project, ProjectMemberRow, Release, WorkItem } from "../types";
 import { encode } from "./query";
 
+export interface OverviewSprint {
+  id: string;
+  name: string;
+  status: string;
+  start_date: string | null;
+  end_date: string | null;
+  total: number;
+  done: number;
+  percent: number;
+  days_remaining: number | null;
+  by_status: Record<string, number>;
+}
+
+/** Project landing page payload (RDM-185): counters + actionable lists. */
 export interface ProjectOverview {
+  project_key: string;
+  project_name: string;
+  project_status: string;
+  project_description_md?: string | null;
   total_items: number;
   open_items: number;
+  done_items: number;
   my_open_items: number;
   members: number;
   by_kind: Record<string, number>;
   by_status: Record<string, number>;
-  active_sprint: {
-    name: string;
-    total: number;
-    by_status: Record<string, number>;
-  } | null;
+  by_priority: Record<string, number>;
+  overdue_count: number;
+  blocked_count: number;
+  my_items: WorkItem[];
+  overdue_items: WorkItem[];
+  recent_items: WorkItem[];
+  active_sprint: OverviewSprint | null;
+  releases: Release[];
 }
 
 export function listProjects(): Promise<Project[]> {

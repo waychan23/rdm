@@ -16,6 +16,32 @@ export function formatDate(iso?: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+/**
+ * RFC 3339 timestamp → locale-aware relative label ("3 天前" / "3 days ago").
+ * Falls back to "—" for missing/invalid input. Used by the overview activity
+ * feed, where the exact clock time is noise compared to "how long ago".
+ */
+export function formatRelativeTime(
+  iso: string | null | undefined,
+  locale: string,
+  now: number = Date.now(),
+): string {
+  const d = parse(iso);
+  if (!d) return "—";
+  const diff = d.getTime() - now;
+  const abs = Math.abs(diff);
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  if (abs < minute) return rtf.format(0, "second");
+  if (abs < hour) return rtf.format(Math.round(diff / minute), "minute");
+  if (abs < day) return rtf.format(Math.round(diff / hour), "hour");
+  if (abs < 30 * day) return rtf.format(Math.round(diff / day), "day");
+  if (abs < 365 * day) return rtf.format(Math.round(diff / (30 * day)), "month");
+  return rtf.format(Math.round(diff / (365 * day)), "year");
+}
+
 export function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

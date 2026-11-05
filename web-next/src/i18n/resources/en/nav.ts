@@ -1,5 +1,6 @@
 const nav = {
   project: {
+    overview: "Overview",
     board: "Board",
     backlog: "Work items",
     issues: "Issues",

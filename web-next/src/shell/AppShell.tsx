@@ -107,6 +107,7 @@ const styles = cssMap({
 });
 
 type NavKey =
+  | "project.overview"
   | "project.board"
   | "project.backlog"
   | "project.issues"
@@ -124,9 +125,18 @@ interface NavEntry {
   icon: (props: { label: string }) => ReactNode;
   /** Work item pages re-open with their remembered filters (RDM-80). */
   view?: WorkView;
+  /** Exact match only (project landing page would otherwise match every subpage). */
+  end?: boolean;
 }
 
 const PROJECT_NAV: NavEntry[] = [
+  {
+    to: (k) => `/projects/${k}`,
+    labelKey: "project.overview",
+    testId: "overview",
+    icon: DashboardIcon,
+    end: true,
+  },
   { to: (k) => `/projects/${k}/board`, view: "board", labelKey: "project.board", testId: "board", icon: BoardIcon },
   { to: (k) => `/projects/${k}/backlog`, view: "backlog", labelKey: "project.backlog", testId: "backlog", icon: BacklogIcon },
   { to: (k) => `/projects/${k}/issues`, view: "issues", labelKey: "project.issues", testId: "issues", icon: BugIcon },
@@ -366,6 +376,7 @@ export default function AppShell() {
                     label={t(entry.labelKey)}
                     testId={`project-${entry.testId}`}
                     icon={entry.icon}
+                    end={entry.end}
                   />
                 ))}
               </div>

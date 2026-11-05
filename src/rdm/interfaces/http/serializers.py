@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from rdm.application.dto import user_brief
+from rdm.application.services.overview_service import ProjectOverview
 from rdm.application.services.release_service import ReleaseOverview
 from rdm.domain.entities import (
     Artifact,
@@ -331,6 +332,36 @@ def release_out(r: Release, stats: dict[str, int] | None = None) -> dict:
         "stats": stats or {"total": 0, "done": 0, "published": 0, "cancelled": 0, "percent": 0},
         "created_at": _iso(r.created_at),
         "updated_at": _iso(r.updated_at),
+    }
+
+
+def overview_out(overview: ProjectOverview, users: dict[str, User] | None = None) -> dict:
+    """Project landing page payload: counters + actionable item lists."""
+    project = overview.project
+    return {
+        "project_key": project.key,
+        "project_name": project.name,
+        "project_status": str(project.status),
+        "project_description_md": project.description_md,
+        "total_items": overview.total_items,
+        "open_items": overview.open_items,
+        "done_items": overview.done_items,
+        "my_open_items": overview.my_open_items,
+        "members": overview.members,
+        "by_kind": overview.by_kind,
+        "by_status": overview.by_status,
+        "by_priority": overview.by_priority,
+        "overdue_count": overview.overdue_count,
+        "blocked_count": overview.blocked_count,
+        "my_items": [work_item_summary_out(item, project, users) for item in overview.my_items],
+        "overdue_items": [
+            work_item_summary_out(item, project, users) for item in overview.overdue_items
+        ],
+        "recent_items": [
+            work_item_summary_out(item, project, users) for item in overview.recent_items
+        ],
+        "active_sprint": overview.active_sprint,
+        "releases": [release_out(release, stats) for release, stats in overview.releases],
     }
 
 
